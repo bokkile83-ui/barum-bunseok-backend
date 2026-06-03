@@ -1,38 +1,86 @@
 <!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BARUM 보장분석</title><style>
-*{box-sizing:border-box;font-family:'Malgun Gothic',sans-serif}
-body{background:#0f1420;color:#e9edf5;margin:0;padding:24px;display:flex;justify-content:center}
-.c{max-width:440px;width:100%}
-h1{color:#c9a24b;font-size:20px;border-bottom:2px solid #c9a24b;padding-bottom:8px}
-.box{background:#141b2b;border:1px solid #2a3550;border-radius:12px;padding:18px;margin-top:14px}
+*{box-sizing:border-box;font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif}
+body{background:#0f1420;color:#e9edf5;margin:0;padding:18px;display:flex;justify-content:center}
+.c{max-width:720px;width:100%}
+h1{color:#c9a24b;font-size:20px;border-bottom:2px solid #c9a24b;padding-bottom:8px;margin:0 0 14px}
+.box{background:#141b2b;border:1px solid #2a3550;border-radius:12px;padding:16px;margin-bottom:14px}
 label{font-size:13px;color:#8a93a6;display:block;margin:10px 0 4px}
 input{width:100%;background:#1b2436;border:1px solid #2a3550;color:#e9edf5;border-radius:8px;padding:11px;font-size:14px}
-button{width:100%;background:#c9a24b;color:#0f1420;border:0;border-radius:8px;padding:13px;font-weight:700;font-size:15px;margin-top:16px;cursor:pointer}
+button{background:#c9a24b;color:#0f1420;border:0;border-radius:8px;padding:12px 16px;font-weight:700;font-size:14px;cursor:pointer}
 button:disabled{opacity:.5}
-#st{margin-top:12px;font-size:13px;color:#8a93a6;white-space:pre-wrap}
-.hint{font-size:11px;color:#6b7488;margin-top:10px}
+#st{margin-top:12px;font-size:13px;white-space:pre-wrap;color:#e3b34d}
+.err{color:#ff6b6b !important}
+#result{display:none}
+.bar{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}
+.bar button{background:#1b2436;border:1px solid #c9a24b;color:#c9a24b;border-radius:18px;padding:6px 12px;font-size:12px;font-weight:400}
+#chat{background:#141b2b;border:1px solid #2a3550;border-radius:10px;height:300px;overflow-y:auto;padding:10px;margin-bottom:8px}
+.msg{margin-bottom:9px;display:flex}.msg.u{justify-content:flex-end}
+.bub{max-width:86%;padding:8px 11px;border-radius:11px;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.u .bub{background:#6d2e46;color:#fff}.a .bub{background:#1f293d}
+.inp{display:flex;gap:7px}
+#q{flex:1;background:#1b2436;border:1px solid #2a3550;color:#e9edf5;border-radius:9px;padding:10px;font-size:14px}
+.hint{font-size:11px;color:#6b7488;margin-top:8px}
 </style></head><body><div class="c">
 <h1>BARUM 보장분석</h1>
 <div class="box">
-<label>접근 비밀번호</label><input id="pw" type="password" placeholder="****">
+<label>접근 비밀번호</label><input id="pw" type="password" placeholder="1009">
 <label>보장분석 리포트 PDF</label><input id="f" type="file" accept="application/pdf">
-<button id="b" onclick="go()">분석 → 엑셀+PPT 받기</button>
+<button id="b" onclick="go()" style="width:100%;margin-top:14px">분석 시작</button>
 <div id="st"></div>
-<div class="hint">PDF 1개 업로드 → 계약별 분석 → 색칠 엑셀 + 보장분석지 PPT ZIP. 결과는 증권 최종확인.</div>
-</div></div>
+<div class="hint">PDF 1개 → 계약별 분석 → 엑셀+PPT ZIP 자동 다운로드 + 아래에서 팩폭·수정 채팅. 결과는 증권 최종확인.</div>
+</div>
+
+<div class="box" id="result">
+<b style="color:#c9a24b">검수 채팅 (팩폭 · 수정)</b>
+<div class="bar">
+<button onclick="quick('팩폭')">🔍 팩폭</button>
+<button onclick="quick('수정')">✏️ 수정</button>
+<button onclick="quick('계약별로 무슨 담보가 어느 회사에 들어갔는지 요약')">📋 계약별 요약</button>
+</div>
+<div id="chat"></div>
+<div class="inp"><input id="q" placeholder="질문… (팩폭/수정)" onkeydown="if(event.key==='Enter')send2()"><button onclick="send2()">전송</button></div>
+</div>
+</div>
 <script>
+let DATA=null, hist=[];
+const st=document.getElementById('st');
+function setSt(t,err){st.textContent=t;st.className=err?'err':''}
 async function go(){
- const pw=document.getElementById('pw').value, f=document.getElementById('f').files[0], st=document.getElementById('st'), b=document.getElementById('b');
- if(!pw||!f){st.textContent='비밀번호와 PDF를 넣어주세요.';return}
- b.disabled=true; st.textContent='분석 중… (계약 많으면 1~2분)';
+ const pw=document.getElementById('pw').value, f=document.getElementById('f').files[0], b=document.getElementById('b');
+ if(!pw||!f){setSt('비밀번호와 PDF를 넣어주세요.',true);return}
+ b.disabled=true; setSt('분석 중… 계약 많으면 1~2분 걸립니다.');
  const fd=new FormData(); fd.append('password',pw); fd.append('file',f);
  try{
   const r=await fetch('/analyze',{method:'POST',body:fd});
-  if(!r.ok){st.textContent='오류: '+(await r.text());b.disabled=false;return}
-  const blob=await r.blob(); const u=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=u; a.download='barum_result.zip'; a.click();
-  st.textContent='완료. ZIP 다운로드됨.';
- }catch(e){st.textContent='실패: '+e.message}
+  const j=await r.json();
+  if(!j.ok){setSt('실패: '+(j.error||'')+(j.trace?'\n'+j.trace:'')+(j.raw?'\n'+j.raw:''),true);b.disabled=false;return}
+  DATA=j.data;
+  // ZIP 다운로드
+  const bin=atob(j.zip_b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  const blob=new Blob([arr],{type:'application/zip'}); const u=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=u; a.download=j.filename||'barum.zip'; a.click();
+  const n=(j.data.contracts||[]).length;
+  setSt('완료. ZIP 다운로드됨 (계약 '+n+'건'+(j.pptx_filled?', PPT 채움':', PPT 폼채움 실패-엑셀 참고')+'). 아래에서 팩폭하세요.');
+  document.getElementById('result').style.display='block';
+  chatAdd('a','분석 끝. "팩폭" 누르면 계약별로 누락·중복·오귀속 점검합니다.');
+ }catch(e){setSt('실패: '+e.message,true)}
  b.disabled=false;
+}
+const chat=document.getElementById('chat');
+function chatAdd(role,t){const d=document.createElement('div');d.className='msg '+(role==='u'?'u':'a');d.innerHTML='<div class="bub"></div>';d.querySelector('.bub').textContent=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d}
+function quick(t){document.getElementById('q').value=t;send2()}
+async function send2(){
+ const q=document.getElementById('q'); const text=q.value.trim(); if(!text||!DATA)return;
+ chatAdd('u',text); q.value=''; const ld=chatAdd('a','…');
+ hist.push({role:'user',content:text});
+ try{
+  const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data:DATA,messages:hist})});
+  const j=await r.json();
+  const out=j.ok?j.reply:('오류: '+j.error);
+  ld.querySelector('.bub').textContent=out;
+  if(j.ok)hist.push({role:'assistant',content:out});
+ }catch(e){ld.querySelector('.bub').textContent='오류: '+e.message}
+ chat.scrollTop=chat.scrollHeight;
 }
 </script></body></html>
