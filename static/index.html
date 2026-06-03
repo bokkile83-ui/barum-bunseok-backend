@@ -1,161 +1,38 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>MAKEONE 보장분석실</title>
-<style>
-  :root{--bg:#0c0d10;--panel:#15171c;--line:#2a2d34;--acc:#E0463B;--acc2:#F4897F;
-    --ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--amber:#F5B547;--red:#FF6B6B;--blue:#5B9BFF}
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans KR',sans-serif;line-height:1.55}
-  /* ===== 게이트(단순 메인잠금) ===== */
-  #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;
-    align-items:center;justify-content:center;padding:30px 26px;text-align:center}
-  #gate .kick{font-size:14px;font-weight:800;letter-spacing:.45em;color:var(--acc);margin-bottom:14px}
-  #gate h1{font-size:30px;font-weight:800;letter-spacing:-.01em;margin-bottom:14px}
-  #gate .s{font-size:14px;color:var(--mute);margin-bottom:38px}
-  #gate .pw{width:100%;max-width:420px;background:#1a1c22;border:1px solid var(--line);border-radius:14px;
-    padding:18px 20px;font-size:17px;color:var(--ink);text-align:center;letter-spacing:.3em;outline:none}
-  #gate .pw:focus{border-color:var(--acc)}
-  #gate .go{width:100%;max-width:420px;margin-top:14px;border:none;border-radius:14px;padding:18px;
-    font-size:17px;font-weight:800;color:#fff;background:var(--acc);cursor:pointer}
-  #gate .go:active{transform:translateY(1px)}
-  #gate .err{color:var(--acc2);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
-  .shake{animation:sh .35s}
-  @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-  /* ===== 앱 ===== */
-  .app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
-  header{padding:14px 18px;border-bottom:1px solid var(--line);
-    background:linear-gradient(135deg,#1a1115,#0d0e11 60%,#1c1216);display:flex;align-items:center;gap:10px}
-  .logo{width:32px;height:32px;border-radius:9px;border:1px solid var(--acc);display:flex;
-    align-items:center;justify-content:center;font-size:16px;background:linear-gradient(135deg,#241012,#0d0e11)}
-  h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}
-  .sub{font-size:10px;color:var(--mute)}
-  .chat{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:12px}
-  .msg{max-width:90%;font-size:13px}
-  .me{align-self:flex-end;background:rgba(224,70,59,.14);border:1px solid rgba(224,70,59,.32);
-    border-radius:14px 14px 4px 14px;padding:9px 13px}
-  .bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
-    border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%}
-  .file-card{display:flex;align-items:center;gap:11px;background:rgba(74,222,128,.06);
-    border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:11px 13px;margin-top:9px;text-decoration:none;color:var(--ink)}
-  .file-card .ic{font-size:22px}
-  .file-card .nm{flex:1;font-size:12.5px;font-weight:700}
-  .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);
-    padding:5px 11px;border-radius:8px}
-  .sec-t{font-size:11px;font-weight:800;color:var(--acc2);margin:12px 0 6px;letter-spacing:.3px}
-  .gap{display:flex;gap:9px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid rgba(42,47,58,.5)}
-  .gap .pri{flex:0 0 20px;height:20px;border-radius:5px;background:rgba(224,70,59,.16);color:var(--acc2);
-    font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
-  .gap .it{flex:1}.gap .am{font-size:10px;color:var(--mute)}
-  .st{font-size:10px;font-weight:800;padding:3px 8px;border-radius:7px}
-  .st-ok{background:rgba(74,222,128,.13);color:var(--green)}
-  .st-low{background:rgba(245,181,71,.14);color:var(--amber)}
-  .st-no{background:rgba(255,107,107,.14);color:var(--red)}
-  .memo{font-size:11.5px;color:var(--mute);padding:5px 0;display:flex;gap:7px}
-  .memo .d{color:var(--acc)}
-  .err{color:#ffb4b4;font-size:12px}
-  .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);
-    border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
-  @keyframes sp{to{transform:rotate(360deg)}}
-  .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
-  .up{flex:1;border:1.5px dashed rgba(224,70,59,.5);border-radius:12px;padding:13px;text-align:center;
-    font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
-  .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);
-    color:#fff;cursor:pointer}.send:disabled{opacity:.4}
-  footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}
-  footer b{color:var(--acc2)}
-</style></head>
-<body>
-<!-- 게이트 -->
-<div id="gate">
-  <div class="kick">MAKEONE</div>
-  <h1>MAKEONE 보장분석실</h1>
-  <div class="s">접속 비밀번호를 입력하세요</div>
-  <input id="pw" class="pw" type="password" inputmode="numeric" placeholder="비밀번호" autocomplete="off">
-  <button id="go" class="go">접속</button>
-  <div id="gerr" class="err"></div>
-</div>
-
-<!-- 앱 -->
-<div class="app" id="app">
-  <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
-    <div class="sub">PDF 넣으면 → 엑셀 → PPT 자동 채움 · 최은혜 지점장</div></div></header>
-  <div class="chat" id="chat">
-    <div class="msg bot">보장분석지(PDF)를 올려주세요. 33조로 분석해서 <b>색칠된 보장진단 엑셀</b>을 만들어 드려요.</div>
-  </div>
-  <div class="bar">
-    <label class="up" id="up">📄 <span id="uplabel">보장분석지 PDF 선택</span></label>
-    <button class="send" id="send" disabled>분석</button>
-  </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM</footer>
-</div>
-<input type="file" id="fi" accept="application/pdf" style="display:none">
-
+<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BARUM 보장분석</title><style>
+*{box-sizing:border-box;font-family:'Malgun Gothic',sans-serif}
+body{background:#0f1420;color:#e9edf5;margin:0;padding:24px;display:flex;justify-content:center}
+.c{max-width:440px;width:100%}
+h1{color:#c9a24b;font-size:20px;border-bottom:2px solid #c9a24b;padding-bottom:8px}
+.box{background:#141b2b;border:1px solid #2a3550;border-radius:12px;padding:18px;margin-top:14px}
+label{font-size:13px;color:#8a93a6;display:block;margin:10px 0 4px}
+input{width:100%;background:#1b2436;border:1px solid #2a3550;color:#e9edf5;border-radius:8px;padding:11px;font-size:14px}
+button{width:100%;background:#c9a24b;color:#0f1420;border:0;border-radius:8px;padding:13px;font-weight:700;font-size:15px;margin-top:16px;cursor:pointer}
+button:disabled{opacity:.5}
+#st{margin-top:12px;font-size:13px;color:#8a93a6;white-space:pre-wrap}
+.hint{font-size:11px;color:#6b7488;margin-top:10px}
+</style></head><body><div class="c">
+<h1>BARUM 보장분석</h1>
+<div class="box">
+<label>접근 비밀번호</label><input id="pw" type="password" placeholder="****">
+<label>보장분석 리포트 PDF</label><input id="f" type="file" accept="application/pdf">
+<button id="b" onclick="go()">분석 → 엑셀+PPT 받기</button>
+<div id="st"></div>
+<div class="hint">PDF 1개 업로드 → 계약별 분석 → 색칠 엑셀 + 보장분석지 PPT ZIP. 결과는 증권 최종확인.</div>
+</div></div>
 <script>
-const $=s=>document.querySelector(s);
-// ===== 서버측 잠금 (비번은 서버 ACCESS_PW로 검증, 소스에 없음) =====
-let ACCESS="";
-async function unlock(){
-  const v=$("#pw").value;
-  $("#gerr").textContent="확인 중…";
-  try{
-    const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
-    const j=await r.json();
-    if(j.ok){ ACCESS=v; $("#gerr").textContent=""; $("#gate").style.display="none"; $("#app").style.display="flex"; }
-    else { fail(); }
-  }catch(e){ $("#gerr").textContent="서버 연결 실패"; }
-}
-function fail(){ $("#gerr").textContent="비밀번호가 올바르지 않습니다."; $("#gate").classList.add("shake");
-  setTimeout(()=>$("#gate").classList.remove("shake"),350); $("#pw").value=""; $("#pw").focus(); }
-$("#go").onclick=unlock;
-$("#pw").addEventListener("keydown",e=>{ if(e.key==="Enter") unlock(); });
-window.addEventListener("load",()=>$("#pw").focus());
-
-// ===== 앱 =====
-const chat=$("#chat"); let file=null;
-$("#up").onclick=()=>$("#fi").click();
-$("#fi").onchange=e=>{file=e.target.files[0];if(file){$("#uplabel").textContent=file.name;$("#send").disabled=false;}};
-function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
-$("#send").onclick=async()=>{
-  if(!file)return;
-  add("📄 "+esc(file.name),"me");
-  $("#send").disabled=true;$("#up").style.opacity=.5;
-  const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 분석 시작…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 끊지 말고 기다려 주세요</div></div></div>',"bot");
-  const t0=Date.now();
-  const steps=["📄 PDF 읽는 중…","🔎 애매한 담보 약관 조회 중…","📊 보장진단 엑셀 채우는 중…","📑 보장분석지 PPT 채우는 중…","✍️ 마무리 정리 중…"];
-  const tick=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과 · 보통 30~90초, 끊지 마세요";if(mm)mm.textContent=steps[Math.min(Math.floor(s/12),steps.length-1)];},1000);
-  const fd=new FormData();fd.append("file",file);
-  try{
-    const r=await fetch("/analyze",{method:"POST",headers:{"x-access-pw":ACCESS},body:fd});
-    const j=await r.json();
-    clearInterval(tick); loading.remove();
-    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>'+(j.raw?'<div class="memo">'+esc(j.raw.slice(0,500))+'</div>':""),"bot");}
-    else render(j);
-  }catch(e){clearInterval(tick); loading.remove();add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");}
-  $("#send").disabled=false;$("#up").style.opacity=1;
-};
-function render(j){
-  let h='<b>'+esc(j.client)+' 님 보장분석 완료</b>';
-  (j.files||[]).forEach(f=>{
-    h+='<a class="file-card" href="'+f.url+'" download><span class="ic">'+(f.name.endsWith("xlsx")?"📊":"📑")+
-       '</span><span class="nm">'+esc(f.name)+'</span><span class="dl">저장 ⬇</span></a>';
-  });
-  if(!j.pptx_ready) h+='<div class="memo"><span class="d">▸</span><span>PPT 연계는 2단계(form.pptx 등록 후) 자동 추가됩니다.</span></div>';
-  const rec=(j.recommend||[]).sort((a,b)=>(a.priority||9)-(b.priority||9));
-  if(rec.length){h+='<div class="sec-t">🎯 권장 대비 (우선순위)</div>';
-    rec.forEach(g=>{const st=g.status||"";const c=st.includes("충분")?"st-ok":st.includes("미가입")?"st-no":"st-low";
-      h+='<div class="gap"><span class="pri">'+esc(g.priority||"·")+'</span><span class="it">'+esc(g.item)+
-         '<div class="am">권장 '+esc(g.rec)+' · 가입 '+esc(g.cur)+'</div></span><span class="st '+c+'">'+esc(st)+'</span></div>';});}
-  const memo=j.memo||[];
-  if(memo.length){h+='<div class="sec-t">⚠️ 셀프팩폭 · 증권확인 (자동 10%는 사람 몫)</div>';
-    memo.forEach(m=>{var tag,it,nt;if(m&&typeof m==='object'){tag=m.tag||'메모';it=m.item||'';nt=m.note||'';}else{tag='';it='';nt=String(m);}
-      var col=tag.indexOf('확인')>=0?'#F4C430':tag.indexOf('부족')>=0?'#F4897F':tag.indexOf('미가입')>=0?'#9aa0a8':tag.indexOf('갱신')>=0?'#7FB0FF':'#cfcfcf';
-      var lab=tag?'['+tag+'] ':'';var body=it?(it+' — '+nt):nt;
-      h+='<div class="memo"><span class="d" style="color:'+col+'">▸</span><span><b style="color:'+col+'">'+esc(lab)+'</b>'+esc(body)+'</span></div>';});}
-  add(h,"bot");
-  file=null;$("#uplabel").textContent="보장분석지 PDF 선택";$("#send").disabled=true;$("#fi").value="";
+async function go(){
+ const pw=document.getElementById('pw').value, f=document.getElementById('f').files[0], st=document.getElementById('st'), b=document.getElementById('b');
+ if(!pw||!f){st.textContent='비밀번호와 PDF를 넣어주세요.';return}
+ b.disabled=true; st.textContent='분석 중… (계약 많으면 1~2분)';
+ const fd=new FormData(); fd.append('password',pw); fd.append('file',f);
+ try{
+  const r=await fetch('/analyze',{method:'POST',body:fd});
+  if(!r.ok){st.textContent='오류: '+(await r.text());b.disabled=false;return}
+  const blob=await r.blob(); const u=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=u; a.download='barum_result.zip'; a.click();
+  st.textContent='완료. ZIP 다운로드됨.';
+ }catch(e){st.textContent='실패: '+e.message}
+ b.disabled=false;
 }
 </script></body></html>

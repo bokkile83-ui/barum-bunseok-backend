@@ -1,22 +1,26 @@
-# 바름 AI 보장분석 백엔드 (단일 Render 서비스)
+# BARUM 보장분석 백엔드 (Railway)
 
-PDF 보장분석지 → Claude(29+4조) → 색칠된 보장진단 엑셀 → (2단계: PPT 연계) → 채팅에 다운로드.
+PDF 1개 업로드 → Claude 네이티브 PDF 분석(법칙 내장) → 계약별 색칠 엑셀 + 보장분석지 PPT ZIP.
 
-## Render 배포
-1. 이 폴더를 GitHub 새 repo에 올린다.
-2. render.com → New → Web Service → 그 repo 선택.
-3. Build: `pip install -r requirements.txt`  /  Start: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Environment → `ANTHROPIC_API_KEY` = sk-ant-... 추가.
-   + 잠금 켜려면 `ACCESS_PW` = 1009 (원하는 비번)도 추가. 미설정 시 잠금 없이 누구나 사용.
-5. 배포 후 나온 주소 열기 → PDF 업로드.
+## 배포 (Railway)
+1. 이 폴더 전체를 repo(bokkile83-ui/barum-bunseok-backend)에 push 또는 Railway에 업로드.
+2. 환경변수(Variables) 설정:
+   - `ANTHROPIC_API_KEY` = sk-ant-... (필수)
+   - `ACCESS_PW` = 1009 (게이트 비번, 기본 1009)
+   - `MODEL` = claude-sonnet-4-6 (선택, 정확도↑면 claude-opus-4-7)
+3. 시작 명령은 Procfile 자동: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. 배포 URL 접속 → 비번 입력 → PDF 업로드 → ZIP 다운로드.
 
 ## 파일
-- main.py        : FastAPI(페이지+분석+채움+파일반환)
-- rules.py       : 29+4조 시스템프롬프트
-- fill_excel.py  : JSON→색칠 엑셀 (검증완료)
-- template.xlsx  : 빈 보장진단 템플릿
-- static/index.html : 채팅 UI
-- (2단계) fill_pptx.py + form.pptx : 엑셀값→PPT 폼 연계
+- main.py : FastAPI (/ 업로드폼, /analyze 처리)
+- rules.py : 법칙 + JSON 스키마 (Claude 시스템 프롬프트)
+- fill_excel.py : JSON → 계약별 그리드 엑셀 (색·콤마·선·심장 중복채움·메모)
+- fill_pptx.py : 한장보장 폼(form.pptx) 합계 채움
+- template.xlsx / form.pptx : 표본
+- static/index.html : 업로드 게이트
 
-## 2단계(PPT) 추가법
-form.pptx(빈 폼) 등록 + fill_pptx.py(엑셀값→버블/메모) 추가하면 자동으로 PPT도 채팅에 같이 올라옴.
+## 핵심
+- Claude가 PDF를 직접 읽어 계약별 세로 컬럼에 정확히 매핑(좌표추출 한계 없음).
+- 심장 허혈성→급성심근경색·협심증 중복보장 자동 채움.
+- 1~5종 종별 합산, n대·통합전이암 대표1개, 하이클래스=비급여주요치료비.
+- 결과는 증권 최종확인.
