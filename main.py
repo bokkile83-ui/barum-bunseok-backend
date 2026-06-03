@@ -74,17 +74,23 @@ async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None))
 
     token = uuid.uuid4().hex[:10]
     client = data.get("client", "고객")
+    safe = re.sub(r"[^\w가-힣]", "", str(client)) or "고객"
     files = []
     # 1) 엑셀 먼저
-    xlsx = os.path.join(OUT, f"{token}_보장진단_{client}.xlsx")
-    fill_excel(data, os.path.join(BASE, "template.xlsx"), xlsx)
-    files.append({"name": f"보장진단_{client}.xlsx", "url": f"/download/{token}/excel"})
+    xlsx = os.path.join(OUT, f"{token}_보장진단_{safe}.xlsx")
+    try:
+        fill_excel(data, os.path.join(BASE, "template.xlsx"), xlsx)
+    except Exception as e:
+        import traceback
+        return JSONResponse({"ok": False, "error": "엑셀 생성 오류: " + str(e),
+                             "raw": traceback.format_exc()[:1500]})
+    files.append({"name": f"보장진단_{safe}.xlsx", "url": f"/download/{token}/excel"})
     # 2) PPT 연계 (엑셀 값 기반) — 준비되면
     if PPTX_READY and os.path.exists(os.path.join(BASE, "form.pptx")):
         try:
-            pptx = os.path.join(OUT, f"{token}_보장분석지_{client}.pptx")
+            pptx = os.path.join(OUT, f"{token}_보장분석지_{safe}.pptx")
             fill_pptx(data, xlsx, os.path.join(BASE, "form.pptx"), pptx)
-            files.append({"name": f"보장분석지_{client}.pptx", "url": f"/download/{token}/pptx"})
+            files.append({"name": f"보장분석지_{safe}.pptx", "url": f"/download/{token}/pptx"})
         except Exception as e:
             data.setdefault("memo", []).append("PPT 생성 실패(엑셀은 정상): " + str(e))
     return JSONResponse({"ok": True, "client": client,

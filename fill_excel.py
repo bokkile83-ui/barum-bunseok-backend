@@ -31,7 +31,8 @@ def _mark(i): return CIRC[i] if i<len(CIRC) else f"{i+1}."
 def fill_excel(data, template_path, out_path):
     wb=openpyxl.load_workbook(template_path); ws=wb.active
     client=data.get("client","고객")
-    ws.title=f"{client} 보장진단"[:31]
+    _safe=re.sub(r"[:\\/?*\[\]]","",str(client)).strip() or "고객"
+    ws.title=(_safe+" 보장진단")[:31]
     ws["A1"]=f"{client}\n보장진단"
     contracts=data.get("contracts",[])[:MAXC]
     N=len(contracts)
