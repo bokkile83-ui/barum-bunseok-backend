@@ -44,6 +44,10 @@ async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None))
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         return JSONResponse({"ok": False, "error": "ANTHROPIC_API_KEY 미설정 (Render 환경변수 확인)"} )
+    # 25·33조: 새 분석 시작 시 이전 고객 산출물 자동삭제(한 번에 한 명만)
+    try:
+        for fn in os.listdir(OUT): os.remove(os.path.join(OUT, fn))
+    except Exception: pass
     pdf = await file.read()
     b64 = base64.b64encode(pdf).decode()
     payload = {
