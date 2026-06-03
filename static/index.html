@@ -83,7 +83,7 @@
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
     <div class="sub">PDF 넣으면 → 엑셀 → PPT 자동 채움 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
-    <div class="msg bot">보장분석지(PDF)를 올려주세요. 29+4조로 분석해서 <b>색칠된 보장진단 엑셀</b>을 만들어 드려요.</div>
+    <div class="msg bot">보장분석지(PDF)를 올려주세요. 33조로 분석해서 <b>색칠된 보장진단 엑셀</b>을 만들어 드려요.</div>
   </div>
   <div class="bar">
     <label class="up" id="up">📄 <span id="uplabel">보장분석지 PDF 선택</span></label>
@@ -151,7 +151,10 @@ function render(j){
          '<div class="am">권장 '+esc(g.rec)+' · 가입 '+esc(g.cur)+'</div></span><span class="st '+c+'">'+esc(st)+'</span></div>';});}
   const memo=j.memo||[];
   if(memo.length){h+='<div class="sec-t">⚠️ 셀프팩폭 · 증권확인 (자동 10%는 사람 몫)</div>';
-    memo.forEach(m=>h+='<div class="memo"><span class="d">▸</span><span>'+esc(m)+'</span></div>');}
+    memo.forEach(m=>{var tag,it,nt;if(m&&typeof m==='object'){tag=m.tag||'메모';it=m.item||'';nt=m.note||'';}else{tag='';it='';nt=String(m);}
+      var col=tag.indexOf('확인')>=0?'#F4C430':tag.indexOf('부족')>=0?'#F4897F':tag.indexOf('미가입')>=0?'#9aa0a8':tag.indexOf('갱신')>=0?'#7FB0FF':'#cfcfcf';
+      var lab=tag?'['+tag+'] ':'';var body=it?(it+' — '+nt):nt;
+      h+='<div class="memo"><span class="d" style="color:'+col+'">▸</span><span><b style="color:'+col+'">'+esc(lab)+'</b>'+esc(body)+'</span></div>';});}
   add(h,"bot");
   file=null;$("#uplabel").textContent="보장분석지 PDF 선택";$("#send").disabled=true;$("#fi").value="";
 }
