@@ -36,6 +36,7 @@ def fill_excel(data, template_path, out_path):
     ws["A1"]=f"{client}\n보장진단"
     contracts=data.get("contracts",[])[:MAXC]
     N=len(contracts)
+    cren=[_renew_contract(c) for c in contracts]  # 계약별 갱신여부
 
     extra=max(0, N-TPL_COLS)
     if extra:
@@ -54,9 +55,11 @@ def fill_excel(data, template_path, out_path):
     for i,c in enumerate(contracts):
         col=FIRST+i; ren=_renew_contract(c)
         h=ws.cell(1,col)
-        h.value=f"{_mark(i)}{c.get('company','')}\n{c.get('product','')}"
+        htxt=f"{_mark(i)}{c.get('company','') or c.get('product','')}"
+        h.value=htxt
         h.fill=F_BLUE if ren else F_RED
-        h.font=Font(bold=True, color=WHITE, size=9)
+        hs=10 if len(htxt)<=6 else 9 if len(htxt)<=9 else 8 if len(htxt)<=13 else 7  # 34조: 칸에 맞게 자동축소
+        h.font=Font(bold=True, color=WHITE, size=hs)
         h.alignment=Alignment(horizontal="center", vertical="center", wrap_text=True)
         ws.cell(2,col).value=c.get("renewal","")
         ws.cell(3,col).value=c.get("premium")
@@ -69,6 +72,7 @@ def fill_excel(data, template_path, out_path):
         cell=ws.cell(r,sum_col)
         if not isinstance(cell,MergedCell) and N:
             cell.value=f"=SUM({get_column_letter(FIRST)}{r}:{get_column_letter(last_col)}{r})"
+    ws.row_dimensions[1].height=30  # 34조: 최대 2줄
     ws.cell(1,sum_col).value="합계"
     setsum(3)
 
@@ -100,7 +104,8 @@ def fill_excel(data, template_path, out_path):
                     cell=ws.cell(row, FIRST+ci)
                     if isinstance(cell,MergedCell): continue
                     cell.value=a.get("value")
-                    cell.font=Font(color=BLUE if a.get("renew") else BLACK)
+                    blue = a.get("renew") or (ci<N and cren[ci])
+                    cell.font=Font(color=BLUE if blue else BLACK)
                     filled.add((row,FIRST+ci))
         if (not row) or collide:
             extra_rows.append((rw.get("group",""), rw.get("name",""), amts))
@@ -125,7 +130,8 @@ def fill_excel(data, template_path, out_path):
                 if ci is None or ci>=N: continue
                 cell=ws.cell(sr, FIRST+ci)
                 cell.value=a.get("value")
-                cell.font=Font(color=BLUE if a.get("renew") else BLACK)
+                blue = a.get("renew") or (ci<N and cren[ci])
+                cell.font=Font(color=BLUE if blue else BLACK)
                 cell.border=BORDER
             sc=ws.cell(sr,sum_col,f"=SUM({get_column_letter(FIRST)}{sr}:{get_column_letter(last_col)}{sr})")
             sc.border=BORDER
