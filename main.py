@@ -47,7 +47,7 @@ async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None))
     pdf = await file.read()
     b64 = base64.b64encode(pdf).decode()
     payload = {
-        "model": "claude-sonnet-4-6", "max_tokens": 6000, "system": RULES,
+        "model": "claude-sonnet-4-6", "max_tokens": 16000, "system": RULES,
         "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
         "messages": [{"role": "user", "content": [
             {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},

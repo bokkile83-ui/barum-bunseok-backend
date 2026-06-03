@@ -123,15 +123,18 @@ $("#send").onclick=async()=>{
   if(!file)return;
   add("📄 "+esc(file.name),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
-  const loading=add('<span class="spin"></span> &nbsp;분석 중… 보장분석지 읽고 엑셀 채우는 중 (10~40초)',"bot");
+  const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 분석 시작…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 끊지 말고 기다려 주세요</div></div></div>',"bot");
+  const t0=Date.now();
+  const steps=["📄 PDF 읽는 중…","🔎 애매한 담보 약관 조회 중…","📊 보장진단 엑셀 채우는 중…","📑 보장분석지 PPT 채우는 중…","✍️ 마무리 정리 중…"];
+  const tick=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과 · 보통 30~90초, 끊지 마세요";if(mm)mm.textContent=steps[Math.min(Math.floor(s/12),steps.length-1)];},1000);
   const fd=new FormData();fd.append("file",file);
   try{
     const r=await fetch("/analyze",{method:"POST",headers:{"x-access-pw":ACCESS},body:fd});
     const j=await r.json();
-    loading.remove();
+    clearInterval(tick); loading.remove();
     if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>'+(j.raw?'<div class="memo">'+esc(j.raw.slice(0,500))+'</div>':""),"bot");}
     else render(j);
-  }catch(e){loading.remove();add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");}
+  }catch(e){clearInterval(tick); loading.remove();add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");}
   $("#send").disabled=false;$("#up").style.opacity=1;
 };
 function render(j){
