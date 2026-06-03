@@ -276,9 +276,14 @@ async def analyze(password: str = Form(...), file: UploadFile = File(...)):
                 {'type':'document','source':{'type':'base64','media_type':'application/pdf','data':b64}},
                 {'type':'text','text':'이 PDF를 법칙대로 계약별로 분석해 JSON만 출력.'}]}])
         raw=''.join(b.text for b in msg.content if getattr(b,'type',None)=='text')
-        m=re.search(r'\{.*\}', raw, re.S)
-        if not m: return JSONResponse({'ok':False,'error':'분석 JSON을 못 찾음','raw':raw[:1200]})
-        data=json.loads(m.group(0))
+        # ```json 펜스/설명 제거 후, 첫 { 부터 완결된 JSON 객체만 파싱(뒤 설명 무시)
+        cleaned=raw.replace('```json','').replace('```','')
+        start=cleaned.find('{')
+        if start<0: return JSONResponse({'ok':False,'error':'분석 JSON을 못 찾음','raw':raw[:1200]})
+        try:
+            data,_=json.JSONDecoder().raw_decode(cleaned[start:])
+        except json.JSONDecodeError as je:
+            return JSONResponse({'ok':False,'error':f'JSON 파싱 실패: {je}','raw':cleaned[start:start+1500]})
         cust=re.sub(r'[^\w가-힣]','',str(data.get('customer','고객'))) or '고객'
         xlsx=os.path.join(tempfile.gettempdir(),f'보장진단_{cust}.xlsx')
         build_excel(data, xlsx)
