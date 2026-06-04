@@ -22,12 +22,14 @@ def home():
     with open(os.path.join(BASE, "static", "index.html"), encoding="utf-8") as f:
         return f.read()
 
-ACCESS_PW = os.environ.get("ACCESS_PW")  # 설정 시 잠금 활성화
+# ====== 로그인 비밀번호 ======
+# ↓↓↓ 따옴표 안 숫자만 바꾸면 비번이 바뀝니다 (지금은 1009) ↓↓↓
+LOGIN_PW = "1009"
+# (선택) Render에 ACCESS_PW 환경변수를 넣으면 그게 우선 적용됩니다.
+ACCESS_PW = os.environ.get("ACCESS_PW") or LOGIN_PW
 
 @app.post("/check")
 async def check(request: Request):
-    if not ACCESS_PW:
-        return JSONResponse({"ok": True, "locked": False})  # 미설정=잠금없음
     try:
         body = await request.json()
     except Exception:
@@ -35,7 +37,7 @@ async def check(request: Request):
     return JSONResponse({"ok": str(body.get("pw", "")) == ACCESS_PW, "locked": True})
 
 def _gate(x_access_pw):
-    return (not ACCESS_PW) or (x_access_pw == ACCESS_PW)
+    return x_access_pw == ACCESS_PW
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None)):
@@ -51,11 +53,12 @@ async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None))
     pdf = await file.read()
     b64 = base64.b64encode(pdf).decode()
     payload = {
-        "model": "claude-sonnet-4-6", "max_tokens": 16000, "system": RULES,
-        "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-        "messages": [{"role": "user", "content": [
-            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
-            {"type": "text", "text": "이 보장분석지를 법칙대로 분석해 JSON만 출력하세요."}]}],
+        "model": "claude-sonnet-4-6", "max_tokens": 32000, "system": RULES,
+        "messages": [
+            {"role": "user", "content": [
+                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": b64}},
+                {"type": "text", "text": "이 보장분석지를 법칙대로 분석해 JSON만 출력하세요."}]},
+            {"role": "assistant", "content": "{"}],
     }
     try:
         async with httpx.AsyncClient(timeout=280) as cx:
@@ -64,13 +67,18 @@ async def analyze(file: UploadFile = File(...), x_access_pw: str = Header(None))
         d = r.json()
         if d.get("error"):
             return JSONResponse({"ok": False, "error": "Claude: " + str(d["error"].get("message"))})
-        text = "".join(b.get("text", "") for b in d.get("content", []))
+        # prefill "{" 로 시작했으므로 응답 앞에 다시 붙여 완전한 JSON 복원
+        text = "{" + "".join(b.get("text", "") for b in d.get("content", []))
+        truncated = d.get("stop_reason") == "max_tokens"
     except Exception as e:
         return JSONResponse({"ok": False, "error": "API 호출 오류: " + str(e)})
 
     data = _extract_json(text)
     if not data:
         return JSONResponse({"ok": False, "error": "JSON 파싱 실패", "raw": text[:4000]})
+    if truncated:
+        data.setdefault("memo", []).append(
+            {"tag": "메모", "item": "분석 잘림", "note": "담보 많아 일부 누락 가능·증권 직접확인"})
 
     token = uuid.uuid4().hex[:10]
     client = data.get("client", "고객")
@@ -107,7 +115,28 @@ def download(token: str, kind: str):
 
 def _extract_json(t):
     s = re.sub(r"```json|```", "", t).strip()
-    a, b = s.find("{"), s.rfind("}")
-    if a < 0 or b < 0: return None
-    try: return json.loads(s[a:b+1])
+    a = s.find("{")
+    if a < 0: return None
+    s = s[a:]
+    # 1) 그대로 시도
+    b = s.rfind("}")
+    if b >= 0:
+        try: return json.loads(s[:b+1])
+        except Exception: pass
+    # 2) 잘림 복구: 문자열 밖에서 열린 괄호를 스택에 쌓고, 끝에서 역순으로 닫는다
+    stack = []; in_str = esc = False
+    for ch in s:
+        if esc: esc = False; continue
+        if ch == "\\" and in_str: esc = True; continue
+        if ch == '"': in_str = not in_str; continue
+        if in_str: continue
+        if ch in "{[": stack.append(ch)
+        elif ch == "}" and stack and stack[-1] == "{": stack.pop()
+        elif ch == "]" and stack and stack[-1] == "[": stack.pop()
+    fixed = s
+    if in_str: fixed += '"'
+    fixed = fixed.rstrip().rstrip(",")
+    for opener in reversed(stack):
+        fixed += "}" if opener == "{" else "]"
+    try: return json.loads(fixed)
     except Exception: return None
