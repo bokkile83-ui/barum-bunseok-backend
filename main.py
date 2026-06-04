@@ -19,7 +19,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 @app.get("/", response_class=HTMLResponse)
 def home():
-    with open(os.path.join(BASE, "static", "index.html"), encoding="utf-8") as f:
+    with open(os.path.join(BASE, "index.html"), encoding="utf-8") as f:
         return f.read()
 
 # ====== 로그인 비밀번호 ======
