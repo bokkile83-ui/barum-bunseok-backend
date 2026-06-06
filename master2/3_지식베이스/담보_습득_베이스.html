@@ -1,0 +1,57 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>바름 담보 습득 베이스</title><style>
+:root{--navy:#0b1f3a;--navy2:#12294b;--gold:#c9a14a;--gold2:#e6c879;--ink:#eaf0f8;--mut:#9fb0c8;--red:#ff9aa6;--grn:#8fe0b0;}
+*{box-sizing:border-box}body{margin:0;background:#070d18;color:var(--ink);font-family:'Pretendard','Apple SD Gothic Neo',system-ui,sans-serif;line-height:1.55}
+.w{max-width:840px;margin:0 auto;padding:26px 18px 56px}
+.h{border-left:4px solid var(--gold);padding:6px 0 6px 15px;margin-bottom:18px}
+.h h1{margin:0;font-size:21px}.h .s{color:var(--mut);font-size:13px;margin-top:3px}
+.sec{background:linear-gradient(135deg,var(--navy),var(--navy2));border:1px solid #1e3358;border-radius:13px;padding:15px 17px;margin:13px 0}
+.sec .t{color:var(--gold2);font-weight:800;font-size:15px;margin-bottom:9px;letter-spacing:.3px}
+.row{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid #14233f;font-size:13px}
+.row:last-child{border:0}.row b{color:var(--gold);min-width:78px;flex-shrink:0}
+.row span{color:var(--ink)}
+.hold{border-left:3px solid #7a1f2b;background:rgba(122,31,43,.16);padding:11px 14px;border-radius:8px;margin-top:6px;font-size:13px}
+.hold .t{color:var(--red);font-weight:800;margin-bottom:5px}
+.code{color:var(--gold2);font-family:monospace;font-size:12px}
+.foot{margin-top:24px;color:#6b7e9c;font-size:12px;text-align:center}
+.kpi{display:flex;gap:10px;margin:6px 0 16px}.kpi div{flex:1;background:var(--navy);border:1px solid #1e3358;border-top:3px solid var(--gold);border-radius:10px;padding:11px 13px}
+.kpi .n{font-size:22px;font-weight:800;color:var(--gold2)}.kpi .l{font-size:11px;color:var(--mut)}
+</style></head><body><div class="w">
+<div class="h"><h1>바름 담보 습득 베이스 v1</h1><div class="s">영구마스터판 + 26년 교본 102p 압축 · 앱 기본베이스 = barum_dict.py · 메모리 영구저장</div></div>
+
+<div class="kpi">
+<div><div class="n">348</div><div class="l">14계약 고유담보</div></div>
+<div><div class="n">52%</div><div class="l">표준칸 직행매핑</div></div>
+<div><div class="n">HOLD</div><div class="l">모호=추측금지[확인]</div></div>
+</div>
+
+<div class="sec"><div class="t">암 (5칸 family)</div>
+<div class="row"><b>일반암</b><span>일반암·암진단 → 암진단비</span></div>
+<div class="row"><b>유사암</b><span>갑상선·기타피부·대장점막내·소액·제자리·경계성</span></div>
+<div class="row"><b>전이암</b><span>통합형전이암(12대·4대·뇌·심장·소액 전이)</span></div>
+<div class="row"><b>항암치료</b><span>표적·카티(CAR-T)·양성자·중입자·세기조절(IMRT)</span></div>
+<div class="row"><b>암수술</b><span>암수술 / 다빈치=별도칸</span></div></div>
+
+<div class="sec"><div class="t">뇌혈관 — 코드 위계가 보장폭</div>
+<div class="row"><b>뇌출혈</b><span>I60지주막하·I61뇌내·I62기타두개내 <span class="code">(최협 I60-62)</span></span></div>
+<div class="row"><b>뇌졸중</b><span>뇌출혈 + I63 뇌경색</span></div>
+<div class="row"><b>뇌혈관질환</b><span>전체 I60-69(협착·후유증 포함, 최광)</span></div></div>
+
+<div class="sec"><div class="t">심장 — 담보 등급별 코드</div>
+<div class="row"><b>급성심근</b><span>I21-23만 (가장 좁음)</span></div>
+<div class="row"><b>허혈성</b><span>+협심증 I20 +만성허혈 I25</span></div>
+<div class="row"><b>전체심장</b><span>부정맥·심부전 I47-50까지 = 전체심장 담보라야 보장</span></div>
+<div class="row"><b>★위치</b><span>허혈성·급성심근은 한화·KB 것 — 동양생명엔 없다(읽은 그대로)</span></div></div>
+
+<div class="sec"><div class="t">수술 1-5종 (종별택1, 합계=최대값)</div>
+<div class="row"><b>1종</b><span>백내장·편도·치핵·맘모톰·탈장</span></div>
+<div class="row"><b>2종</b><span>충수(맹장)·대장용종·쇄석·자궁난소</span></div>
+<div class="row"><b>3종</b><span>스텐트·인공심박조율기·경피적(뇌/심장)·척추골</span></div>
+<div class="row"><b>4종</b><span>장기 부분절제(간·췌·신·위·폐)</span></div>
+<div class="row"><b>5종</b><span>장기이식·개두(두개내관혈)·개흉(심장내관혈)·대동맥</span></div></div>
+
+<div class="hold"><div class="t">★ 추측금지 HOLD — 표준칸에 절대 안 넣고 [확인]</div>
+2대질환진단 · 성인병질환 · 특정심장질환Ⅰ/Ⅱ(등급불확정) · 양성뇌종양 · 재생불량성빈혈 · 특정감염병 · 대상포진 · 통풍 — 깔끔한 표준 1:1 매칭이 없으면 지어내지 않는다(법칙18).</div>
+
+<div class="foot">믿음은 조용히 쌓이고, 신뢰는 오래 남습니다. — BARUM 최은혜 지점장</div>
+</div></body></html>

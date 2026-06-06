@@ -1,0 +1,36 @@
+<!doctype html><html lang=ko><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>CI·캐논 습득</title><style>
+:root{--navy:#0b1f3a;--navy2:#12294b;--gold:#c9a14a;--gold2:#e6c879;--ink:#eaf0f8;--mut:#9fb0c8;--red:#ff9aa6;--grn:#8fe0b0}
+*{box-sizing:border-box}body{margin:0;background:#070d18;color:var(--ink);font-family:'Pretendard','Apple SD Gothic Neo',system-ui;line-height:1.55}
+.w{max-width:860px;margin:0 auto;padding:26px 18px 56px}
+.h{border-left:4px solid var(--gold);padding:6px 0 6px 15px;margin-bottom:16px}.h h1{margin:0;font-size:21px}.h .s{color:var(--mut);font-size:13px;margin-top:3px}
+.sec{background:linear-gradient(135deg,var(--navy),var(--navy2));border:1px solid #1e3358;border-radius:13px;padding:15px 17px;margin:12px 0}
+.sec .t{color:var(--gold2);font-weight:800;font-size:15px;margin-bottom:8px}
+.ci{border-left:3px solid var(--gold);background:rgba(201,161,74,.12);padding:11px 14px;border-radius:8px;margin-top:6px;font-size:13px}
+.ci b{color:var(--gold2)}
+.cat{font-size:12.5px;padding:5px 0;border-bottom:1px solid #14233f}.cat:last-child{border:0}.cat b{color:var(--gold);min-width:62px;display:inline-block}
+.foot{margin-top:22px;color:#6b7e9c;font-size:12px;text-align:center}
+.kpi{display:flex;gap:10px;margin:4px 0 14px}.kpi div{flex:1;background:var(--navy);border:1px solid #1e3358;border-top:3px solid var(--gold);border-radius:10px;padding:10px 12px}.kpi .n{font-size:21px;font-weight:800;color:var(--gold2)}.kpi .l{font-size:11px;color:var(--mut)}
+</style>
+<div class=w>
+<div class=h><h1>CI 처리법 + 실전 캐논 taxonomy 습득</h1><div class=s>실전 12파일(100+고객·24.4~25.3) 학습 · 코드=barum_dict.py(CANON·is_ci)</div></div>
+<div class=kpi><div><div class=n>12</div><div class=l>실전 파일</div></div><div><div class=n>75</div><div class=l>캐논 담보행</div></div><div><div class=n>17</div><div class=l>카테고리</div></div></div>
+
+<div class=sec><div class=t>★ CI / GI / 컨버전스 결합담보 처리법</div>
+<div class=ci>회사헤더에 <b>CI·GI</b> 표식 → 담보는 <b>"CI중대한암 · CI중대한뇌졸증 · CI중대한급성심근 · CI사망 · CI중대수술 · 중대화상"</b>으로 라벨.<br>
+핵심: <b>"중대한OO" = CI약관 정의</b>(일반 진단비보다 좁고 선지급). <b>일반 진단비칸에 그냥 합산하지 않는다</b> — CI 표식 유지(코드 is_ci=True). DB컨버전스·두번째중대한암(2차 CI)도 같은 계열.</div></div>
+
+<div class=sec><div class=t>실전 캐논 — 17카테고리 75행 (네 정식 분류표)</div>
+<div class=cat><b>사망</b> 일반·질병(80세)·교통상해·상해</div>
+<div class=cat><b>후유</b> 상해3%·상해80%·질병3%·질병80%</div>
+<div class=cat><b>암</b> 고액암·일반암·특정암(전립선·방광)·유사암(갑기경제)·표적·양성자·세기조절·암수술·암주요치료·다빈치·암일당·항암방사선약물</div>
+<div class=cat><b>뇌혈관</b> 뇌혈관진단·뇌졸증·뇌출혈·외상성뇌출혈·산정특례·혈전용해</div>
+<div class=cat><b>심장</b> 허혈성·협심증·심부전·염증·부정맥·산정특례·2대주요치료비·급성심근·혈전용해</div>
+<div class=cat><b>일당</b> 질병·상해·11대수술·상급병원·1인실(상급/종합)·간병인·중환자실(질병/상해)</div>
+<div class=cat><b>수술</b> 상해·중대한상해·상해1-5종·창상봉합·골절·5대골절·화상·질병·질병1-5종·12대폴립·11대</div>
+<div class=cat><b>골절/응급/치아/화상</b> 골절(치아±)·5대골절·응급실·임플란트·화상진단·중증화상</div>
+<div class=cat><b>자동차</b> 대인·대물·합의금·6주미만·변호사·자부상</div>
+<div class=cat><b>깁스/실손</b> 반깁스·깁스진단·입원실손·통원실손·약값·MRI도수비급여·일상배상</div></div>
+
+<div class=foot>믿음은 조용히 쌓이고, 신뢰는 오래 남습니다. — BARUM 최은혜 지점장</div>
+</div></html>
