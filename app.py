@@ -8,6 +8,13 @@ import anthropic
 
 SYSTEM_PROMPT = r"""너는 BARUM(최은혜 지점장) 보장분석 엔진이다. 첨부된 '보장분석 리포트' PDF를 계약별로 정확히 읽어 JSON만 출력한다. 설명 금지, 마크다운 금지, 순수 JSON만.
 
+[★최우선 정상화 5규칙 — 아래 A~L보다 우선]
+0(제목). customer는 반드시 PDF 본문 '계약자' 이름. 파일명(noname/복사 등) 사용 금지.
+1(종신). 만기 9999 또는 상품명에 '종신' → 사망액을 '일반사망'과 '상해사망' 두 칸에 같은 금액 1:1 기재. 별첨 사망이 [1]/[2]·두 줄이면 첫째=일반사망, 둘째=상해사망. (예: NEW알뜰종신 6000/6000 → 일반6000+상해6000)
+2(3대진단비). 접두접미 '[갱신형]·갱신계약·(갱신)·중대한'은 떼고 본담보로 매핑(renew/CI 표시만 유지). 암: 암진단비/일반암=일반암 · 갑상선/제자리/경계성/기타피부/소액/비침습=유사암 · 전립선/방광/특정=특정암 · 통합전이/전이=전이암진단비(대표1·합산금지). ★유사암칸에 수천만원이 들어가면 오분류이니 일반암으로 재확인. 뇌: 뇌혈관진단/뇌졸증/뇌출혈 구분. 심장: '심장질환(특정Ⅰ)'=허혈성진단비, '(특정Ⅱ)'=급성심근경색. 허혈성 가입시 급성심근·협심증 동액 중복채움.
+3(수술). 1~5종은 질병/상해 구분해 surg15에 [1종,2종,3종,4종,5종] 배열. 16/116/119대 등 n대수술=대표 1개 ndae. 상해수술비·질병수술비는 별도 row.
+4(갱신vs비갱신). 담보명에 '(갱신형)·[갱신형]·갱신계약' → 그 담보 renew=true(파랑). 계약 renewal: 납입기간==보장기간=갱신 / 9999·운전자·납입≠보장·납입회차>240=비갱신.
+
 [법칙]
 A. 분석순서: ①표지 다음 보유계약목록 인식 ②각 계약 별첨(상품별 보장현황)을 1장씩 분석 ③계약별 세로 컬럼에 정확히 기재. ★A담보가 B회사로 가면 안 됨 — 계약별 대조 필수.
 B. 기재범위: 표준 폼 담보. 폼에 없는 생소담보는 rows에 넣지 말고 memo에 (type=제외).
@@ -291,7 +298,11 @@ async def analyze(password: str = Form(...), file: UploadFile = File(...)):
             data,_=json.JSONDecoder().raw_decode(cleaned[start:])
         except json.JSONDecodeError as je:
             return JSONResponse({'ok':False,'error':f'JSON 파싱 실패: {je}','raw':cleaned[start:start+1500]})
-        if fname and fname.lower() not in ('noname','file','보장','pdf'): data['customer']=fname
+        m_cust=re.search(r'계약자\s*([가-힣][가-힣*]{1,5})', pdf_text or '')
+        pdf_cust=m_cust.group(1).strip() if m_cust else ''
+        bad=(not fname) or bool(re.search(r'noname|복사|file|보장|pdf|^\d', fname, re.I))
+        if pdf_cust: data['customer']=pdf_cust          # ★PDF 계약자 최우선
+        elif not bad: data['customer']=fname            # 깨끗한 파일명만 허용
         cust=re.sub(r'[^\w가-힣]','',str(data.get('customer','고객'))) or '고객'
         xlsx=os.path.join(tempfile.gettempdir(),f'보장진단_{cust}.xlsx')
         build_excel(data, xlsx)
