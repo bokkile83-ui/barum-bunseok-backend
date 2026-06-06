@@ -264,12 +264,25 @@ async def analyze(password: str = Form(...), file: UploadFile = File(...)):
         if not pdf: return JSONResponse({'ok':False,'error':'PDF가 비어있습니다.'})
         fname=re.sub(r'\\.pdf$','',(file.filename or ''),flags=re.I).strip()
         b64=base64.standard_b64encode(pdf).decode()
+        # ★PyMuPDF(fitz) 텍스트 선추출 — OZ리포트뷰어 CID폰트 PDF는 이미지/직접읽기로 한글이 누락(→'미확인').
+        #   fitz는 ToUnicode CMap으로 회사명·상품명·담보명 한글을 복구한다. 이 텍스트를 1순위 근거로 준다.
+        pdf_text=''
+        try:
+            import fitz
+            _doc=fitz.open(stream=pdf, filetype='pdf')
+            _parts=[]
+            for _i,_pg in enumerate(_doc):
+                _parts.append(f'===== p{_i+1} =====\n'+_pg.get_text())
+            pdf_text='\n'.join(_parts)[:60000]
+            _doc.close()
+        except Exception:
+            pdf_text=''
+        _user=[{'type':'document','source':{'type':'base64','media_type':'application/pdf','data':b64}}]
+        if pdf_text.strip():
+            _user.append({'type':'text','text':'아래는 같은 PDF에서 추출한 원문 텍스트다. 회사명·상품명·담보명·금액·날짜는 이 텍스트를 1순위 근거로 삼아라(PDF 이미지가 흐릿하거나 마스킹돼 보여도 이 텍스트의 한글을 신뢰). 텍스트에 회사명이 있으면 절대 \'미확인\'으로 쓰지 마라.\n\n===PDF 추출 원문===\n'+pdf_text})
+        _user.append({'type':'text','text':'이 PDF를 법칙대로 계약별로 분석하라. 설명·사고과정·서론 절대 금지. JSON 객체 하나만 출력. 첫 글자는 { 이다.'})
         msg=client().messages.create(model=MODEL, max_tokens=20000, system=SYSTEM_PROMPT,
-            messages=[
-                {'role':'user','content':[
-                    {'type':'document','source':{'type':'base64','media_type':'application/pdf','data':b64}},
-                    {'type':'text','text':'이 PDF를 법칙대로 계약별로 분석하라. 설명·사고과정·서론 절대 금지. JSON 객체 하나만 출력. 첫 글자는 { 이다.'}]},
-                {'role':'assistant','content':'{'}])
+            messages=[{'role':'user','content':_user},{'role':'assistant','content':'{'}])
         raw='{'+''.join(b.text for b in msg.content if getattr(b,'type',None)=='text')
         cleaned=raw.replace('```json','').replace('```','')
         start=cleaned.find('{')

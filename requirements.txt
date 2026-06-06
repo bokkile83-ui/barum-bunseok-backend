@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 python-multipart
-PyMuPDF
+anthropic
 openpyxl
+PyMuPDF
 python-pptx
