@@ -657,3 +657,4 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         return JSONResponse({'ok':True,'data':data,'zip_b64':zip_b64,'filename':zip_name,'pptx_ready':ppt_ok})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
+Commit changes
