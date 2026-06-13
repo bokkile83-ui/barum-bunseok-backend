@@ -451,8 +451,165 @@ def build_ppt(data, path):
     return True
 
 # ── HTML (기존 app.py 디자인 유지, TXT만 변경) ───────────────────────
-INDEX_HTML=open(os.path.join(HERE,'static','index.html'),encoding='utf-8').read() if \
-    os.path.exists(os.path.join(HERE,'static','index.html')) else "<h1>index.html 없음</h1>"
+INDEX_HTML = r'''<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MAKEONE 보장분석실</title>
+<style>
+  :root{--bg:#0c0d10;--panel:#15171c;--line:#2a2d34;--acc:#E0463B;--acc2:#F4897F;
+    --ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--amber:#F5B547;--red:#FF6B6B;--blue:#5B9BFF}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans KR',sans-serif;line-height:1.55}
+  #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:30px 26px;text-align:center}
+  #gate .kick{font-size:14px;font-weight:800;letter-spacing:.45em;color:var(--acc);margin-bottom:14px}
+  #gate h1{font-size:30px;font-weight:800;letter-spacing:-.01em;margin-bottom:14px}
+  #gate .s{font-size:14px;color:var(--mute);margin-bottom:38px}
+  #gate .pw{width:100%;max-width:420px;background:#1a1c22;border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;font-size:17px;color:var(--ink);text-align:center;letter-spacing:.3em;outline:none}
+  #gate .pw:focus{border-color:var(--acc)}
+  #gate .go{width:100%;max-width:420px;margin-top:14px;border:none;border-radius:14px;padding:18px;
+    font-size:17px;font-weight:800;color:#fff;background:var(--acc);cursor:pointer}
+  #gate .go:active{transform:translateY(1px)}
+  #gate .err{color:var(--acc2);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
+  .shake{animation:sh .35s}
+  @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+  .app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
+  header{padding:14px 18px;border-bottom:1px solid var(--line);
+    background:linear-gradient(135deg,#1a1115,#0d0e11 60%,#1c1216);display:flex;align-items:center;gap:10px}
+  .logo{width:32px;height:32px;border-radius:9px;border:1px solid var(--acc);display:flex;
+    align-items:center;justify-content:center;font-size:16px;background:linear-gradient(135deg,#241012,#0d0e11)}
+  h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}
+  .sub{font-size:10px;color:var(--mute)}
+  .chat{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:12px}
+  .msg{max-width:90%;font-size:13px}
+  .me{align-self:flex-end;background:rgba(224,70,59,.14);border:1px solid rgba(224,70,59,.32);
+    border-radius:14px 14px 4px 14px;padding:9px 13px}
+  .bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%}
+  .file-card{display:flex;align-items:center;gap:11px;background:rgba(74,222,128,.06);
+    border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:11px 13px;margin-top:9px;text-decoration:none;color:var(--ink)}
+  .file-card .ic{font-size:22px}.file-card .nm{flex:1;font-size:12.5px;font-weight:700}
+  .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);padding:5px 11px;border-radius:8px}
+  .err{color:#ffb4b4;font-size:12px}
+  .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);
+    border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
+  .up{flex:1;border:1.5px dashed rgba(224,70,59,.5);border-radius:12px;padding:13px;text-align:center;
+    font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
+  .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);color:#fff;cursor:pointer}
+  .send:disabled{opacity:.4}
+  footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}
+  footer b{color:var(--acc2)}
+</style></head>
+<body>
+<div id="gate">
+  <div class="kick">MAKEONE</div>
+  <h1>MAKEONE 보장분석실</h1>
+  <div class="s">접속 비밀번호를 입력하세요</div>
+  <input id="pw" class="pw" type="password" inputmode="numeric" placeholder="비밀번호" autocomplete="off">
+  <button id="go" class="go">접속</button>
+  <div id="gerr" class="err"></div>
+</div>
+<div class="app" id="app">
+  <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
+    <div class="sub">TXT 넣으면 → 엑셀+PPT 세트 · 최은혜 지점장</div></div></header>
+  <div class="chat" id="chat">
+    <div class="msg bot">
+      보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀+PPT 세트를 ZIP으로 드려요.<br><br>
+      <span style="font-size:11px;color:var(--mute)">
+        💡 Adobe Acrobat → 편집 → 모두선택(Ctrl+A) → 복사(Ctrl+C)<br>
+        → 메모장 붙여넣기 → .txt 저장 → 여기 업로드
+      </span>
+    </div>
+  </div>
+  <div class="bar">
+    <label class="up" id="up">📄 <span id="uplabel">보장분석지 TXT 선택</span></label>
+    <button class="send" id="send" disabled>분석</button>
+  </div>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM</footer>
+</div>
+<input type="file" id="fi" accept=".txt,text/plain" style="display:none">
+<script>
+const $=s=>document.querySelector(s);
+let ACCESS='';
+async function unlock(){
+  const v=$("#pw").value;
+  $("#gerr").textContent="확인 중…";
+  try{
+    const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
+    const j=await r.json();
+    if(j.ok){ACCESS=v;$("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
+    else{fail();}
+  }catch(e){$("#gerr").textContent="서버 연결 실패";}
+}
+function fail(){
+  $("#gerr").textContent="비밀번호가 올바르지 않습니다.";
+  $("#gate").classList.add("shake");
+  setTimeout(()=>$("#gate").classList.remove("shake"),350);
+  $("#pw").value="";$("#pw").focus();
+}
+$("#go").onclick=unlock;
+$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});
+window.addEventListener("load",()=>$("#pw").focus());
+
+const chat=$("#chat");let file=null;
+$("#up").onclick=()=>$("#fi").click();
+$("#fi").onchange=e=>{
+  file=e.target.files[0];
+  if(file){$("#uplabel").textContent=file.name;$("#send").disabled=false;}
+};
+function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
+
+$("#send").onclick=async()=>{
+  if(!file)return;
+  add("📄 "+esc(file.name),"me");
+  $("#send").disabled=true;$("#up").style.opacity=.5;
+  const loading=add(
+    '<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span>'+
+    '<div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 TXT 파싱 중…</div>'+
+    '<div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
+  const t0=Date.now();
+  const steps=["📄 TXT 파싱 중…","🔎 별첨 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ ZIP 완성 중…"];
+  let si=0;
+  const timer=setInterval(()=>{
+    si=Math.min(si+1,steps.length-1);
+    const s=Math.floor((Date.now()-t0)/1000);
+    const tm=document.getElementById("ldtime");
+    const mm=document.getElementById("ldmsg");
+    if(tm)tm.textContent=s+"초 경과";
+    if(mm)mm.textContent=steps[si];
+  },8000);
+  const fd=new FormData();fd.append("file",file);fd.append("pw",ACCESS);
+  try{
+    const r=await fetch("/analyze",{method:"POST",body:fd});
+    clearInterval(timer);loading.remove();
+    const j=await r.json();
+    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
+    else{
+      const bin=atob(j.zip_b64);
+      const arr=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      const u=URL.createObjectURL(new Blob([arr],{type:"application/zip"}));
+      const a=document.createElement("a");a.href=u;a.download=j.filename||"보장분석.zip";a.click();
+      add(
+        '<b>✅ 분석 완료!</b><br>'+
+        '<a class="file-card" href="'+u+'" download="'+esc(j.filename||"보장분석.zip")+'">'+
+        '<span class="ic">📦</span>'+
+        '<span class="nm">'+esc(j.filename||"보장분석.zip")+'<br>'+
+        '<span style="font-size:10px;color:var(--mute)">엑셀'+(j.pptx_ready?'+PPT':'')+' 세트</span></span>'+
+        '<span class="dl">저장 ⬇</span></a>',"bot");
+    }
+  }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
+  file=null;$("#uplabel").textContent="보장분석지 TXT 선택";
+  $("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+};
+</script></body></html>
+'''
 
 # ── FastAPI ────────────────────────────────────────────────────────────
 app=FastAPI()
