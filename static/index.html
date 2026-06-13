@@ -38,10 +38,8 @@
     border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%}
   .file-card{display:flex;align-items:center;gap:11px;background:rgba(74,222,128,.06);
     border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:11px 13px;margin-top:9px;text-decoration:none;color:var(--ink)}
-  .file-card .ic{font-size:22px}
-  .file-card .nm{flex:1;font-size:12.5px;font-weight:700}
-  .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);
-    padding:5px 11px;border-radius:8px}
+  .file-card .ic{font-size:22px}.file-card .nm{flex:1;font-size:12.5px;font-weight:700}
+  .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);padding:5px 11px;border-radius:8px}
   .err{color:#ffb4b4;font-size:12px}
   .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);
     border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -49,14 +47,12 @@
   .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
   .up{flex:1;border:1.5px dashed rgba(224,70,59,.5);border-radius:12px;padding:13px;text-align:center;
     font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
-  .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);
-    color:#fff;cursor:pointer}.send:disabled{opacity:.4}
+  .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);color:#fff;cursor:pointer}
+  .send:disabled{opacity:.4}
   footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}
   footer b{color:var(--acc2)}
-  .tip{font-size:11px;color:var(--mute);padding:8px 12px;line-height:1.8}
 </style></head>
 <body>
-<!-- 게이트 -->
 <div id="gate">
   <div class="kick">MAKEONE</div>
   <h1>MAKEONE 보장분석실</h1>
@@ -65,7 +61,6 @@
   <button id="go" class="go">접속</button>
   <div id="gerr" class="err"></div>
 </div>
-<!-- 앱 -->
 <div class="app" id="app">
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
     <div class="sub">TXT 넣으면 → 엑셀+PPT 세트 · 최은혜 지점장</div></div></header>
@@ -85,19 +80,14 @@
   <footer>미래를 <b>바르게</b> 설계합니다 · BARUM</footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
-
 <script>
 const $=s=>document.querySelector(s);
-let ACCESS="";
-
-// ===== 비번 검증 =====
+let ACCESS='';
 async function unlock(){
   const v=$("#pw").value;
   $("#gerr").textContent="확인 중…";
   try{
-    const r=await fetch("/check",{method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({pw:v})});
+    const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
     const j=await r.json();
     if(j.ok){ACCESS=v;$("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
     else{fail();}
@@ -113,7 +103,6 @@ $("#go").onclick=unlock;
 $("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});
 window.addEventListener("load",()=>$("#pw").focus());
 
-// ===== 앱 =====
 const chat=$("#chat");let file=null;
 $("#up").onclick=()=>$("#fi").click();
 $("#fi").onchange=e=>{
@@ -121,74 +110,49 @@ $("#fi").onchange=e=>{
   if(file){$("#uplabel").textContent=file.name;$("#send").disabled=false;}
 };
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-function add(html,cls){
-  const d=document.createElement("div");d.className="msg "+cls;
-  d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;
-}
+function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 
-// ===== 분석 버튼 =====
 $("#send").onclick=async()=>{
   if(!file)return;
   add("📄 "+esc(file.name),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
-
   const loading=add(
-    '<div style="display:flex;align-items:center;gap:11px">'+
-    '<span class="spin"></span>'+
-    '<div style="flex:1">'+
-    '<div id="ldmsg" style="font-weight:800">📄 TXT 파싱 중…</div>'+
-    '<div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div>'+
-    '</div></div>',"bot");
-
+    '<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span>'+
+    '<div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 TXT 파싱 중…</div>'+
+    '<div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
   const t0=Date.now();
   const steps=["📄 TXT 파싱 중…","🔎 별첨 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ ZIP 완성 중…"];
-  const tick=setInterval(()=>{
+  let si=0;
+  const timer=setInterval(()=>{
+    si=Math.min(si+1,steps.length-1);
     const s=Math.floor((Date.now()-t0)/1000);
     const tm=document.getElementById("ldtime");
     const mm=document.getElementById("ldmsg");
-    if(tm)tm.textContent=s+"초 경과 · 보통 20~60초";
-    if(mm)mm.textContent=steps[Math.min(Math.floor(s/10),steps.length-1)];
-  },1000);
-
-  const fd=new FormData();
-  fd.append("file",file);
-  fd.append("pw",ACCESS);  // main.py는 pw form field로 받음
-
+    if(tm)tm.textContent=s+"초 경과";
+    if(mm)mm.textContent=steps[si];
+  },8000);
+  const fd=new FormData();fd.append("file",file);fd.append("pw",ACCESS);
   try{
     const r=await fetch("/analyze",{method:"POST",body:fd});
-    clearInterval(tick);loading.remove();
-
-    if(!r.ok){
-      const t=await r.text();
-      add('<span class="err">⚠ '+esc(t)+'</span>',"bot");
-    } else {
-      // ZIP 파일로 직접 다운로드
-      const b=await r.blob();
-      const u=URL.createObjectURL(b);
-      const cn=r.headers.get("content-disposition")||"";
-      const fn=cn.match(/filename="?([^"]+)"?/)?.[1]||"보장분석.zip";
-      const a=document.createElement("a");
-      a.href=u;a.download=fn;a.click();
-
-      const nm=fn.replace(".zip","");
+    clearInterval(timer);loading.remove();
+    const j=await r.json();
+    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
+    else{
+      const bin=atob(j.zip_b64);
+      const arr=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+      const u=URL.createObjectURL(new Blob([arr],{type:"application/zip"}));
+      const a=document.createElement("a");a.href=u;a.download=j.filename||"보장분석.zip";a.click();
       add(
         '<b>✅ 분석 완료!</b><br>'+
-        '<a class="file-card" href="'+u+'" download="'+esc(fn)+'">'+
+        '<a class="file-card" href="'+u+'" download="'+esc(j.filename||"보장분석.zip")+'">'+
         '<span class="ic">📦</span>'+
-        '<span class="nm">'+esc(fn)+'<br><span style="font-size:10px;color:var(--mute)">엑셀+PPT 세트</span></span>'+
-        '<span class="dl">저장 ⬇</span></a>',
-        "bot"
-      );
+        '<span class="nm">'+esc(j.filename||"보장분석.zip")+'<br>'+
+        '<span style="font-size:10px;color:var(--mute)">엑셀'+(j.pptx_ready?'+PPT':'')+' 세트</span></span>'+
+        '<span class="dl">저장 ⬇</span></a>',"bot");
     }
-  }catch(e){
-    clearInterval(tick);loading.remove();
-    add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");
-  }
-
-  file=null;
-  $("#uplabel").textContent="보장분석지 TXT 선택";
-  $("#send").disabled=true;
-  $("#fi").value="";
-  $("#up").style.opacity=1;
+  }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
+  file=null;$("#uplabel").textContent="보장분석지 TXT 선택";
+  $("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
 };
 </script></body></html>
