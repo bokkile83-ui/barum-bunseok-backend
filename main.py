@@ -20,101 +20,7 @@ TPL_XL  = os.path.join(HERE, "MASTER_보장분석_엑셀_영구표본.xlsx")
 TPL_PPT = os.path.join(HERE, "MASTER_보장분석지_PPT_빈폼.pptx")
 
 # ── 프론트엔드 ────────────────────────────────────────────────────────
-PAGE = """<!doctype html>
-<html lang=ko><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>MAKEONE 보장분석실</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:#0c0d10;color:#eaecef;font-family:'Apple SD Gothic Neo',system-ui;
-  display:flex;min-height:100vh;align-items:center;justify-content:center}
-.c{background:linear-gradient(135deg,#0b1f3a,#12294b);border:1px solid #1e3358;
-  border-top:3px solid #c9a14a;border-radius:16px;padding:30px 24px;
-  max-width:440px;width:92%;text-align:center}
-h1{font-size:20px;color:#e6c879;margin-bottom:4px}
-.sub{font-size:11px;color:#7a90a8;margin-bottom:20px;line-height:1.6}
-input[type=password]{width:100%;padding:12px;border-radius:10px;
-  border:1px solid #2a4570;background:#0b1f3a;color:#eaf0f8;font-size:14px;margin-top:10px}
-.file-area{width:100%;margin-top:12px;padding:16px;border-radius:10px;
-  border:2px dashed #2a4570;background:#061526;color:#7a90a8;
-  font-size:13px;cursor:pointer;transition:.2s}
-.file-area:hover{border-color:#c9a14a;color:#e6c879}
-.file-area.active{border-color:#4ade80;color:#4ade80;background:#061d10}
-.btn{width:100%;margin-top:14px;padding:14px;border-radius:10px;border:none;
-  background:#c9a14a;color:#0b1f3a;font-size:16px;font-weight:800;cursor:pointer}
-.btn:disabled{opacity:.4;cursor:not-allowed}
-.msg{margin-top:12px;font-size:13px;min-height:18px}
-.ok{color:#4ade80}.err{color:#ff9aa6}.wait{color:#f5b547}
-.prog{height:4px;background:#1e3358;border-radius:2px;margin-top:10px;overflow:hidden}
-.bar{height:100%;background:linear-gradient(90deg,#c9a14a,#e6c879);border-radius:2px;
-  transition:width .5s;width:0%}
-.tip{margin-top:16px;font-size:10px;color:#3a5070;line-height:1.8}
-</style>
-<div class=c>
-  <h1>MAKEONE 보장분석실</h1>
-  <div class=sub>
-    Adobe Acrobat으로 보장분석지 PDF 텍스트 추출 후<br>
-    .txt 파일을 업로드하면 엑셀+PPT 세트를 받습니다
-  </div>
-  <input type=password id=pw placeholder="비밀번호" autocomplete=off>
-  <div class=file-area id=fa onclick=document.getElementById('f').click()>
-    📄 TXT 파일 선택 (클릭 또는 드래그)
-    <input type=file id=f accept=".txt,text/plain" style=display:none onchange=onFile()>
-  </div>
-  <button class=btn id=btn onclick=go() disabled>분석 → 엑셀+PPT ZIP 다운로드</button>
-  <div class=prog><div class=bar id=bar></div></div>
-  <div class=msg id=msg></div>
-  <div class=tip>
-    Adobe Acrobat → 편집 → 모두선택(Ctrl+A) → 복사(Ctrl+C)<br>
-    → 메모장 붙여넣기 → .txt 저장 → 여기 업로드
-  </div>
-</div>
-<script>
-let fname='';
-function onFile(){
-  const f=document.getElementById('f').files[0];
-  if(!f)return;
-  fname=f.name;
-  document.getElementById('fa').textContent='✅ '+fname;
-  document.getElementById('fa').className='file-area active';
-  document.getElementById('btn').disabled=false;
-}
-document.getElementById('fa').addEventListener('dragover',e=>{e.preventDefault();});
-document.getElementById('fa').addEventListener('drop',e=>{
-  e.preventDefault();
-  const f=e.dataTransfer.files[0];
-  if(f){document.getElementById('f').files;
-    const dt=new DataTransfer();dt.items.add(f);
-    document.getElementById('f').files=dt.files;onFile();}
-});
-function setMsg(t,c){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+c;}
-function setProg(p){document.getElementById('bar').style.width=p+'%';}
-async function go(){
-  const f=document.getElementById('f').files[0];
-  const pw=document.getElementById('pw').value;
-  if(!f){setMsg('TXT 파일을 선택하세요','err');return;}
-  if(!pw){setMsg('비밀번호를 입력하세요','err');return;}
-  document.getElementById('btn').disabled=true;
-  setProg(5);setMsg('📄 TXT 파싱 중…','wait');
-  const steps=['🔎 별첨 담보 추출 중…','📊 엑셀 생성 중…','🖼 PPT 채우는 중…','✅ ZIP 완성 중…'];
-  let si=0;
-  const timer=setInterval(()=>{si=Math.min(si+1,steps.length-1);
-    setMsg(steps[si],'wait');setProg(15+si*20);},7000);
-  try{
-    const fd=new FormData();fd.append('file',f);fd.append('pw',pw);
-    const r=await fetch('/analyze',{method:'POST',body:fd});
-    clearInterval(timer);setProg(100);
-    if(!r.ok){const t=await r.text();setMsg('❌ '+t,'err');
-      document.getElementById('btn').disabled=false;return;}
-    const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement('a');
-    const cn=r.headers.get('content-disposition')||'';
-    const fn=cn.match(/filename="?([^"]+)"?/)?.[1]||'보장분석.zip';
-    a.href=u;a.download=fn;a.click();
-    setMsg('✅ 완료! ZIP 다운로드됨','ok');
-  }catch(e){clearInterval(timer);setMsg('❌ 오류: '+e.message,'err');}
-  document.getElementById('btn').disabled=false;
-}
-</script>"""
+PAGE = open(os.path.join(HERE,"static","index.html"),encoding="utf-8").read()
 
 # ── 스타일 ────────────────────────────────────────────────────────────
 W   = Font(color='FFFFFF', name='맑은 고딕', size=9, bold=True)
@@ -773,6 +679,11 @@ def home(): return PAGE
 
 @app.get("/health")
 def health(): return {"ok": True, "version": "v5-txt-set"}
+
+
+@app.post("/check")
+async def check_pw(body: dict):
+    return {"ok": body.get("pw") == PW}
 
 @app.post("/analyze")
 async def analyze(file: UploadFile = File(...), pw: str = Form("")):

@@ -9,7 +9,6 @@
     --ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--amber:#F5B547;--red:#FF6B6B;--blue:#5B9BFF}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans KR',sans-serif;line-height:1.55}
-  /* ===== 게이트(단순 메인잠금) ===== */
   #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;
     align-items:center;justify-content:center;padding:30px 26px;text-align:center}
   #gate .kick{font-size:14px;font-weight:800;letter-spacing:.45em;color:var(--acc);margin-bottom:14px}
@@ -24,7 +23,6 @@
   #gate .err{color:var(--acc2);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
   .shake{animation:sh .35s}
   @keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-  /* ===== 앱 ===== */
   .app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
   header{padding:14px 18px;border-bottom:1px solid var(--line);
     background:linear-gradient(135deg,#1a1115,#0d0e11 60%,#1c1216);display:flex;align-items:center;gap:10px}
@@ -44,29 +42,6 @@
   .file-card .nm{flex:1;font-size:12.5px;font-weight:700}
   .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);
     padding:5px 11px;border-radius:8px}
-  .sec-t{font-size:11px;font-weight:800;color:var(--acc2);margin:12px 0 6px;letter-spacing:.3px}
-  .gap{display:flex;gap:9px;align-items:center;font-size:12px;padding:5px 0;border-bottom:1px solid rgba(42,47,58,.5)}
-  .gap .pri{flex:0 0 20px;height:20px;border-radius:5px;background:rgba(224,70,59,.16);color:var(--acc2);
-    font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
-  .gap .it{flex:1}.gap .am{font-size:10px;color:var(--mute)}
-  .st{font-size:10px;font-weight:800;padding:3px 8px;border-radius:7px}
-  .st-ok{background:rgba(74,222,128,.13);color:var(--green)}
-  .st-low{background:rgba(245,181,71,.14);color:var(--amber)}
-  .st-no{background:rgba(255,107,107,.14);color:var(--red)}
-  .memo{font-size:11.5px;color:var(--mute);padding:5px 0;display:flex;gap:7px}
-  .pkchip{font-size:10px;font-weight:800;padding:2px 9px;border-radius:12px;background:rgba(255,107,107,.16);color:var(--red);margin-left:6px}
-  .pkchip.done{background:rgba(74,222,128,.16);color:var(--green)}
-  .pkrow{align-items:flex-start}
-  .pktx{flex:1}
-  .pkact{display:flex;gap:6px;align-items:center;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
-  .pklnk{font-size:10.5px;color:#7FB0FF;text-decoration:none;border:1px solid rgba(127,176,255,.5);border-radius:6px;padding:2px 7px;white-space:nowrap}
-  .pkbtn{font-size:10.5px;font-weight:700;color:#F4C430;background:transparent;border:1px solid #F4C430;border-radius:6px;padding:3px 9px;cursor:pointer;white-space:nowrap}
-  .pkrow.closed{opacity:.42}
-  .pkrow.closed .pktx{text-decoration:line-through}
-  .pkrow.closed .pkbtn{color:var(--green);border-color:var(--green)}
-  .pkfoot{font-size:11px;font-weight:700;color:var(--mute);text-align:center;padding:8px;margin-top:6px;border-radius:8px;background:rgba(255,255,255,.03)}
-  .pkfoot.done{color:var(--green);background:rgba(74,222,128,.1);border:1px solid rgba(74,222,128,.3)}
-  .memo .d{color:var(--acc)}
   .err{color:#ffb4b4;font-size:12px}
   .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);
     border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -78,6 +53,7 @@
     color:#fff;cursor:pointer}.send:disabled{opacity:.4}
   footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}
   footer b{color:var(--acc2)}
+  .tip{font-size:11px;color:var(--mute);padding:8px 12px;line-height:1.8}
 </style></head>
 <body>
 <!-- 게이트 -->
@@ -89,16 +65,21 @@
   <button id="go" class="go">접속</button>
   <div id="gerr" class="err"></div>
 </div>
-
 <!-- 앱 -->
 <div class="app" id="app">
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
-    <div class="sub">PDF 넣으면 → 엑셀 → PPT 자동 채움 · 최은혜 지점장</div></div></header>
+    <div class="sub">TXT 넣으면 → 엑셀+PPT 세트 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
-    <div class="msg bot">보장분석지 TXT를 올려주세요. 엑셀+PPT 세트를 받습니다</div>
+    <div class="msg bot">
+      보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀+PPT 세트를 ZIP으로 드려요.<br><br>
+      <span style="font-size:11px;color:var(--mute)">
+        💡 Adobe Acrobat → 편집 → 모두선택(Ctrl+A) → 복사(Ctrl+C)<br>
+        → 메모장 붙여넣기 → .txt 저장 → 여기 업로드
+      </span>
+    </div>
   </div>
   <div class="bar">
-    <label class="up" id="up">📄 <span id="uplabel">보장분석지 txt 선택</span></label>
+    <label class="up" id="up">📄 <span id="uplabel">보장분석지 TXT 선택</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
   <footer>미래를 <b>바르게</b> 설계합니다 · BARUM</footer>
@@ -107,70 +88,107 @@
 
 <script>
 const $=s=>document.querySelector(s);
-// ===== 서버측 잠금 (비번은 서버 ACCESS_PW로 검증, 소스에 없음) =====
 let ACCESS="";
+
+// ===== 비번 검증 =====
 async function unlock(){
   const v=$("#pw").value;
   $("#gerr").textContent="확인 중…";
   try{
-    const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
+    const r=await fetch("/check",{method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({pw:v})});
     const j=await r.json();
-    if(j.ok){ ACCESS=v; $("#gerr").textContent=""; $("#gate").style.display="none"; $("#app").style.display="flex"; }
-    else { fail(); }
-  }catch(e){ $("#gerr").textContent="서버 연결 실패"; }
+    if(j.ok){ACCESS=v;$("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
+    else{fail();}
+  }catch(e){$("#gerr").textContent="서버 연결 실패";}
 }
-function fail(){ $("#gerr").textContent="비밀번호가 올바르지 않습니다."; $("#gate").classList.add("shake");
-  setTimeout(()=>$("#gate").classList.remove("shake"),350); $("#pw").value=""; $("#pw").focus(); }
+function fail(){
+  $("#gerr").textContent="비밀번호가 올바르지 않습니다.";
+  $("#gate").classList.add("shake");
+  setTimeout(()=>$("#gate").classList.remove("shake"),350);
+  $("#pw").value="";$("#pw").focus();
+}
 $("#go").onclick=unlock;
-$("#pw").addEventListener("keydown",e=>{ if(e.key==="Enter") unlock(); });
+$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});
 window.addEventListener("load",()=>$("#pw").focus());
 
 // ===== 앱 =====
-const chat=$("#chat"); let file=null;
+const chat=$("#chat");let file=null;
 $("#up").onclick=()=>$("#fi").click();
-$("#fi").onchange=e=>{file=e.target.files[0];if(file){$("#uplabel").textContent=file.name;$("#send").disabled=false;}};
+$("#fi").onchange=e=>{
+  file=e.target.files[0];
+  if(file){$("#uplabel").textContent=file.name;$("#send").disabled=false;}
+};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
+function add(html,cls){
+  const d=document.createElement("div");d.className="msg "+cls;
+  d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;
+}
+
+// ===== 분석 버튼 =====
 $("#send").onclick=async()=>{
   if(!file)return;
   add("📄 "+esc(file.name),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
-  const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 분석 시작…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 끊지 말고 기다려 주세요</div></div></div>',"bot");
-  const t0=Date.now();
-  const steps=["📄 PDF 읽는 중…","🔎 애매한 담보 약관 조회 중…","📊 보장진단 엑셀 채우는 중…","📑 보장분석지 PPT 채우는 중…","✍️ 마무리 정리 중…"];
-  const tick=setInterval(()=>{const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과 · 보통 30~90초, 끊지 마세요";if(mm)mm.textContent=steps[Math.min(Math.floor(s/12),steps.length-1)];},1000);
-  const fd=new FormData();fd.append("file",file);
-  try{
-    const r=await fetch("/analyze",{method:"POST",headers:{"x-access-pw":ACCESS},body:fd});
-    const j=await r.json();
-    clearInterval(tick); loading.remove();
-    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>'+(j.raw?'<div class="memo">'+esc(j.raw.slice(0,500))+'</div>':""),"bot");}
-    else render(j);
-  }catch(e){clearInterval(tick); loading.remove();add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");}
-  $("#send").disabled=false;$("#up").style.opacity=1;
-};
-function render(j){
-  let h='<b>'+esc(j.client)+' 님 보장분석 완료</b>';
-  (j.files||[]).forEach(f=>{
-    h+='<a class="file-card" href="'+f.url+'" download><span class="ic">'+(f.name.endsWith("xlsx")?"📊":"📑")+
-       '</span><span class="nm">'+esc(f.name)+'</span><span class="dl">저장 ⬇</span></a>';
-  });
-  if(!j.pptx_ready) h+='<div class="memo"><span class="d">▸</span><span>PPT 연계는 2단계(form.pptx 등록 후) 자동 추가됩니다.</span></div>';
-  const rec=(j.recommend||[]).sort((a,b)=>(a.priority||9)-(b.priority||9));
-  if(rec.length){h+='<div class="sec-t">🎯 권장 대비 (우선순위)</div>';
-    rec.forEach(g=>{const st=g.status||"";const c=st.includes("충분")?"st-ok":st.includes("미가입")?"st-no":"st-low";
-      h+='<div class="gap"><span class="pri">'+esc(g.priority||"·")+'</span><span class="it">'+esc(g.item)+
-         '<div class="am">권장 '+esc(g.rec)+' · 가입 '+esc(g.cur)+'</div></span><span class="st '+c+'">'+esc(st)+'</span></div>';});}
-  const memo=j.memo||[];
-  if(memo.length){h+='<div class="sec-t">⚠️ 점검팩폭 · 증권확인 <span class="pkchip">미확인 '+memo.length+'건</span></div>';
-    memo.forEach(m=>{var tag,it,nt;if(m&&typeof m==='object'){tag=m.tag||'메모';it=m.item||'';nt=m.note||'';}else{tag='';it='';nt=String(m);}
-      var col=tag.indexOf('확인')>=0?'#F4C430':tag.indexOf('부족')>=0?'#F4897F':tag.indexOf('미가입')>=0?'#9aa0a8':tag.indexOf('갱신')>=0?'#7FB0FF':'#cfcfcf';
-      var lab=tag?'['+tag+'] ':'';var body=it?(it+' — '+nt):nt;
-      var needLink=(tag.indexOf('부족')<0&&tag.indexOf('미가입')<0);var link=needLink?'<a class="pklnk" href="https://fine.fss.or.kr" target="_blank">약관·증권 보기</a>':'';h+='<div class="memo pkrow" data-pk><span class="d" style="color:'+col+'">▸</span><span class="pktx"><b style="color:'+col+'">'+esc(lab)+'</b>'+esc(body)+'</span><span class="pkact">'+link+'<button class="pkbtn" onclick="pkClose(this)">확인완료</button></span></div>';});h+='<div class="pkfoot">전부 확인하면 — 팩폭 0건, 증권 최종확인 완료</div>';}
-  add(h,"bot");
-  file=null;$("#uplabel").textContent="보장분석지 PDF 선택";$("#send").disabled=true;$("#fi").value="";
-}
 
-function pkClose(btn){var row=btn.closest(".pkrow");row.classList.toggle("closed");btn.textContent=row.classList.contains("closed")?"✓ 완료":"확인완료";pkRefresh(btn.closest(".msg"));}
-function pkRefresh(box){if(!box)return;var rows=box.querySelectorAll(".pkrow");var open=0;rows.forEach(function(r){if(!r.classList.contains("closed"))open++;});var chip=box.querySelector(".pkchip"),foot=box.querySelector(".pkfoot");if(chip){if(open===0){chip.className="pkchip done";chip.textContent="완료 0건";}else{chip.className="pkchip";chip.textContent="미확인 "+open+"건";}}if(foot){if(open===0){foot.className="pkfoot done";foot.textContent="✅ 팩폭 0건 — 증권 최종확인 완료";}else{foot.className="pkfoot";foot.textContent="전부 확인하면 — 팩폭 0건, 증권 최종확인 완료";}}}
+  const loading=add(
+    '<div style="display:flex;align-items:center;gap:11px">'+
+    '<span class="spin"></span>'+
+    '<div style="flex:1">'+
+    '<div id="ldmsg" style="font-weight:800">📄 TXT 파싱 중…</div>'+
+    '<div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div>'+
+    '</div></div>',"bot");
+
+  const t0=Date.now();
+  const steps=["📄 TXT 파싱 중…","🔎 별첨 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ ZIP 완성 중…"];
+  const tick=setInterval(()=>{
+    const s=Math.floor((Date.now()-t0)/1000);
+    const tm=document.getElementById("ldtime");
+    const mm=document.getElementById("ldmsg");
+    if(tm)tm.textContent=s+"초 경과 · 보통 20~60초";
+    if(mm)mm.textContent=steps[Math.min(Math.floor(s/10),steps.length-1)];
+  },1000);
+
+  const fd=new FormData();
+  fd.append("file",file);
+  fd.append("pw",ACCESS);  // main.py는 pw form field로 받음
+
+  try{
+    const r=await fetch("/analyze",{method:"POST",body:fd});
+    clearInterval(tick);loading.remove();
+
+    if(!r.ok){
+      const t=await r.text();
+      add('<span class="err">⚠ '+esc(t)+'</span>',"bot");
+    } else {
+      // ZIP 파일로 직접 다운로드
+      const b=await r.blob();
+      const u=URL.createObjectURL(b);
+      const cn=r.headers.get("content-disposition")||"";
+      const fn=cn.match(/filename="?([^"]+)"?/)?.[1]||"보장분석.zip";
+      const a=document.createElement("a");
+      a.href=u;a.download=fn;a.click();
+
+      const nm=fn.replace(".zip","");
+      add(
+        '<b>✅ 분석 완료!</b><br>'+
+        '<a class="file-card" href="'+u+'" download="'+esc(fn)+'">'+
+        '<span class="ic">📦</span>'+
+        '<span class="nm">'+esc(fn)+'<br><span style="font-size:10px;color:var(--mute)">엑셀+PPT 세트</span></span>'+
+        '<span class="dl">저장 ⬇</span></a>',
+        "bot"
+      );
+    }
+  }catch(e){
+    clearInterval(tick);loading.remove();
+    add('<span class="err">연결 오류: '+esc(e.message)+'</span>',"bot");
+  }
+
+  file=null;
+  $("#uplabel").textContent="보장분석지 TXT 선택";
+  $("#send").disabled=true;
+  $("#fi").value="";
+  $("#up").style.opacity=1;
+};
 </script></body></html>
