@@ -581,7 +581,7 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         build_excel(data,xl); ppt_ok=build_ppt(data,pt)
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
-                  'summary':make_summary(data),'pptx_ready':ppt_ok}
+                 'summary':make_summary(data),'pptx_ready':ppt_ok,'data':data}
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
