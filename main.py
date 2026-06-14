@@ -525,10 +525,10 @@ $("#send").onclick=async()=>{
         const ptBlob=b64toBlob(j.pptx_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
         setTimeout(()=>dl(ptBlob,j.pptx_name),800);
         ptCard=`<div class="file-card pt"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
-      if(j.data){analysisData=j.data;document.getElementById('qbar').style.display='flex';document.getElementById('qlbl').style.display='block';}
       add('<b>✅ 분석 완료!</b><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
         `<div class="file-card xl"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장완료 ✓</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
+  if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="보장분석지 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
 };
 let analysisData=null;
@@ -581,7 +581,7 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         build_excel(data,xl); ppt_ok=build_ppt(data,pt)
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
-                  'summary':make_summary(data),'pptx_ready':ppt_ok,'data':{'client':data['client'],'contracts':[{'company':ct['company'],'renewal':ct['renewal'],'premium':int(ct['premium']),'dambo':{k:int(v) for k,v in ct['dambo'].items()}} for ct in data['contracts']]}}
+                  'summary':make_summary(data),'pptx_ready':ppt_ok}
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
