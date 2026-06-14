@@ -7,13 +7,13 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
-
+ 
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL_XL  = os.path.join(HERE, "MASTER_보장분석_엑셀_영구표본.xlsx")
 TPL_PPT = os.path.join(HERE, "MASTER_보장분석지_PPT_빈폼.pptx")
-
+ 
 W   = Font(color='FFFFFF', name='맑은 고딕', size=9, bold=True)
 BL  = Font(color='0070C0', name='맑은 고딕', size=9)
 BK  = Font(color='000000', name='맑은 고딕', size=9)
@@ -22,11 +22,11 @@ FILL_BLUE  = PatternFill('solid', fgColor='0070C0')
 FILL_GREEN = PatternFill('solid', fgColor='375623')
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
-
+ 
 EXCLUDE = ['실효','미납해지','농업인NH안전보험','자동차보험']
 def is_excluded(company, product=''):
     return any(kw in company+product for kw in EXCLUDE)
-
+ 
 def judge_renewal(product, expiry, pay_count):
     if '갱신형' in product and '비갱신' not in product: return '갱신'
     if '갱신' in product and '비갱신' not in product: return '갱신'
@@ -36,12 +36,12 @@ def judge_renewal(product, expiry, pay_count):
         if int(b.strip()) > 240: return '비갱신'
     except: pass
     return '비갱신'
-
+ 
 def get_종번호(name):
     for i,k in enumerate(['(1종)','(2종)','(3종)','(4종)','(5종)'],1):
         if k in name: return i
     return 0
-
+ 
 def parse_txt(txt):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     client = '고객'
@@ -51,7 +51,7 @@ def parse_txt(txt):
         if m and len(m.group(1)) <= 4: client = m.group(1); break
         m2 = re.search(r'([가-힣]{2,4})\s+고객님', l)
         if m2: client = m2.group(1); break
-
+ 
     contracts = []; i = 0; n = len(lines)
     while i < n:
         l = lines[i].strip()
@@ -106,7 +106,7 @@ def parse_txt(txt):
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo})
     return {'client':client,'contracts':contracts}
-
+ 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
     # 사망
@@ -182,27 +182,27 @@ DMAP = {
     # 제외
     '보험료납입지원':None,
 }
-
+ 
 def resolve(raw):
     if raw in DMAP: return DMAP[raw]
     for k,v in DMAP.items():
         if k in raw: return v
     if any(k in raw for k in ['(1종)','(2종)','(3종)','(4종)','(5종)']): return None
     return None
-
+ 
 def build_excel(data, out):
     wb = openpyxl.load_workbook(TPL_XL)
     ws = wb['보장분석']
     client = data['client']; contracts = data['contracts']
     ws.cell(1,1).value = f"{client} 보장진단"
-
+ 
     nm2r = {}
     for r in range(6, ws.max_row+1):
         v = ws.cell(r,2).value
         if v: nm2r[str(v).strip()] = r
-
+ 
     total_premium = 0; n_ct = len(contracts)
-
+ 
     for i, ct in enumerate(contracts):
         col = 3 + i
         gen  = ct['renewal'] == '갱신'
@@ -219,11 +219,11 @@ def build_excel(data, out):
         ws.cell(4,col).value = ct['expiry_date']
         ws.cell(5,col).value = f"{ct['pay_period']} ({ct['pay_count']})" if ct['pay_period'] else ''
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
-
+ 
         dambo = ct['dambo']
         q종 = {k:v for k,v in dambo.items() if '질병수술비' in k and get_종번호(k)>0}
         s종 = {k:v for k,v in dambo.items() if '상해수술비' in k and get_종번호(k)>0}
-
+ 
         if q종:
             vals = [0]*5
             for k,v in q종.items():
@@ -231,7 +231,7 @@ def build_excel(data, out):
                 if 0<=idx<5: vals[idx] = v
             r = nm2r.get('질병 종수술비(1-5종)')
             if r: ws.cell(r,col).value = '/'.join(str(x) for x in vals); ws.cell(r,col).font = BL if gen else BK
-
+ 
         if s종:
             vals = [0]*5
             for k,v in s종.items():
@@ -239,7 +239,7 @@ def build_excel(data, out):
                 if 0<=idx<5: vals[idx] = v
             r = nm2r.get('상해 종수술비(1-5종)')
             if r: ws.cell(r,col).value = '/'.join(str(x) for x in vals); ws.cell(r,col).font = BL if gen else BK
-
+ 
         skip = set(list(q종.keys()) + list(s종.keys()))
         for raw, amt in dambo.items():
             if raw in skip: continue
@@ -250,12 +250,12 @@ def build_excel(data, out):
             existing = ws.cell(r,col).value
             ws.cell(r,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
             ws.cell(r,col).font = BL if gen else BK
-
+ 
     last_col = 3 + n_ct
     hc = ws.cell(1, last_col)
     hc.value = '합계'; hc.font = W; hc.fill = FILL_SUM; hc.alignment = AL
     ws.cell(2, last_col).value = total_premium; ws.cell(2, last_col).font = W
-
+ 
     for r in range(6, ws.max_row+1):
         slash_t=[0]*5; is_slash=False; total=0
         for col in range(3, last_col):
@@ -269,18 +269,18 @@ def build_excel(data, out):
         sc = ws.cell(r, last_col)
         if is_slash and any(slash_t): sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK
         elif total > 0: sc.value = total; sc.font = BK
-
+ 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
-
+ 
     if '📋확인사항' in wb.sheetnames: del wb['📋확인사항']
     ws2 = wb.create_sheet('📋확인사항')
     ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}')
     ws2.cell(3,1,'완료'); ws2.cell(3,2,f'계약 {n_ct}건')
     ws2.cell(3,3,f'월보험료합계: {total_premium:,}원')
     wb.save(out)
-
+ 
 def build_ppt(data, out):
     if not os.path.exists(TPL_PPT): return False
     prs = Presentation(TPL_PPT)
@@ -288,7 +288,7 @@ def build_ppt(data, out):
     by = {sh.name:sh for sh in sl.shapes if sh.has_text_frame}
     client = data['client']; contracts = data['contracts']
     now = datetime.datetime.now()
-
+ 
     totals = {}
     surg_q=[0]*5; surg_s=[0]*5
     for ct in contracts:
@@ -299,7 +299,7 @@ def build_ppt(data, out):
                 if '상해수술비' in raw: surg_s[i]+=amt
             std = resolve(raw)
             if std: totals[std]=totals.get(std,0)+amt
-
+ 
     def g(nm): return totals.get(nm,0)
     def r_set(box,pi,ri,val):
         if box not in by: return
@@ -307,17 +307,17 @@ def build_ppt(data, out):
         if pi<len(tf.paragraphs):
             p=tf.paragraphs[pi]
             if ri<len(p.runs): p.runs[ri].text=val
-
+ 
     for b in ['TextBox 49','TextBox 56']:
         if b in by: by[b].text_frame.word_wrap=False
-
+ 
     by['TextBox 21'].text_frame.word_wrap=False
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{client} 님의 보장'
     by['TextBox 21'].text_frame.paragraphs[0].runs[1].text='(전)'
     by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
     by['TextBox 35'].text_frame.paragraphs[0].runs[0].text=f'{now.month:02d}월'
     by['TextBox 29'].text_frame.paragraphs[0].runs[0].text=f'{now.day:02d}일 기준'
-
+ 
     if g('질병사망(80세)'): r_set('TextBox 10',2,2,f': {g("질병사망(80세)"):,}')
     if g('상해사망'): r_set('TextBox 11',0,1,f': {g("상해사망"):,}')
     종신_d=0
@@ -326,22 +326,22 @@ def build_ppt(data, out):
             for raw,v in ct['dambo'].items():
                 if resolve(raw)=='상해사망': 종신_d+=v
     if 종신_d: r_set('TextBox 10',3,1,f': {종신_d:,}')
-
+ 
     if g('상해후유3%'): r_set('TextBox 8',2,1,f'3% : {g("상해후유3%"):,}')
     if g('질병후유3%'): r_set('TextBox 8',0,1,f'3% : {g("질병후유3%"):,}')
     if g('상해후유80%'): r_set('TextBox 8',3,1,f'80% : {g("상해후유80%"):,}')
     if g('질병후유80%'): r_set('TextBox 8',1,1,f'80% : {g("질병후유80%"):,}')
-
+ 
     if g('뇌혈관진단비'): by['TextBox 46'].text_frame.paragraphs[0].runs[0].text=f'뇌혈관\n{g("뇌혈관진단비"):,}'
     if g('뇌졸증진단비'): by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
     if g('뇌출혈진단비'): by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
     if g('산정특례뇌혈관'): r_set('TextBox 49',0,3,f': {g("산정특례뇌혈관"):,}')
     if g('혈전용해치료비'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비"):,}')
-
+ 
     if g('협심증'): by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("협심증"):,}'
     if g('급성심근경색'): by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
     if g('산정특례심장'): r_set('TextBox 56',0,3,f': {g("산정특례심장"):,}')
-
+ 
     if g('일반암'): r_set('TextBox 14',0,1,f': {g("일반암"):,}')
     if g('유사암(갑.기.경.제)'): r_set('TextBox 14',1,2,f': {g("유사암(갑.기.경.제)"):,}')
     if g('항암방사선약물'): r_set('TextBox 14',4,1,f': {g("항암방사선약물"):,} / ')
@@ -349,7 +349,7 @@ def build_ppt(data, out):
     if g('세기조절치료'): r_set('TextBox 14',5,4,f': {g("세기조절치료"):,}')
     if g('양성자치료'): r_set('TextBox 14',5,5,f': {g("양성자치료"):,}')
     if g('다빈치로봇수술비'): r_set('TextBox 14',7,1,f': {g("다빈치로봇수술비"):,}')
-
+ 
     if g('질병수술비'): r_set('TextBox 17',0,1,f': {g("질병수술비"):,}')
     if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})'); r_set('TextBox 17',3,2,'')
     if g('뇌혈관수술비'): r_set('TextBox 17',5,1,f': {g("뇌혈관수술비"):,}')
@@ -357,7 +357,7 @@ def build_ppt(data, out):
     if g('상해수술비'): r_set('TextBox 19',0,1,f': {g("상해수술비"):,}')
     if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})'); r_set('TextBox 19',3,2,'')
     if g('골절수술비'): r_set('TextBox 19',4,1,f': {g("골절수술비"):,}')
-
+ 
     실손_dates=[ct['contract_date'] for ct in contracts
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
     실손가입일=min(실손_dates) if 실손_dates else '___________'
@@ -372,7 +372,7 @@ def build_ppt(data, out):
     if g('MRI'): r_set('TextBox 6',2,0,f'MRI : {g("MRI"):,}')
     if g('도수치료'): r_set('TextBox 6',3,1,f': {g("도수치료"):,}')
     if g('비급여주사'): r_set('TextBox 6',4,1,f': {g("비급여주사"):,}')
-
+ 
     if g('골절(치아파절제외)'): r_set('TextBox 7',0,1,f': {g("골절(치아파절제외)"):,}')
     if g(' 진 단 비'): r_set('TextBox 7',2,1,f': {g(" 진 단 비"):,}')
     if g('깁스진단비'): r_set('TextBox 7',5,1,f': {g("깁스진단비"):,}')
@@ -389,9 +389,9 @@ def build_ppt(data, out):
     if g('간호통합병동'): r_set('TextBox 22',8,2,f': {g("간호통합병동"):,}')
     if g('크라운'): r_set('TextBox 13',0,1,f': {g("크라운"):,}')
     if g('임플란트'): r_set('TextBox 13',1,1,f': {g("임플란트"):,}')
-
+ 
     prs.save(out); return True
-
+ 
 def make_summary(data):
     contracts=data['contracts']; cust=data['client']
     total_premium=sum(ct['premium'] for ct in contracts)
@@ -416,7 +416,7 @@ def make_summary(data):
         lines+=["","🔑 <b>주요 담보 합계 (만원)</b>"]
         for lbl,amt in found: lines.append(f"  • {lbl}: <b>{amt:,}만원</b>")
     return '<br>'.join(lines)
-
+ 
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
@@ -525,10 +525,10 @@ $("#send").onclick=async()=>{
         const ptBlob=b64toBlob(j.pptx_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
         setTimeout(()=>dl(ptBlob,j.pptx_name),800);
         ptCard=`<div class="file-card pt"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
+      if(j.data){analysisData=j.data;document.getElementById('qbar').style.display='flex';document.getElementById('qlbl').style.display='block';}
       add('<b>✅ 분석 완료!</b><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
         `<div class="file-card xl"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장완료 ✓</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
-  if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="보장분석지 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
 };
 let analysisData=null;
@@ -552,16 +552,16 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("qbtn").onclick=askAI;
 });
 </script></body></html>'''
-
+ 
 @app.get('/health')
 def health(): return {'ok':True,'version':'v8-ai-chat'}
-
+ 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
-
+ 
 @app.post('/check')
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
-
+ 
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(...),pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
@@ -588,10 +588,10 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
-
+ 
 # ── AI 질문답 ─────────────────────────────────────────────────────────
 import httpx
-
+ 
 def build_context(data):
     lines=[f"고객명: {data['client']}", f"계약 수: {len(data['contracts'])}건"]
     for ct in data['contracts']:
@@ -612,7 +612,7 @@ def build_context(data):
         lines.append("\n자동매핑 실패 담보 (약관 확인 필요):")
         for u in sorted(set(unmapped)): lines.append(f"  - {u}")
     return '\n'.join(lines)
-
+ 
 @app.post('/ask')
 async def ask(body:dict):
     if body.get('pw')!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
