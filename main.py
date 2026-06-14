@@ -635,7 +635,8 @@ async def ask(body:dict):
                 json={'model':'claude-haiku-4-5-20251001','max_tokens':300,
                       'system':system,'messages':[{'role':'user','content':question}]})
         r=resp.json()
-        answer=r.get('content',[])[0].get('text','답변을 가져오지 못했습니다.')
+        content=r.get('content',[])
+        answer=content[0].get('text','답변 오류') if content else str(r.get('error','API 키 확인 필요'))
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e)})
