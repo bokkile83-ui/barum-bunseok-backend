@@ -6,6 +6,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from pptx import Presentation
 from pptx.util import Pt
+from pptx.enum.text import PP_ALIGN
 
 CATS=[
 ('사망',['일반사망(종신)','질병사망(80세)','질병사망(__세)','상해사망','교통상해사망']),
@@ -171,17 +172,18 @@ def resolve(raw):
 # ── 엑셀 생성 ──────────────────────────────────────────────────────────
 def build_excel(data, path):
     contracts=data['contracts']
-    cols=[chr(ord('C')+i) for i in range(len(contracts))]
-    colnum={c:3+i for i,c in enumerate(cols)}
+    n_ct=len(contracts)
+    # 컬럼 번호: 3번(C)부터 계약 순서대로 연속 배치 (빈 열 없음)
+    col_indices={i: 3+i for i in range(n_ct)}  # 계약idx → 열번호
+    # ★ 합계열 = 마지막 계약 열 + 1 (컴팩트 배치이므로 항상 맨 끝)
+    last_col = 3 + n_ct
 
     # 담보 매트릭스 구성
     matrix={}
     surg15={'질병':{},'상해':{}}
-    ndae={}
 
     for idx,ct in enumerate(contracts):
-        col=cols[idx]
-        gen=ct['renewal']=='갱신'
+        col_key=idx  # 정수 키로 통일
         dambo=ct['dambo']
 
         q종={k:v for k,v in dambo.items() if '질병수술비' in k and get_종번호(k)>0}
@@ -191,29 +193,26 @@ def build_excel(data, path):
             for k,v in q종.items():
                 i=get_종번호(k)-1
                 if 0<=i<5: vals[i]=v
-            surg15['질병'][col]=vals
+            surg15['질병'][col_key]=vals
         if s종:
             vals=[0]*5
             for k,v in s종.items():
                 i=get_종번호(k)-1
                 if 0<=i<5: vals[i]=v
-            surg15['상해'][col]=vals
+            surg15['상해'][col_key]=vals
 
         skip=set(list(q종.keys())+list(s종.keys()))
         for raw,amt in dambo.items():
             if raw in skip: continue
             std=resolve(raw)
             if std is None: continue
-            # 카테고리 찾기
             cat_found=None
             for cat,rows in CATS:
                 if std in rows: cat_found=cat; break
-            if not cat_found:
-                cat_found='기타'
+            if not cat_found: cat_found='기타'
             key=(cat_found,std)
             if key not in matrix: matrix[key]={}
-            existing=matrix[key].get(col,0)
-            matrix[key][col]=existing+amt
+            matrix[key][col_key]=matrix[key].get(col_key,0)+amt
 
     # 엑셀 작성
     wb=Workbook(); ws=wb.active; ws.title='보장진단'
@@ -225,32 +224,46 @@ def build_excel(data, path):
 
     total_premium=0
     for idx,ct in enumerate(contracts):
-        col=cols[idx]; cn=colnum[col]
+        cn=col_indices[idx]
         gen=ct['renewal']=='갱신'
         paid='완납' in ct['renewal']
-        종신='종신' in ct['renewal']
         fill=GREEN if paid else (BLUE if gen else RED)
-        h=ws.cell(row=1,column=cn,value=ct['company'])
+        h=ws.cell(row=1,column=cn,value=f"{ct['company']}\n[{ct['renewal']}]")
         h.fill=PatternFill('solid',fgColor=fill)
         h.font=Font(color=WHITE,bold=True,size=9)
         h.alignment=Alignment(horizontal='center',vertical='center',wrap_text=True)
         h.border=GRID
-        meta=[ct['renewal'],ct['premium'],ct['contract_date'],ct['expiry_date'],ct['pay_period'],ct['pay_count']]
+        meta=[ct['premium'],ct['contract_date'],ct['expiry_date'],ct['pay_period'],ct['pay_count']]
+        labels=['보험료','가입일','만기일','납입기간','납입횟수']
         for i,v in enumerate(meta):
             cc=ws.cell(row=2+i,column=cn,value=v)
             cc.alignment=Alignment(horizontal='center'); cc.border=GRID; cc.font=Font(size=8)
         total_premium+=ct['premium']
 
-    # 합계열
-    last_col=3+len(contracts)
-    ws.cell(row=1,column=last_col,value='합계').fill=PatternFill('solid',fgColor='FF2E75B6')
-    ws.cell(row=1,column=last_col).font=Font(color=WHITE,bold=True,size=9)
-    ws.cell(row=1,column=last_col).alignment=Alignment(horizontal='center')
-    ws.cell(row=1,column=last_col).border=GRID
-    ws.cell(row=2,column=last_col,value=total_premium)
-    ws.cell(row=2,column=last_col).font=Font(bold=True,size=8)
+    # ★ 합계열 — 마지막 열 (last_col = 3 + n_ct, 항상 데이터 열 뒤)
+    hc=ws.cell(row=1,column=last_col,value='합계')
+    hc.fill=PatternFill('solid',fgColor='FF2E75B6')
+    hc.font=Font(color=WHITE,bold=True,size=9)
+    hc.alignment=Alignment(horizontal='center')
+    hc.border=GRID
+    tp=ws.cell(row=2,column=last_col,value=total_premium)
+    tp.font=Font(bold=True,size=8)
+    tp.number_format='#,##0'
+    tp.border=GRID
 
     # 담보 행
+    # SUM 수식용 열 문자 계산
+    def col_letter(n):
+        s=''
+        while n>0:
+            n,r=divmod(n-1,26)
+            s=chr(65+r)+s
+        return s
+
+    first_data_col=col_letter(3)           # C
+    last_data_col=col_letter(last_col-1)   # 마지막 계약열
+    sum_col=col_letter(last_col)           # 합계열
+
     r=8
     for cat,rows in CATS:
         extra=sorted({k[1] for k in matrix if k[0]==cat and k[1] not in rows})
@@ -259,33 +272,34 @@ def build_excel(data, path):
             ws.cell(row=r,column=2,value=rw).font=Font(size=9)
             ws.cell(row=r,column=2).border=GRID
             ws.cell(row=r,column=1).border=GRID
-            for col in cols: ws.cell(row=r,column=colnum[col]).border=GRID
-            ws.cell(row=r,column=last_col).border=GRID
+            for idx in range(n_ct):
+                ws.cell(row=r,column=col_indices[idx]).border=GRID
             q=ws.cell(row=r,column=last_col)
             q.border=GRID; q.font=Font(bold=True,size=8)
 
             if rw in ('상해종수술비(1-5종)','질병종수술비(1-5종)'):
                 kind='상해' if '상해' in rw else '질병'
                 tot=[0]*5; kk=surg15.get(kind,{})
-                for col in cols:
-                    seq=kk.get(col)
+                for idx in range(n_ct):
+                    seq=kk.get(idx)
                     if seq:
                         for j in range(5): tot[j]+=seq[j]
-                        cell=ws.cell(row=r,column=colnum[col],value='/'.join(str(x) for x in seq))
-                        cell.font=Font(color=(BLUE if contracts[cols.index(col)]['renewal']=='갱신' else BLACK),size=8)
+                        cell=ws.cell(row=r,column=col_indices[idx],value='/'.join(str(x) for x in seq))
+                        cell.font=Font(color=(BLUE if contracts[idx]['renewal']=='갱신' else BLACK),size=8)
                         cell.alignment=Alignment(horizontal='center',shrink_to_fit=True)
                 if any(tot): q.value='/'.join(str(x) for x in tot); q.number_format='General'
             else:
                 has=False
-                for col in cols:
-                    amt=matrix.get((cat,rw),{}).get(col)
+                for idx in range(n_ct):
+                    amt=matrix.get((cat,rw),{}).get(idx)
                     if amt:
                         has=True
-                        cell=ws.cell(row=r,column=colnum[col],value=amt)
+                        cell=ws.cell(row=r,column=col_indices[idx],value=amt)
                         cell.number_format='#,##0'
-                        cell.font=Font(color=(BLUE if contracts[cols.index(col)]['renewal']=='갱신' else BLACK),size=8)
+                        cell.font=Font(color=(BLUE if contracts[idx]['renewal']=='갱신' else BLACK),size=8)
                         cell.alignment=Alignment(horizontal='center')
-                if has: q.value=f'=SUM(C{r}:{chr(ord("A")+last_col-2)}{r})'
+                # ★ SUM 수식: 법칙 22조 — 하드코딩 금지, 수식 유지
+                if has: q.value=f'=SUM({first_data_col}{r}:{last_data_col}{r})'
             r+=1
         ws.merge_cells(start_row=start,start_column=1,end_row=r-1,end_column=1)
         a=ws.cell(row=start,column=1,value=cat)
@@ -294,21 +308,41 @@ def build_excel(data, path):
         a.alignment=Alignment(horizontal='center',vertical='center'); a.border=GRID
 
     ws.column_dimensions['A'].width=6; ws.column_dimensions['B'].width=22
-    for col in cols: ws.column_dimensions[ws.cell(row=1,column=colnum[col]).column_letter].width=7.5
-    ws.column_dimensions[ws.cell(row=1,column=last_col).column_letter].width=12
+    for idx in range(n_ct):
+        ws.column_dimensions[col_letter(col_indices[idx])].width=7.5
+    ws.column_dimensions[col_letter(last_col)].width=12
 
     # 확인사항 시트
     ms=wb.create_sheet('📋확인사항')
     ms['A1']=f"{cust} 고객님 — 확인사항"
     ms['A1'].font=Font(bold=True,size=11)
     ms.append([]); ms.append(['구분','대상','내용'])
-    ms.append(['완료',f'계약 {len(contracts)}건',f'월보험료합계: {total_premium:,}원'])
+    ms.append(['완료',f'계약 {n_ct}건',f'월보험료합계: {total_premium:,}원'])
     ms.column_dimensions['A'].width=12; ms.column_dimensions['B'].width=40; ms.column_dimensions['C'].width=50
     wb.save(path)
 
 # ── PPT 채우기 ────────────────────────────────────────────────────────
 HERE=os.path.dirname(os.path.abspath(__file__))
 TPL_PPT=os.path.join(HERE,'MASTER_보장분석지_PPT_빈폼.pptx')
+
+def _shrink_box(shape):
+    """텍스트 오버플로우 방지: 박스 내 자동 축소"""
+    from pptx.enum.text import PP_ALIGN
+    from pptx.oxml.ns import qn
+    import lxml.etree as etree
+    tf=shape.text_frame
+    tf.word_wrap=False
+    # autofit=spAutoFit 적용 (XML 직접)
+    txBody=tf._txBody
+    bodyPr=txBody.find(qn('a:bodyPr'))
+    if bodyPr is not None:
+        # 기존 autofit 제거 후 normAutofit(shrink) 추가
+        for tag in ['a:noAutofit','a:spAutoFit','a:normAutofit']:
+            el=bodyPr.find(qn(tag))
+            if el is not None: bodyPr.remove(el)
+        norm=etree.SubElement(bodyPr, qn('a:normAutofit'))
+        norm.set('fontScale','100000')
+        norm.set('lnSpcReduction','0')
 
 def build_ppt(data, path):
     if not os.path.exists(TPL_PPT): return False
@@ -339,6 +373,13 @@ def build_ppt(data, path):
             p=tf.paragraphs[pi]
             if ri<len(p.runs): p.runs[ri].text=val
 
+    # ★ 오버플로우 방지: 내용이 긴 박스들에 shrink 적용
+    overflow_boxes=['TextBox 14','TextBox 17','TextBox 19','TextBox 22','TextBox 57']
+    for bname in overflow_boxes:
+        if bname in by:
+            try: _shrink_box(by[bname])
+            except: pass
+
     # 제목/날짜
     by['TextBox 21'].text_frame.word_wrap=False
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{cust} 님의 보장'
@@ -349,11 +390,14 @@ def build_ppt(data, path):
     for b in ['TextBox 36','TextBox 35','TextBox 29']:
         by[b].text_frame.word_wrap=False
 
+    # 산정특례 줄바꿈 방지
+    for b in ['TextBox 49','TextBox 56']:
+        if b in by: by[b].text_frame.word_wrap=False
+
     # 사망
     q_d=g('질병사망(80세)'); s_d=g('상해사망')
     if q_d: r_set('TextBox 10',2,2,f': {q_d:,}')
     if s_d: r_set('TextBox 11',0,1,f': {s_d:,}')
-    # 종신
     종신_d=0
     for ct in contracts:
         if '종신' in ct['renewal']:
@@ -374,7 +418,6 @@ def build_ppt(data, path):
         by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
     if g('뇌출혈진단비'):
         by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
-    by['TextBox 49'].text_frame.word_wrap=False
     if g('산정특례(뇌혈관)'): r_set('TextBox 49',0,3,f': {g("산정특례(뇌혈관)"):,}')
     if g('혈전용해치료비(뇌졸중)'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비(뇌졸중)"):,}')
 
@@ -383,7 +426,6 @@ def build_ppt(data, path):
         by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("허혈성"):,}'
     if g('급성심근경색'):
         by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
-    by['TextBox 56'].text_frame.word_wrap=False
     if g('산정특례(심장)'): r_set('TextBox 56',0,3,f': {g("산정특례(심장)"):,}')
 
     # 암
@@ -452,7 +494,50 @@ def build_ppt(data, path):
     prs.save(path)
     return True
 
-# ── HTML (기존 app.py 디자인 유지, TXT만 변경) ───────────────────────
+# ── 분석 요약 생성 ────────────────────────────────────────────────────
+def make_summary(data):
+    contracts=data['contracts']
+    cust=data['client']
+    total_premium=sum(ct['premium'] for ct in contracts)
+    갱신수=sum(1 for ct in contracts if ct['renewal']=='갱신')
+    비갱신수=len(contracts)-갱신수
+
+    lines=[
+        f"<b>👤 {cust} 고객님 분석 완료</b>",
+        f"",
+        f"📋 <b>계약 현황</b>",
+        f"  • 총 계약 수: <b>{len(contracts)}건</b>",
+        f"  • 갱신형: {갱신수}건 / 비갱신형: {비갱신수}건",
+        f"  • 월 보험료 합계: <b>{total_premium:,}원</b>",
+        f"",
+        f"🏢 <b>가입 회사</b>",
+    ]
+    for ct in contracts:
+        tag='🔵갱신' if ct['renewal']=='갱신' else '🔴비갱신' if '비갱신' in ct['renewal'] else '🟢완납'
+        lines.append(f"  • {ct['company']} [{tag}] {ct['premium']:,}원")
+
+    # 주요 담보 합계
+    totals={}
+    for ct in contracts:
+        for raw,amt in ct['dambo'].items():
+            std=resolve(raw)
+            if std: totals[std]=totals.get(std,0)+amt
+
+    key_items=[
+        ('암진단비','🎗암진단'),('뇌혈관진단비','🧠뇌혈관'),('허혈성','❤️허혈성'),
+        ('급성심근경색','❤️급성심근'),('상해사망','💀상해사망'),('질병사망(80세)','💀질병사망'),
+        ('실손입원','🏥실손'),
+    ]
+    found=[(lbl,totals[k]) for k,lbl in key_items if k in totals and totals[k]>0]
+    if found:
+        lines.append(f"")
+        lines.append(f"🔑 <b>주요 담보 합계 (만원)</b>")
+        for lbl,amt in found:
+            lines.append(f"  • {lbl}: <b>{amt:,}만원</b>")
+
+    return '<br>'.join(lines)
+
+# ── HTML ───────────────────────────────────────────────────────────────
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -491,10 +576,18 @@ INDEX_HTML = r'''<!DOCTYPE html>
     border-radius:14px 14px 4px 14px;padding:9px 13px}
   .bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
     border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%}
-  .file-card{display:flex;align-items:center;gap:11px;background:rgba(74,222,128,.06);
-    border:1px solid rgba(74,222,128,.3);border-radius:12px;padding:11px 13px;margin-top:9px;text-decoration:none;color:var(--ink)}
+  /* ★ 개별 파일 카드 */
+  .file-cards{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+  .file-card{display:flex;align-items:center;gap:11px;border-radius:12px;
+    padding:11px 13px;text-decoration:none;color:var(--ink)}
+  .file-card.xl{background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.3)}
+  .file-card.pt{background:rgba(91,155,255,.06);border:1px solid rgba(91,155,255,.3)}
   .file-card .ic{font-size:22px}.file-card .nm{flex:1;font-size:12.5px;font-weight:700}
-  .file-card .dl{font-size:11px;font-weight:800;color:var(--green);background:rgba(74,222,128,.12);padding:5px 11px;border-radius:8px}
+  .file-card .dl{font-size:11px;font-weight:800;padding:5px 11px;border-radius:8px}
+  .file-card.xl .dl{color:var(--green);background:rgba(74,222,128,.12)}
+  .file-card.pt .dl{color:var(--blue);background:rgba(91,155,255,.12)}
+  .summary-box{background:#1a1f2a;border:1px solid #2a3040;border-radius:10px;
+    padding:12px 14px;margin-top:10px;font-size:12px;line-height:1.7;white-space:pre-wrap}
   .err{color:#ffb4b4;font-size:12px}
   .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);
     border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
@@ -518,10 +611,10 @@ INDEX_HTML = r'''<!DOCTYPE html>
 </div>
 <div class="app" id="app">
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
-    <div class="sub">TXT 넣으면 → 엑셀+PPT 세트 · 최은혜 지점장</div></div></header>
+    <div class="sub">TXT 넣으면 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
     <div class="msg bot">
-      보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀+PPT 세트를 ZIP으로 드려요.<br><br>
+      보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀·PPT 파일을 각각 드려요.<br><br>
       <span style="font-size:11px;color:var(--mute)">
         💡 Adobe Acrobat → 편집 → 모두선택(Ctrl+A) → 복사(Ctrl+C)<br>
         → 메모장 붙여넣기 → .txt 저장 → 여기 업로드
@@ -567,6 +660,17 @@ $("#fi").onchange=e=>{
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 
+function b64toBlob(b64,mime){
+  const bin=atob(b64);const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function triggerDownload(blob,fname){
+  const u=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=u;a.download=fname;a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),3000);
+}
+
 $("#send").onclick=async()=>{
   if(!file)return;
   add("📄 "+esc(file.name),"me");
@@ -576,7 +680,7 @@ $("#send").onclick=async()=>{
     '<div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 TXT 파싱 중…</div>'+
     '<div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
   const t0=Date.now();
-  const steps=["📄 TXT 파싱 중…","🔎 별첨 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ ZIP 완성 중…"];
+  const steps=["📄 TXT 파싱 중…","🔎 별첨 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ 완성 중…"];
   let si=0;
   const timer=setInterval(()=>{
     si=Math.min(si+1,steps.length-1);
@@ -593,18 +697,29 @@ $("#send").onclick=async()=>{
     const j=await r.json();
     if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
     else{
-      const bin=atob(j.zip_b64);
-      const arr=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-      const u=URL.createObjectURL(new Blob([arr],{type:"application/zip"}));
-      const a=document.createElement("a");a.href=u;a.download=j.filename||"보장분석.zip";a.click();
+      // ★ 엑셀 + PPT 개별 다운로드
+      const xlBlob=b64toBlob(j.xlsx_b64,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      triggerDownload(xlBlob,j.xlsx_name);
+      let ptCard='';
+      if(j.pptx_b64){
+        const ptBlob=b64toBlob(j.pptx_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        setTimeout(()=>triggerDownload(ptBlob,j.pptx_name),800);
+        ptCard=`<a class="file-card pt" href="#" onclick="event.preventDefault()">
+          <span class="ic">📊</span>
+          <span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span>
+          <span class="dl">자동저장 ⬇</span></a>`;
+      }
+      // ★ 분석 요약 + 파일 카드
       add(
-        '<b>✅ 분석 완료!</b><br>'+
-        '<a class="file-card" href="'+u+'" download="'+esc(j.filename||"보장분석.zip")+'">'+
-        '<span class="ic">📦</span>'+
-        '<span class="nm">'+esc(j.filename||"보장분석.zip")+'<br>'+
-        '<span style="font-size:10px;color:var(--mute)">엑셀'+(j.pptx_ready?'+PPT':'')+' 세트</span></span>'+
-        '<span class="dl">저장 ⬇</span></a>',"bot");
+        '<b>✅ 분석 완료!</b>'+
+        '<div class="summary-box">'+j.summary+'</div>'+
+        '<div class="file-cards">'+
+        `<a class="file-card xl" href="#" onclick="event.preventDefault()">
+          <span class="ic">📗</span>
+          <span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span>
+          <span class="dl">자동저장 ⬇</span></a>`+
+        ptCard+
+        '</div>',"bot");
     }
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   file=null;$("#uplabel").textContent="보장분석지 TXT 선택";
@@ -618,7 +733,7 @@ app=FastAPI()
 ACCESS_PW=os.environ.get('ACCESS_PW','1009')
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v5-txt'}
+def health(): return {'ok':True,'version':'v6-split-download'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -646,16 +761,17 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx')
         pt=os.path.join(d,f'보장분석지_{cust}.pptx')
-        zp=os.path.join(d,f'보장분석_{cust}_{now:%m%d}.zip')
         build_excel(data,xl)
         ppt_ok=build_ppt(data,pt)
-        with zipfile.ZipFile(zp,'w') as z:
-            z.write(xl,f'보장진단_{cust}.xlsx')
-            if ppt_ok and os.path.exists(pt):
-                z.write(pt,f'보장분석지_{cust}.pptx')
-        buf=open(zp,'rb').read()
-        zip_b64=base64.b64encode(buf).decode()
-        zip_name=f'보장분석_{cust}_{now:%m%d}.zip'
-        return JSONResponse({'ok':True,'data':data,'zip_b64':zip_b64,'filename':zip_name,'pptx_ready':ppt_ok})
+
+        # ★ 엑셀 + PPT 개별 base64 반환 (ZIP 없음)
+        xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
+        xlsx_name=f'보장진단_{cust}.xlsx'
+        response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':xlsx_name,
+                  'summary':make_summary(data),'pptx_ready':ppt_ok}
+        if ppt_ok and os.path.exists(pt):
+            response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
+            response['pptx_name']=f'보장분석지_{cust}.pptx'
+        return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
