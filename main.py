@@ -725,6 +725,8 @@ async def analyze(file: UploadFile = File(...), pw: str = Form("")):
         if os.path.exists(pt):
             z.write(pt, pt_name)
 
-    return FileResponse(zp, filename=zip_name,
+    import urllib.parse as _up
+    _enc = _up.quote(zip_name)
+    return FileResponse(zp,
                         media_type="application/zip",
-                        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'})
+                        headers={"Content-Disposition": f"attachment; filename=\"result.zip\"; filename*=UTF-8''{_enc}"})
