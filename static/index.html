@@ -135,20 +135,22 @@ $("#send").onclick=async()=>{
   try{
     const r=await fetch("/analyze",{method:"POST",body:fd});
     clearInterval(timer);loading.remove();
-    const j=await r.json();
-    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
-    else{
-      const bin=atob(j.zip_b64);
-      const arr=new Uint8Array(bin.length);
-      for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-      const u=URL.createObjectURL(new Blob([arr],{type:"application/zip"}));
-      const a=document.createElement("a");a.href=u;a.download=j.filename||"보장분석.zip";a.click();
+    if(!r.ok){
+      const txt=await r.text();
+      add('<span class="err">⚠ 서버 오류: '+esc(txt.slice(0,100))+'</span>',"bot");
+    } else {
+      const blob=await r.blob();
+      const cd=r.headers.get("Content-Disposition")||"";
+      const m=cd.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+      const fname=m?decodeURIComponent(m[1].replace(/"/g,"")):"보장분석.zip";
+      const u=URL.createObjectURL(blob);
+      const a=document.createElement("a");a.href=u;a.download=fname;a.click();
       add(
         '<b>✅ 분석 완료!</b><br>'+
-        '<a class="file-card" href="'+u+'" download="'+esc(j.filename||"보장분석.zip")+'">'+
+        '<a class="file-card" href="'+u+'" download="'+esc(fname)+'">'+
         '<span class="ic">📦</span>'+
-        '<span class="nm">'+esc(j.filename||"보장분석.zip")+'<br>'+
-        '<span style="font-size:10px;color:var(--mute)">엑셀'+(j.pptx_ready?'+PPT':'')+' 세트</span></span>'+
+        '<span class="nm">'+esc(fname)+'<br>'+
+        '<span style="font-size:10px;color:var(--mute)">엑셀+PPT 세트</span></span>'+
         '<span class="dl">저장 ⬇</span></a>',"bot");
     }
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
