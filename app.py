@@ -374,6 +374,7 @@ def build_ppt(data, path):
         by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
     if g('뇌출혈진단비'):
         by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
+    by['TextBox 49'].text_frame.word_wrap=False
     if g('산정특례(뇌혈관)'): r_set('TextBox 49',0,3,f': {g("산정특례(뇌혈관)"):,}')
     if g('혈전용해치료비(뇌졸중)'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비(뇌졸중)"):,}')
 
@@ -382,6 +383,7 @@ def build_ppt(data, path):
         by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("허혈성"):,}'
     if g('급성심근경색'):
         by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
+    by['TextBox 56'].text_frame.word_wrap=False
     if g('산정특례(심장)'): r_set('TextBox 56',0,3,f': {g("산정특례(심장)"):,}')
 
     # 암
@@ -657,4 +659,3 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         return JSONResponse({'ok':True,'data':data,'zip_b64':zip_b64,'filename':zip_name,'pptx_ready':ppt_ok})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
-Commit changes
