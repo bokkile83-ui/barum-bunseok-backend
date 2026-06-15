@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, re, tempfile, datetime, base64, traceback
+import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 import openpyxl
@@ -23,18 +23,35 @@ FILL_GREEN = PatternFill('solid', fgColor='375623')
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-EXCLUDE = ['실효','미납해지','농업인NH안전보험','자동차보험']
+EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함, '농업인' 표기만 제외
 def is_excluded(company, product=''):
     return any(kw in company+product for kw in EXCLUDE)
 
-def judge_renewal(product, expiry, pay_count):
+def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
+    # 지침 §7 판정 순서
+    # 1) '갱신형' 명시 -> 갱신
     if '갱신형' in product and '비갱신' not in product: return '갱신'
     if '갱신' in product and '비갱신' not in product: return '갱신'
+    # 2) 만기 9999(종신) -> 비갱신
     if expiry.startswith('9999'): return '비갱신(종신)'
+    # 3) 총회차 240 초과 -> 비갱신
     try:
-        a,b = pay_count.split('/')
+        _, b = pay_count.split('/')
         if int(b.strip()) > 240: return '비갱신'
     except: pass
+    # 4) 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
+    pay_y = 0; cov_y = 0
+    m = re.search(r'(\d+)\s*년', pay_period or '')
+    if m: pay_y = int(m.group(1))
+    if not pay_y:
+        try:
+            _, b = pay_count.split('/'); pay_y = round(int(b.strip())/12)
+        except: pass
+    try:
+        cy = int(contract[:4]); ey = int(expiry[:4])
+        if cy and ey: cov_y = ey - cy
+    except: pass
+    if pay_y and cov_y and pay_y == cov_y: return '갱신'
     return '비갱신'
 
 def get_종번호(name):
@@ -42,15 +59,70 @@ def get_종번호(name):
         if k in name: return i
     return 0
 
-def parse_txt(txt):
-    lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
-    client = '고객'
-    for l in lines[:30]:
+def rule_extract(block_lines):
+    """기존 규칙 추출(담보명+금액 같은 줄). 폴백용."""
+    dambo = {}
+    UNIT = r'(?:\s*(원|만원|만))?'
+    for l in block_lines:
         l = l.strip()
-        m = re.match(r'^([가-힣]{2,5})\s*$', l)
-        if m and len(m.group(1)) <= 4: client = m.group(1); break
-        m2 = re.search(r'([가-힣]{2,4})\s+고객님', l)
-        if m2: client = m2.group(1); break
+        m = re.search(r'^(.+?)\s{2,}([\d,]+)' + UNIT + r'\s*$', l) or re.search(r'^(.+?)\s+([\d,]+)' + UNIT + r'\s*$', l)
+        if m:
+            name = re.sub(r'\s+', ' ', m.group(1).strip())
+            try:
+                amt = int(m.group(2).replace(',',''))
+                if (m.group(3) or '') == '원': amt = amt // 10000
+                if 0 < amt <= 200000 and len(name) > 2:
+                    dambo[name] = dambo.get(name,0) + amt
+            except: pass
+    return dambo
+
+def llm_extract(block_text):
+    """깨진 별첨(담보명/금액 줄 분리)을 Claude가 의미로 추출. 키 없으면 {} -> 규칙 폴백."""
+    key = os.environ.get('ANTHROPIC_API_KEY','')
+    if not key or not block_text.strip(): return {}
+    prompt = ("보험 별첨 텍스트에서 담보명과 가입금액(만원 단위 숫자)을 추출.\n"
+        "주의: 표가 깨져 담보명이 2줄로 나뉘거나 금액이 별도 블록에 모여있을 수 있음. 순서·문맥으로 정확히 매칭.\n"
+        "담보명은 원문 그대로. 납입면제·납입지원·특약안내 등 비담보성 항목은 제외.\n"
+        "금액 단위가 '원'이면 만원으로 환산(÷10000). 매칭 불확실하면 제외.\n\n"
+        + block_text + "\n\nJSON만 출력: {\"담보명\": 금액숫자}")
+    try:
+        r = httpx.post('https://api.anthropic.com/v1/messages',
+            headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+            json={'model':'claude-sonnet-4-6','max_tokens':4000,'messages':[{'role':'user','content':prompt}]}, timeout=90)
+        txt = ''.join(b.get('text','') for b in r.json().get('content',[]) if b.get('type')=='text')
+        txt = txt.strip().replace('```json','').replace('```','').strip()
+        out = json.loads(txt)
+        return {str(k).strip(): int(v) for k,v in out.items() if isinstance(v,(int,float)) and 0 < v <= 200000 and len(str(k).strip())>2}
+    except Exception:
+        return {}
+
+def parse_txt(txt, filename=''):
+    lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
+    client = ''
+    # ★ 정본 §2: 고객명 = 파일명 우선
+    if filename:
+        base = re.sub(r'\.[Tt][Xx][Tt]$', '', filename).strip()
+        fm = re.match(r'^([가-힣]{2,4})', base)
+        if fm: client = fm.group(1)
+    # 폴백: 내용에서 (마스킹 '박*은' 형태도 허용)
+    if not client:
+        for l in lines[:30]:
+            l = l.strip()
+            m2 = re.search(r'([가-힣]{2,4})\s+고객님', l)
+            if m2: client = m2.group(1); break
+            m = re.match(r'^([가-힣]{2,5})\s*$', l)
+            if m and len(m.group(1)) <= 4: client = m.group(1); break
+    if not client: client = '고객'
+
+    # ★ 한장보장표(앞부분)에서 회차 추출 → (회사,가입일,만기일) 키로 맵 구축 (별첨엔 회차 없음)
+    paycount_map = {}
+    for l in lines:
+        ld = l.strip()
+        m = re.search(r'([가-힣A-Za-z]{2,8}(?:생명|화재|손보|손해|해상|라이프|증권)?)\s+.*?(\d{4}\.\d{2}\.\d{2})\s+(\d{4}\.\d{2}\.\d{2})\s+월납\s+(\d{1,3}/\d{2,3})', ld)
+        if m:
+            comp = m.group(1).strip()
+            paycount_map[(comp, m.group(2), m.group(3))] = m.group(4)
+            paycount_map[(m.group(2), m.group(3))] = m.group(4)  # 회사 표기 흔들림 대비 보조키
 
     contracts = []; i = 0; n = len(lines)
     while i < n:
@@ -69,8 +141,8 @@ def parse_txt(txt):
             l = lines[j]
             m = re.search(r'(\d{4}\.\d{2}\.\d{2})\s*~\s*(\d{4}\.\d{2}\.\d{2})', l)
             if m: contract_date = m.group(1); expiry_date = m.group(2)
-            m2 = re.search(r'(\d+)\s*/\s*(\d+)\s*회', l)
-            if m2: pay_count = f"{m2.group(1)}/{m2.group(2)}"
+            m2 = re.search(r'(\d{1,3})\s*/\s*(\d{2,3})\s*회', l) or re.search(r'월납\s+(\d{1,3})\s*/\s*(\d{2,3})', l) or re.search(r'(?<![\d.])(\d{1,3})\s*/\s*(\d{2,3})(?![\d.])', l)
+            if m2 and not pay_count: pay_count = f"{m2.group(1)}/{m2.group(2)}"
             m3 = re.search(r'([\d,]+)원', l)
             if m3:
                 v = int(m3.group(1).replace(',',''))
@@ -86,26 +158,47 @@ def parse_txt(txt):
             if l and not re.search(r'계약자|납입주기|보험료|보장기간', l):
                 if len(l) > 5 and not re.search(r'^\d+$', l) and not re.search(r'^\d{4}\.\d{2}', l):
                     product = l; i = j + 1; break
-        renewal = judge_renewal(product, expiry_date, pay_count)
-        dambo = {}; j = i
+        renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period)
+        # 담보 블록 텍스트 수집 (다음 '정상계약/실효계약 리스트'까지)
+        block_lines = []; j = i
         while j < n:
-            l = lines[j].strip()
-            if '정상계약 리스트' in l or '실효계약 리스트' in l: i = j; break
-            m = re.search(r'^(.+?)\s{2,}([\d,]+)\s*$', l)
-            if not m: m = re.search(r'^(.+?)\s+([\d,]+)\s*$', l)
-            if m:
-                name = re.sub(r'\s+', ' ', m.group(1).strip())
-                try:
-                    amt = int(m.group(2).replace(',',''))
-                    if 0 < amt <= 100000 and len(name) > 2: dambo[name] = dambo.get(name,0) + amt
-                except: pass
-            j += 1
-        else: i = j
+            if '정상계약 리스트' in lines[j] or '실효계약 리스트' in lines[j]: break
+            block_lines.append(lines[j]); j += 1
+        i = j
+        # 추출: LLM 우선(깨진 별첨 복원), 키 없거나 실패 시 규칙 폴백
+        dambo = llm_extract('\n'.join(block_lines)) or rule_extract(block_lines)
         if company:
             contracts.append({'company':company,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo})
-    return {'client':client,'contracts':contracts}
+    # ★ 페이지 분할 중복 제거 (정본 체크리스트 ①②): 동일 계약키 병합
+    merged = {}
+    order = []
+    for c in contracts:
+        key = (c['company'], c['contract_date'], c['expiry_date'], c['premium'])
+        if key not in merged:
+            merged[key] = c; order.append(key)
+        else:
+            m = merged[key]
+            # 담보 병합: 같은 담보명은 큰 값 유지(중복가산 방지), 새 담보는 추가
+            for k, v in c['dambo'].items():
+                m['dambo'][k] = max(m['dambo'].get(k, 0), v)
+            # 더 긴(덜 잘린) 상품명 채택
+            if len(c['product']) > len(m['product']): m['product'] = c['product']
+            # 회차/기간 비어있으면 채움
+            if not m['pay_count'] and c['pay_count']: m['pay_count'] = c['pay_count']
+            if not m['pay_period'] and c['pay_period']: m['pay_period'] = c['pay_period']
+    deduped = [merged[k] for k in order]
+    # 한장보장표 회차 주입 (별첨에 없던 pay_count 보정)
+    for c in deduped:
+        if not c['pay_count']:
+            pc = paycount_map.get((c['company'], c['contract_date'], c['expiry_date'])) \
+                 or paycount_map.get((c['contract_date'], c['expiry_date']))
+            if pc: c['pay_count'] = pc
+    # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
+    for c in deduped:
+        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'])
+    return {'client':client,'contracts':deduped}
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
@@ -188,20 +281,116 @@ def resolve(raw):
     for k,v in DMAP.items():
         if k in raw: return v
     if any(k in raw for k in ['(1종)','(2종)','(3종)','(4종)','(5종)']): return None
+    # 암 일반 폴백: '암'+'진단' 포함 & 특수암/치료 아님 -> 일반암
+    if '암' in raw and '진단' in raw:
+        if not any(x in raw for x in ['유사','고액','소액','표적','방사선','약물','수술','일당',
+                                      '양성자','세기','중입자','전이','보험료']):
+            return '일반암'
     return None
+
+NOFILL = PatternFill(fill_type=None)
+
+# ★ SUM 수식 캐시값 채우기 — openpyxl은 수식만 저장(캐시 없음)→모바일/미리보기 공란.
+#   저장 후 LibreOffice 재계산으로 값 주입(수식은 유지=법칙22).
+def recalc_xlsx(path):
+    import subprocess, shutil, tempfile
+    soffice = shutil.which('soffice') or shutil.which('libreoffice')
+    if not soffice: return False
+    try:
+        outd = tempfile.mkdtemp()
+        subprocess.run([soffice,'--headless','--norestore','--convert-to','xlsx','--outdir',outd,path],
+                       timeout=90, capture_output=True)
+        out = os.path.join(outd, os.path.splitext(os.path.basename(path))[0]+'.xlsx')
+        if os.path.exists(out):
+            shutil.copyfile(out, path); shutil.rmtree(outd, ignore_errors=True)
+            return True
+        shutil.rmtree(outd, ignore_errors=True)
+        return False
+    except Exception:
+        return False
+
+# ★ LLM 매핑 엔진 — 마스터 표준 담보명에 의미기반 매핑 (앱 자동화 핵심)
+def load_std_dambo(ws):
+    out=[]
+    for r in range(6, ws.max_row+1):
+        v=ws.cell(r,2).value
+        if v and str(v).strip(): out.append(str(v).strip())
+    return out
+
+def llm_resolve(raw_names, std_list):
+    """raw 담보명 -> {raw: {'std': 표준명 or None, 'jong': 0~5}}  (jong>0이면 종수술비)"""
+    raw_names=[r for r in raw_names if r]
+    if not raw_names: return {}
+    key=os.environ.get('ANTHROPIC_API_KEY','')
+    if not key:
+        return {r:{'std':None,'jong':0,'note':''} for r in raw_names}  # 키 없음 -> 전부 [확인]
+    rules=("한국 보험 보장분석. 아래 담보명들을 표준목록의 표준명에 의미기반 매핑.\n"
+        "규칙:\n"
+        "- 표준목록에 있는 것만 선택. 의미가 명확히 일치할 때만. 애매/해당없음=null.\n"
+        "- 중입자방사선=중입자치료비, 양성자=양성자치료, 세기조절=세기조절치료, 표적항암약물=표적항암치료비\n"
+        "- '상해 1~5종/1-5종 수술비'(_N종·(N종)·N종)=상해 종수술비(1-5종), jong=종번호. 질병도 동일=질병 종수술비(1-5종)\n"
+        "- 허혈심장/협심증=협심증, 급성심근경색=급성심근경색, 부정맥=부정맥, 심장질환수술=심장수술비\n"
+        "- 유사암(갑상선/기타피부/제자리/경계성)=유사암(갑.기.경.제). 특수치료 아닌 일반 암진단=일반암\n"
+        "- 라이나(라이나생명) '뇌혈관진단비'는 실제 뇌출혈 보장 → 뇌출혈진단비\n"
+        "- 하이클래스=하이클래스(암), 표적항암약물허가=표적항암치료비(여러 건이면 가장 큰 1건만)\n"
+        "- 유사암 진단금액은 가입연도 2020년 이하면 일반암의 1/10, 2021년 이상이면 1/5로 환산 기재\n"
+        "- 뇌혈관수술=뇌혈관수술비, 항암방사선/약물치료비=항암방사선약물, 암수술=암수술\n"
+        "- 화상 진단비='진 단 비'(화상 구분 행), 중증화상=중증화상진단비\n"
+        "- 생명보험 종신 주계약/기본계약(사망보장)=일반사망\n"
+        "- 운전자: 교통사고처리지원금=대인, 벌금(대물)=대물, 변호사선임=변호사, 자동차부상위로금=자부상\n"
+        "- 표준목록에 자리 없는 담보(예 크론병·다발경화증·장기이식 등)=null (행 추가 금지)\n"
+        "- 심장담보 질병코드 분류: 협심증(I20)=협심증, 급성심근경색(I21~22)=급성심근경색, "
+        "부정맥(I47~49)=부정맥, 심부전(I50)=심부전, 심내막·심근·심장막염=염증. "
+        "단 '특정Ⅰ/Ⅱ·특정심장' 등 상품별 정의는 약관마다 달라 본표 단정 금지→null.\n"
+        "- note 규칙(엄수): 약관 없이 보장범위를 추측·일반론으로 단정하지 말 것. "
+        "담보명에서 명백한 사실만 적고, 상품별 정의(특정Ⅰ/Ⅱ 등)나 불확실한 건 '약관 확인 필요'로만 기재. "
+        "의학적 추정(예 '통상 허혈성'·'대개 ~포함') 금지.\n")
+    prompt=rules+f"\n표준목록: {std_list}\n\n담보명: {raw_names}\n\nJSON만 출력(설명 금지): {{\"담보명\":{{\"std\":\"표준명 또는 null\",\"jong\":0,\"note\":\"보장범위 요약\"}}}}"
+    try:
+        r=httpx.post('https://api.anthropic.com/v1/messages',
+            headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+            json={'model':'claude-sonnet-4-6','max_tokens':8000,
+                  'messages':[{'role':'user','content':prompt}]}, timeout=90)
+        txt=''.join(b.get('text','') for b in r.json().get('content',[]) if b.get('type')=='text')
+        txt=txt.strip().replace('```json','').replace('```','').strip()
+        out=json.loads(txt)
+        return {k:{'std':(v.get('std') if isinstance(v,dict) else None),
+                   'jong':(v.get('jong',0) if isinstance(v,dict) else 0),
+                   'note':(v.get('note','') if isinstance(v,dict) else '')} for k,v in out.items()}
+    except Exception:
+        return {r:{'std':None,'jong':0,'note':''} for r in raw_names}
 
 def build_excel(data, out):
     wb = openpyxl.load_workbook(TPL_XL)
     ws = wb['보장분석']
     client = data['client']; contracts = data['contracts']
-    ws.cell(1,1).value = f"{client} 보장진단"
 
+    # 담보명 -> 행번호 맵 (A/B열 유지)
     nm2r = {}
+    nm2r_norm = {}   # 공백무시 보조키 ('진 단 비' 등 라벨 변형 흡수)
     for r in range(6, ws.max_row+1):
         v = ws.cell(r,2).value
-        if v: nm2r[str(v).strip()] = r
+        if v:
+            k = str(v).strip()
+            nm2r[k] = r
+            nm2r_norm[re.sub(r'\s','',k)] = r
 
-    total_premium = 0; n_ct = len(contracts)
+    # ★ 데이터영역(C열~) 전체 초기화 — 옛 7계약 헤더·합계·SUM수식·슬래시골격 제거
+    MAXC = 60  # 최대 50계약 + 여유
+    for r in range(1, ws.max_row+1):
+        for c in range(3, MAXC+1):
+            cell = ws.cell(r,c)
+            cell.value = None
+            cell.fill = NOFILL
+    ws.cell(1,1).value = f"{client} 보장진단"
+
+    n_ct = len(contracts)
+
+    # ★ LLM 배치 매핑 (앱 자동화): 전체 담보 1회 호출 -> 표준명/종번호
+    std_list = load_std_dambo(ws)
+    all_raw = sorted({raw for c in contracts for raw in c['dambo']})
+    LLMMAP = llm_resolve(all_raw, std_list)
+    unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
 
     for i, ct in enumerate(contracts):
         col = 3 + i
@@ -212,73 +401,111 @@ def build_excel(data, out):
         h.font = W; h.alignment = AL
         h.fill = FILL_GREEN if paid else (FILL_BLUE if gen else FILL_RED)
         pm = ct['premium']
-        ws.cell(2,col).value = pm if pm else ''
+        ws.cell(2,col).value = pm if pm else None
         ws.cell(2,col).font = BL if gen else BK
-        total_premium += pm if pm else 0
         ws.cell(3,col).value = ct['contract_date']
         ws.cell(4,col).value = ct['expiry_date']
         ws.cell(5,col).value = f"{ct['pay_period']} ({ct['pay_count']})" if ct['pay_period'] else ''
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
 
         dambo = ct['dambo']
-        q종 = {k:v for k,v in dambo.items() if '질병수술비' in k and get_종번호(k)>0}
-        s종 = {k:v for k,v in dambo.items() if '상해수술비' in k and get_종번호(k)>0}
+        jong_acc = {'상해 종수술비(1-5종)':[0]*5, '질병 종수술비(1-5종)':[0]*5}
+        jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
 
-        if q종:
-            vals = [0]*5
-            for k,v in q종.items():
-                idx = get_종번호(k)-1
-                if 0<=idx<5: vals[idx] = v
-            r = nm2r.get('질병 종수술비(1-5종)')
-            if r: ws.cell(r,col).value = '/'.join(str(x) for x in vals); ws.cell(r,col).font = BL if gen else BK
-
-        if s종:
-            vals = [0]*5
-            for k,v in s종.items():
-                idx = get_종번호(k)-1
-                if 0<=idx<5: vals[idx] = v
-            r = nm2r.get('상해 종수술비(1-5종)')
-            if r: ws.cell(r,col).value = '/'.join(str(x) for x in vals); ws.cell(r,col).font = BL if gen else BK
-
-        skip = set(list(q종.keys()) + list(s종.keys()))
         for raw, amt in dambo.items():
-            if raw in skip: continue
-            std = resolve(raw)
-            if not std: continue
+            m = LLMMAP.get(raw) or {}
+            std = m.get('std'); jong = m.get('jong', 0) or 0
+            if not std:                       # LLM 미반환 시 사전 폴백
+                std = resolve(raw)
+                if not jong: jong = get_종번호(raw)
+            blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
+            # 수술비 1~5종 -> 종별 슬래시 누적
+            if std in jong_acc and 1 <= jong <= 5:
+                jong_acc[std][jong-1] += amt
+                if blue: jong_blue[std] = True
+                continue
             r = nm2r.get(std)
-            if not r: continue
+            if r is None and std:             # 공백무시 재매칭 (화상 '진 단 비' 등)
+                r = nm2r_norm.get(re.sub(r'\s','', std))
+            if not std or r is None:          # 마스터 미수록/매핑실패 -> [확인]
+                unmapped.append((col, ct['company'], raw, amt, m.get('note','') or ''))
+                continue
             existing = ws.cell(r,col).value
-            ws.cell(r,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
-            ws.cell(r,col).font = BL if gen else BK
+            if std == '표적항암치료비' and isinstance(existing,(int,float)):
+                ws.cell(r,col).value = max(existing, amt)   # §8 표적=최댓값 1건
+            else:
+                ws.cell(r,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
+            ws.cell(r,col).font = BL if blue else BK
 
+        for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
+            if any(vals):
+                r = nm2r.get(nm)
+                if r:
+                    ws.cell(r,col).value = '/'.join(str(x) for x in vals)
+                    ws.cell(r,col).font = BL if (gen or jong_blue[nm]) else BK
+
+        # ★ §8 생보 종신(만기 9999): 일반사망(종신) + 상해사망 1:1 복제
+        if ct['expiry_date'].startswith('9999'):
+            r_il = nm2r.get('일반사망'); r_sh = nm2r.get('상해사망')
+            v = ws.cell(r_il,col).value if r_il else None
+            if isinstance(v,(int,float)) and r_sh and not isinstance(ws.cell(r_sh,col).value,(int,float)):
+                ws.cell(r_sh,col).value = v
+                ws.cell(r_sh,col).font = BL if gen else BK
+
+    # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
+    first_L = get_column_letter(3)
+    last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
     hc = ws.cell(1, last_col)
     hc.value = '합계'; hc.font = W; hc.fill = FILL_SUM; hc.alignment = AL
-    ws.cell(2, last_col).value = total_premium; ws.cell(2, last_col).font = W
+    # 보험료 합계 = 숫자만 표기(§3): 수식 아닌 계산된 숫자값. 글자 검정(흰바탕)
+    if n_ct>0:
+        ws.cell(2, last_col).value = sum(c['premium'] for c in contracts)
+        ws.cell(2, last_col).font = BK
 
     for r in range(6, ws.max_row+1):
-        slash_t=[0]*5; is_slash=False; total=0
+        slash_t=[0]*5; is_slash=False; has_num=False
         for col in range(3, last_col):
             v = ws.cell(r,col).value
-            if isinstance(v,(int,float)): total += int(v)
+            if isinstance(v,(int,float)): has_num=True
             elif isinstance(v,str) and '/' in v:
                 is_slash = True
                 for k,p in enumerate(v.split('/')[:5]):
                     try: slash_t[k] += int(p)
                     except: pass
         sc = ws.cell(r, last_col)
-        if is_slash and any(slash_t): sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK
-        elif total > 0: sc.value = total; sc.font = BK
+        if is_slash and any(slash_t):
+            sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
+        elif has_num:
+            sc.value = f'=SUM({first_L}{r}:{last_ct_L}{r})'; sc.font = BK
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
 
+    # ★ 합계 이후 잔재 열 삭제 (§3: 합계 = 맨 끝 열)
+    if ws.max_column > last_col:
+        ws.delete_cols(last_col+1, ws.max_column - last_col)
+
+    # ── 확인사항 시트: LLM 매핑 실패 담보 노출(자가진단, §10) ──
     if '📋확인사항' in wb.sheetnames: del wb['📋확인사항']
     ws2 = wb.create_sheet('📋확인사항')
     ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}')
-    ws2.cell(3,1,'완료'); ws2.cell(3,2,f'계약 {n_ct}건')
-    ws2.cell(3,3,f'월보험료합계: {total_premium:,}원')
+    ws2.cell(3,1,'계약수'); ws2.cell(3,2,n_ct)
+    ws2.cell(4,1,'월보험료합계'); ws2.cell(4,2,f'{sum(c["premium"] for c in contracts):,}원')
+    ws2.cell(6,1,'[확인] 자동매핑 실패 담보 (마스터 미수록 또는 약관 확인 후 수기 기재)')
+    ws2.cell(7,1,'회사'); ws2.cell(7,2,'담보명'); ws2.cell(7,3,'금액(만원)'); ws2.cell(7,4,'보장범위(참고)'); ws2.cell(7,5,'약관검색')
+    LINKF = Font(color='0000FF', underline='single')
+    for k,(col,comp,raw,amt,note) in enumerate(unmapped):
+        rr = 8+k
+        ws2.cell(rr,1,comp); ws2.cell(rr,2,raw); ws2.cell(rr,3,amt); ws2.cell(rr,4,note)
+        prod = contracts[col-3]['product'] if 0<=col-3<len(contracts) else ''
+        prod_key = re.sub(r'[\(\)\[\]ⅠⅡⅢ_]', ' ', prod)[:18].strip()
+        q = f"{comp} {prod_key} {raw[:12]} 약관 보장내용"
+        cell = ws2.cell(rr,5,'🔗약관검색')
+        cell.hyperlink = "https://search.naver.com/search.naver?query=" + urllib.parse.quote(q)
+        cell.font = LINKF
+    ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
     wb.save(out)
 
 def build_ppt(data, out):
@@ -573,12 +800,12 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         except: pass
     else: txt=raw.decode('utf-8',errors='ignore')
     try:
-        data=parse_txt(txt)
+        data=parse_txt(txt, file.filename)
         if not data['contracts']:
             return JSONResponse({'ok':False,'error':'계약을 찾지 못했습니다.'})
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
-        build_excel(data,xl); ppt_ok=build_ppt(data,pt)
+        build_excel(data,xl); recalc_xlsx(xl); ppt_ok=build_ppt(data,pt)
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
                   'summary':make_summary(data),'pptx_ready':ppt_ok}
@@ -635,8 +862,7 @@ async def ask(body:dict):
                 json={'model':'claude-haiku-4-5-20251001','max_tokens':300,
                       'system':system,'messages':[{'role':'user','content':question}]})
         r=resp.json()
-        content=r.get('content',[])
-        answer=content[0].get('text','답변 오류') if content else str(r.get('error','API 키 확인 필요'))
+        answer=r.get('content',[])[0].get('text','답변을 가져오지 못했습니다.')
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e)})
