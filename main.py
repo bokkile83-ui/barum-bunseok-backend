@@ -7,13 +7,13 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
-
+ 
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL_XL  = os.path.join(HERE, "MASTER_보장분석_엑셀_영구표본.xlsx")
 TPL_PPT = os.path.join(HERE, "MASTER_보장분석지_PPT_빈폼.pptx")
-
+ 
 W   = Font(color='FFFFFF', name='맑은 고딕', size=9, bold=True)
 BL  = Font(color='0070C0', name='맑은 고딕', size=9)
 BK  = Font(color='000000', name='맑은 고딕', size=9)
@@ -22,11 +22,11 @@ FILL_BLUE  = PatternFill('solid', fgColor='0070C0')
 FILL_GREEN = PatternFill('solid', fgColor='375623')
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
-
+ 
 EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함, '농업인' 표기만 제외
 def is_excluded(company, product=''):
     return any(kw in company+product for kw in EXCLUDE)
-
+ 
 def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     # 지침 §7 판정 순서
     # 1) '갱신형' 명시 -> 갱신
@@ -53,12 +53,12 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     except: pass
     if pay_y and cov_y and pay_y == cov_y: return '갱신'
     return '비갱신'
-
+ 
 def get_종번호(name):
     for i,k in enumerate(['(1종)','(2종)','(3종)','(4종)','(5종)'],1):
         if k in name: return i
     return 0
-
+ 
 def rule_extract(block_lines):
     """기존 규칙 추출(담보명+금액 같은 줄). 폴백용."""
     dambo = {}
@@ -75,7 +75,7 @@ def rule_extract(block_lines):
                     dambo[name] = dambo.get(name,0) + amt
             except: pass
     return dambo
-
+ 
 def llm_extract(block_text):
     """깨진 별첨(담보명/금액 줄 분리)을 Claude가 의미로 추출. 키 없으면 {} -> 규칙 폴백."""
     key = os.environ.get('ANTHROPIC_API_KEY','')
@@ -95,7 +95,7 @@ def llm_extract(block_text):
         return {str(k).strip(): int(v) for k,v in out.items() if isinstance(v,(int,float)) and 0 < v <= 200000 and len(str(k).strip())>2}
     except Exception:
         return {}
-
+ 
 def parse_txt(txt, filename=''):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     client = ''
@@ -113,7 +113,7 @@ def parse_txt(txt, filename=''):
             m = re.match(r'^([가-힣]{2,5})\s*$', l)
             if m and len(m.group(1)) <= 4: client = m.group(1); break
     if not client: client = '고객'
-
+ 
     # ★ 한장보장표(앞부분)에서 회차 추출 → (회사,가입일,만기일) 키로 맵 구축 (별첨엔 회차 없음)
     paycount_map = {}
     for l in lines:
@@ -123,7 +123,7 @@ def parse_txt(txt, filename=''):
             comp = m.group(1).strip()
             paycount_map[(comp, m.group(2), m.group(3))] = m.group(4)
             paycount_map[(m.group(2), m.group(3))] = m.group(4)  # 회사 표기 흔들림 대비 보조키
-
+ 
     contracts = []; i = 0; n = len(lines)
     while i < n:
         l = lines[i].strip()
@@ -199,7 +199,7 @@ def parse_txt(txt, filename=''):
     for c in deduped:
         c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'])
     return {'client':client,'contracts':deduped}
-
+ 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
     # 사망
@@ -275,7 +275,7 @@ DMAP = {
     # 제외
     '보험료납입지원':None,
 }
-
+ 
 def resolve(raw):
     if raw in DMAP: return DMAP[raw]
     for k,v in DMAP.items():
@@ -287,9 +287,9 @@ def resolve(raw):
                                       '양성자','세기','중입자','전이','보험료']):
             return '일반암'
     return None
-
+ 
 NOFILL = PatternFill(fill_type=None)
-
+ 
 # ★ SUM 수식 캐시값 채우기 — openpyxl은 수식만 저장(캐시 없음)→모바일/미리보기 공란.
 #   저장 후 LibreOffice 재계산으로 값 주입(수식은 유지=법칙22).
 def recalc_xlsx(path):
@@ -308,7 +308,7 @@ def recalc_xlsx(path):
         return False
     except Exception:
         return False
-
+ 
 # ★ LLM 매핑 엔진 — 마스터 표준 담보명에 의미기반 매핑 (앱 자동화 핵심)
 def load_std_dambo(ws):
     out=[]
@@ -316,7 +316,7 @@ def load_std_dambo(ws):
         v=ws.cell(r,2).value
         if v and str(v).strip(): out.append(str(v).strip())
     return out
-
+ 
 def llm_resolve(raw_names, std_list):
     """raw 담보명 -> {raw: {'std': 표준명 or None, 'jong': 0~5}}  (jong>0이면 종수술비)"""
     raw_names=[r for r in raw_names if r]
@@ -359,12 +359,12 @@ def llm_resolve(raw_names, std_list):
                    'note':(v.get('note','') if isinstance(v,dict) else '')} for k,v in out.items()}
     except Exception:
         return {r:{'std':None,'jong':0,'note':''} for r in raw_names}
-
+ 
 def build_excel(data, out):
     wb = openpyxl.load_workbook(TPL_XL)
     ws = wb['보장분석']
     client = data['client']; contracts = data['contracts']
-
+ 
     # 담보명 -> 행번호 맵 (A/B열 유지)
     nm2r = {}
     nm2r_norm = {}   # 공백무시 보조키 ('진 단 비' 등 라벨 변형 흡수)
@@ -374,7 +374,7 @@ def build_excel(data, out):
             k = str(v).strip()
             nm2r[k] = r
             nm2r_norm[re.sub(r'\s','',k)] = r
-
+ 
     # ★ 데이터영역(C열~) 전체 초기화 — 옛 7계약 헤더·합계·SUM수식·슬래시골격 제거
     MAXC = 60  # 최대 50계약 + 여유
     for r in range(1, ws.max_row+1):
@@ -383,15 +383,15 @@ def build_excel(data, out):
             cell.value = None
             cell.fill = NOFILL
     ws.cell(1,1).value = f"{client} 보장진단"
-
+ 
     n_ct = len(contracts)
-
+ 
     # ★ LLM 배치 매핑 (앱 자동화): 전체 담보 1회 호출 -> 표준명/종번호
     std_list = load_std_dambo(ws)
     all_raw = sorted({raw for c in contracts for raw in c['dambo']})
     LLMMAP = llm_resolve(all_raw, std_list)
     unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
-
+ 
     for i, ct in enumerate(contracts):
         col = 3 + i
         gen  = ct['renewal'] == '갱신'
@@ -407,11 +407,11 @@ def build_excel(data, out):
         ws.cell(4,col).value = ct['expiry_date']
         ws.cell(5,col).value = f"{ct['pay_period']} ({ct['pay_count']})" if ct['pay_period'] else ''
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
-
+ 
         dambo = ct['dambo']
         jong_acc = {'상해 종수술비(1-5종)':[0]*5, '질병 종수술비(1-5종)':[0]*5}
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
-
+ 
         for raw, amt in dambo.items():
             m = LLMMAP.get(raw) or {}
             std = m.get('std'); jong = m.get('jong', 0) or 0
@@ -436,14 +436,14 @@ def build_excel(data, out):
             else:
                 ws.cell(r,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
             ws.cell(r,col).font = BL if blue else BK
-
+ 
         for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
             if any(vals):
                 r = nm2r.get(nm)
                 if r:
                     ws.cell(r,col).value = '/'.join(str(x) for x in vals)
                     ws.cell(r,col).font = BL if (gen or jong_blue[nm]) else BK
-
+ 
         # ★ §8 생보 종신(만기 9999): 일반사망(종신) + 상해사망 1:1 복제
         if ct['expiry_date'].startswith('9999'):
             r_il = nm2r.get('일반사망'); r_sh = nm2r.get('상해사망')
@@ -451,7 +451,7 @@ def build_excel(data, out):
             if isinstance(v,(int,float)) and r_sh and not isinstance(ws.cell(r_sh,col).value,(int,float)):
                 ws.cell(r_sh,col).value = v
                 ws.cell(r_sh,col).font = BL if gen else BK
-
+ 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
     first_L = get_column_letter(3)
@@ -462,7 +462,7 @@ def build_excel(data, out):
     if n_ct>0:
         ws.cell(2, last_col).value = sum(c['premium'] for c in contracts)
         ws.cell(2, last_col).font = BK
-
+ 
     for r in range(6, ws.max_row+1):
         slash_t=[0]*5; is_slash=False; has_num=False
         for col in range(3, last_col):
@@ -478,15 +478,15 @@ def build_excel(data, out):
             sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
         elif has_num:
             sc.value = f'=SUM({first_L}{r}:{last_ct_L}{r})'; sc.font = BK
-
+ 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
-
+ 
     # ★ 합계 이후 잔재 열 삭제 (§3: 합계 = 맨 끝 열)
     if ws.max_column > last_col:
         ws.delete_cols(last_col+1, ws.max_column - last_col)
-
+ 
     # ── 확인사항 시트: LLM 매핑 실패 담보 노출(자가진단, §10) ──
     if '📋확인사항' in wb.sheetnames: del wb['📋확인사항']
     ws2 = wb.create_sheet('📋확인사항')
@@ -507,7 +507,7 @@ def build_excel(data, out):
         cell.font = LINKF
     ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
     wb.save(out)
-
+ 
 def build_ppt(data, out):
     if not os.path.exists(TPL_PPT): return False
     prs = Presentation(TPL_PPT)
@@ -515,7 +515,7 @@ def build_ppt(data, out):
     by = {sh.name:sh for sh in sl.shapes if sh.has_text_frame}
     client = data['client']; contracts = data['contracts']
     now = datetime.datetime.now()
-
+ 
     totals = {}
     surg_q=[0]*5; surg_s=[0]*5
     for ct in contracts:
@@ -526,7 +526,7 @@ def build_ppt(data, out):
                 if '상해수술비' in raw: surg_s[i]+=amt
             std = resolve(raw)
             if std: totals[std]=totals.get(std,0)+amt
-
+ 
     def g(nm): return totals.get(nm,0)
     def r_set(box,pi,ri,val):
         if box not in by: return
@@ -534,17 +534,17 @@ def build_ppt(data, out):
         if pi<len(tf.paragraphs):
             p=tf.paragraphs[pi]
             if ri<len(p.runs): p.runs[ri].text=val
-
+ 
     for b in ['TextBox 49','TextBox 56']:
         if b in by: by[b].text_frame.word_wrap=False
-
+ 
     by['TextBox 21'].text_frame.word_wrap=False
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{client} 님의 보장'
     by['TextBox 21'].text_frame.paragraphs[0].runs[1].text='(전)'
     by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
     by['TextBox 35'].text_frame.paragraphs[0].runs[0].text=f'{now.month:02d}월'
     by['TextBox 29'].text_frame.paragraphs[0].runs[0].text=f'{now.day:02d}일 기준'
-
+ 
     if g('질병사망(80세)'): r_set('TextBox 10',2,2,f': {g("질병사망(80세)"):,}')
     if g('상해사망'): r_set('TextBox 11',0,1,f': {g("상해사망"):,}')
     종신_d=0
@@ -553,22 +553,22 @@ def build_ppt(data, out):
             for raw,v in ct['dambo'].items():
                 if resolve(raw)=='상해사망': 종신_d+=v
     if 종신_d: r_set('TextBox 10',3,1,f': {종신_d:,}')
-
+ 
     if g('상해후유3%'): r_set('TextBox 8',2,1,f'3% : {g("상해후유3%"):,}')
     if g('질병후유3%'): r_set('TextBox 8',0,1,f'3% : {g("질병후유3%"):,}')
     if g('상해후유80%'): r_set('TextBox 8',3,1,f'80% : {g("상해후유80%"):,}')
     if g('질병후유80%'): r_set('TextBox 8',1,1,f'80% : {g("질병후유80%"):,}')
-
+ 
     if g('뇌혈관진단비'): by['TextBox 46'].text_frame.paragraphs[0].runs[0].text=f'뇌혈관\n{g("뇌혈관진단비"):,}'
     if g('뇌졸증진단비'): by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
     if g('뇌출혈진단비'): by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
     if g('산정특례뇌혈관'): r_set('TextBox 49',0,3,f': {g("산정특례뇌혈관"):,}')
     if g('혈전용해치료비'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비"):,}')
-
+ 
     if g('협심증'): by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("협심증"):,}'
     if g('급성심근경색'): by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
     if g('산정특례심장'): r_set('TextBox 56',0,3,f': {g("산정특례심장"):,}')
-
+ 
     if g('일반암'): r_set('TextBox 14',0,1,f': {g("일반암"):,}')
     if g('유사암(갑.기.경.제)'): r_set('TextBox 14',1,2,f': {g("유사암(갑.기.경.제)"):,}')
     if g('항암방사선약물'): r_set('TextBox 14',4,1,f': {g("항암방사선약물"):,} / ')
@@ -576,7 +576,7 @@ def build_ppt(data, out):
     if g('세기조절치료'): r_set('TextBox 14',5,4,f': {g("세기조절치료"):,}')
     if g('양성자치료'): r_set('TextBox 14',5,5,f': {g("양성자치료"):,}')
     if g('다빈치로봇수술비'): r_set('TextBox 14',7,1,f': {g("다빈치로봇수술비"):,}')
-
+ 
     if g('질병수술비'): r_set('TextBox 17',0,1,f': {g("질병수술비"):,}')
     if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})'); r_set('TextBox 17',3,2,'')
     if g('뇌혈관수술비'): r_set('TextBox 17',5,1,f': {g("뇌혈관수술비"):,}')
@@ -584,7 +584,7 @@ def build_ppt(data, out):
     if g('상해수술비'): r_set('TextBox 19',0,1,f': {g("상해수술비"):,}')
     if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})'); r_set('TextBox 19',3,2,'')
     if g('골절수술비'): r_set('TextBox 19',4,1,f': {g("골절수술비"):,}')
-
+ 
     실손_dates=[ct['contract_date'] for ct in contracts
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
     실손가입일=min(실손_dates) if 실손_dates else '___________'
@@ -599,7 +599,7 @@ def build_ppt(data, out):
     if g('MRI'): r_set('TextBox 6',2,0,f'MRI : {g("MRI"):,}')
     if g('도수치료'): r_set('TextBox 6',3,1,f': {g("도수치료"):,}')
     if g('비급여주사'): r_set('TextBox 6',4,1,f': {g("비급여주사"):,}')
-
+ 
     if g('골절(치아파절제외)'): r_set('TextBox 7',0,1,f': {g("골절(치아파절제외)"):,}')
     if g(' 진 단 비'): r_set('TextBox 7',2,1,f': {g(" 진 단 비"):,}')
     if g('깁스진단비'): r_set('TextBox 7',5,1,f': {g("깁스진단비"):,}')
@@ -616,9 +616,9 @@ def build_ppt(data, out):
     if g('간호통합병동'): r_set('TextBox 22',8,2,f': {g("간호통합병동"):,}')
     if g('크라운'): r_set('TextBox 13',0,1,f': {g("크라운"):,}')
     if g('임플란트'): r_set('TextBox 13',1,1,f': {g("임플란트"):,}')
-
+ 
     prs.save(out); return True
-
+ 
 def make_summary(data):
     contracts=data['contracts']; cust=data['client']
     total_premium=sum(ct['premium'] for ct in contracts)
@@ -643,7 +643,7 @@ def make_summary(data):
         lines+=["","🔑 <b>주요 담보 합계 (만원)</b>"]
         for lbl,amt in found: lines.append(f"  • {lbl}: <b>{amt:,}만원</b>")
     return '<br>'.join(lines)
-
+ 
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
@@ -779,16 +779,16 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("qbtn").onclick=askAI;
 });
 </script></body></html>'''
-
+ 
 @app.get('/health')
 def health(): return {'ok':True,'version':'v8-ai-chat'}
-
+ 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
-
+ 
 @app.post('/check')
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
-
+ 
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(...),pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
@@ -815,10 +815,10 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
-
+ 
 # ── AI 질문답 ─────────────────────────────────────────────────────────
 import httpx
-
+ 
 def build_context(data):
     lines=[f"고객명: {data['client']}", f"계약 수: {len(data['contracts'])}건"]
     for ct in data['contracts']:
@@ -839,7 +839,7 @@ def build_context(data):
         lines.append("\n자동매핑 실패 담보 (약관 확인 필요):")
         for u in sorted(set(unmapped)): lines.append(f"  - {u}")
     return '\n'.join(lines)
-
+ 
 @app.post('/ask')
 async def ask(body:dict):
     if body.get('pw')!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
@@ -866,3 +866,4 @@ async def ask(body:dict):
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e)})
+ 
