@@ -948,7 +948,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM</footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v11</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1018,7 +1018,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v8-ai-chat'}
+def health(): return {'ok':True,'version':'v11-borders-autofit-20260616'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
