@@ -948,7 +948,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v11</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v13</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -966,6 +966,10 @@ function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
 function dl(blob,fname){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(u),3000);}
+const XLMIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PTMIME="application/vnd.openxmlformats-officedocument.presentationml.presentation";
+let savedFiles={};
+function reDL(k){const f=savedFiles[k];if(f&&f.b64){dl(b64toBlob(f.b64,f.mime),f.name);}}
 $("#send").onclick=async()=>{
   if(!file)return;add("📄 "+esc(file.name),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
@@ -973,27 +977,33 @@ $("#send").onclick=async()=>{
   const t0=Date.now();const steps=["📄 TXT 파싱 중…","🔎 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ 완성 중…"];let si=0;
   const timer=setInterval(()=>{si=Math.min(si+1,steps.length-1);const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과";if(mm)mm.textContent=steps[si];},8000);
   const fd=new FormData();fd.append("file",file);fd.append("pw",ACCESS);
+  let j=null;
   try{
     const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
-    const j=await r.json();
+    j=await r.json();
     if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
     else{
-      const xlBlob=b64toBlob(j.xlsx_b64,"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      savedFiles={};
+      const xlBlob=b64toBlob(j.xlsx_b64,XLMIME);
       dl(xlBlob,j.xlsx_name);
+      savedFiles.xlsx={b64:j.xlsx_b64,name:j.xlsx_name,mime:XLMIME};
       let ptCard='';
       if(j.pptx_b64){
-        const ptBlob=b64toBlob(j.pptx_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        const ptBlob=b64toBlob(j.pptx_b64,PTMIME);
         setTimeout(()=>dl(ptBlob,j.pptx_name),800);
-        ptCard=`<div class="file-card pt"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
+        savedFiles.pptx={b64:j.pptx_b64,name:j.pptx_name,mime:PTMIME};
+        ptCard=`<div class="file-card pt" onclick="reDL('pptx')" style="cursor:pointer"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
       if(j.chiryo_b64){
-        const txBlob=b64toBlob(j.chiryo_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        const txBlob=b64toBlob(j.chiryo_b64,PTMIME);
         setTimeout(()=>dl(txBlob,j.chiryo_name),1600);
-        ptCard+=`<div class="file-card pt"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
-      add('<b>✅ 분석 완료!</b><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
-        `<div class="file-card xl"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장완료 ✓</span></div>`+ptCard+'</div>',"bot");}
+        savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
+        ptCard+=`<div class="file-card pt" onclick="reDL('chiryo')" style="cursor:pointer"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
+      add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
+        `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
-  file=null;$("#uplabel").textContent="보장분석지 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  file=null;$("#uplabel").textContent="다음 고객 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  if(j&&j.ok){add('다음 고객 TXT를 올리면 이어서 분석합니다.',"bot");}
 };
 let analysisData=null;
 function askAI(){
@@ -1018,7 +1028,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v11-borders-autofit-20260616'}
+def health(): return {'ok':True,'version':'v13-resave-20260616'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
