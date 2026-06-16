@@ -4,7 +4,7 @@ import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
@@ -627,6 +627,15 @@ def build_excel(data, out):
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
 
+    # ★ 테두리: 데이터 열(C~합계)만 동적으로 그림. A(세로병합 구분)·B는 마스터 테두리 유지.
+    _thin = Side(style='thin', color='000000'); _med = Side(style='medium', color='000000')
+    for r in range(1, ws.max_row+1):
+        for c in range(3, last_col+1):
+            top    = _med if r in (1,2,5) else (_med if r in (3,4) else _thin)
+            bottom = _med if r in (1,2,5) else _thin
+            right  = _med if c == last_col else _thin
+            ws.cell(r,c).border = Border(left=_thin, right=right, top=top, bottom=bottom)
+
     # ★ 합계 이후 잔재 열 삭제 (§3: 합계 = 맨 끝 열)
     if ws.max_column > last_col:
         ws.delete_cols(last_col+1, ws.max_column - last_col)
@@ -786,25 +795,27 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
 
 
 def _autofit_ppt(by):
-    """긴 텍스트 박스 폰트 자동 축소(삐져나옴 방지, §11). 박스 폭 기준 휴리스틱."""
-    from pptx.util import Emu
+    """겹침·단락내림 방지(§11): 모든 값박스 word_wrap off + 가장 긴 단락 기준 폰트 일괄 축소.
+    같은 박스 안 단락은 같은 폰트여야 줄간격이 안 어긋난다 → 박스 단위로 한 번에 줄임."""
     for sh in by.values():
         tf = sh.text_frame
-        try: w_in = sh.width / 914400.0  # EMU->inch
+        try:
+            tf.word_wrap = False           # 줄바꿈(단락 내려옴) 차단
+            w_in = sh.width / 914400.0
         except: continue
-        for p in tf.paragraphs:
-            txt = ''.join(r.text for r in p.runs)
-            if not txt.strip(): continue
-            runs = [r for r in p.runs if r.text]
-            if not runs: continue
-            base = runs[0].font.size.pt if runs[0].font.size else 9
-            # 한 줄에 들어갈 대략 글자수(한글 폭≈폰트pt*0.95) → 넘치면 축소
-            cap = max(4, int(w_in * 72 / (base * 0.62)))
-            if len(txt) > cap:
-                newpt = max(6.0, base * cap / len(txt))
-                for r in runs:
-                    try: r.font.size = Pt(round(newpt,1))
-                    except: pass
+        # 박스 내 모든 run 현재폰트 중 최댓값을 base로
+        runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
+        if not runs_all: continue
+        base = max((r.font.size.pt for r in runs_all if r.font.size), default=9)
+        # 가장 긴 단락이 한 줄에 들어가도록 cap 산정
+        longest = max((sum(len(r.text) for r in p.runs) for p in tf.paragraphs), default=0)
+        if longest <= 0: continue
+        cap = max(4, int(w_in * 72 / (base * 0.62)))
+        if longest > cap:
+            newpt = max(6.0, round(base * cap / longest, 1))
+            for r in runs_all:
+                try: r.font.size = Pt(newpt)
+                except: pass
 
 
 def build_chiryo(data, out, totals=None, unmapped=None):
