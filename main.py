@@ -165,6 +165,10 @@ def parse_txt(txt, filename=''):
             if l and not re.search(r'계약자|납입주기|보험료|보장기간', l):
                 if len(l) > 5 and not re.search(r'^\d+$', l) and not re.search(r'^\d{4}\.\d{2}', l):
                     product = l; i = j + 1; break
+        # ★ 제외 재검사(§4): 회사명엔 없고 상품명에만 있는 자동차보험·농업인 등을 여기서 차단
+        if is_excluded(company, product):
+            while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
+            continue
         renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period)
         # 담보 블록 텍스트 수집 (다음 '정상계약/실효계약 리스트'까지)
         block_lines = []; j = i
