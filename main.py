@@ -14,6 +14,7 @@ PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL_XL  = os.path.join(HERE, "MASTER_보장분석_엑셀_영구표본.xlsx")
 TPL_PPT = os.path.join(HERE, "MASTER_보장분석지_PPT_빈폼.pptx")
+TPL_TX  = os.path.join(HERE, "치료비_정리_빈폼.pptx")
 
 W   = Font(color='FFFFFF', name='맑은 고딕', size=9, bold=True)
 BL  = Font(color='0070C0', name='맑은 고딕', size=9)
@@ -282,17 +283,144 @@ DMAP = {
     '보험료납입지원':None,
 }
 
+# -*- coding: utf-8 -*-
+import re
+# 마스터 82행 전부 키워드로 잡는 사전 엔진. (predicate, std, jong)
+# 순서 = 구체 우선. 앞에서 잡히면 끝.
+def _norm(s): return re.sub(r'\s+','',s)
+
+def resolve_kw(raw):
+    """raw 담보명 -> (std표준명 or None, jong 0~5). API 불필요."""
+    r = raw; n = _norm(raw)
+    has = lambda *ks: all(_norm(k) in n for k in ks)
+    no  = lambda *ks: not any(_norm(k) in n for k in ks)
+    # 종번호
+    jong = 0
+    for i,k in enumerate(['1종','2종','3종','4종','5종'],1):
+        if k in n or f'({i}종)' in r: jong = i; break
+
+    # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
+    if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
+    if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
+    if has('수술') and has('일당'): return '질병수술일당',0
+    # ── 수술비 ──
+    if has('수술'):
+        if has('상해') and jong: return '상해 종수술비(1-5종)', jong
+        if has('질병') and jong: return '질병 종수술비(1-5종)', jong
+        if has('중대한','상해'): return '중대한상해수술비',0
+        if has('5대기관') and has('비관혈'): return '5대기관 수술비 비관혈',0
+        if has('5대기관'): return '5대기관 수술비 관혈',0
+        if has('120대') or has('120'): return '120대수술비',0
+        if has('뇌혈관') or has('심뇌혈관'): return '뇌혈관수술비',0
+        if has('허혈'): return '허혈성수술비',0
+        if has('심장') or has('심질환'): return '심장수술비',0
+        if has('5대골절'): return '5대골절수술비',0
+        if has('골절'): return '골절수술비',0
+        if has('화상'): return '화상수술비',0
+        if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
+        if has('암'): return '암수술',0
+        if has('상해'): return '상해수술비',0
+        if has('질병'): return '질병수술비',0
+    if has('창상') or has('봉합'): return '창상봉합술',0
+
+    # ── 암 치료비 ──
+    if has('표적'): return '표적항암치료비',0
+    if has('하이클래스'): return '하이클래스(암)',0
+    if has('중입자'): return '중입자치료비',0
+    if has('양성자'): return '양성자치료',0
+    if has('세기조절'): return '세기조절치료',0
+    if has('항암') and (has('방사선') or has('약물')): return '항암방사선약물',0
+    if has('카티') or has('CAR-T') or has('CART'): return '항암방사선약물',0
+    if has('고액암'): return '고액암',0
+    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]):
+        return '유사암(갑.기.경.제)',0
+    if has('중대한') and has('암'): return '중대한 암',0
+    if has('암') and has('진단') and no('유사','고액','소액','표적','방사선','약물','수술','일당','양성자','세기','중입자','전이','뇌','보험료'):
+        return '일반암',0
+    if has('암') and has('입원'): return '암일당',0
+
+    # ── 뇌혈관 ──
+    if has('외상성') and has('뇌출혈'): return '외상성뇌출혈',0
+    if has('뇌출혈'): return '뇌출혈진단비',0
+    if has('중대한') and has('뇌졸'): return '중대한 뇌졸증',0
+    if has('뇌졸'): return '뇌졸증진단비',0
+    if has('산정특례') and has('뇌'): return '산정특례뇌혈관',0
+    if has('뇌혈관') and has('진단'): return '뇌혈관진단비',0
+    if has('혈전용해') and has('뇌'): return '혈전용해치료비',0
+
+    # ── 심장 ──
+    if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
+    if has('급성심근'): return '급성심근경색',0
+    if has('협심') or has('허혈'): return '협심증',0
+    if has('심부전'): return '심부전',0
+    if has('심내막') or has('심근염') or has('심장막'): return '염증',0
+    if has('부정맥'): return '부정맥',0
+    if has('산정특례') and has('심'): return '산정특례심장',0
+    if has('2대') and has('주요'): return '2대 주요치료비',0
+    if has('혈전용해'): return '혈전용해치료비',0
+
+    # ── 사망 ──
+    if has('CI') and has('사망'): return '중대한CI적용',0
+    if has('교통') and has('사망'): return '교통상해사망',0
+    if (has('상해') or has('재해')) and has('사망'): return '상해사망',0
+    if has('질병') and has('사망'): return '질병사망(80세)',0
+    if has('일반사망') or (has('사망') and no('상해','질병','교통','재해','CI')): return '일반사망',0
+
+    # ── 후유장애 ──
+    if has('후유') or has('장해') or has('장애'):
+        sev = '80' if ('80' in n) else '3'
+        body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
+        return f'{body}후유{sev}%',0
+
+    # ── 일당/입원 ──
+    if has('간병인'): return '간병인',0
+    if has('간호') and (has('통합') or has('간병')): return '간호통합병동',0
+    if has('1인실') and has('상급'): return '1인실 상급병원',0
+    if has('1인실') and has('종합'): return '1인실 종합병원',0
+    if has('중환자') and has('상해'): return '상해중환자실',0
+    if has('중환자') and has('질병'): return '질병중환자실',0
+    if (has('질병') or has('수술')) and has('일당') and has('수술'): return '질병수술일당',0
+    if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
+    if has('상해') and (has('일당') or has('입원')): return '상해일당',0
+    if has('질병') and (has('일당') or has('입원')): return '질병일당',0
+
+    # ── 운전자 ──
+    if has('교통사고처리') or (has('대인') and no('대물')): return '대인',0
+    if has('벌금') or has('대물'): return '대물',0
+    if has('형사합의') or has('합의금'): return '합의금',0
+    if has('6주'): return '6주미만',0
+    if has('변호사'): return '변호사',0
+    if has('자동차부상') or has('자부상') or has('부상위로'): return '자부상',0
+
+    # ── 골절/응급/독감/화상/깁스 ──
+    if has('5대골절') and has('진단'): return '5대골절진단비',0
+    if has('골절') and has('치아파절포함'): return '골절(치아파절포함)',0
+    if has('골절') and has('진단'): return '골절(치아파절제외)',0
+    if has('응급실') or (has('응급') and has('내원')): return '응급실(응급)',0
+    if has('독감') or has('인플루엔자'): return '독감',0
+    if has('중증화상') or has('심재성'): return '중증화상진단비',0
+    if has('화상') and has('진단'): return '진 단 비',0
+    if has('반깁스'): return '반깁스',0
+    if has('깁스'): return '깁스진단비',0
+
+    # ── 실손 ──
+    if (has('실손') or has('입원의료비') or has('상해입원형') or has('질병입원형')) and has('입원'): return '입원',0
+    if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
+    if has('처방조제') or has('약제비') or (has('약') and has('실손')): return '약값',0
+    if has('일상생활') and has('배상') or has('일배책') or has('일상배상'): return '일상배상책임',0
+    return None, 0
+
+def resolve2(raw):
+    """raw -> (std, jong). DMAP 정확매칭 우선, 없으면 키워드 사전엔진(resolve_kw)."""
+    if raw in DMAP:
+        v = DMAP[raw]
+        return (v, get_종번호(raw))
+    for k, v in DMAP.items():
+        if k and k in raw and v: return (v, get_종번호(raw))
+    return resolve_kw(raw)
+
 def resolve(raw):
-    if raw in DMAP: return DMAP[raw]
-    for k,v in DMAP.items():
-        if k in raw: return v
-    if any(k in raw for k in ['(1종)','(2종)','(3종)','(4종)','(5종)']): return None
-    # 암 일반 폴백: '암'+'진단' 포함 & 특수암/치료 아님 -> 일반암
-    if '암' in raw and '진단' in raw:
-        if not any(x in raw for x in ['유사','고액','소액','표적','방사선','약물','수술','일당',
-                                      '양성자','세기','중입자','전이','보험료']):
-            return '일반암'
-    return None
+    return resolve2(raw)[0]
 
 NOFILL = PatternFill(fill_type=None)
 
@@ -427,9 +555,9 @@ def build_excel(data, out):
         for raw, amt in dambo.items():
             m = LLMMAP.get(raw) or {}
             std = m.get('std'); jong = m.get('jong', 0) or 0
-            if not std:                       # LLM 미반환 시 사전 폴백
-                std = resolve(raw)
-                if not jong: jong = get_종번호(raw)
+            if not std:                       # LLM 미반환/실패 -> 키워드 사전엔진(API 불필요)
+                std, j2 = resolve2(raw)
+                if not jong: jong = j2 or get_종번호(raw)
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -519,6 +647,7 @@ def build_excel(data, out):
         cell.font = LINKF
     ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
     wb.save(out)
+    return unmapped
 
 def read_excel_totals(path):
     """완성 엑셀 끝열(합계)을 담보명->값으로 읽음. 등식2: PPT는 이것만 본다."""
@@ -648,6 +777,64 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('크라운'): r_set('TextBox 13',0,1,f': {g("크라운"):,}')
     if g('임플란트'): r_set('TextBox 13',1,1,f': {g("임플란트"):,}')
 
+    _autofit_ppt(by)
+    prs.save(out); return True
+
+
+def _autofit_ppt(by):
+    """긴 텍스트 박스 폰트 자동 축소(삐져나옴 방지, §11). 박스 폭 기준 휴리스틱."""
+    from pptx.util import Emu
+    for sh in by.values():
+        tf = sh.text_frame
+        try: w_in = sh.width / 914400.0  # EMU->inch
+        except: continue
+        for p in tf.paragraphs:
+            txt = ''.join(r.text for r in p.runs)
+            if not txt.strip(): continue
+            runs = [r for r in p.runs if r.text]
+            if not runs: continue
+            base = runs[0].font.size.pt if runs[0].font.size else 9
+            # 한 줄에 들어갈 대략 글자수(한글 폭≈폰트pt*0.95) → 넘치면 축소
+            cap = max(4, int(w_in * 72 / (base * 0.62)))
+            if len(txt) > cap:
+                newpt = max(6.0, base * cap / len(txt))
+                for r in runs:
+                    try: r.font.size = Pt(round(newpt,1))
+                    except: pass
+
+
+def build_chiryo(data, out, totals=None, unmapped=None):
+    """치료비 정리 폼: 고객명/날짜 + [확인](AI 미매핑) 항목을 카테고리별로 채움.
+    추측 금지 — 박스 라벨이 명시한 'AI가 못 채운 항목'에 실제 미매핑 목록만 주입."""
+    if not os.path.exists(TPL_TX): return False
+    prs = Presentation(TPL_TX); sl = prs.slides[0]
+    by = {sh.name:sh for sh in sl.shapes if sh.has_text_frame}
+    client = data['client']; now = datetime.datetime.now()
+    def first_run_set(box, text):
+        if box not in by: return
+        tf = by[box].text_frame
+        if tf.paragraphs and tf.paragraphs[0].runs:
+            tf.paragraphs[0].runs[0].text = text
+    if 'TextBox 21' in by:
+        by['TextBox 21'].text_frame.word_wrap=False
+        rs=by['TextBox 21'].text_frame.paragraphs[0].runs
+        if rs: rs[0].text=f'{client} 님의 보장'
+        if len(rs)>1: rs[1].text='(전)'
+    first_run_set('TextBox 36', f'{now.year}년')
+    first_run_set('TextBox 35', f'{now.month:02d}월')
+    first_run_set('TextBox 29', f'{now.day:02d}일 기준')
+    # [확인] 미매핑 항목 → 회사별 묶어 본문 박스에 기재(있을 때만)
+    unmapped = unmapped or []
+    if unmapped:
+        lines = [f"{comp} {raw}: {amt:,}" for (col,comp,raw,amt,note) in unmapped]
+        blob = '\n'.join(lines[:20])
+        for box in ['TextBox 25','TextBox 32','TextBox 37','TextBox 51']:
+            if box in by:
+                tf=by[box].text_frame
+                if tf.paragraphs and tf.paragraphs[0].runs:
+                    tf.paragraphs[0].runs[0].text = '⚠ AI 미매핑(별첨 직접확인):\n'+blob
+                break
+    _autofit_ppt(by)
     prs.save(out); return True
 
 def make_summary(data):
@@ -783,6 +970,10 @@ $("#send").onclick=async()=>{
         const ptBlob=b64toBlob(j.pptx_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
         setTimeout(()=>dl(ptBlob,j.pptx_name),800);
         ptCard=`<div class="file-card pt"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
+      if(j.chiryo_b64){
+        const txBlob=b64toBlob(j.chiryo_b64,"application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        setTimeout(()=>dl(txBlob,j.chiryo_name),1600);
+        ptCard+=`<div class="file-card pt"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">저장완료 ✓</span></div>`;}
       add('<b>✅ 분석 완료!</b><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
         `<div class="file-card xl"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장완료 ✓</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
@@ -836,15 +1027,20 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
             return JSONResponse({'ok':False,'error':'계약을 찾지 못했습니다.'})
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
-        build_excel(data,xl); recalc_xlsx(xl)
+        tx=os.path.join(d,f'치료비정리_{cust}.pptx')
+        unmapped=build_excel(data,xl); recalc_xlsx(xl)
         ppt_totals, sq, ss = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
         ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss)
+        tx_ok=build_chiryo(data,tx,ppt_totals,unmapped)   # 치료비 폼(2번째 PPT)
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
                   'summary':make_summary(data),'pptx_ready':ppt_ok}
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
+        if tx_ok and os.path.exists(tx):
+            response['chiryo_b64']=base64.b64encode(open(tx,'rb').read()).decode()
+            response['chiryo_name']=f'치료비정리_{cust}.pptx'
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
