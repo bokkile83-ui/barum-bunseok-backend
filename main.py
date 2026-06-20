@@ -8,6 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
+from pptx.enum.text import MSO_AUTO_SIZE
 
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
@@ -221,7 +222,7 @@ DMAP = {
     '상해후유장해3%':'상해후유3%','상해후유80%':'상해후유80%',
     '질병후유장해3%':'질병후유3%','질병후유80%':'질병후유80%',
     # 암 — B열: 고액암/일반암/중대한 암/유사암(갑.기.경.제)/표적항암치료비/하이클래스(암)/중입자치료비/양성자치료/세기조절치료/다빈치로봇수술비/암수술/암일당/항암방사선약물
-    '일반암진단비':'일반암','암진단비':'일반암','암진단Ⅱ(유사암제외)(간편가입Ⅲ)담보':'일반암',
+    '일반암진단비':'일반암','암진단Ⅱ(유사암제외)(간편가입Ⅲ)담보':'일반암',
     '고액암진단비':'고액암',
     '갑상선암.기타피부암.유사암진단비Ⅲ':'유사암(갑.기.경.제)','유사암진단비':'유사암(갑.기.경.제)',
     '유사암진단Ⅱ(양성뇌종양포함)(간편가입Ⅲ)담보':'유사암(갑.기.경.제)',
@@ -254,25 +255,23 @@ DMAP = {
     '상급종합병원질병입원일당(상급병실(1인실),1일이상60일한도)(간편가입)(갱신형)':'1인실 상급병원',
     '종합병원질병입원일당(상급병실(1인실),1일이상30일한도)(간편가입)(갱신형)':'1인실 종합병원',
     # 수술비
-    '질병수술비':'질병수술비','질병수술(간편가입Ⅲ)담보':'질병수술비',
+    '질병수술(간편가입Ⅲ)담보':'질병수술비',
     '상해수술비(건강맞춤형Ⅱ)(갱신형)':'상해수술비','상해수술(간편가입Ⅲ)담보':'상해수술비',
     '골절수술(간편가입Ⅲ)담보':'골절수술비','화상수술(간편가입Ⅲ)담보':'화상수술비',
-    '120대질병수술Ⅱ(간편가입Ⅲ)(질병수술3(24대질병))담보':'120대수술비',
+    '120대질병수술Ⅱ(간편가입Ⅲ)(질병수술3(24대질병))담보':'n대수술비',
     '5대기관질병수술(관혈/비관혈)(연간1회한)(간편가입Ⅲ)담보':'5대기관 수술비 관혈',
     '중대한특정상해수술(간편가입Ⅲ)담보':'중대한상해수술비',
-    # 운전자 — B열: 대인/대물/합의금/6주미만/변호사/자부상
-    '교통사고처리지원금':'대인','교통사고 처리지원금':'대인',
+    # 운전자 — B열: 대인/대물/합의금/6주미만/변호사/자부상 (처리지원금 판정은 resolve_kw에서 순서대로)
     '교통사고벌금(대물)':'대물','교통사고벌금(대인)':'대인',
-    '6주미만처리지원금':'6주미만',
-    '변호사선임비용':'변호사','자동차사고 변호사선임비용':'변호사',
-    '자동차부상위로금':'자부상',
+    '변호사선임비용':'변호사','자동차사고 변호사선임비용':'변호사','변호사비':'변호사',
+    '자동차부상위로금':'자부상','자동차부상보장':'자부상',
     '무보험차에 의한 상해':'일상배상책임',
     # 골절 — B열: 골절(치아파절포함)/골절(치아파절제외)/5대골절진단비
     '골절진단(간편가입Ⅲ)담보':'골절(치아파절제외)','골절진단비':'골절(치아파절제외)',
     # 응급실
     '응급실내원비(응급)':'응급실(응급)',
     # 화상 — B열: 진 단 비/중증화상진단비
-    '화상진단비':' 진 단 비','화상진단비(건강맞춤형Ⅱ)(갱신형)':' 진 단 비',
+    '화상진단비':'화상진단비','화상진단비(건강맞춤형Ⅱ)(갱신형)':'화상진단비',
     # 깁스 — B열: 반깁스/깁스진단비
     '깁스치료담보':'깁스진단비','깁스치료':'깁스진단비',
     # 실손 — B열: 입원/통원/약값
@@ -303,6 +302,9 @@ def resolve_kw(raw):
     for i,k in enumerate(['1종','2종','3종','4종','5종'],1):
         if k in n or f'({i}종)' in r: jong = i; break
 
+    # 비담보성(보험료 납입면제·일시납입지원) → 매핑 안 함(자부상 등 오매핑 차단)
+    if has('납입') and (has('면제') or has('지원') or has('대상보장')): return None,0
+
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
     if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
     if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
@@ -314,7 +316,7 @@ def resolve_kw(raw):
         if has('중대한','상해'): return '중대한상해수술비',0
         if has('5대기관') and has('비관혈'): return '5대기관 수술비 비관혈',0
         if has('5대기관'): return '5대기관 수술비 관혈',0
-        if has('120대') or has('120'): return '120대수술비',0
+        if re.search(r'1\d\d\s*대', r): return 'n대수술비',0   # 116/119/120/123대 등 → n대수술비(최댓값 1건)
         if has('뇌혈관') or has('심뇌혈관'): return '뇌혈관수술비',0
         if has('허혈'): return '허혈성수술비',0
         if has('심장') or has('심질환'): return '심장수술비',0
@@ -323,23 +325,34 @@ def resolve_kw(raw):
         if has('화상'): return '화상수술비',0
         if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
         if has('암'): return '암수술',0
-        if has('상해'): return '상해수술비',0
-        if has('질병'): return '질병수술비',0
+        if has('상해'):
+            # §6 상해수술비 = 기본만. 병원규모 가산·부위/특정 변형은 합산 금지 → [확인]
+            if no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골'):
+                return '상해수술비',0
+            return None,0
+        if has('질병'):
+            # 질병수술비 / 질병입원수술비 = 기본만. 그 외 변형(특정·부위·관절 등)은 합산 금지 → [확인]
+            if no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골','상급','종합병원'):
+                return '질병수술비',0
+            return None,0
     if has('창상') or has('봉합'): return '창상봉합술',0
 
     # ── 암 치료비 ──
     if has('표적'): return '표적항암치료비',0
     if has('하이클래스'): return '하이클래스(암)',0
+    if (has('비급여') or has('하이클래스')) and has('주요치료'): return '하이클래스(암)',0   # 비급여 주요치료비=하이클래스(암)
+    if has('암') and has('주요치료') and no('순환계','2대'): return '암주요치료비',0          # 암(유사암제외)주요치료비
     if has('중입자'): return '중입자치료비',0
     if has('양성자'): return '양성자치료',0
     if has('세기조절'): return '세기조절치료',0
     if has('항암') and (has('방사선') or has('약물')): return '항암방사선약물',0
     if has('카티') or has('CAR-T') or has('CART'): return '항암방사선약물',0
     if has('고액암'): return '고액암',0
-    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]):
+    # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
+    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
         return '유사암(갑.기.경.제)',0
     if has('중대한') and has('암'): return '중대한 암',0
-    if has('암') and has('진단') and no('유사','고액','소액','표적','방사선','약물','수술','일당','양성자','세기','중입자','전이','뇌','보험료'):
+    if has('암') and has('진단') and no('고액','소액','표적','방사선','약물','수술','일당','양성자','세기','중입자','전이','뇌','보험료'):
         return '일반암',0
     if has('암') and has('입원'): return '암일당',0
 
@@ -353,6 +366,7 @@ def resolve_kw(raw):
     if has('혈전용해') and has('뇌'): return '혈전용해치료비',0
 
     # ── 심장 ──
+    if (has('순환계') or has('2대')) and has('주요치료'): return '2대 주요치료비',0
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
     if has('급성심근'): return '급성심근경색',0
     if has('협심') or has('허혈'): return '협심증',0
@@ -388,13 +402,17 @@ def resolve_kw(raw):
     if has('상해') and (has('일당') or has('입원')): return '상해일당',0
     if has('질병') and (has('일당') or has('입원')): return '질병일당',0
 
-    # ── 운전자 ──
-    if has('교통사고처리') or (has('대인') and no('대물')): return '대인',0
-    if has('벌금') or has('대물'): return '대물',0
-    if has('형사합의') or has('합의금'): return '합의금',0
+    # ── 운전자 (지침 §운전자 매핑) ──
+    #  벌금(대인)→대인 / 벌금(대물)→대물 / 처리지원금(중상해포함)→합의금 / 처리지원금(6주미만)→6주미만
+    #  변호사→변호사 / 자동차(사고)부상보장·부상위로→자부상
     if has('6주'): return '6주미만',0
+    if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
+    if has('벌금') and has('대물'): return '대물',0
+    if has('벌금'): return '대인',0   # 벌금담보·벌금(대인) = 대인 (기본). 대물 명시만 대물
+    if has('대인') and no('대물'): return '대인',0
+    if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
-    if has('자동차부상') or has('자부상') or has('부상위로'): return '자부상',0
+    if has('자동차부상') or has('자동차사고부상') or has('자부상') or has('부상위로') or has('부상보장'): return '자부상',0
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
@@ -402,8 +420,8 @@ def resolve_kw(raw):
     if has('골절') and has('진단'): return '골절(치아파절제외)',0
     if has('응급실') or (has('응급') and has('내원')): return '응급실(응급)',0
     if has('독감') or has('인플루엔자'): return '독감',0
-    if has('중증화상') or has('심재성'): return '중증화상진단비',0
-    if has('화상') and has('진단'): return '진 단 비',0
+    if has('화상') and (has('중증') or has('심재성') or has('중대한') or has('부식')): return '중증화상진단비',0
+    if has('화상') and has('진단'): return '화상진단비',0
     if has('반깁스'): return '반깁스',0
     if has('깁스'): return '깁스진단비',0
 
@@ -473,9 +491,9 @@ def llm_resolve(raw_names, std_list):
         "- 하이클래스=하이클래스(암), 표적항암약물허가=표적항암치료비(여러 건이면 가장 큰 1건만)\n"
         "- 유사암 진단금액은 가입연도 2020년 이하면 일반암의 1/10, 2021년 이상이면 1/5로 환산 기재\n"
         "- 뇌혈관수술=뇌혈관수술비, 항암방사선/약물치료비=항암방사선약물, 암수술=암수술\n"
-        "- 화상 진단비='진 단 비'(화상 구분 행), 중증화상=중증화상진단비\n"
+        "- 화상 진단비='화상진단비'(화상 구분 행), 중대한화상·부식=중증화상진단비\n"
         "- 생명보험 종신 주계약/기본계약(사망보장)=일반사망\n"
-        "- 운전자: 교통사고처리지원금=대인, 벌금(대물)=대물, 변호사선임=변호사, 자동차부상위로금=자부상\n"
+        "- 운전자: 벌금(대인)=대인, 벌금(대물)=대물, 교통사고처리지원금(중상해)=합의금, 처리지원금(6주미만)=6주미만, 변호사비=변호사, 자동차(사고)부상보장=자부상\n"
         "- 표준목록에 자리 없는 담보(예 크론병·다발경화증·장기이식 등)=null (행 추가 금지)\n"
         "- 심장담보 질병코드 분류: 협심증(I20)=협심증, 급성심근경색(I21~22)=급성심근경색, "
         "부정맥(I47~49)=부정맥, 심부전(I50)=심부전, 심내막·심근·심장막염=염증. "
@@ -512,12 +530,14 @@ def build_excel(data, out):
     # 담보명 -> 행번호 맵 (A/B열 유지)
     nm2r = {}
     nm2r_norm = {}   # 공백무시 보조키 ('진 단 비' 등 라벨 변형 흡수)
+    nm2r_multi = {}  # 동일 담보명이 여러 행(2대 주요치료비=뇌혈관+심장) → 모두 기재용
     for r in range(6, ws.max_row+1):
         v = ws.cell(r,2).value
         if v:
             k = str(v).strip()
             nm2r[k] = r
             nm2r_norm[re.sub(r'\s','',k)] = r
+            nm2r_multi.setdefault(k, []).append(r)
 
     # ★ 데이터영역(C열~) 전체 초기화 — 옛 7계약 헤더·합계·SUM수식·슬래시골격 제거
     MAXC = 60  # 최대 50계약 + 여유
@@ -574,12 +594,16 @@ def build_excel(data, out):
             if not std or r is None:          # 마스터 미수록/매핑실패 -> [확인]
                 unmapped.append((col, ct['company'], raw, amt, m.get('note','') or ''))
                 continue
-            existing = ws.cell(r,col).value
-            if std == '표적항암치료비' and isinstance(existing,(int,float)):
-                ws.cell(r,col).value = max(existing, amt)   # §8 표적=최댓값 1건
-            else:
-                ws.cell(r,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
-            ws.cell(r,col).font = BL if blue else BK
+            # 2대 주요치료비는 뇌혈관·심장 두 칸 모두 기재(동일 담보, 양쪽 표기). 그 외는 단일 행.
+            target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
+            for tr in target_rows:
+                existing = ws.cell(tr,col).value
+                if std in ('표적항암치료비','n대수술비') and isinstance(existing,(int,float)):
+                    ws.cell(tr,col).value = max(existing, amt)   # §8 표적·n대수술비=최댓값 1건
+                else:
+                    ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
+                # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
+                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약')) else BK
 
         for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
             if any(vals):
@@ -627,14 +651,34 @@ def build_excel(data, out):
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
 
-    # ★ 테두리: 데이터 열(C~합계)만 동적으로 그림. A(세로병합 구분)·B는 마스터 테두리 유지.
+    # ★ 테두리: A(구분)~끝열(합계) 전체 격자 직접 그림 + 구분(키워드)마다 굵은 구분선.
+    #   (마스터 A·B 테두리가 중간행에서 끊겨 '선 없음' 발생 → 전부 새로 그림)
     _thin = Side(style='thin', color='000000'); _med = Side(style='medium', color='000000')
+    # 구분(그룹) 끝행 동적 계산: A열에 값 있는 행=그룹 시작 → 다음 시작-1 = 그룹 끝
+    g_starts = [r for r in range(6, ws.max_row+1) if ws.cell(r,1).value not in (None,'')]
+    g_end = set()
+    for k, s in enumerate(g_starts):
+        e = (g_starts[k+1]-1) if k+1 < len(g_starts) else ws.max_row
+        g_end.add(e)
+    # 수술비 블록 내부 구분: 질병수술비 행 위에 굵은 선(상해 수술 ↔ 질병 수술)
+    row_top_med = set()
+    for r in range(6, ws.max_row+1):
+        if str(ws.cell(r,2).value).strip() == '질병수술비':
+            row_top_med.add(r)
     for r in range(1, ws.max_row+1):
-        for c in range(3, last_col+1):
-            top    = _med if r in (1,2,5) else (_med if r in (3,4) else _thin)
-            bottom = _med if r in (1,2,5) else _thin
+        for c in range(1, last_col+1):
+            left   = _med if c == 1 else _thin
             right  = _med if c == last_col else _thin
-            ws.cell(r,c).border = Border(left=_thin, right=right, top=top, bottom=bottom)
+            top    = _med if (r in (1, 6) or r in row_top_med) else _thin
+            # 헤더 5행 + 각 구분 끝행 = 굵은 가로 구분선
+            bottom = _med if (r in (1,2,3,4,5) or r in g_end) else _thin
+            ws.cell(r,c).border = Border(left=left, right=right, top=top, bottom=bottom)
+    # ★ 숫자 콤마: 보험료·담보값·합계 SUM 전부 #,##0. (날짜·납입기간·슬래시 행은 텍스트라 제외)
+    for r in range(1, ws.max_row+1):
+        for c in range(2, last_col+1):
+            v = ws.cell(r,c).value
+            if isinstance(v,(int,float)) or (isinstance(v,str) and v.startswith('=')):
+                ws.cell(r,c).number_format = '#,##0'
 
     # ★ 합계 이후 잔재 열 삭제 (§3: 합계 = 맨 끝 열)
     if ws.max_column > last_col:
@@ -663,24 +707,36 @@ def build_excel(data, out):
     return unmapped
 
 def read_excel_totals(path):
-    """완성 엑셀 끝열(합계)을 담보명->값으로 읽음. 등식2: PPT는 이것만 본다."""
+    """완성 엑셀에서 담보명->합계 읽음. 등식2: PPT는 이것만 본다.
+       끝열 =SUM() 캐시(LibreOffice 의존) 대신 데이터셀(C~끝열-1) 직접 합산 → 재계산 없어도 PPT=엑셀 보장."""
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb['보장분석']; last = ws.max_column
     out = {}; sq=[0]*5; ss=[0]*5
     for r in range(6, ws.max_row+1):
         nm = ws.cell(r,2).value
         if not nm: continue
-        nm = str(nm).strip(); v = ws.cell(r,last).value
-        if nm == '상해 종수술비(1-5종)' and isinstance(v,str) and '/' in v:
-            for k,p in enumerate(v.split('/')[:5]):
+        nm = str(nm).strip()
+        endv = ws.cell(r,last).value
+        # 수술비 1~5종: 끝열 슬래시 문자열(수식 아님, 항상 존재)
+        if nm == '상해 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
+            for k,p in enumerate(endv.split('/')[:5]):
                 try: ss[k]=int(p)
                 except: pass
-        elif nm == '질병 종수술비(1-5종)' and isinstance(v,str) and '/' in v:
-            for k,p in enumerate(v.split('/')[:5]):
+            continue
+        if nm == '질병 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
+            for k,p in enumerate(endv.split('/')[:5]):
                 try: sq[k]=int(p)
                 except: pass
-        elif isinstance(v,(int,float)) and v:
-            out[nm] = v
+            continue
+        # 숫자 합계: 끝열 캐시값 있으면 사용, 없으면(=SUM 미계산) 데이터셀 C~끝열-1 직접 합산
+        if isinstance(endv,(int,float)) and endv:
+            out[nm] = endv
+        else:
+            s = 0
+            for c in range(3, last):
+                v = ws.cell(r,c).value
+                if isinstance(v,(int,float)): s += v
+            if s: out[nm] = s
     return out, sq, ss
 
 def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
@@ -712,6 +768,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
         if b in by: by[b].text_frame.word_wrap=False
 
     by['TextBox 21'].text_frame.word_wrap=False
+    by['TextBox 21'].text_frame.auto_size=MSO_AUTO_SIZE.NONE  # 도형 고정(이름 길이에 따라 박스 이동·크기변경 방지)
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{client} 님의 보장'
     by['TextBox 21'].text_frame.paragraphs[0].runs[1].text='(전)'
     by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
@@ -749,6 +806,10 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('세기조절치료'): r_set('TextBox 14',5,4,f': {g("세기조절치료"):,}')
     if g('양성자치료'): r_set('TextBox 14',5,5,f': {g("양성자치료"):,}')
     if g('다빈치로봇수술비'): r_set('TextBox 14',7,1,f': {g("다빈치로봇수술비"):,}')
+    # 상급병원 암주요치료비 / 하이클래스 (TextBox 57)
+    if 'TextBox 57' in by: by['TextBox 57'].text_frame.word_wrap=False
+    if g('암주요치료비'): r_set('TextBox 57',0,2,f': {g("암주요치료비"):,}')
+    if g('하이클래스(암)'): r_set('TextBox 57',1,2,f': {g("하이클래스(암)"):,}')
 
     if g('질병수술비'): r_set('TextBox 17',0,1,f': {g("질병수술비"):,}')
     if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})'); r_set('TextBox 17',3,2,'')
@@ -774,13 +835,16 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('비급여주사'): r_set('TextBox 6',4,1,f': {g("비급여주사"):,}')
 
     if g('골절(치아파절제외)'): r_set('TextBox 7',0,1,f': {g("골절(치아파절제외)"):,}')
-    if g(' 진 단 비'): r_set('TextBox 7',2,1,f': {g(" 진 단 비"):,}')
+    if g('화상진단비'): r_set('TextBox 7',2,1,f': {g("화상진단비"):,}')
     if g('깁스진단비'): r_set('TextBox 7',5,1,f': {g("깁스진단비"):,}')
     if g('응급실(응급)'): r_set('TextBox 7',6,1,f': {g("응급실(응급)"):,}')
     if g('일상배상책임'): r_set('TextBox 5',0,1,f': {g("일상배상책임"):,}')
     if g('대인'): r_set('TextBox 9',0,1,f': {g("대인"):,}')
     if g('대물'): r_set('TextBox 9',1,1,f': {g("대물"):,}')
+    if g('합의금'): r_set('TextBox 9',2,1,f': {g("합의금"):,}')
+    if g('6주미만'): r_set('TextBox 9',3,2,f': {g("6주미만"):,}')
     if g('변호사'): r_set('TextBox 9',4,1,f': {g("변호사"):,}')
+    if g('자부상'): r_set('TextBox 9',5,2,f': {g("자부상"):,}')
     if g('질병일당'): r_set('TextBox 22',0,1,f': {g("질병일당"):,} / ')
     if g('상해일당'): r_set('TextBox 22',1,1,f': {g("상해일당"):,} / ')
     if g('1인실 상급병원'): r_set('TextBox 22',3,2,f': {g("1인실 상급병원"):,}')
@@ -832,6 +896,7 @@ def build_chiryo(data, out, totals=None, unmapped=None):
             tf.paragraphs[0].runs[0].text = text
     if 'TextBox 21' in by:
         by['TextBox 21'].text_frame.word_wrap=False
+        by['TextBox 21'].text_frame.auto_size=MSO_AUTO_SIZE.NONE  # 도형 고정
         rs=by['TextBox 21'].text_frame.paragraphs[0].runs
         if rs: rs[0].text=f'{client} 님의 보장'
         if len(rs)>1: rs[1].text='(전)'
@@ -948,7 +1013,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v13</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v14</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1028,7 +1093,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v13-resave-20260616'}
+def health(): return {'ok':True,'version':'v14-eq2-20260619'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
