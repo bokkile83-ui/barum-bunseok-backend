@@ -9,6 +9,7 @@ from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.dml.color import RGBColor
 
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
@@ -369,6 +370,7 @@ def resolve_kw(raw):
     if (has('순환계') or has('2대')) and has('주요치료'): return '2대 주요치료비',0
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
     if has('급성심근'): return '급성심근경색',0
+    if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
     if has('협심') or has('허혈'): return '협심증',0
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막'): return '염증',0
@@ -412,13 +414,13 @@ def resolve_kw(raw):
     if has('대인') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
-    if has('자동차부상') or has('자동차사고부상') or has('자부상') or has('부상위로') or has('부상보장'):
-        # ★자부상=14급(경상) 기준: 급수밴드 표기가 있으면 14급 포함 밴드만 자부상. 1~3/1~7 등 중상해 밴드는 제외.
+    if has('자부상') or (has('자동차') and (has('부상') or has('자부상'))):
+        # ★자부상=자동차 한정. 급수밴드 있으면 14급 포함 밴드만(1~3/1~7 제외). 밴드 없으면 단독 자부상.
         _band=re.search(r'(\d+)\s*~\s*(\d+)\s*급', r)
         if _band:
             if int(_band.group(2))>=14: return '자부상',0
             return None,0
-        return '자부상',0   # 급수 표기 없는 단독 자부상(부상치료비/위로금 등)
+        return '자부상',0
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
@@ -763,13 +765,36 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
                 std = resolve(raw)
                 if std: totals[std]=totals.get(std,0)+amt
 
-    def g(nm): return totals.get(nm,0)
-    def r_set(box,pi,ri,val):
-        if box not in by: return
-        tf=by[box].text_frame
-        if pi<len(tf.paragraphs):
-            p=tf.paragraphs[pi]
-            if ri<len(p.runs): p.runs[ri].text=val
+    # ★PPT 색: 하나라도 갱신=파랑 / 전부 비갱신=검정 / 실손 항상 파랑 (미가입은 값 미기재라 해당없음)
+    _BLUE=RGBColor(0x00,0x00,0xFF); _BLACK=RGBColor(0x00,0x00,0x00)
+    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사'}
+    _std_renew=set()
+    for ct in contracts:
+        _gen = (ct.get('renewal','')=='갱신')
+        for raw,amt in ct.get('dambo',{}).items():
+            if not amt: continue
+            st=resolve(raw)
+            if st and (_gen or '갱신' in raw): _std_renew.add(st)
+    def pcol(std):
+        if std in _silson: return _BLUE
+        return _BLUE if std in _std_renew else _BLACK
+    def _setcol(run,std):
+        try: run.font.color.rgb=pcol(std)
+        except: pass
+    _last_std=[None]
+    def g(nm):
+        _last_std[0]=nm
+        return totals.get(nm,0)
+    def r_set(box,pi,ri,val,std='__USE_LAST__'):
+        use = _last_std[0] if std=='__USE_LAST__' else std
+        if box in by:
+            tf=by[box].text_frame
+            if pi<len(tf.paragraphs):
+                p=tf.paragraphs[pi]
+                if ri<len(p.runs):
+                    p.runs[ri].text=val
+                    if use: _setcol(p.runs[ri], use)
+        _last_std[0]=None
 
     for b in ['TextBox 49','TextBox 56']:
         if b in by: by[b].text_frame.word_wrap=False
@@ -781,6 +806,11 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
     by['TextBox 35'].text_frame.paragraphs[0].runs[0].text=f'{now.month:02d}월'
     by['TextBox 29'].text_frame.paragraphs[0].runs[0].text=f'{now.day:02d}일 기준'
+    for _hb in ('TextBox 36','TextBox 35','TextBox 29'):
+        if _hb in by:
+            by[_hb].text_frame.word_wrap=False
+            try: by[_hb].text_frame.auto_size=MSO_AUTO_SIZE.NONE
+            except: pass
 
     if g('질병사망(80세)'): r_set('TextBox 10',2,2,f': {g("질병사망(80세)"):,}')
     if g('상해사망'): r_set('TextBox 11',0,1,f': {g("상해사망"):,}')
@@ -796,14 +826,19 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('상해후유80%'): r_set('TextBox 8',3,1,f'80% : {g("상해후유80%"):,}')
     if g('질병후유80%'): r_set('TextBox 8',1,1,f'80% : {g("질병후유80%"):,}')
 
-    if g('뇌혈관진단비'): by['TextBox 46'].text_frame.paragraphs[0].runs[0].text=f'뇌혈관\n{g("뇌혈관진단비"):,}'
-    if g('뇌졸증진단비'): by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
-    if g('뇌출혈진단비'): by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
+    if g('뇌혈관진단비'):
+        _r=by['TextBox 46'].text_frame.paragraphs[0].runs[0]; _r.text=f'뇌혈관\n{g("뇌혈관진단비"):,}'; _setcol(_r,'뇌혈관진단비')
+    if g('뇌졸증진단비'):
+        _r=by['TextBox 47'].text_frame.paragraphs[0].runs[0]; _r.text=f'뇌졸증\n{g("뇌졸증진단비"):,}'; _setcol(_r,'뇌졸증진단비')
+    if g('뇌출혈진단비'):
+        _r=by['TextBox 48'].text_frame.paragraphs[0].runs[0]; _r.text=f'뇌출혈\n{g("뇌출혈진단비"):,}'; _setcol(_r,'뇌출혈진단비')
     if g('산정특례뇌혈관'): r_set('TextBox 49',0,3,f': {g("산정특례뇌혈관"):,}')
     if g('혈전용해치료비'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비"):,}')
 
-    if g('협심증'): by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("협심증"):,}'
-    if g('급성심근경색'): by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
+    if g('협심증'):
+        _r=by['TextBox 54'].text_frame.paragraphs[0].runs[0]; _r.text=f'허혈성\n{g("협심증"):,}'; _setcol(_r,'협심증')
+    if g('급성심근경색'):
+        _r=by['TextBox 55'].text_frame.paragraphs[0].runs[0]; _r.text=f'급성심근\n{g("급성심근경색"):,}'; _setcol(_r,'급성심근경색')
     if g('산정특례심장'): r_set('TextBox 56',0,3,f': {g("산정특례심장"):,}')
 
     if g('일반암'): r_set('TextBox 14',0,1,f': {g("일반암"):,}')
@@ -819,11 +854,11 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('하이클래스(암)'): r_set('TextBox 57',1,2,f': {g("하이클래스(암)"):,}')
 
     if g('질병수술비'): r_set('TextBox 17',0,1,f': {g("질병수술비"):,}')
-    if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})'); r_set('TextBox 17',3,2,'')
+    if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})','질병 종수술비(1-5종)'); r_set('TextBox 17',3,2,'',None)
     if g('뇌혈관수술비'): r_set('TextBox 17',5,1,f': {g("뇌혈관수술비"):,}')
     if g('심장수술비'): r_set('TextBox 17',7,1,f': {g("심장수술비"):,}')
     if g('상해수술비'): r_set('TextBox 19',0,1,f': {g("상해수술비"):,}')
-    if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})'); r_set('TextBox 19',3,2,'')
+    if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})','상해 종수술비(1-5종)'); r_set('TextBox 19',3,2,'',None)
     if g('골절수술비'): r_set('TextBox 19',4,1,f': {g("골절수술비"):,}')
 
     실손_dates=[ct['contract_date'] for ct in contracts
@@ -865,10 +900,12 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     prs.save(out); return True
 
 
+_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
 def _autofit_ppt(by):
     """겹침·단락내림 방지(§11): 모든 값박스 word_wrap off + 가장 긴 단락 기준 폰트 일괄 축소.
     같은 박스 안 단락은 같은 폰트여야 줄간격이 안 어긋난다 → 박스 단위로 한 번에 줄임."""
-    for sh in by.values():
+    for _bn, sh in by.items():
+        if _bn in _HEADER_BOXES: continue   # 이름·날짜 헤더는 크기 고정(autofit 제외)
         tf = sh.text_frame
         try:
             tf.word_wrap = False           # 줄바꿈(단락 내려옴) 차단
@@ -1020,7 +1057,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v16</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v18</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1100,7 +1137,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v16-jabu-20260621'}
+def health(): return {'ok':True,'version':'v18-color-20260621'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
