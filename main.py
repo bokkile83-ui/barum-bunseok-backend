@@ -412,7 +412,13 @@ def resolve_kw(raw):
     if has('대인') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
-    if has('자동차부상') or has('자동차사고부상') or has('자부상') or has('부상위로') or has('부상보장'): return '자부상',0
+    if has('자동차부상') or has('자동차사고부상') or has('자부상') or has('부상위로') or has('부상보장'):
+        # ★자부상=14급(경상) 기준: 급수밴드 표기가 있으면 14급 포함 밴드만 자부상. 1~3/1~7 등 중상해 밴드는 제외.
+        _band=re.search(r'(\d+)\s*~\s*(\d+)\s*급', r)
+        if _band:
+            if int(_band.group(2))>=14: return '자부상',0
+            return None,0
+        return '자부상',0   # 급수 표기 없는 단독 자부상(부상치료비/위로금 등)
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
@@ -1014,7 +1020,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v15</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v16</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1094,7 +1100,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v15-frac-20260621'}
+def health(): return {'ok':True,'version':'v16-jabu-20260621'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
