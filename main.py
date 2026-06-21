@@ -267,7 +267,7 @@ DMAP = {
     '자동차부상위로금':'자부상','자동차부상보장':'자부상',
     '무보험차에 의한 상해':'일상배상책임',
     # 골절 — B열: 골절(치아파절포함)/골절(치아파절제외)/5대골절진단비
-    '골절진단(간편가입Ⅲ)담보':'골절(치아파절제외)','골절진단비':'골절(치아파절제외)',
+    '골절진단(간편가입Ⅲ)담보':'골절(치아파절포함)',  # 단독 골절진단=치아포함 행(치아제외 명시만 제외 행)
     # 응급실
     '응급실내원비(응급)':'응급실(응급)',
     # 화상 — B열: 진 단 비/중증화상진단비
@@ -416,8 +416,9 @@ def resolve_kw(raw):
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
-    if has('골절') and has('치아파절포함'): return '골절(치아파절포함)',0
-    if has('골절') and has('진단'): return '골절(치아파절제외)',0
+    # §골절: '치아제외/파절제외' 명시된 것만 제외 행. 단독 골절진단비·치아포함은 포함 행.
+    if has('골절') and (has('치아제외') or has('파절제외')): return '골절(치아파절제외)',0
+    if has('골절') and has('진단'): return '골절(치아파절포함)',0
     if has('응급실') or (has('응급') and has('내원')): return '응급실(응급)',0
     if has('독감') or has('인플루엔자'): return '독감',0
     if has('화상') and (has('중증') or has('심재성') or has('중대한') or has('부식')): return '중증화상진단비',0
@@ -1013,7 +1014,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v14</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v15</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1093,7 +1094,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v14-eq2-20260619'}
+def health(): return {'ok':True,'version':'v15-frac-20260621'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
