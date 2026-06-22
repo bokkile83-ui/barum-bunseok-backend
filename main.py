@@ -17,9 +17,9 @@ from pptx.text.text import _Run
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
 HERE = os.path.dirname(os.path.abspath(__file__))
-TPL_XL  = os.path.join(HERE, "MASTER_보장분석_엑셀_영구표본.xlsx")
-TPL_PPT = os.path.join(HERE, "MASTER_보장분석지_PPT_빈폼.pptx")
-TPL_TX  = os.path.join(HERE, "치료비_정리_빈폼.pptx")
+TPL_XL  = os.path.join(HERE, "master.xlsx")
+TPL_PPT = os.path.join(HERE, "ppt_form.pptx")
+TPL_TX  = os.path.join(HERE, "chiryo_form.pptx")
 
 W   = Font(color='FFFFFF', name='맑은 고딕', size=9, bold=True)
 BL  = Font(color='0070C0', name='맑은 고딕', size=9)
@@ -387,7 +387,7 @@ def resolve_kw(raw):
     if has('교통') and has('사망'): return '교통상해사망',0
     if (has('상해') or has('재해')) and has('사망'): return '상해사망',0
     if has('질병') and has('사망'): return '질병사망(80세)',0
-    if has('일반사망') or (has('사망') and no('상해','질병','교통','재해','CI')): return '일반사망',0
+    if has('일반사망') or (has('사망') and no('상해','질병','교통','재해','CI','암','운전','입원','수술')): return '일반사망',0
 
     # ── 후유장애 ──
     if has('후유') or has('장해') or has('장애'):
@@ -599,6 +599,15 @@ def build_excel(data, out):
             if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
                 unmapped.append((col, ct['company'], raw, amt, '등급별 100만↑ 제외'))  # 등급별 → 합산·기재 안 함
                 continue
+            if std=='합의금' and amt>25000:   # 합의금 최대 2.5억, 초과는 불가 → [확인]
+                unmapped.append((col, ct['company'], raw, amt, '합의금 2.5억 초과(불가)'))
+                continue
+            if std=='입원':                    # 실손 입원=2009.09 이후 무조건 5,000만원 고정
+                _cd=(ct.get('contract_date') or ''); _post=True
+                try:
+                    _y=int(_cd[:4]); _mo=int(_cd[5:7]); _post=(_y>2009 or (_y==2009 and _mo>=9))
+                except: _post=True
+                if _post: amt=5000
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -775,7 +784,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
 
     # ★PPT 색: 하나라도 갱신=파랑 / 전부 비갱신=검정 / 실손 항상 파랑 (미가입은 값 미기재라 해당없음)
     _BLUE=RGBColor(0x00,0x00,0xFF); _BLACK=RGBColor(0x00,0x00,0x00)
-    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인'}  # 간병인=무조건 파랑
+    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인','일상배상책임'}  # 간병인·일상배상책임=무조건 파랑
     # 담보별 '최대 기여 계약'의 갱신여부로 색 결정 → 합산 시 전부 파랑 쏠림 방지(엑셀 혼합과 일치)
     _dom={}  # std -> (max_amt, gen)
     for ct in contracts:
@@ -857,19 +866,25 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     by['TextBox 21'].text_frame.auto_size=MSO_AUTO_SIZE.NONE  # 도형 고정(이름 길이에 따라 박스 이동·크기변경 방지)
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{client} 님의 보장'
     by['TextBox 21'].text_frame.paragraphs[0].runs[1].text='(전)'
-    by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
-    by['TextBox 35'].text_frame.paragraphs[0].runs[0].text=f'{now.month:02d}월'
-    by['TextBox 29'].text_frame.paragraphs[0].runs[0].text=f'{now.day:02d}일 기준'
-    for _hb in ('TextBox 36','TextBox 35','TextBox 29'):
+    # 날짜를 한 박스(TextBox 36)로 통합, 35·29는 비움
+    if 'TextBox 36' in by and 'TextBox 29' in by:
+        try: by['TextBox 36'].width = by['TextBox 29'].left + by['TextBox 29'].width - by['TextBox 36'].left
+        except: pass
+    by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년 {now.month:02d}월 {now.day:02d}일 기준'
+    for _eb in ('TextBox 35','TextBox 29'):
+        if _eb in by:
+            for _pp in by[_eb].text_frame.paragraphs:
+                for _rr in _pp.runs: _rr.text=''
+    # 상단 헤더(이름+날짜) 전부 18pt·도형 고정
+    for _hb in ('TextBox 21','TextBox 36','TextBox 35','TextBox 29'):
         if _hb in by:
             by[_hb].text_frame.word_wrap=False
             try: by[_hb].text_frame.auto_size=MSO_AUTO_SIZE.NONE
             except: pass
             for _pp in by[_hb].text_frame.paragraphs:
                 for _rr in _pp.runs:
-                    if _rr.text.strip():
-                        try: _rr.font.size=Pt(24)
-                        except: pass
+                    try: _rr.font.size=Pt(18)
+                    except: pass
 
     if g('질병사망(80세)'): pv('TextBox 10',2,2,'질병사망(80세)',prefix=': ',suffix='')
     if g('상해사망'): pv('TextBox 11',0,1,'상해사망',prefix=': ',suffix='')
@@ -1123,7 +1138,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v25</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v27</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1203,7 +1218,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v25-sep-20260621'}
+def health(): return {'ok':True,'version':'v27-asc-20260623'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

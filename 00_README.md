@@ -1,13 +1,7 @@
-# BARUM 배포 번들 (v15-frac-20260621)
-
-## 이번 수정 (v14 대비)
-- 골절: 단독 '골절진단비'·'치아포함'→골절(치아파절포함). '치아제외/파절제외' 명시만→골절(치아파절제외). (기존 반대 매핑 버그 교정)
-- 확인: 질병/상해 입원일당 4종 합산, 간호통합병동(1-180), 질병간병인일당→간병인 정상 동작.
-
-## 다음(v16 예정, 배포·렌더 후)
-- PPT 색: 하나라도 갱신=파랑/전부 비갱신=검정/미가입=빨강/실손 항상 파랑.
-- PPT 제목 폰트 고정(크기 들쑥날쑥 해소).
-- 자부상 14급(경상) 기준 적용.
-
-## 업로드: main.py / MASTER 엑셀(필수) / PPT 2종 / requirements·Procfile·nixpacks
-## 확인: /health → "v15-frac-20260621"
+# BARUM deploy bundle (v27-asc-20260623)
+## IMPORTANT: all filenames are ASCII now (Korean filenames broke on mobile upload)
+- main.py references: master.xlsx / ppt_form.pptx / chiryo_form.pptx
+- Upload ALL files in this folder to GitHub root. Commit.
+## changes vs v26: asset filenames Korean -> ASCII (master.xlsx, ppt_form.pptx, chiryo_form.pptx). logic identical to v26.
+## v26 rules: PPT header 18pt + date one box, 합의금 2.5억 cap, 일상배상 always renewal(blue), 실손 입원 5000 fixed, 일반사망 9999 only, master 90 rows (B43 허혈성 진단비).
+## verify: /health -> "v27-asc-20260623"
