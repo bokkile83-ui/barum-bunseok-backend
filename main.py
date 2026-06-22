@@ -9,6 +9,10 @@ from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
 from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.dml.color import RGBColor
+import copy as _copy
+from pptx.oxml.ns import qn as _qn
+from pptx.text.text import _Run
 
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "1009"))
@@ -331,8 +335,8 @@ def resolve_kw(raw):
                 return '상해수술비',0
             return None,0
         if has('질병'):
-            # 질병수술비 / 질병입원수술비 = 기본만. 그 외 변형(특정·부위·관절 등)은 합산 금지 → [확인]
-            if no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골','상급','종합병원'):
+            # ★질병수술비 행 = '질병수술비'·'질병입원수술비' 이 2개 담보명만 합산. 그 외 변형은 [확인]
+            if (has('질병수술비') or has('질병입원수술비')) and no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골','상급','종합병원'):
                 return '질병수술비',0
             return None,0
     if has('창상') or has('봉합'): return '창상봉합술',0
@@ -369,6 +373,7 @@ def resolve_kw(raw):
     if (has('순환계') or has('2대')) and has('주요치료'): return '2대 주요치료비',0
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
     if has('급성심근'): return '급성심근경색',0
+    if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
     if has('협심') or has('허혈'): return '협심증',0
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막'): return '염증',0
@@ -399,8 +404,8 @@ def resolve_kw(raw):
     if has('중환자') and has('질병'): return '질병중환자실',0
     if (has('질병') or has('수술')) and has('일당') and has('수술'): return '질병수술일당',0
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
-    if has('상해') and (has('일당') or has('입원')): return '상해일당',0
-    if has('질병') and (has('일당') or has('입원')): return '질병일당',0
+    if has('상해일당') or has('상해입원일당'): return '상해일당',0   # 상해일당/상해입원일당(1-10/20/30/180 등)만
+    if has('질병일당') or has('질병입원일당'): return '질병일당',0   # 질병일당/질병입원일당(1-10/20/30/180 등)만
 
     # ── 운전자 (지침 §운전자 매핑) ──
     #  벌금(대인)→대인 / 벌금(대물)→대물 / 처리지원금(중상해포함)→합의금 / 처리지원금(6주미만)→6주미만
@@ -408,11 +413,17 @@ def resolve_kw(raw):
     if has('6주'): return '6주미만',0
     if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
     if has('벌금') and has('대물'): return '대물',0
-    if has('벌금'): return '대인',0   # 벌금담보·벌금(대인) = 대인 (기본). 대물 명시만 대물
+    if has('벌금') and no('화재'): return '대인',0   # 벌금담보·벌금(대인)=대인. 화재벌금은 교통 아님→제외
     if has('대인') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
-    if has('자동차부상') or has('자동차사고부상') or has('자부상') or has('부상위로') or has('부상보장'): return '자부상',0
+    if has('자부상') or (has('자동차') and (has('부상') or has('자부상'))):
+        # ★자부상=자동차 한정. 급수밴드 있으면 14급 포함 밴드만(1~3/1~7 제외). 밴드 없으면 단독 자부상.
+        _band=re.search(r'(\d+)\s*~\s*(\d+)\s*급', r)
+        if _band:
+            if int(_band.group(2))>=14: return '자부상',0
+            return None,0
+        return '자부상',0
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
@@ -583,6 +594,11 @@ def build_excel(data, out):
             if not std:                       # LLM 미반환/실패 -> 키워드 사전엔진(API 불필요)
                 std, j2 = resolve2(raw)
                 if not jong: jong = j2 or get_종번호(raw)
+            if std and any(_k in ct['product'] for _k in ('CI보험','리빙케어','GI보험')):
+                std = {'일반암':'중대한 암','뇌졸증진단비':'중대한 뇌졸증','급성심근경색':'중대한 급성심근'}.get(std, std)
+            if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
+                unmapped.append((col, ct['company'], raw, amt, '등급별 100만↑ 제외'))  # 등급별 → 합산·기재 안 함
+                continue
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -757,13 +773,82 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
                 std = resolve(raw)
                 if std: totals[std]=totals.get(std,0)+amt
 
-    def g(nm): return totals.get(nm,0)
-    def r_set(box,pi,ri,val):
+    # ★PPT 색: 하나라도 갱신=파랑 / 전부 비갱신=검정 / 실손 항상 파랑 (미가입은 값 미기재라 해당없음)
+    _BLUE=RGBColor(0x00,0x00,0xFF); _BLACK=RGBColor(0x00,0x00,0x00)
+    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인'}  # 간병인=무조건 파랑
+    # 담보별 '최대 기여 계약'의 갱신여부로 색 결정 → 합산 시 전부 파랑 쏠림 방지(엑셀 혼합과 일치)
+    _dom={}  # std -> (max_amt, gen)
+    for ct in contracts:
+        _gen = (ct.get('renewal','')=='갱신')
+        for raw,amt in ct.get('dambo',{}).items():
+            if not amt: continue
+            st=resolve(raw)
+            if not st: continue
+            if st not in _dom or amt>_dom[st][0]: _dom[st]=(amt,_gen)
+    def pcol(std):
+        if std in _silson: return _BLUE
+        d=_dom.get(std)
+        return _BLUE if (d and d[1]) else _BLACK
+    # ★담보별 갱신합/비갱신합 (분할 표기용)
+    _gensum={}; _nonsum={}
+    for ct in contracts:
+        _gen=(ct.get('renewal','')=='갱신')
+        for raw,amt in ct.get('dambo',{}).items():
+            if not amt: continue
+            st=resolve(raw)
+            if not st: continue
+            tgt=_gensum if _gen else _nonsum
+            tgt[st]=tgt.get(st,0)+amt
+    def _seg(run0, segs):
+        run0.text=segs[0][0]
+        if segs[0][1] is not None:
+            try: run0.font.color.rgb=segs[0][1]
+            except: pass
+        prev=run0._r
+        for txt,col in segs[1:]:
+            new=_copy.deepcopy(run0._r)
+            t=new.find(_qn('a:t'))
+            if t is not None: t.text=txt
+            prev.addnext(new); prev=new
+            nr=_Run(new, run0._parent)
+            if col is not None:
+                try: nr.font.color.rgb=col
+                except: pass
+    def pv(box,pi,ri,std,prefix=': ',suffix=''):
+        # 한 칸 분할: 갱신합=파랑 / 비갱신합=검정 (둘 다면 'gen / non'), 실손=파랑 합계
         if box not in by: return
         tf=by[box].text_frame
-        if pi<len(tf.paragraphs):
-            p=tf.paragraphs[pi]
-            if ri<len(p.runs): p.runs[ri].text=val
+        if pi>=len(tf.paragraphs): return
+        p=tf.paragraphs[pi]
+        if ri>=len(p.runs): return
+        gs=_gensum.get(std,0); ns=_nonsum.get(std,0)
+        if not gs and not ns: return
+        if std in _silson:
+            segs=[(f'{prefix}{gs+ns:,}{suffix}', _BLUE)]
+        elif gs and ns:
+            segs=[(f'{prefix}{gs:,}', _BLUE),(f'+{ns:,}{suffix}', _BLACK)]
+        elif gs:
+            segs=[(f'{prefix}{gs:,}{suffix}', _BLUE)]
+        else:
+            segs=[(f'{prefix}{ns:,}{suffix}', _BLACK)]
+        _seg(p.runs[ri], segs)
+    def _setcol(run,std):
+        try: run.font.color.rgb=pcol(std)
+        except: pass
+    _last_std=[None]
+    def g(nm):
+        _last_std[0]=nm
+        return totals.get(nm,0)
+    def r_set(box,pi,ri,val,std='__USE_LAST__'):
+        use = _last_std[0] if std=='__USE_LAST__' else std
+        if box in by:
+            tf=by[box].text_frame
+            if pi<len(tf.paragraphs):
+                p=tf.paragraphs[pi]
+                if ri<len(p.runs):
+                    p.runs[ri].text=val
+                    if use: _setcol(p.runs[ri], use)
+        _last_std[0]=None
 
     for b in ['TextBox 49','TextBox 56']:
         if b in by: by[b].text_frame.word_wrap=False
@@ -775,9 +860,19 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     by['TextBox 36'].text_frame.paragraphs[0].runs[0].text=f'{now.year}년'
     by['TextBox 35'].text_frame.paragraphs[0].runs[0].text=f'{now.month:02d}월'
     by['TextBox 29'].text_frame.paragraphs[0].runs[0].text=f'{now.day:02d}일 기준'
+    for _hb in ('TextBox 36','TextBox 35','TextBox 29'):
+        if _hb in by:
+            by[_hb].text_frame.word_wrap=False
+            try: by[_hb].text_frame.auto_size=MSO_AUTO_SIZE.NONE
+            except: pass
+            for _pp in by[_hb].text_frame.paragraphs:
+                for _rr in _pp.runs:
+                    if _rr.text.strip():
+                        try: _rr.font.size=Pt(24)
+                        except: pass
 
-    if g('질병사망(80세)'): r_set('TextBox 10',2,2,f': {g("질병사망(80세)"):,}')
-    if g('상해사망'): r_set('TextBox 11',0,1,f': {g("상해사망"):,}')
+    if g('질병사망(80세)'): pv('TextBox 10',2,2,'질병사망(80세)',prefix=': ',suffix='')
+    if g('상해사망'): pv('TextBox 11',0,1,'상해사망',prefix=': ',suffix='')
     종신_d=0
     for ct in contracts:
         if '종신' in ct['renewal']:
@@ -785,40 +880,40 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
                 if resolve(raw)=='상해사망': 종신_d+=v
     if 종신_d: r_set('TextBox 10',3,1,f': {종신_d:,}')
 
-    if g('상해후유3%'): r_set('TextBox 8',2,1,f'3% : {g("상해후유3%"):,}')
-    if g('질병후유3%'): r_set('TextBox 8',0,1,f'3% : {g("질병후유3%"):,}')
-    if g('상해후유80%'): r_set('TextBox 8',3,1,f'80% : {g("상해후유80%"):,}')
-    if g('질병후유80%'): r_set('TextBox 8',1,1,f'80% : {g("질병후유80%"):,}')
+    if g('상해후유3%'): pv('TextBox 8',2,1,'상해후유3%',prefix='3% : ',suffix='')
+    if g('질병후유3%'): pv('TextBox 8',0,1,'질병후유3%',prefix='3% : ',suffix='')
+    if g('상해후유80%'): pv('TextBox 8',3,1,'상해후유80%',prefix='80% : ',suffix='')
+    if g('질병후유80%'): pv('TextBox 8',1,1,'질병후유80%',prefix='80% : ',suffix='')
 
-    if g('뇌혈관진단비'): by['TextBox 46'].text_frame.paragraphs[0].runs[0].text=f'뇌혈관\n{g("뇌혈관진단비"):,}'
-    if g('뇌졸증진단비'): by['TextBox 47'].text_frame.paragraphs[0].runs[0].text=f'뇌졸증\n{g("뇌졸증진단비"):,}'
-    if g('뇌출혈진단비'): by['TextBox 48'].text_frame.paragraphs[0].runs[0].text=f'뇌출혈\n{g("뇌출혈진단비"):,}'
-    if g('산정특례뇌혈관'): r_set('TextBox 49',0,3,f': {g("산정특례뇌혈관"):,}')
-    if g('혈전용해치료비'): r_set('TextBox 49',1,1,f': {g("혈전용해치료비"):,}')
+    if g('뇌혈관진단비'): pv('TextBox 46',0,0,'뇌혈관진단비',prefix='뇌혈관\n',suffix='')
+    if g('뇌졸증진단비'): pv('TextBox 47',0,0,'뇌졸증진단비',prefix='뇌졸증\n',suffix='')
+    if g('뇌출혈진단비'): pv('TextBox 48',0,0,'뇌출혈진단비',prefix='뇌출혈\n',suffix='')
+    if g('산정특례뇌혈관'): pv('TextBox 49',0,3,'산정특례뇌혈관',prefix=': ',suffix='')
+    if g('혈전용해치료비'): pv('TextBox 49',1,1,'혈전용해치료비',prefix=': ',suffix='')
 
-    if g('협심증'): by['TextBox 54'].text_frame.paragraphs[0].runs[0].text=f'허혈성\n{g("협심증"):,}'
-    if g('급성심근경색'): by['TextBox 55'].text_frame.paragraphs[0].runs[0].text=f'급성심근\n{g("급성심근경색"):,}'
-    if g('산정특례심장'): r_set('TextBox 56',0,3,f': {g("산정특례심장"):,}')
+    if g('협심증'): pv('TextBox 54',0,0,'협심증',prefix='허혈성\n',suffix='')
+    if g('급성심근경색'): pv('TextBox 55',0,0,'급성심근경색',prefix='급성심근\n',suffix='')
+    if g('산정특례심장'): pv('TextBox 56',0,3,'산정특례심장',prefix=': ',suffix='')
 
-    if g('일반암'): r_set('TextBox 14',0,1,f': {g("일반암"):,}')
-    if g('유사암(갑.기.경.제)'): r_set('TextBox 14',1,2,f': {g("유사암(갑.기.경.제)"):,}')
-    if g('항암방사선약물'): r_set('TextBox 14',4,1,f': {g("항암방사선약물"):,} / ')
-    if g('표적항암치료비'): r_set('TextBox 14',5,1,f': {g("표적항암치료비"):,} / ')
-    if g('세기조절치료'): r_set('TextBox 14',5,4,f': {g("세기조절치료"):,}')
-    if g('양성자치료'): r_set('TextBox 14',5,5,f': {g("양성자치료"):,}')
-    if g('다빈치로봇수술비'): r_set('TextBox 14',7,1,f': {g("다빈치로봇수술비"):,}')
+    if g('일반암'): pv('TextBox 14',0,1,'일반암',prefix=': ',suffix='')
+    if g('유사암(갑.기.경.제)'): pv('TextBox 14',1,2,'유사암(갑.기.경.제)',prefix=': ',suffix='')
+    if g('항암방사선약물'): pv('TextBox 14',4,1,'항암방사선약물',prefix=': ',suffix=' / ')
+    if g('표적항암치료비'): pv('TextBox 14',5,1,'표적항암치료비',prefix=': ',suffix=' / ')
+    if g('세기조절치료'): pv('TextBox 14',5,4,'세기조절치료',prefix=': ',suffix='')
+    if g('양성자치료'): pv('TextBox 14',5,5,'양성자치료',prefix=': ',suffix='')
+    if g('다빈치로봇수술비'): pv('TextBox 14',7,1,'다빈치로봇수술비',prefix=': ',suffix='')
     # 상급병원 암주요치료비 / 하이클래스 (TextBox 57)
     if 'TextBox 57' in by: by['TextBox 57'].text_frame.word_wrap=False
-    if g('암주요치료비'): r_set('TextBox 57',0,2,f': {g("암주요치료비"):,}')
-    if g('하이클래스(암)'): r_set('TextBox 57',1,2,f': {g("하이클래스(암)"):,}')
+    if g('암주요치료비'): pv('TextBox 57',0,2,'암주요치료비',prefix=': ',suffix='')
+    if g('하이클래스(암)'): pv('TextBox 57',1,2,'하이클래스(암)',prefix=': ',suffix='')
 
-    if g('질병수술비'): r_set('TextBox 17',0,1,f': {g("질병수술비"):,}')
-    if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})'); r_set('TextBox 17',3,2,'')
-    if g('뇌혈관수술비'): r_set('TextBox 17',5,1,f': {g("뇌혈관수술비"):,}')
-    if g('심장수술비'): r_set('TextBox 17',7,1,f': {g("심장수술비"):,}')
-    if g('상해수술비'): r_set('TextBox 19',0,1,f': {g("상해수술비"):,}')
-    if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})'); r_set('TextBox 19',3,2,'')
-    if g('골절수술비'): r_set('TextBox 19',4,1,f': {g("골절수술비"):,}')
+    if g('질병수술비'): pv('TextBox 17',0,1,'질병수술비',prefix=': ',suffix='')
+    if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})','질병 종수술비(1-5종)'); r_set('TextBox 17',3,2,'',None)
+    if g('뇌혈관수술비'): pv('TextBox 17',5,1,'뇌혈관수술비',prefix=': ',suffix='')
+    if g('심장수술비'): pv('TextBox 17',7,1,'심장수술비',prefix=': ',suffix='')
+    if g('상해수술비'): pv('TextBox 19',0,1,'상해수술비',prefix=': ',suffix='')
+    if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})','상해 종수술비(1-5종)'); r_set('TextBox 19',3,2,'',None)
+    if g('골절수술비'): pv('TextBox 19',4,1,'골절수술비',prefix=': ',suffix='')
 
     실손_dates=[ct['contract_date'] for ct in contracts
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
@@ -829,40 +924,54 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
     by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
     for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(8)
-    if g('입원'): r_set('TextBox 6',0,1,f': {g("입원"):,}')
-    if g('통원'): r_set('TextBox 6',1,1,f': {g("통원"):,} / ')
-    if g('MRI'): r_set('TextBox 6',2,0,f'MRI : {g("MRI"):,}')
-    if g('도수치료'): r_set('TextBox 6',3,1,f': {g("도수치료"):,}')
-    if g('비급여주사'): r_set('TextBox 6',4,1,f': {g("비급여주사"):,}')
+    if g('입원'): pv('TextBox 6',0,1,'입원',prefix=': ',suffix='')
+    if g('통원'): pv('TextBox 6',1,1,'통원',prefix=': ',suffix=' / ')
+    if g('MRI'): pv('TextBox 6',2,0,'MRI',prefix='MRI : ',suffix='')
+    if g('도수치료'): pv('TextBox 6',3,1,'도수치료',prefix=': ',suffix='')
+    if g('비급여주사'): pv('TextBox 6',4,1,'비급여주사',prefix=': ',suffix='')
 
-    if g('골절(치아파절제외)'): r_set('TextBox 7',0,1,f': {g("골절(치아파절제외)"):,}')
-    if g('화상진단비'): r_set('TextBox 7',2,1,f': {g("화상진단비"):,}')
-    if g('깁스진단비'): r_set('TextBox 7',5,1,f': {g("깁스진단비"):,}')
-    if g('응급실(응급)'): r_set('TextBox 7',6,1,f': {g("응급실(응급)"):,}')
-    if g('일상배상책임'): r_set('TextBox 5',0,1,f': {g("일상배상책임"):,}')
-    if g('대인'): r_set('TextBox 9',0,1,f': {g("대인"):,}')
-    if g('대물'): r_set('TextBox 9',1,1,f': {g("대물"):,}')
-    if g('합의금'): r_set('TextBox 9',2,1,f': {g("합의금"):,}')
-    if g('6주미만'): r_set('TextBox 9',3,2,f': {g("6주미만"):,}')
-    if g('변호사'): r_set('TextBox 9',4,1,f': {g("변호사"):,}')
-    if g('자부상'): r_set('TextBox 9',5,2,f': {g("자부상"):,}')
-    if g('질병일당'): r_set('TextBox 22',0,1,f': {g("질병일당"):,} / ')
-    if g('상해일당'): r_set('TextBox 22',1,1,f': {g("상해일당"):,} / ')
-    if g('1인실 상급병원'): r_set('TextBox 22',3,2,f': {g("1인실 상급병원"):,}')
-    if g('1인실 종합병원'): r_set('TextBox 22',4,2,f': {g("1인실 종합병원"):,}')
-    if g('간병인'): r_set('TextBox 22',7,1,f': {g("간병인"):,} / ')
-    if g('간호통합병동'): r_set('TextBox 22',8,2,f': {g("간호통합병동"):,}')
-    if g('크라운'): r_set('TextBox 13',0,1,f': {g("크라운"):,}')
-    if g('임플란트'): r_set('TextBox 13',1,1,f': {g("임플란트"):,}')
+    if g('골절(치아파절제외)'): pv('TextBox 7',0,1,'골절(치아파절제외)',prefix=': ',suffix='')
+    if g('화상진단비'): pv('TextBox 7',2,1,'화상진단비',prefix=': ',suffix='')
+    if g('깁스진단비'): pv('TextBox 7',5,1,'깁스진단비',prefix=': ',suffix='')
+    if g('응급실(응급)'): pv('TextBox 7',6,1,'응급실(응급)',prefix=': ',suffix='')
+    if g('일상배상책임'): pv('TextBox 5',0,1,'일상배상책임',prefix=': ',suffix='')
+    if g('대인'): pv('TextBox 9',0,1,'대인',prefix=': ',suffix='')
+    if g('대물'): pv('TextBox 9',1,1,'대물',prefix=': ',suffix='')
+    if g('합의금'): pv('TextBox 9',2,1,'합의금',prefix=': ',suffix='')
+    if g('6주미만'): pv('TextBox 9',3,2,'6주미만',prefix=': ',suffix='')
+    if g('변호사'): pv('TextBox 9',4,1,'변호사',prefix=': ',suffix='')
+    if g('자부상'): pv('TextBox 9',5,2,'자부상',prefix=': ',suffix='')
+    if g('질병일당'): pv('TextBox 22',0,1,'질병일당',prefix=': ',suffix=' / ')
+    if g('상해일당'): pv('TextBox 22',1,1,'상해일당',prefix=': ',suffix=' / ')
+    if g('1인실 상급병원'): pv('TextBox 22',3,2,'1인실 상급병원',prefix=': ',suffix='')
+    if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
+    if g('간병인'): pv('TextBox 22',7,1,'간병인',prefix=': ',suffix=' / ')
+    if g('간호통합병동'): pv('TextBox 22',8,2,'간호통합병동',prefix=': ',suffix='')
+    if g('크라운'): pv('TextBox 13',0,1,'크라운',prefix=': ',suffix='')
+    if g('임플란트'): pv('TextBox 13',1,1,'임플란트',prefix=': ',suffix='')
 
+    # ── 누락 슬롯 보충 (엑셀 합계 끌어오기) ──
+    if g('중입자치료비'): pv('TextBox 14',3,2,'중입자치료비',prefix=': ',suffix='')
+    if g('5대골절진단비'): pv('TextBox 7',1,3,'5대골절진단비',prefix=': ',suffix='')
+    if g('중증화상진단비'): pv('TextBox 7',3,1,'중증화상진단비',prefix=': ',suffix='')
+    if g('허혈성수술비'): pv('TextBox 17',6,2,'허혈성수술비',prefix=': ',suffix='')
+    if g('5대골절수술비'): pv('TextBox 19',5,3,'5대골절수술비',prefix=': ',suffix='')
+    if g('화상수술비'): pv('TextBox 19',6,1,'화상수술비',prefix=': ',suffix='')
+    if g('창상봉합술'): pv('TextBox 19',8,2,'창상봉합술',prefix=': ',suffix='')
+    if g('질병중환자실'): pv('TextBox 22',2,2,'질병중환자실',prefix=': ',suffix=' / ')
+    if g('상해중환자실'): pv('TextBox 22',2,5,'상해중환자실',prefix=': ',suffix='')
+    if g('1인실 상급병원'): pv('TextBox 22',3,2,'1인실 상급병원',prefix=': ',suffix='')
+    if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
     _autofit_ppt(by)
     prs.save(out); return True
 
 
+_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
 def _autofit_ppt(by):
     """겹침·단락내림 방지(§11): 모든 값박스 word_wrap off + 가장 긴 단락 기준 폰트 일괄 축소.
     같은 박스 안 단락은 같은 폰트여야 줄간격이 안 어긋난다 → 박스 단위로 한 번에 줄임."""
-    for sh in by.values():
+    for _bn, sh in by.items():
+        if _bn in _HEADER_BOXES: continue   # 이름·날짜 헤더는 크기 고정(autofit 제외)
         tf = sh.text_frame
         try:
             tf.word_wrap = False           # 줄바꿈(단락 내려옴) 차단
@@ -1014,7 +1123,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v15</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v25</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1094,7 +1203,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v15-frac-20260621'}
+def health(): return {'ok':True,'version':'v25-sep-20260621'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
