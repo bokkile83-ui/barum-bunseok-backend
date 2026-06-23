@@ -31,8 +31,15 @@ FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
 EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함, '농업인' 표기만 제외
-def is_excluded(company, product=''):
-    return any(kw in company+product for kw in EXCLUDE)
+AUTO_HINT = ['다이렉트개인용','다이렉트업무용','개인용자동차','업무용자동차','영업용자동차']
+def is_excluded(company, product='', dambo=None):
+    blob = company+product
+    if any(kw in blob for kw in EXCLUDE): return True
+    if any(kw in blob for kw in AUTO_HINT): return True
+    if dambo:
+        auto_cov = ['무보험차','다른자동차 운전','자기차량손해','대인배상','대물배상']
+        if any(any(a in k for a in auto_cov) for k in dambo): return True
+    return False
 
 def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     # 지침 §7 판정 순서
@@ -183,6 +190,8 @@ def parse_txt(txt, filename=''):
         i = j
         # 추출: LLM 우선(깨진 별첨 복원), 키 없거나 실패 시 규칙 폴백
         dambo = llm_extract('\n'.join(block_lines)) or rule_extract(block_lines)
+        if is_excluded(company, product, dambo):  # 담보로 자동차보험 최종 차단
+            continue
         if company:
             contracts.append({'company':company,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
@@ -269,7 +278,6 @@ DMAP = {
     '교통사고벌금(대물)':'대물','교통사고벌금(대인)':'대인',
     '변호사선임비용':'변호사','자동차사고 변호사선임비용':'변호사','변호사비':'변호사',
     '자동차부상위로금':'자부상','자동차부상보장':'자부상',
-    '무보험차에 의한 상해':'일상배상책임',
     # 골절 — B열: 골절(치아파절포함)/골절(치아파절제외)/5대골절진단비
     '골절진단(간편가입Ⅲ)담보':'골절(치아파절포함)',  # 단독 골절진단=치아포함 행(치아제외 명시만 제외 행)
     # 응급실
@@ -608,6 +616,8 @@ def build_excel(data, out):
                     _y=int(_cd[:4]); _mo=int(_cd[5:7]); _post=(_y>2009 or (_y==2009 and _mo>=9))
                 except: _post=True
                 if _post: amt=5000
+                _ex=ws.cell(nm2r.get('입원',0),col).value if nm2r.get('입원') else None
+                if isinstance(_ex,(int,float)): continue  # 실손 입원=행단위 5,000 고정, 둘째 줄 합산 금지
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -1218,7 +1228,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v27-asc-20260623'}
+def health(): return {'ok':True,'version':'v27b-exclude-20260624'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
