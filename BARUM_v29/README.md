@@ -33,3 +33,8 @@
 ## 배포
 Railway: web-production-4a155.up.railway.app  /health
 GitHub: github.com/bokkile83-ui/barum-bunseok-backend
+
+## ★추가(2026.06.26)
+- code/main_v29patch_질병수술비.py ← 현행 main.py + 질병수술비 750버그 패치 적용본(문법검증 완료, 런타임 미검증).
+  변경: 질병수술비 행 = 변형/종(1-5종)/대수술/일당/Ⅱ·Ⅲ 전부 제외 → 합산 누수 차단(과합산 방지, 의심분은 매핑 제외).
+  ※ 실손 세대·통합암·통합전이암·항암분리·묶음후유 등 나머지 v29는 코드 미반영 → 지침_v29.md 보고 수기.
