@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+openpyxl
+python-pptx
+python-multipart
+lxml
+httpx
+weasyprint
