@@ -1,2 +1,6 @@
 [phases.setup]
-nixPkgs = ["...", "pango", "fontconfig", "harfbuzz", "noto-fonts-cjk-sans", "nanum"]
+aptPkgs = [
+  "libpango-1.0-0", "libpangocairo-1.0-0", "libcairo2",
+  "libgdk-pixbuf-2.0-0", "libffi-dev", "libharfbuzz0b",
+  "fonts-nanum", "fonts-noto-cjk"
+]

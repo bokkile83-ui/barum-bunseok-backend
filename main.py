@@ -1204,6 +1204,7 @@ $("#send").onclick=async()=>{
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="다음 고객 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 TXT를 올리면 이어서 분석합니다.',"bot");}
 };
 let analysisData=null;
@@ -1229,7 +1230,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29-realson-20260626'}
+def health(): return {'ok':True,'version':'v29b-report-20260626'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
