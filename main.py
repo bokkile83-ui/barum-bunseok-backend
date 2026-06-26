@@ -31,15 +31,8 @@ FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
 EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함, '농업인' 표기만 제외
-AUTO_HINT = ['다이렉트개인용','다이렉트업무용','개인용자동차','업무용자동차','영업용자동차']
-def is_excluded(company, product='', dambo=None):
-    blob = company+product
-    if any(kw in blob for kw in EXCLUDE): return True
-    if any(kw in blob for kw in AUTO_HINT): return True
-    if dambo:
-        auto_cov = ['무보험차','다른자동차 운전','자기차량손해','대인배상','대물배상']
-        if any(any(a in k for a in auto_cov) for k in dambo): return True
-    return False
+def is_excluded(company, product=''):
+    return any(kw in company+product for kw in EXCLUDE)
 
 def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     # 지침 §7 판정 순서
@@ -190,8 +183,6 @@ def parse_txt(txt, filename=''):
         i = j
         # 추출: LLM 우선(깨진 별첨 복원), 키 없거나 실패 시 규칙 폴백
         dambo = llm_extract('\n'.join(block_lines)) or rule_extract(block_lines)
-        if is_excluded(company, product, dambo):  # 담보로 자동차보험 최종 차단
-            continue
         if company:
             contracts.append({'company':company,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
@@ -278,6 +269,7 @@ DMAP = {
     '교통사고벌금(대물)':'대물','교통사고벌금(대인)':'대인',
     '변호사선임비용':'변호사','자동차사고 변호사선임비용':'변호사','변호사비':'변호사',
     '자동차부상위로금':'자부상','자동차부상보장':'자부상',
+    '무보험차에 의한 상해':'일상배상책임',
     # 골절 — B열: 골절(치아파절포함)/골절(치아파절제외)/5대골절진단비
     '골절진단(간편가입Ⅲ)담보':'골절(치아파절포함)',  # 단독 골절진단=치아포함 행(치아제외 명시만 제외 행)
     # 응급실
@@ -343,8 +335,13 @@ def resolve_kw(raw):
                 return '상해수술비',0
             return None,0
         if has('질병'):
-            # ★질병수술비 행 = '질병수술비'·'질병입원수술비' 이 2개 담보명만 합산. 그 외 변형은 [확인]
-            if (has('질병수술비') or has('질병입원수술비')) and no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골','상급','종합병원'):
+            # ★v29 §8.5 질병수술비 합산군 = '질병수술비'·'질병입원수술비'·'질병수술비(**제외)' 만.
+            #   변형(특정/부위/Ⅱ/대수술/종합/일당 등)·종(1-5종)은 합산 금지 → 매핑 제외(개별/[확인]).
+            _base = has('질병수술비') or has('질병입원수술비')
+            _excl_ok = no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
+                          '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
+                          '2종','3종','4종','5종','부분','관혈','내시경','로봇')
+            if _base and _excl_ok and jong==0:
                 return '질병수술비',0
             return None,0
     if has('창상') or has('봉합'): return '창상봉합술',0
@@ -616,8 +613,6 @@ def build_excel(data, out):
                     _y=int(_cd[:4]); _mo=int(_cd[5:7]); _post=(_y>2009 or (_y==2009 and _mo>=9))
                 except: _post=True
                 if _post: amt=5000
-                _ex=ws.cell(nm2r.get('입원',0),col).value if nm2r.get('입원') else None
-                if isinstance(_ex,(int,float)): continue  # 실손 입원=행단위 5,000 고정, 둘째 줄 합산 금지
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -1148,7 +1143,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v27</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1168,6 +1163,7 @@ function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.le
 function dl(blob,fname){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(u),3000);}
 const XLMIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PTMIME="application/vnd.openxmlformats-officedocument.presentationml.presentation";
+const PDFMIME="application/pdf";
 let savedFiles={};
 function reDL(k){const f=savedFiles[k];if(f&&f.b64){dl(b64toBlob(f.b64,f.mime),f.name);}}
 $("#send").onclick=async()=>{
@@ -1198,6 +1194,11 @@ $("#send").onclick=async()=>{
         setTimeout(()=>dl(txBlob,j.chiryo_name),1600);
         savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
         ptCard+=`<div class="file-card pt" onclick="reDL('chiryo')" style="cursor:pointer"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
+      if(j.report_b64){
+        const rpBlob=b64toBlob(j.report_b64,PDFMIME);
+        setTimeout(()=>dl(rpBlob,j.report_name),2400);
+        savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
+        ptCard+=`<div class="file-card pt" onclick="reDL('report')" style="cursor:pointer"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 다시저장</span></div>`;}
       add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
         `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
@@ -1228,7 +1229,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v27b-exclude-20260624'}
+def health(): return {'ok':True,'version':'v29-realson-20260626'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -1256,16 +1257,26 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         unmapped=build_excel(data,xl); recalc_xlsx(xl)
         ppt_totals, sq, ss = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
         ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss)
-        tx_ok=build_chiryo(data,tx,ppt_totals,unmapped)   # 치료비 폼(2번째 PPT)
+        # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
                   'summary':make_summary(data),'pptx_ready':ppt_ok}
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
-        if tx_ok and os.path.exists(tx):
-            response['chiryo_b64']=base64.b64encode(open(tx,'rb').read()).decode()
-            response['chiryo_name']=f'치료비정리_{cust}.pptx'
+        # ── 보장설명지(충족률 리포트 PDF) — 실패해도 3개 파일은 유지(lazy import) ──
+        try:
+            from coverage_benchmark import map_excel_to_report
+            from report_weasy import build_report_pdf
+            rep=map_excel_to_report(xl, settings={'client':cust,
+                'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
+            rp=os.path.join(d,f'보장설명지_{cust}.pdf')
+            build_report_pdf(rep, rp)
+            if os.path.exists(rp):
+                response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
+                response['report_name']=f'보장설명지_{cust}.pdf'
+        except Exception as _re:
+            response['report_error']=str(_re)
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
