@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29g-2대주요-20260628 (2대주요치료비 인식확장+PPT뇌혈관심장 양쪽표기, base v29f) =====
+# ===== BARUM main.py v29h-ci-20260628 (CI/리빙케어/GI 본체 80·50% 분해→중대한암·뇌졸증·급성심근, base v29g) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -183,10 +183,20 @@ def parse_txt(txt, filename=''):
         i = j
         # 추출: LLM 우선(깨진 별첨 복원), 키 없거나 실패 시 규칙 폴백
         dambo = llm_extract('\n'.join(block_lines)) or rule_extract(block_lines)
+        # ★ CI/리빙케어/GI: 별첨이 전부 '주계약'으로 라벨없이 뭉침 → 개별 주계약 금액 수집(본체 80/50% 판별용)
+        ci_jugye=[]
+        if any(k in (product or '') for k in ('CI보험','리빙케어','GI보험')):
+            for _bl in block_lines:
+                _m=re.match(r'^\s*주계약\s+([\d,]+)\s*$', _bl)
+                if _m:
+                    try:
+                        _v=int(_m.group(1).replace(',',''))
+                        if 0<_v<=200000: ci_jugye.append(_v)
+                    except: pass
         if company:
             contracts.append({'company':company,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
-                'pay_count':pay_count,'renewal':renewal,'dambo':dambo})
+                'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye})
     # ★ 페이지 분할 중복 제거 (정본 체크리스트 ①②): 동일 계약키 병합
     merged = {}
     order = []
@@ -199,6 +209,7 @@ def parse_txt(txt, filename=''):
             # 담보 병합: 같은 담보명은 큰 값 유지(중복가산 방지), 새 담보는 추가
             for k, v in c['dambo'].items():
                 m['dambo'][k] = max(m['dambo'].get(k, 0), v)
+            if not m.get('ci_jugye') and c.get('ci_jugye'): m['ci_jugye'] = c['ci_jugye']
             # 더 긴(덜 잘린) 상품명 채택
             if len(c['product']) > len(m['product']): m['product'] = c['product']
             # 회차/기간 비어있으면 채움
@@ -594,6 +605,30 @@ def build_excel(data, out):
         dambo = ct['dambo']
         jong_acc = {'상해 종수술비(1-5종)':[0]*5, '질병 종수술비(1-5종)':[0]*5}
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
+
+        # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
+        #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
+        _is_ci = any(k in (ct.get('product') or '') for k in ('CI보험','리빙케어','GI보험'))
+        _cij = ct.get('ci_jugye') or []
+        if _is_ci and _cij:
+            _samang = max(_cij); _bonche=None; _pct=None
+            _cand=[v for v in _cij if 0<v<_samang]
+            for _ratio,_p in ((0.8,80),(0.5,50)):
+                for v in sorted(set(_cand), key=lambda x:-_cand.count(x)):
+                    if _samang and abs(v/_samang-_ratio)<0.02: _bonche=v; _pct=_p; break
+                if _bonche: break
+            if _bonche:
+                for _nm in ('중대한 암','중대한 뇌졸증','중대한 급성심근'):
+                    _r=nm2r.get(_nm)
+                    if _r:
+                        ws.cell(_r,col).value=_bonche; ws.cell(_r,col).font = BL if gen else BK
+                _ril=nm2r.get('일반사망')
+                if _ril and not isinstance(ws.cell(_ril,col).value,(int,float)):
+                    ws.cell(_ril,col).value=_samang; ws.cell(_ril,col).font = BL if gen else BK
+                dambo.pop('주계약', None)
+            else:
+                unmapped.append((col, ct['company'], f'주계약(CI 80/50%판별실패 {_cij})', _samang, 'CI 본체비율 불명 → 좌측표 수기'))
+                dambo.pop('주계약', None)
 
         for raw, amt in dambo.items():
             # ★ 한화 심혈관특정질환Ⅰ·Ⅱ진단비 = 협심·경색 제외 묶음 → 구성질환 행 각각 기재(§8.3.1)
@@ -1174,7 +1209,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29g</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29h</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1261,7 +1296,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29g-2대주요-20260628'}
+def health(): return {'ok':True,'version':'v29h-ci-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
