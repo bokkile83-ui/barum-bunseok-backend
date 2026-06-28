@@ -5,3 +5,4 @@ python-pptx
 python-multipart
 lxml
 httpx
+weasyprint==69.0
