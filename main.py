@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29c-prodname-20260628 (헤더상품명+빈행합계0, base v29b-report) =====
+# ===== BARUM main.py v29d-heart2-20260628 (심혈관특정묶음+심근병증·판막행, base v29c) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -377,6 +377,8 @@ def resolve_kw(raw):
     # ── 심장 ──
     if (has('순환계') or has('2대')) and has('주요치료'): return '2대 주요치료비',0
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
+    if has('심근병증') or has('심근증'): return '심근병증',0
+    if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
     if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
     if has('협심') or has('허혈'): return '협심증',0
@@ -594,6 +596,16 @@ def build_excel(data, out):
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
 
         for raw, amt in dambo.items():
+            # ★ 한화 심혈관특정질환Ⅰ·Ⅱ진단비 = 협심·경색 제외 묶음 → 구성질환 행 각각 기재(§8.3.1)
+            _rn = re.sub(r'\s','',raw)
+            if '심혈관특정' in _rn and '진단' in _rn and '수술' not in _rn:
+                for _bt in ['염증','부정맥','심부전','심근병증','심장판막']:
+                    _br = nm2r.get(_bt)
+                    if _br:
+                        _ex = ws.cell(_br,col).value
+                        ws.cell(_br,col).value = (_ex+amt) if isinstance(_ex,(int,float)) else amt
+                        ws.cell(_br,col).font = BL if gen else BK
+                continue
             m = LLMMAP.get(raw) or {}
             std = m.get('std'); jong = m.get('jong', 0) or 0
             if not std:                       # LLM 미반환/실패 -> 키워드 사전엔진(API 불필요)
@@ -1143,7 +1155,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29c</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29d</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1230,7 +1242,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29c-prodname-20260628'}
+def health(): return {'ok':True,'version':'v29d-heart2-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
