@@ -87,8 +87,10 @@ def load_excel(path):
         nm=ws.cell(1,c).value; pr=_man(ws.cell(2,c).value)
         if nm is None and pr==0: continue
         nm=str(nm or '').replace('\n',' ').strip()
-        renew='(갱신)' in nm
-        nm=re.sub(r'\s*\((갱신|비갱신)\)','',nm).strip()
+        renew = '[갱신]' in nm   # 헤더 형식 [갱신]/[비갱신(종신)] — 대괄호 정확매칭
+        nm=re.sub(r'\s*\[[^\]]*\]','',nm)                       # [갱신]·[비갱신(종신)] 제거
+        nm=re.sub(r'\((무|표준형|종신|표준형-종신|갱신|비갱신)\)','',nm)  # 괄호 수식 제거
+        nm=re.sub(r'\s+',' ',nm).strip()
         headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew})
     total_prem=int(_man(ws.cell(2,last).value))
     return grp_rows, headers, total_prem
@@ -142,9 +144,10 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     weak=[{'h':c,'d':f'충족률 {p}% — 보강 필요'} for c,p in ranked if p<40][:4]
     gap_count=sum(1 for _,p in ranked if p<40)
 
-    renew_list=[{'nm':h['nm'],'v':f"{h['amt']:,}원"} for h in headers if h['renew']]
-    nonren_list=[{'nm':h['nm'],'v':f"{h['amt']:,}원"} for h in headers if not h['renew']]
-    bars=sorted([{'nm':h['nm'],'amt':h['amt'],'renew':h['renew']} for h in headers],
+    renew_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원"} for h in headers if h['renew']]
+    nonren_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원"} for h in headers if not h['renew']]
+    _co=lambda nm:(nm.split(' ')[0] if ' ' in nm else nm[:6])
+    bars=sorted([{'nm':_co(h['nm']),'amt':h['amt'],'renew':h['renew']} for h in headers],
                 key=lambda x:-x['amt'])
     donuts=[{'name':('심장' if c=='심장' else c.split('·')[0] if c in('실손·일배책','입원·일당','응급실·독감','골절·화상','사망·후유') else c),
              'pct':donut_map[c]} for c in DONUT_ORDER]
@@ -162,6 +165,22 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             if v>0: allrows[b]=max(allrows.get(b,0),v)
     chiryo=[{'name':lab,'value':(_fmt(allrows.get(key,0)) or '미가입')} for lab,key in CHIRYO]
 
+    # ── CI/생명보험 선지급 분석 (사망값 의존X: 선지급률=본체/(본체+잔여)) ──
+    def _gv(nm):
+        for rows in grp_rows.values():
+            for b,v in rows:
+                if str(b).strip()==nm: return v
+        return 0
+    _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근')]
+    _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
+    _ci_apply=_gv('중대한CI적용')
+    _ci_bonche=max((v for _,v in _ci_pairs), default=0)
+    _ci_samang=_ci_bonche+_ci_apply
+    _ci_rate=round(_ci_bonche/_ci_samang*100) if _ci_samang else 0
+    ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
+        'rate':_ci_rate,'residual':_fmt(_ci_apply),
+        'items':[{'t':n,'v':_fmt(v)} for n,v in _ci_pairs]}
+
     rep={
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
@@ -175,6 +194,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                          'rec':detail_map[c]['rec'],'pct':donut_map[c]} for c in DONUT_ORDER],
         'band_label':{'20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대'}.get(age_band,age_band),
         'chiryo':chiryo,
+        'ci':ci,
         'age_band':age_band,'age_known':age_known,
     }
     return rep

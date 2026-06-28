@@ -81,6 +81,32 @@ def build_report_pdf(rep, out):
                   for c in rep.get('chiryo',[]))
     crows=f'<tr>{crows}</tr>' if crows else '<tr><td>—</td></tr>'
 
+    # ── CI 선지급 분석 블록 (rep['ci'], 없으면 빈 문자열) ──
+    ci=rep.get('ci',{'present':False})
+    if ci.get('present'):
+        _chips=''.join(f'<span class="ci-it"><b>{_html.escape(i["t"])}</b> {_html.escape(i["v"])}</span>' for i in ci['items'])
+        _rate=ci.get('rate',0); _rem=max(0,100-_rate)
+        ci_html=(f'<div class="sect">CI · 생명보험 선지급 분석 <span>CRITICAL ILLNESS</span></div>'
+                 f'<div class="ci-wrap">'
+                 f'<div class="ci-top"><div class="ci-rate">선지급 <b>{_rate}%</b> 형</div>'
+                 f'<div class="ci-desc">CI 사망보장 <b>{_html.escape(ci["samang"])}</b> · 중대질병 진단 시 {_rate}% 선지급, 잔여 {_rem}%는 사망 시 지급</div></div>'
+                 f'<div class="ci-bar"><div class="ci-fill" style="width:{_rate}%"></div>'
+                 f'<span class="ci-l">선지급 {_rate}%</span><span class="ci-r">잔여 {_rem}%</span></div>'
+                 f'<div class="ci-items">{_chips}</div>'
+                 f'<div class="ci-res">진단 후 잔여 사망보장<b>{_html.escape(ci["residual"])}</b></div>'
+                 f'</div>')
+    else:
+        ci_html=''
+
+    # ── 보장 진단 코멘트 (P3 하단 채움 + 설명서 성격) ──
+    _sh=[_html.escape(s['h']) for s in rep.get('strength',[])][:4]
+    _cm=f'{cust} 고객님은 보유 <b>{n_contract}건</b> · 월 <b>{premium:,}원</b>의 보장을 운용하고 있습니다. '
+    if _sh: _cm+='특히 <b>'+' · '.join(_sh)+'</b> 영역의 핵심담보를 충실히 보유했습니다. '
+    if ci.get('present'):
+        _cm+=f'CI 선지급형 보유로 암·뇌졸증·급성심근 등 중대질병 진단 시 진단자금이 즉시 지급되며, 진단 후에도 잔여 사망보장 <b>{_html.escape(ci.get("residual","-"))}</b>이 유지됩니다. '
+    _cm+='보강이 필요한 공백 영역은 <b>'+f'{gap_cnt}개</b>로 '+('전반적으로 보장 균형이 양호합니다.' if gap_cnt==0 else '상담을 통한 보완을 권장합니다.')
+    comment_html=f'<div class="sect" style="margin-top:5mm">보장 진단 코멘트 <span>SUMMARY</span></div><div class="cmt">{_cm}</div>'
+
     css=f'''
 @page {{ size:A4; margin:0; }}
 * {{ margin:0; padding:0; box-sizing:border-box; font-family:'NanumSquareRound','Noto Sans CJK KR',sans-serif; }}
@@ -157,6 +183,23 @@ body {{ color:{INK}; }}
 .ctab .cc {{ background:#F6F8FB; border:0.8pt solid {LINE}; border-radius:2mm; padding:2mm 1.5mm; text-align:center; vertical-align:top; }}
 .ctab .cl {{ font-size:8.5pt; color:{MUT}; font-weight:700; margin-bottom:1.5mm; }}
 .ctab .cval {{ font-size:11pt; }}
+.ci-wrap {{ border:0.8pt solid {GOLD}; border-radius:4pt; overflow:hidden; margin-bottom:5mm; }}
+.ci-top {{ background:{NAVY}; color:#fff; padding:3mm 4mm; }}
+.ci-top .ci-rate {{ font-size:13pt; font-weight:800; }}
+.ci-top .ci-rate b {{ color:{GOLDL}; font-size:17pt; }}
+.ci-top .ci-desc {{ font-size:8.5pt; color:#C9D5E4; margin-top:1mm; }}
+.ci-top .ci-desc b {{ color:{GOLDL}; }}
+.ci-bar {{ position:relative; height:6mm; background:{NAVY2}; }}
+.ci-bar .ci-fill {{ height:6mm; background:linear-gradient(90deg,{GOLD},{GOLDD}); }}
+.ci-bar .ci-l {{ position:absolute; left:3mm; top:1.5mm; color:{NAVY}; font-size:8pt; font-weight:800; }}
+.ci-bar .ci-r {{ position:absolute; right:3mm; top:1.6mm; color:#fff; font-size:8pt; font-weight:700; }}
+.ci-items {{ padding:3mm 4mm 1mm; }}
+.ci-items .ci-it {{ display:inline-block; font-size:9.5pt; padding:1.5mm 3mm; margin:0 2mm 2mm 0; border-radius:2pt; background:#FBF1D8; color:{NAVY}; }}
+.ci-items .ci-it b {{ color:{GOLDD}; }}
+.ci-res {{ padding:2.5mm 4mm 3mm; font-size:9.5pt; color:{INK}; border-top:0.5pt solid {LINE}; }}
+.ci-res b {{ color:{NAVY}; font-size:12pt; margin-left:1mm; }}
+.cmt {{ padding:4mm 4.5mm; background:#F6F8FB; border:0.5pt solid {LINE}; border-left:2.5pt solid {NAVY}; border-radius:3pt; font-size:9.5pt; line-height:1.7; color:{INK}; }}
+.cmt b {{ color:{NAVY}; }}
 .ft {{ position:absolute; bottom:0; left:0; width:100%; padding:4mm 11mm; background:{NAVY}; color:#9FB0C6; font-size:8pt; overflow:hidden; }}
 .ft b {{ color:{GOLD}; font-weight:700; }}
 .ft .r {{ float:right; }}
@@ -178,7 +221,7 @@ body {{ color:{INK}; }}
   <div class="sect">보장 현황 <span>CATEGORY COVERAGE</span></div>
   <table class="cov">{rows}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 3</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 4</span></div>
 </div>
 <!-- P2 -->
 <div class="pg">
@@ -189,7 +232,7 @@ body {{ color:{INK}; }}
   <div class="sect">AI 진단 요약 <span>DIAGNOSIS</span></div>
   <table class="diag"><tr>
    <td><div class="dc g"><div class="h">✓ 보유 강점</div><ul>{li(rep["strength"])}</ul></div></td>
-   <td><div class="dc w"><div class="h">! 보장 공백</div><ul>{li(rep["weak"])}</ul></div></td>
+   <td><div class="dc w"><div class="h">! 보장 공백</div><ul>{li(rep["weak"]) if rep["weak"] else '<li style="color:#1F7A4D"><b>주요 공백 없음</b> — 핵심담보 균형이 양호합니다.</li>'}</ul></div></td>
   </tr></table>
   <div class="sect" style="margin-top:4mm">갱신 / 비갱신 구조 <span>RENEWAL</span></div>
   <table class="ren"><tr>
@@ -198,16 +241,27 @@ body {{ color:{INK}; }}
   </tr></table>
   <div class="sect" style="margin-top:4mm">월 보험료 구성 <span>PREMIUM</span></div>
   <table class="pbar">{bars}</table>
-  <div class="sect" style="margin-top:4mm">주요 치료비 정리 <span>TREATMENT BENEFITS</span></div>
-  <table class="ctab">{crows}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 3</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 4</span></div>
 </div>
-<!-- P3 -->
+<!-- P3: 핵심 보장 분석 (CI 선지급 + 주요 치료비) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>3</b>부위별 충족률</div><div class="bar"></div></div>
+  <div class="pgn"><b>3</b>핵심 보장 분석</div><div class="bar"></div></div>
+ <div class="body">
+  {ci_html}
+  <div class="sect"{' style="margin-top:5mm"' if ci_html else ''}>주요 치료비 정리 <span>TREATMENT BENEFITS</span></div>
+  <table class="ctab">{crows}</table>
+  {comment_html}
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 4</span></div>
+</div>
+<!-- P4 -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
+  <div class="pgn"><b>4</b>부위별 충족률</div><div class="bar"></div></div>
  <div class="body">
   <div class="sect">부위별 충족률 <span>COVERAGE LEVEL</span></div>
   <table class="dtab">{drows}</table>
@@ -223,7 +277,7 @@ body {{ color:{INK}; }}
   </table>
   <div class="note">※ <b>충족률 = 보유 ÷ 연령밴드 권장액 × 100</b> (상한 100%). 권장액은 업계 적정 가입금액 가이드(암 진단비 5천만~1억·뇌혈관 3천만~5천만·허혈성 심장 3천만 등) 기준이며 {band} 표준밴드를 적용했습니다. 운전자·실손·일당·응급실은 핵심담보 보유개수 기준입니다. 개인 소득·가족력에 따라 권장액은 상담을 통해 조정됩니다.{age_warn}</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 3</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 4</span></div>
 </div>
 </body></html>'''
     HTML(string=doc).write_pdf(out)
