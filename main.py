@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29m-pptilson-20260628 (v29l + PPT 실손값=완성엑셀 직결: 입원5천캡·통원디폴트가 PPT에도 반영) =====
+# ===== BARUM main.py v29n-reportppt-20260628 (v29m + 보장진단서 PPT(report_pptx) /analyze 통합·편집가능·PDF와 병행) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -1304,12 +1304,18 @@ $("#send").onclick=async()=>{
         setTimeout(()=>dl(rpBlob,j.report_name),2400);
         savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
         ptCard+=`<div class="file-card pt" onclick="reDL('report')" style="cursor:pointer"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 다시저장</span></div>`;}
+      if(j.report_pptx_b64){
+        const rpxBlob=b64toBlob(j.report_pptx_b64,PTMIME);
+        setTimeout(()=>dl(rpxBlob,j.report_pptx_name),3000);
+        savedFiles.reportpptx={b64:j.report_pptx_b64,name:j.report_pptx_name,mime:PTMIME};
+        ptCard+=`<div class="file-card pt" onclick="reDL('reportpptx')" style="cursor:pointer"><span class="ic">📋</span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">💾 다시저장</span></div>`;}
       add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
         `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="다음 고객 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
   if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
+  if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 TXT를 올리면 이어서 분석합니다.',"bot");}
 };
 let analysisData=null;
@@ -1335,7 +1341,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29m-pptilson-20260628'}
+def health(): return {'ok':True,'version':'v29n-reportppt-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -1370,19 +1376,35 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
-        # ── 보장설명지(충족률 리포트 PDF) — 실패해도 3개 파일은 유지(lazy import) ──
+        # ── 보장설명서: 충족률 PDF + ★보장진단서 PPT(편집가능) — 둘 다 실패해도 엑셀·PPT는 유지 ──
+        rep=None
         try:
             from coverage_benchmark import map_excel_to_report
-            from report_weasy import build_report_pdf
             rep=map_excel_to_report(xl, settings={'client':cust,
                 'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
-            rp=os.path.join(d,f'보장설명지_{cust}.pdf')
-            build_report_pdf(rep, rp)
-            if os.path.exists(rp):
-                response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
-                response['report_name']=f'보장설명지_{cust}.pdf'
         except Exception as _re:
-            response['report_error']=str(_re)
+            response['report_error']='분석데이터 생성 실패: '+str(_re)
+        if rep is not None:
+            # 충족률 PDF (weasyprint 미복구면 실패 허용)
+            try:
+                from report_weasy import build_report_pdf
+                rp=os.path.join(d,f'보장설명지_{cust}.pdf')
+                build_report_pdf(rep, rp)
+                if os.path.exists(rp):
+                    response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
+                    response['report_name']=f'보장설명지_{cust}.pdf'
+            except Exception as _re:
+                response['report_error']=str(_re)
+            # ★ 보장진단서 PPT (편집가능) — 같은 rep로 생성
+            try:
+                from report_pptx import build_report_pptx
+                rpx=os.path.join(d,f'보장진단서_{cust}.pptx')
+                build_report_pptx(rep, rpx)
+                if os.path.exists(rpx):
+                    response['report_pptx_b64']=base64.b64encode(open(rpx,'rb').read()).decode()
+                    response['report_pptx_name']=f'보장진단서_{cust}.pptx'
+            except Exception as _pe:
+                response['report_pptx_error']=str(_pe)
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})

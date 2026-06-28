@@ -6,3 +6,4 @@ python-multipart
 lxml
 httpx
 weasyprint==69.0
+matplotlib
