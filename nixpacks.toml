@@ -2,7 +2,7 @@
 nixPkgs = ["python311", "pango", "glib", "cairo", "gdk-pixbuf", "harfbuzz", "fontconfig", "freetype"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["python -m pip install -r requirements.txt"]
 
 [start]
-cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "python -m uvicorn main:app --host 0.0.0.0 --port 8080"
