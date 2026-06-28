@@ -1,4 +1,4 @@
-# ===== BARUM 보장설명지 전용 main.py report-only-v1-20260628 (base v29g, PDF만 출력) =====
+# ===== BARUM main.py v29g-2대주요-20260628 (2대주요치료비 인식확장+PPT뇌혈관심장 양쪽표기, base v29f) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -1211,13 +1211,27 @@ $("#send").onclick=async()=>{
     if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
     else{
       savedFiles={};
+      const xlBlob=b64toBlob(j.xlsx_b64,XLMIME);
+      dl(xlBlob,j.xlsx_name);
+      savedFiles.xlsx={b64:j.xlsx_b64,name:j.xlsx_name,mime:XLMIME};
       let ptCard='';
+      if(j.pptx_b64){
+        const ptBlob=b64toBlob(j.pptx_b64,PTMIME);
+        setTimeout(()=>dl(ptBlob,j.pptx_name),800);
+        savedFiles.pptx={b64:j.pptx_b64,name:j.pptx_name,mime:PTMIME};
+        ptCard=`<div class="file-card pt" onclick="reDL('pptx')" style="cursor:pointer"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
+      if(j.chiryo_b64){
+        const txBlob=b64toBlob(j.chiryo_b64,PTMIME);
+        setTimeout(()=>dl(txBlob,j.chiryo_name),1600);
+        savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
+        ptCard+=`<div class="file-card pt" onclick="reDL('chiryo')" style="cursor:pointer"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
       if(j.report_b64){
         const rpBlob=b64toBlob(j.report_b64,PDFMIME);
-        dl(rpBlob,j.report_name);
+        setTimeout(()=>dl(rpBlob,j.report_name),2400);
         savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
-        ptCard=`<div class="file-card pt" onclick="reDL('report')" style="cursor:pointer"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 다시저장</span></div>`;}
-      add('<b>✅ 보장설명지 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+ptCard+'</div>',"bot");}
+        ptCard+=`<div class="file-card pt" onclick="reDL('report')" style="cursor:pointer"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 다시저장</span></div>`;}
+      add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
+        `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="다음 고객 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
@@ -1247,7 +1261,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'report-only-v1-20260628'}
+def health(): return {'ok':True,'version':'v29g-2대주요-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -1272,17 +1286,29 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
-        unmapped=build_excel(data,xl); recalc_xlsx(xl)   # 엑셀은 리포트가 읽어야 하므로 내부 생성(출력 안 함)
-        response={'ok':True,'summary':make_summary(data)}
-        # ── 보장설명지(충족률 리포트 PDF)만 출력 ──
-        from coverage_benchmark import map_excel_to_report
-        from report_weasy import build_report_pdf
-        rep=map_excel_to_report(xl, settings={'client':cust,
-            'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
-        rp=os.path.join(d,f'보장설명지_{cust}.pdf')
-        build_report_pdf(rep, rp)
-        response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
-        response['report_name']=f'보장설명지_{cust}.pdf'
+        unmapped=build_excel(data,xl); recalc_xlsx(xl)
+        ppt_totals, sq, ss = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
+        ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss)
+        # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
+        xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
+        response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
+                  'summary':make_summary(data),'pptx_ready':ppt_ok}
+        if ppt_ok and os.path.exists(pt):
+            response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
+            response['pptx_name']=f'보장분석지_{cust}.pptx'
+        # ── 보장설명지(충족률 리포트 PDF) — 실패해도 3개 파일은 유지(lazy import) ──
+        try:
+            from coverage_benchmark import map_excel_to_report
+            from report_weasy import build_report_pdf
+            rep=map_excel_to_report(xl, settings={'client':cust,
+                'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
+            rp=os.path.join(d,f'보장설명지_{cust}.pdf')
+            build_report_pdf(rep, rp)
+            if os.path.exists(rp):
+                response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
+                response['report_name']=f'보장설명지_{cust}.pdf'
+        except Exception as _re:
+            response['report_error']=str(_re)
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
