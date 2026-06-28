@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29e-sumfix-20260628 (합계 수식→계산값 직접기재, base v29d) =====
+# ===== BARUM main.py v29g-2대주요-20260628 (2대주요치료비 인식확장+PPT뇌혈관심장 양쪽표기, base v29f) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -375,7 +375,7 @@ def resolve_kw(raw):
     if has('혈전용해') and has('뇌'): return '혈전용해치료비',0
 
     # ── 심장 ──
-    if (has('순환계') or has('2대')) and has('주요치료'): return '2대 주요치료비',0
+    if has('주요치료') and (has('순환계') or has('2대') or has('뇌혈관') or has('심뇌') or has('허혈') or has('심장')): return '2대 주요치료비',0   # 뇌혈관+허혈성/심장 주요치료비=순환계=2대주요치료비
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
     if has('심근병증') or has('심근증'): return '심근병증',0
     if has('판막'): return '심장판막',0
@@ -926,10 +926,25 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('뇌출혈진단비'): pv('TextBox 48',0,0,'뇌출혈진단비',prefix='뇌출혈\n',suffix='')
     if g('산정특례뇌혈관'): pv('TextBox 49',0,3,'산정특례뇌혈관',prefix=': ',suffix='')
     if g('혈전용해치료비'): pv('TextBox 49',1,1,'혈전용해치료비',prefix=': ',suffix='')
+    if g('2대 주요치료비'): pv('TextBox 49',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 뇌혈관쪽 2대주요치료비
 
-    if g('협심증'): pv('TextBox 54',0,0,'협심증',prefix='허혈성\n',suffix='')
+    # ★ 심장 4종 표기(지침 2026.06.28): 협심증/심부전/염증 한 줄 + 부정맥 다음 줄. 값 있는 것만. 급성심근은 별도칸.
+    if 'TextBox 심장4종' in by:
+        _h4=by['TextBox 심장4종'].text_frame
+        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bj=totals.get('부정맥',0)
+        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym)] if v]
+        _amt=max(_hp,_sf,_ym)
+        if _names and len(_h4.paragraphs[0].runs)>=2:
+            _h4.paragraphs[0].runs[0].text='/'.join(_names)+' '
+            _h4.paragraphs[0].runs[1].text=f'{_amt:,}' if _amt else ''
+        elif len(_h4.paragraphs[0].runs)>=1:
+            _h4.paragraphs[0].runs[0].text=''
+        if len(_h4.paragraphs)>1 and len(_h4.paragraphs[1].runs)>=2:
+            _h4.paragraphs[1].runs[1].text=f'{_bj:,}' if _bj else ''
+            if not _bj: _h4.paragraphs[1].runs[0].text=''  
     if g('급성심근경색'): pv('TextBox 55',0,0,'급성심근경색',prefix='급성심근\n',suffix='')
     if g('산정특례심장'): pv('TextBox 56',0,3,'산정특례심장',prefix=': ',suffix='')
+    if g('2대 주요치료비'): pv('TextBox 56',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 심장쪽 2대주요치료비
 
     if g('일반암'): pv('TextBox 14',0,1,'일반암',prefix=': ',suffix='')
     if g('유사암(갑.기.경.제)'): pv('TextBox 14',1,2,'유사암(갑.기.경.제)',prefix=': ',suffix='')
@@ -1159,7 +1174,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29e</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29g</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1246,7 +1261,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29e-sumfix-20260628'}
+def health(): return {'ok':True,'version':'v29g-2대주요-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
