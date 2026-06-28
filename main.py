@@ -1,4 +1,4 @@
-# ===== BARUM main.py FINAL (haiku + PPT등식2) - 이 파일이 최신 =====
+# ===== BARUM main.py v29c-prodname-20260628 (헤더상품명+빈행합계0, base v29b-report) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -578,7 +578,7 @@ def build_excel(data, out):
         gen  = ct['renewal'] == '갱신'
         paid = '완납' in ct['renewal']
         h = ws.cell(1, col)
-        h.value = f"{ct['company']}\n[{ct['renewal']}]"
+        h.value = f"{ct['company']}\n{ct['product']}\n[{ct['renewal']}]"
         h.font = W; h.alignment = AL
         h.fill = FILL_GREEN if paid else (FILL_BLUE if gen else FILL_RED)
         pm = ct['premium']
@@ -675,8 +675,8 @@ def build_excel(data, out):
         sc = ws.cell(r, last_col)
         if is_slash and any(slash_t):
             sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
-        elif has_num:
-            sc.value = f'=SUM({first_L}{r}:{last_ct_L}{r})'; sc.font = BK
+        else:
+            sc.value = f'=SUM({first_L}{r}:{last_ct_L}{r})'; sc.font = BK   # 빈행도 합계 0 표기
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
@@ -1143,7 +1143,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29c</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1230,7 +1230,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29b-report-20260626'}
+def health(): return {'ok':True,'version':'v29c-prodname-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
