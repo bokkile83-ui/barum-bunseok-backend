@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29n-reportppt-20260628 (v29m + 보장진단서 PPT(report_pptx) /analyze 통합·편집가능·PDF와 병행) =====
+# ===== BARUM main.py v29p-heart6sa-20260629 (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -403,6 +403,9 @@ def resolve_kw(raw):
     if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
     if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
+    # ★KB '심장질환(특정Ⅰ/Ⅱ)진단비' = 한장보장표 우선(특정Ⅰ→허혈성·특정Ⅱ→급성심근). 묶음BUNDLE과 별개 단독.
+    if has('심장질환') and has('특정') and has('진단') and no('수술','주요치료'):
+        return ('급성심근경색' if 'Ⅱ' in raw else '허혈성 진단비'),0
     if has('협심') or has('허혈'): return '협심증',0
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
@@ -425,6 +428,7 @@ def resolve_kw(raw):
         return f'{body}후유{sev}%',0
 
     # ── 일당/입원 ──
+    if has('간병인') and has('요양병원') and no('제외'): return None,0  # ★요양병원 포함형 미기재(지점장)
     if has('간병인'): return '간병인',0
     if has('간호') and (has('통합') or has('간병')): return '간호통합병동',0
     if has('1인실') and has('상급'): return '1인실 상급병원',0
@@ -645,10 +649,28 @@ def build_excel(data, out):
                 dambo.pop('주계약', None)
 
         for raw, amt in dambo.items():
-            # ★ 한화 심혈관특정질환Ⅰ·Ⅱ진단비 = 협심·경색 제외 묶음 → 구성질환 행 각각 기재(§8.3.1)
+            # ★ 심장 묶음담보 6사 정본 매핑(2026.06.29). I20→협심증 / 허혈성칸=단독전용 / 순환계=전체5 / 급성심근=묶음제외 / 빈맥·심근병증 제외.
             _rn = re.sub(r'\s','',raw)
-            if '심혈관특정' in _rn and '진단' in _rn and '수술' not in _rn:
-                for _bt in ['염증','부정맥','심부전','심근병증','심장판막']:
+            _heart_bundle = None
+            _co = ct.get('company','')
+            if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
+                # ★순환계진단비=심장 전체 커버(허혈성 칸 쓰는 유일 예외) — 삼성 특정순환계 등
+                if '순환계' in _rn and '4종' not in _rn and '5종' not in _rn and '3종' not in _rn:
+                    _heart_bundle = ['협심증','심부전','염증','허혈성 진단비','부정맥']
+                # 현대 특정Ⅰ(I49 제외) = 협심증·심부전 (부정맥 없음)
+                elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
+                    _heart_bundle = ['협심증','심부전']
+                # DB 순환계 4종 = 협심증·심부전 (심근병증 [확인])
+                elif '순환계' in _rn and '4종' in _rn:
+                    _heart_bundle = ['협심증','심부전']
+                # DB 순환계 3종 = 염증·부정맥
+                elif '순환계' in _rn and '3종' in _rn:
+                    _heart_bundle = ['염증','부정맥']
+                # KB 확대(특정)심장 / 한화 심혈관특정Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전
+                elif ('확대' in _rn and '심장' in _rn) or ('심혈관특정' in _rn) or ('특정심장' in _rn):
+                    _heart_bundle = ['협심증','부정맥','심부전']
+            if _heart_bundle:
+                for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
                     if _br:
                         _ex = ws.cell(_br,col).value
@@ -691,7 +713,7 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약') and isinstance(existing,(int,float)):
+                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인') and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대=최댓값1건 / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
@@ -762,7 +784,12 @@ def build_excel(data, out):
             for _hc in range(3, last_col):
                 _hv = ws.cell(r,_hc).value
                 if isinstance(_hv,(int,float)): _hs += _hv
-            if str(ws.cell(r,2).value).strip()=='입원': _hs=min(_hs,5000)  # 실손 입원 한도 5,000 (계약 다수여도 중복보상X)
+            _bnm=str(ws.cell(r,2).value).strip()
+            if _bnm=='입원': _hs=min(_hs,5000)
+            if _bnm=='간병인':
+                _bv=[ws.cell(r,_c).value for _c in range(3,last_col) if isinstance(ws.cell(r,_c).value,(int,float))]
+                _hs=max(_bv) if _bv else 0
+            if _bnm=='간호통합병동' and _hs>0: _hs=7
             sc.value = _hs; sc.font = BK
 
     ws.column_dimensions['B'].width = 22
@@ -1341,7 +1368,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29n-reportppt-20260628'}
+def health(): return {'ok':True,'version':'v29p-heart6sa-20260629'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
