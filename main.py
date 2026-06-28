@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29d-heart2-20260628 (심혈관특정묶음+심근병증·판막행, base v29c) =====
+# ===== BARUM main.py v29e-sumfix-20260628 (합계 수식→계산값 직접기재, base v29d) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -688,7 +688,11 @@ def build_excel(data, out):
         if is_slash and any(slash_t):
             sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
         else:
-            sc.value = f'=SUM({first_L}{r}:{last_ct_L}{r})'; sc.font = BK   # 빈행도 합계 0 표기
+            _hs = 0   # ★recalc(LibreOffice) 의존 제거: =SUM 수식 대신 동적 계산값 직접 기재 → 폰·뷰어에서도 합계 표시. 빈행=0.
+            for _hc in range(3, last_col):
+                _hv = ws.cell(r,_hc).value
+                if isinstance(_hv,(int,float)): _hs += _hv
+            sc.value = _hs; sc.font = BK
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
@@ -1155,7 +1159,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29d</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29e</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1242,7 +1246,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29d-heart2-20260628'}
+def health(): return {'ok':True,'version':'v29e-sumfix-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
