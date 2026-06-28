@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29j-silson-20260628 (실손 통원/약값 세대·회사유형 디폴트 + 입원한도3000구형유지, base v29i) =====
+# ===== BARUM main.py v29l-mapfix-20260628 (매핑 우선순위 역전+실손입원5천캡+통원오매핑·다이렉트·심장염증·갱신신호, base v29k) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -30,7 +30,7 @@ FILL_GREEN = PatternFill('solid', fgColor='375623')
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함, '농업인' 표기만 제외
+EXCLUDE = ['실효','미납해지','농업인','자동차보험','다이렉트개인용']  # NH농협=포함, '농업인'·자동차(다이렉트개인용 포함)만 제외
 def is_excluded(company, product=''):
     return any(kw in company+product for kw in EXCLUDE)
 
@@ -225,6 +225,11 @@ def parse_txt(txt, filename=''):
     # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
     for c in deduped:
         c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'])
+        # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
+        if not c['expiry_date'].startswith('9999') and c['dambo']:
+            _dk=list(c['dambo'].keys())
+            _gc=sum(1 for k in _dk if '갱신' in k and '비갱신' not in k)
+            if _dk and _gc>=len(_dk)*0.5: c['renewal']='갱신'
     return {'client':client,'contracts':deduped}
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
@@ -325,7 +330,10 @@ def resolve_kw(raw):
 
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
     if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
-    if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
+    if has('도수') or has('체외충격파') or has('증식치료'): return '도수치료',0   # 비급여 도수/체외/증식
+    if has('MRI'): return 'MRI',0
+    if has('비급여') and has('주사'): return '비급여주사',0
+    if has('통원') and (has('실손') or has('외래') or has('의료비')) and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0
     if has('수술') and has('일당'): return '질병수술일당',0
     # ── 수술비 ──
     if has('수술'):
@@ -397,7 +405,7 @@ def resolve_kw(raw):
     if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
     if has('협심') or has('허혈'): return '협심증',0
     if has('심부전'): return '심부전',0
-    if has('심내막') or has('심근염') or has('심장막'): return '염증',0
+    if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
     if has('부정맥'): return '부정맥',0
     if has('산정특례') and has('심'): return '산정특례심장',0
     if has('2대') and has('주요'): return '2대 주요치료비',0
@@ -460,7 +468,7 @@ def resolve_kw(raw):
 
     # ── 실손 ──
     if (has('실손') or has('입원의료비') or has('상해입원형') or has('질병입원형')) and has('입원'): return '입원',0
-    if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
+    if has('통원') and (has('실손') or has('외래') or has('의료비')) and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0
     if has('처방조제') or has('약제비') or (has('약') and has('실손')): return '약값',0
     if has('일상생활') and has('배상') or has('일배책') or has('일상배상'): return '일상배상책임',0
     return None, 0
@@ -647,11 +655,16 @@ def build_excel(data, out):
                         ws.cell(_br,col).value = (_ex+amt) if isinstance(_ex,(int,float)) else amt
                         ws.cell(_br,col).font = BL if gen else BK
                 continue
-            m = LLMMAP.get(raw) or {}
-            std = m.get('std'); jong = m.get('jong', 0) or 0
-            if not std:                       # LLM 미반환/실패 -> 키워드 사전엔진(API 불필요)
-                std, j2 = resolve2(raw)
-                if not jong: jong = j2 or get_종번호(raw)
+            # ★ 우선순위 역전: 확정 규칙(resolve2) 먼저 → 못 잡은 것만 Haiku(llm_resolve).
+            #   Haiku가 간병인·암주요치료비·하이클래스 등 확정담보를 가로채 누락시키던 문제 차단.
+            std, jong = resolve2(raw)
+            jong = jong or get_종번호(raw)
+            if not std:                       # 규칙이 못 잡은 것만 LLM 폴백
+                m = LLMMAP.get(raw) or {}
+                std = m.get('std')
+                if not jong: jong = m.get('jong', 0) or 0
+            else:
+                m = {}
             if std and any(_k in ct['product'] for _k in ('CI보험','리빙케어','GI보험')):
                 std = {'일반암':'중대한 암','뇌졸증진단비':'중대한 뇌졸증','급성심근경색':'중대한 급성심근'}.get(std, std)
             if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
@@ -678,8 +691,8 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                if std in ('표적항암치료비','n대수술비') and isinstance(existing,(int,float)):
-                    ws.cell(tr,col).value = max(existing, amt)   # §8 표적·n대수술비=최댓값 1건
+                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약') and isinstance(existing,(int,float)):
+                    ws.cell(tr,col).value = max(existing, amt)   # 표적·n대=최댓값1건 / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
                 # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
@@ -749,6 +762,7 @@ def build_excel(data, out):
             for _hc in range(3, last_col):
                 _hv = ws.cell(r,_hc).value
                 if isinstance(_hv,(int,float)): _hs += _hv
+            if str(ws.cell(r,2).value).strip()=='입원': _hs=min(_hs,5000)  # 실손 입원 한도 5,000 (계약 다수여도 중복보상X)
             sc.value = _hs; sc.font = BK
 
     ws.column_dimensions['B'].width = 22
@@ -1163,14 +1177,14 @@ def make_summary(data):
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
-<title>MAKEONE 보장분석실</title>
+<title>MAKEONE 보장설명서</title>
 <style>
-:root{--bg:#0c0d10;--panel:#15171c;--line:#2a2d34;--acc:#E0463B;--acc2:#F4897F;--ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--blue:#5B9BFF}
+:root{--bg:#0c0d10;--panel:#15171c;--line:#2a2d34;--acc:#7C3AED;--acc2:#A78BFA;--ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--blue:#5B9BFF}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans KR',sans-serif;line-height:1.55}
 #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 26px;text-align:center}
 #gate .kick{font-size:14px;font-weight:800;letter-spacing:.45em;color:var(--acc);margin-bottom:14px}
-#gate h1{font-size:30px;font-weight:800;margin-bottom:14px}
+#gate h1{font-size:30px;font-weight:800;margin-bottom:14px;color:var(--acc2)}
 #gate .s{font-size:14px;color:var(--mute);margin-bottom:38px}
 #gate .pw{width:100%;max-width:420px;background:#1a1c22;border:1px solid var(--line);border-radius:14px;padding:18px 20px;font-size:17px;color:var(--ink);text-align:center;letter-spacing:.3em;outline:none}
 #gate .pw:focus{border-color:var(--acc)}
@@ -1178,12 +1192,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans K
 #gate .err{color:var(--acc2);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
 .shake{animation:sh .35s}@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
-header{padding:14px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#1a1115,#0d0e11 60%,#1c1216);display:flex;align-items:center;gap:10px}
+header{padding:14px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#17131f,#0d0e11 60%,#1a1426);display:flex;align-items:center;gap:10px}
 .logo{width:32px;height:32px;border-radius:9px;border:1px solid var(--acc);display:flex;align-items:center;justify-content:center;font-size:16px}
 h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;color:var(--mute)}
 .chat{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:90%;font-size:13px}
-.me{align-self:flex-end;background:rgba(224,70,59,.14);border:1px solid rgba(224,70,59,.32);border-radius:14px 14px 4px 14px;padding:9px 13px}
+.me{align-self:flex-end;background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.32);border-radius:14px 14px 4px 14px;padding:9px 13px}
 .bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%}
 .file-cards{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .file-card{display:flex;align-items:center;gap:11px;border-radius:12px;padding:11px 13px}
@@ -1198,7 +1212,7 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
-.up{flex:1;border:1.5px dashed rgba(224,70,59,.5);border-radius:12px;padding:13px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
+.up{flex:1;border:1.5px dashed rgba(124,58,237,.5);border-radius:12px;padding:13px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
 .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);color:#fff;cursor:pointer}
 .send:disabled{opacity:.4}
 .qbar{padding:8px 12px;border-top:1px solid var(--line);display:none;gap:8px;background:var(--bg)}
@@ -1210,13 +1224,13 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{color:var(--acc2)}
 </style></head><body>
 <div id="gate">
-  <div class="kick">MAKEONE</div><h1>MAKEONE 보장분석실</h1>
+  <div class="kick">MAKEONE</div><h1>MAKEONE 보장설명서</h1>
   <div class="s">접속 비밀번호를 입력하세요</div>
   <input id="pw" class="pw" type="password" inputmode="numeric" placeholder="비밀번호" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
 </div>
 <div class="app" id="app">
-  <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장분석실</b></h1>
+  <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장설명서</b></h1>
     <div class="sub">TXT 넣으면 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
     <div class="msg bot">보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀·PPT 파일을 각각 드려요.<br><br>
@@ -1231,7 +1245,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29j</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29k</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1318,7 +1332,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29j-silson-20260628'}
+def health(): return {'ok':True,'version':'v29l-mapfix-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
