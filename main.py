@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29h-ci-20260628 (CI/리빙케어/GI 본체 80·50% 분해→중대한암·뇌졸증·급성심근, base v29g) =====
+# ===== BARUM main.py v29i-ci2-20260628 (CI 중대한CI적용=사망-본체 + 상해의료비 정액매핑, base v29h) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -320,6 +320,9 @@ def resolve_kw(raw):
     # 비담보성(보험료 납입면제·일시납입지원) → 매핑 안 함(자부상 등 오매핑 차단)
     if has('납입') and (has('면제') or has('지원') or has('대상보장')): return None,0
 
+    # ★ 상해의료비 = 별개 정액 담보 단독 행(실손 입원/통원/약값과 합치지 말 것) — 지점장 2026.06.28
+    if has('상해의료비') and no('입원','통원','외래','실손','처방','약제','도수','비급여'): return '상해의료비',0
+
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
     if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
     if has('통원') and (has('실손') or has('외래') or has('의료비')): return '통원',0
@@ -625,6 +628,9 @@ def build_excel(data, out):
                 _ril=nm2r.get('일반사망')
                 if _ril and not isinstance(ws.cell(_ril,col).value,(int,float)):
                     ws.cell(_ril,col).value=_samang; ws.cell(_ril,col).font = BL if gen else BK
+                _rci=nm2r.get('중대한CI적용')   # 사망−본체=선지급 후 잔여 사망보험금(80%형=20%잔여). PPT 제외, 엑셀만.
+                if _rci:
+                    ws.cell(_rci,col).value=_samang-_bonche; ws.cell(_rci,col).font = BL if gen else BK
                 dambo.pop('주계약', None)
             else:
                 unmapped.append((col, ct['company'], f'주계약(CI 80/50%판별실패 {_cij})', _samang, 'CI 본체비율 불명 → 좌측표 수기'))
@@ -1209,7 +1215,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29h</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29i</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1296,7 +1302,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29h-ci-20260628'}
+def health(): return {'ok':True,'version':'v29i-ci2-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
