@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29l-mapfix-20260628 (매핑 우선순위 역전+실손입원5천캡+통원오매핑·다이렉트·심장염증·갱신신호, base v29k) =====
+# ===== BARUM main.py v29m-pptilson-20260628 (v29l + PPT 실손값=완성엑셀 직결: 입원5천캡·통원디폴트가 PPT에도 반영) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -923,10 +923,13 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
         p=tf.paragraphs[pi]
         if ri>=len(p.runs): return
         gs=_gensum.get(std,0); ns=_nonsum.get(std,0)
-        if not gs and not ns: return
         if std in _silson:
-            segs=[(f'{prefix}{gs+ns:,}{suffix}', _BLUE)]
-        elif gs and ns:
+            _v = totals.get(std,0)            # ★실손=완성 엑셀값(입원5천캡·통원디폴트 반영). _gensum 원본합산(상해+질병=1만) 사용 안 함
+            if not _v: return
+            segs=[(f'{prefix}{_v:,}{suffix}', _BLUE)]
+            _seg(p.runs[ri], segs); return
+        if not gs and not ns: return
+        if gs and ns:
             segs=[(f'{prefix}{gs:,}', _BLUE),(f'+{ns:,}{suffix}', _BLACK)]
         elif gs:
             segs=[(f'{prefix}{gs:,}{suffix}', _BLUE)]
@@ -1332,7 +1335,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29l-mapfix-20260628'}
+def health(): return {'ok':True,'version':'v29m-pptilson-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
