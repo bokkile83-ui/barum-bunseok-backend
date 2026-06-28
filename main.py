@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29i-ci2-20260628 (CI 중대한CI적용=사망-본체 + 상해의료비 정액매핑, base v29h) =====
+# ===== BARUM main.py v29j-silson-20260628 (실손 통원/약값 세대·회사유형 디폴트 + 입원한도3000구형유지, base v29i) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -660,12 +660,8 @@ def build_excel(data, out):
             if std=='합의금' and amt>25000:   # 합의금 최대 2.5억, 초과는 불가 → [확인]
                 unmapped.append((col, ct['company'], raw, amt, '합의금 2.5억 초과(불가)'))
                 continue
-            if std=='입원':                    # 실손 입원=2009.09 이후 무조건 5,000만원 고정
-                _cd=(ct.get('contract_date') or ''); _post=True
-                try:
-                    _y=int(_cd[:4]); _mo=int(_cd[5:7]); _post=(_y>2009 or (_y==2009 and _mo>=9))
-                except: _post=True
-                if _post: amt=5000
+            if std=='입원':                    # ② 입원한도 3,000=구형실손→3,000 유지 / 그 외 일반실손→5,000 고정
+                if amt != 3000: amt=5000
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std in jong_acc and 1 <= jong <= 5:
@@ -703,6 +699,26 @@ def build_excel(data, out):
             if isinstance(v,(int,float)) and r_sh and not isinstance(ws.cell(r_sh,col).value,(int,float)):
                 ws.cell(r_sh,col).value = v
                 ws.cell(r_sh,col).font = BL if gen else BK
+
+        # ★ 실손 통원/약값 디폴트 (지점장 2026.06.28): ①별첨 명시값 최우선 → ②입원3,000 구형=통원10·약5
+        #   → ③2021.06 이전: 손보 통원25·약5 / 생보 통원20·약10 → ④4세대(2021.07~): 통원20·약0(통원포함).
+        _rip=nm2r.get('입원'); _rtw=nm2r.get('통원'); _ryk=nm2r.get('약값')
+        _ipv=ws.cell(_rip,col).value if _rip else None
+        if isinstance(_ipv,(int,float)) and _ipv:   # 이 계약에 실손(입원) 존재
+            _life=any(k in (ct['company'] or '') for k in ('생명','라이프','AIA','메트라이프','우체국','공제'))
+            def _ym(d):
+                try: return int(str(d)[:4])*100+int(str(d)[5:7])
+                except: return 0
+            _g4=_ym(ct.get('contract_date',''))>=202107   # 4세대
+            _guhy=(_ipv==3000)                            # 입원한도 3,000=구형
+            _twc=ws.cell(_rtw,col).value if _rtw else None
+            _ykc=ws.cell(_ryk,col).value if _ryk else None
+            if _rtw and not isinstance(_twc,(int,float)):  # ① 별첨 통원 없을 때만 디폴트
+                _twd = 10 if _guhy else (20 if _g4 else (20 if _life else 25))
+                ws.cell(_rtw,col).value=_twd; ws.cell(_rtw,col).font=BL
+            if _ryk and not isinstance(_ykc,(int,float)):  # ① 별첨 약값 없을 때만 디폴트
+                _ykd = 5 if _guhy else (0 if _g4 else (10 if _life else 5))
+                if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
@@ -1215,7 +1231,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29i</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29j</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1302,7 +1318,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29i-ci2-20260628'}
+def health(): return {'ok':True,'version':'v29j-silson-20260628'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
