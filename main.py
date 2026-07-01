@@ -334,6 +334,7 @@ def resolve_kw(raw):
     if has('MRI'): return 'MRI',0
     if has('비급여') and has('주사'): return '비급여주사',0
     if has('통원') and (has('실손') or has('외래') or has('의료비')) and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0
+    if has('상해') and has('수술') and has('일당'): return '상해수술일당',0   # ★v29q-10 상해수술입원일당→상해수술일당(질병수술일당 오입력 차단)
     if has('수술') and has('일당'): return '질병수술일당',0
     # ── 수술비 ──
     if has('수술'):
@@ -351,6 +352,7 @@ def resolve_kw(raw):
         if has('화상'): return '화상수술비',0
         if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
         if has('암'): return '암수술',0
+        if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
         if has('상해'):
             # §6 상해수술비 = 기본만. 병원규모 가산·부위/특정 변형은 합산 금지 → [확인]
             if no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골'):
@@ -379,6 +381,10 @@ def resolve_kw(raw):
     if has('항암') and (has('방사선') or has('약물')): return '항암방사선약물',0
     if has('카티') or has('CAR-T') or has('CART'): return '항암방사선약물',0
     if has('고액암'): return '고액암',0
+    # ★v29q-2 '암입원일당(…유사암들…)' = 암입원일당 키워드 우선 → 암일당 (유사암 판정보다 먼저)
+    if ('암입원일당' in n) or (has('암') and has('입원일당')): return '암일당',0
+    # ★v29q-1 '암진단비(…유사암들…)' = 암진단비 키워드 우선 → 일반암 (괄호 유사암 구성 무시)
+    if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
     if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
         return '유사암(갑.기.경.제)',0
@@ -422,6 +428,7 @@ def resolve_kw(raw):
     if has('일반사망') or (has('사망') and no('상해','질병','교통','재해','CI','암','운전','입원','수술')): return '일반사망',0
 
     # ── 후유장애 ──
+    if has('화재') and (has('후유') or has('장해')): return None,0   # ★v29q-9 화재상해후유(3~100%)≠상해후유3%, 담보행 미기재→[확인] 큐
     if has('후유') or has('장해') or has('장애'):
         sev = '80' if ('80' in n) else '3'
         body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
@@ -446,7 +453,7 @@ def resolve_kw(raw):
     if has('6주'): return '6주미만',0
     if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
     if has('벌금') and has('대물'): return '대물',0
-    if has('벌금') and no('화재'): return '대인',0   # 벌금담보·벌금(대인)=대인. 화재벌금은 교통 아님→제외
+    if has('벌금') and no('화재','과실','치사','업무'): return '대인',0   # ★v29q-7 벌금담보 단독=대인. 과실치사·업무과실 벌금 변형은 이중합산 차단→[확인]
     if has('대인') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
@@ -463,11 +470,11 @@ def resolve_kw(raw):
     # §골절: '치아제외/파절제외' 명시된 것만 제외 행. 단독 골절진단비·치아포함은 포함 행.
     if has('골절') and (has('치아제외') or has('파절제외')): return '골절(치아파절제외)',0
     if has('골절') and has('진단'): return '골절(치아파절포함)',0
-    if has('응급실') or (has('응급') and has('내원')): return '응급실(응급)',0
+    if (has('응급실') or (has('응급') and has('내원'))) and no('비응급'): return '응급실(응급)',0   # ★v29q-11 응급 단독, 비응급 합산 차단→[확인]
     if has('독감') or has('인플루엔자'): return '독감',0
     if has('화상') and (has('중증') or has('심재성') or has('중대한') or has('부식')): return '중증화상진단비',0
     if has('화상') and has('진단'): return '화상진단비',0
-    if has('반깁스'): return '반깁스',0
+    if has('부목') or has('반깁스'): return '반깁스',0   # ★v29q-5 골절부목치료비=반깁스
     if has('깁스'): return '깁스진단비',0
 
     # ── 실손 ──
@@ -699,6 +706,11 @@ def build_excel(data, out):
                 if amt != 3000: amt=5000
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
+            if std == '종수술비공통' and 1 <= jong <= 5:   # ★v29q-12 상해/질병 미표기 → 상해·질병 양쪽 동일 기재
+                for _k in ('상해 종수술비(1-5종)','질병 종수술비(1-5종)'):
+                    jong_acc[_k][jong-1] += amt
+                    if blue: jong_blue[_k] = True
+                continue
             if std in jong_acc and 1 <= jong <= 5:
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
@@ -713,8 +725,8 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인') and isinstance(existing,(int,float)):
-                    ws.cell(tr,col).value = max(existing, amt)   # 표적·n대=최댓값1건 / 실손=중복합산 안함(한도)
+                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술') and isinstance(existing,(int,float)):
+                    ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
                 # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
@@ -1275,7 +1287,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29k</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v29q</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <script>
@@ -1368,7 +1380,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29p-heart6sa-20260629'}
+def health(): return {'ok':True,'version':'v29q-nulzero-20260701'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
