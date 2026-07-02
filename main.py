@@ -61,11 +61,17 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     if pay_y and cov_y and pay_y == cov_y: return '갱신'
     return '비갱신'
 
-def silson_gen(contract_date, ipv=None):
-    """실손 세대 판별 — 가입일 경계(2026.07 확정). 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인]."""
+def silson_gen(contract_date, ipv=None, product=''):
+    """실손 세대 판별 — 가입일 경계(2026.07 확정). 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인].
+    ★v29v: 상품명 연도코드(YYMM 4자리, 예 '1804'=2018.04 출시)가 있으면 판정일로 우선 사용 —
+    갱신 재가입일(계약일)로 세대를 오판(예 2018 실손을 4세대로)하는 것 차단."""
     if ipv==3000: return '1세대(구형)'
     try: ym=int(str(contract_date)[:4])*100+int(str(contract_date)[5:7])
-    except: return ''
+    except: ym=0
+    _pm=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])(0[1-9]|1[0-2])(?!\d)', str(product or ''))
+    if _pm:
+        _pym=2000*100+int(_pm.group(1))*100+int(_pm.group(2))
+        ym=_pym if not ym else min(ym,_pym)
     if not ym: return ''
     if ym<200910:  return '1세대'
     if ym<=201703: return '2세대'
@@ -85,7 +91,7 @@ def silson_gen_desc(gen):
     }.get(gen,'')
 
 def get_종번호(name):
-    for i,k in enumerate(['(1종)','(2종)','(3종)','(4종)','(5종)'],1):
+    for i,k in enumerate(['(1종)','(2종)','(3종)','(4종)','(5종)','(6종)','(7종)','(8종)'],1):   # ★v29v 1-8종 지원
         if k in name: return i
     return 0
 
@@ -411,6 +417,7 @@ def resolve_kw(raw):
 
     # ★ 상해의료비 = 별개 정액 담보 단독 행(실손 입원/통원/약값과 합치지 말 것) — 지점장 2026.06.28
     if has('상해의료비') and no('입원','통원','외래','실손','처방','약제','도수','비급여'): return '상해의료비',0
+    if has('외래') and has('의료비') and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0   # ★v29x '외래의료비'(통원 표기 없음)=통원. 상해·질병 각각 와도 대표 최댓값 1건이라 중복합산 없음
 
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
     if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
@@ -516,12 +523,13 @@ def resolve_kw(raw):
     # ── 후유장애 ──
     if has('화재') and (has('후유') or has('장해')): return None,0   # ★v29q-9 화재상해후유(3~100%)≠상해후유3%, 담보행 미기재→[확인] 큐
     if has('후유') or has('장해') or has('장애'):
-        sev = '80' if ('80' in n) else '3'
+        sev = '80' if ('80' in n or has('고도')) else '3'   # ★v29w (지점장 2026.07.02) 고도후유장해=80%후유장해
         body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
         return f'{body}후유{sev}%',0
 
     # ── 일당/입원 ──
     if has('간병인') and has('요양병원') and no('제외'): return None,0  # ★요양병원 포함형 미기재(지점장)
+    if has('간병인') and has('지원'): return '간병인지원일당',0   # ★v29w (지점장 2026.07.02) 간병인지원일당 전용행
     if has('간병인'): return '간병인',0
     if has('간호') and (has('통합') or has('간병')): return '간호통합병동',0
     if has('1인실') and has('상급'): return '1인실 상급병원',0
@@ -532,6 +540,9 @@ def resolve_kw(raw):
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
     if has('상해일당') or has('상해입원일당'): return '상해일당',0   # 상해일당/상해입원일당(1-10/20/30/180 등)만
     if has('질병일당') or has('질병입원일당'): return '질병일당',0   # 질병일당/질병입원일당(1-10/20/30/180 등)만
+    # ★v29v (지점장 2026.07.02): 밴드형 '입원비(1일이상/180일한도)' = 입원일당
+    if has('입원비') and (has('1일') or has('180일')) and no('실손','의료비','수술'):
+        return ('상해일당' if (has('상해') or has('재해')) else '질병일당'),0   # 재해=상해(§v29v)
 
     # ── 운전자 (지침 §운전자 매핑) ──
     #  벌금(대인)→대인 / 벌금(대물)→대물 / 처리지원금(중상해포함)→합의금 / 처리지원금(6주미만)→6주미만
@@ -584,7 +595,10 @@ def resolve2(raw):
     # ★v29t 부정어 처리: '(소액암제외)'·'(유사암제외)' 등 제외 문구를 지우고 키워드 매칭
     #   (예 '암치료자금_암(소액암제외)진단비특약' → 소액암 오탐으로 유사암행 오매핑되던 버그 차단)
     raw_kw = re.sub(r'[\(\[][^\)\]]*제외[\)\]]', '', raw)
-    return resolve_kw(raw_kw)
+    _r = resolve_kw(raw_kw)
+    if _r[0] is None and '재해' in raw_kw:
+        _r = resolve_kw(raw_kw.replace('재해','상해'))   # ★v29v (지점장 2026.07.02): 재해=상해 동일 적용
+    return _r
 
 def resolve(raw):
     return resolve2(raw)[0]
@@ -746,6 +760,8 @@ def build_excel(data, out):
     all_raw = sorted({raw for c in contracts for raw in c['dambo']})
     LLMMAP = llm_resolve(all_raw, std_list)
     unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
+    heart_trace = []   # ★v29z (지점장 2026.07.03): 심장 블록 기재 근거 — (회사, 원담보명, 기재행들, 금액). '없는 값이 튀어나옴' 방지용 감사 로그
+    silson_trace = []  # ★v29z: 실손 세대 판정 근거 — (회사, 가입일, 상품코드, 판정)
 
     for i, ct in enumerate(contracts):
         col = 3 + i
@@ -764,7 +780,8 @@ def build_excel(data, out):
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
 
         dambo = ct['dambo']
-        jong_acc = {'상해 종수술비(1-5종)':[0]*5, '질병 종수술비(1-5종)':[0]*5}
+        jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
+        trio_acc = [0,0,0]   # ★v29y MRI/도수치료/비급여주사
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
 
         # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
@@ -812,19 +829,26 @@ def build_excel(data, out):
             _heart_bundle = None
             _co = ct.get('company','')
             if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
-                # ★순환계진단비=심장 전체 커버(허혈성 칸 쓰는 유일 예외) — 삼성 특정순환계 등
-                if '순환계' in _rn and '4종' not in _rn and '5종' not in _rn and '3종' not in _rn:
-                    _heart_bundle = ['협심증','심부전','빈맥','염증','허혈성 진단비','부정맥']
-                # 현대 특정Ⅰ(I49 제외) = 협심증·심부전 (부정맥 없음)
-                elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
-                    _heart_bundle = ['협심증','심부전','빈맥']
-                # DB 순환계 4종 = 협심증·심부전 (심근병증 [확인])
+                # ★v29w 심장 범위 재점검(지점장 2026.07.02, 6사 정본 대조):
+                # DB 순환계 5종(중증) = 급성심근경색 + 뇌졸중
+                if '순환계' in _rn and '5종' in _rn:
+                    _heart_bundle = ['급성심근경색','뇌졸증진단비']
+                # DB 순환계 4종 = 협심증·심부전(+빈맥, 심근병증 [확인])
                 elif '순환계' in _rn and '4종' in _rn:
                     _heart_bundle = ['협심증','심부전','빈맥']
                 # DB 순환계 3종 = 염증·부정맥
                 elif '순환계' in _rn and '3종' in _rn:
                     _heart_bundle = ['염증','부정맥']
-                # KB 확대(특정)심장 / 한화 심혈관특정Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전
+                # ★순환계진단비=심장 전체+뇌혈관 커버(허혈성 칸 쓰는 유일 예외) — 삼성 특정순환계 등
+                elif '순환계' in _rn:
+                    _heart_bundle = ['협심증','심부전','빈맥','염증','허혈성 진단비','부정맥','뇌혈관진단비']
+                # 현대 심혈관 특정Ⅱ(중증) = 급성심근경색 (한화 심혈관특정질환Ⅰ·Ⅱ 묶음과 회사로 구분)
+                elif '심혈관' in _rn and ('현대' in _co) and ('중증' in _rn or 'Ⅱ' in _rn):
+                    _heart_bundle = ['급성심근경색']
+                # 현대 특정Ⅰ(I49 제외) = 협심증·심부전(+빈맥)
+                elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
+                    _heart_bundle = ['협심증','심부전','빈맥']
+                # KB 확대(특정)심장 / 한화 심혈관특정질환Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전(+빈맥)
                 elif ('확대' in _rn and '심장' in _rn) or ('심혈관특정' in _rn) or ('특정심장' in _rn):
                     _heart_bundle = ['협심증','부정맥','심부전','빈맥']
             if _heart_bundle:
@@ -834,6 +858,7 @@ def build_excel(data, out):
                         _ex = ws.cell(_br,col).value
                         ws.cell(_br,col).value = (_ex+amt) if isinstance(_ex,(int,float)) else amt
                         ws.cell(_br,col).font = BL if gen else BK
+                heart_trace.append((ct['company'], raw, ' · '.join(_heart_bundle), amt))   # ★v29z 근거 기록
                 continue
             # ★ 우선순위 역전: 확정 규칙(resolve2) 먼저 → 못 잡은 것만 Haiku(llm_resolve).
             #   Haiku가 간병인·암주요치료비·하이클래스 등 확정담보를 가로채 누락시키던 문제 차단.
@@ -866,6 +891,11 @@ def build_excel(data, out):
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
                 continue
+            # ★v29y (지점장 2026.07.02): MRI·도수치료·비급여주사 = 'MRI/도수치료/비급여주사' 한 행 슬래시(1-5종 방식)
+            if std in ('MRI','도수치료','비급여주사'):
+                _ti={'MRI':0,'도수치료':1,'비급여주사':2}[std]
+                trio_acc[_ti]=max(trio_acc[_ti],amt)   # 실손 계열=중복합산 금지, 대표 최댓값
+                continue
             r = nm2r.get(std)
             if r is None and std:             # 공백무시 재매칭 (화상 '진 단 비' 등)
                 r = nm2r_norm.get(re.sub(r'\s','', std))
@@ -876,19 +906,33 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술') and isinstance(existing,(int,float)):
+                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물') and isinstance(existing,(int,float)):   # ★v29v 방사선·약물 둘 중 대표 1건
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
                 # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
-                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약')) else BK
+                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','일상배상책임')) else BK   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
+                if std in {'협심증','심부전','빈맥','염증','부정맥','심근병증','심장판막','산정특례심장','2대 주요치료비','허혈성 진단비','급성심근경색','중대한 급성심근','혈전용해치료비','심장수술비','허혈성수술비'}:
+                    heart_trace.append((ct['company'], raw, std, amt))   # ★v29z 심장 단독 기재 근거
 
         for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
             if any(vals):
-                r = nm2r.get(nm)
+                # ★v29v (지점장 2026.07.02): 6~8종 값이 있으면 그 계약의 종수술은 8단계 → (1-8종) 행에 8칸 슬래시,
+                #   아니면 기존대로 (1-5종) 행에 5칸 슬래시.
+                if any(vals[5:]):
+                    tgt=nm.replace('(1-5종)','(1-8종)'); use=vals
+                else:
+                    tgt=nm; use=vals[:5]
+                r = nm2r.get(tgt) or nm2r.get(nm)
                 if r:
-                    ws.cell(r,col).value = '/'.join(str(x) for x in vals)
+                    ws.cell(r,col).value = '/'.join(str(x) for x in use)
                     ws.cell(r,col).font = BL if (gen or jong_blue[nm]) else BK
+
+        if any(trio_acc):   # ★v29y MRI/도수/주사 슬래시 기재(실손 계열=항상 파랑)
+            _rt=nm2r.get('MRI/도수치료/비급여주사')
+            if _rt:
+                ws.cell(_rt,col).value='/'.join(str(x) for x in trio_acc)
+                ws.cell(_rt,col).font=BL
 
         # ★ §8 생보 종신(만기 9999): 일반사망(종신) + 상해사망 1:1 복제
         if ct['expiry_date'].startswith('9999'):
@@ -907,7 +951,7 @@ def build_excel(data, out):
             def _ym(d):
                 try: return int(str(d)[:4])*100+int(str(d)[5:7])
                 except: return 0
-            _g4=_ym(ct.get('contract_date',''))>=202107   # 4세대
+            _g4=(silson_gen(ct.get('contract_date',''), None, ct.get('product','')) in ('4세대','5세대'))   # ★v29v 상품코드 반영
             _guhy=(_ipv==3000)                            # 입원한도 3,000=구형
             _twc=ws.cell(_rtw,col).value if _rtw else None
             _ykc=ws.cell(_ryk,col).value if _ryk else None
@@ -918,7 +962,9 @@ def build_excel(data, out):
                 _ykd = 5 if _guhy else (0 if _g4 else (10 if _life else 5))
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
             # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
-            _sg = silson_gen(ct.get('contract_date',''), _ipv)
+            _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))
+            _pm0=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])(0[1-9]|1[0-2])(?!\d)', str(ct.get('product','')))
+            silson_trace.append((ct['company'], ct.get('contract_date',''), (_pm0.group(0) if _pm0 else '없음'), _sg or '판정불가'))   # ★v29z 세대 근거
             if _sg:
                 _hc = ws.cell(1,col)
                 if _hc.value and _sg not in str(_hc.value):
@@ -953,18 +999,20 @@ def build_excel(data, out):
         ws.cell(2, last_col).font = BK
 
     for r in range(6, ws.max_row+1):
-        slash_t=[0]*5; is_slash=False; has_num=False
+        slash_t=[0]*8; slash_n=0; is_slash=False; has_num=False   # ★v29v 1-8종·v29y 트리오: 실제 칸수 따름
         for col in range(3, last_col):
             v = ws.cell(r,col).value
             if isinstance(v,(int,float)): has_num=True
             elif isinstance(v,str) and '/' in v:
                 is_slash = True
-                for k,p in enumerate(v.split('/')[:5]):
+                _ps=v.split('/')[:8]
+                slash_n=max(slash_n,len(_ps))
+                for k,p in enumerate(_ps):
                     try: slash_t[k] += int(p)
                     except: pass
         sc = ws.cell(r, last_col)
         if is_slash and any(slash_t):
-            sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
+            sc.value = '/'.join(str(x) for x in slash_t[:(slash_n or 5)]); sc.font = BK   # 슬래시 행은 §3 SUM 예외
         else:
             # ★v29t: §5·v29c(2) 원복 — 합계는 동적 =SUM 수식(하드코딩 금지). 사용자가 값을 추가해도 자동 합산.
             #   저장 후 recalc_xlsx가 캐시값 주입 → 폰·미리보기에서도 숫자 표시(수식 유지).
@@ -1033,6 +1081,18 @@ def build_excel(data, out):
         cell.hyperlink = "https://search.naver.com/search.naver?query=" + urllib.parse.quote(q)
         cell.font = LINKF
     ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
+    # ★v29z 근거 감사 로그 — '없는 값' 논쟁 즉시 검증용
+    _rr = 9 + len(unmapped)
+    if silson_trace:
+        _rr += 2; ws2.cell(_rr,1,'[근거] 실손 세대 판정 (가입일 vs 상품코드 — 상품코드 우선)')
+        _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'가입일'); ws2.cell(_rr,3,'상품코드(YYMM)'); ws2.cell(_rr,4,'판정')
+        for (_c,_d,_p,_g) in silson_trace:
+            _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,_d); ws2.cell(_rr,3,_p); ws2.cell(_rr,4,_g)
+    if heart_trace:
+        _rr += 2; ws2.cell(_rr,1,'[근거] 심장 블록 기재 내역 (원 담보명 → 기재 행) — 별첨 원문 그대로')
+        _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
+        for (_c,_raw,_rows,_a) in heart_trace:
+            _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
     wb.save(out)
     return unmapped
 
@@ -1056,6 +1116,12 @@ def read_excel_totals(path):
         if nm == '질병 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
             for k,p in enumerate(endv.split('/')[:5]):
                 try: sq[k]=int(p)
+                except: pass
+            continue
+        if nm == 'MRI/도수치료/비급여주사' and isinstance(endv,str) and '/' in endv:   # ★v29y 트리오 분해
+            _ps=endv.split('/')
+            for _k,_std in enumerate(('MRI','도수치료','비급여주사')):
+                try: out[_std]=int(_ps[_k])
                 except: pass
             continue
         # 숫자 합계: 끝열 캐시값 있으면 사용, 없으면(=SUM 미계산) 데이터셀 C~끝열-1 직접 합산
@@ -1252,10 +1318,18 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})','상해 종수술비(1-5종)'); r_set('TextBox 19',3,2,'',None)
     if g('골절수술비'): pv('TextBox 19',4,1,'골절수술비',prefix=': ',suffix='')
 
-    실손_dates=[ct['contract_date'] for ct in contracts
+    _ys=totals.get('양성자치료',0); _sgj=totals.get('세기조절치료',0)   # ★v29v (지점장 2026.07.02) 양성자·세기조절 → 암 박스
+    if _ys or _sgj:
+        try:
+            _p14=by['TextBox 14'].text_frame.paragraphs[5]
+            _t = (f'{_ys:,}/{_sgj:,}' if (_ys and _sgj) else f'{(_ys or _sgj):,}')
+            _p14.runs[-1].text=': '+_t
+        except Exception: pass
+    실손_cts=[ct for ct in contracts
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
-    실손가입일=min(실손_dates) if 실손_dates else '___________'
-    _sg=silson_gen(실손가입일, totals.get('입원'))   # ★실손 세대 자동판별
+    실손가입일=min((c['contract_date'] for c in 실손_cts), default='___________')
+    _실손상품=next((c.get('product','') for c in 실손_cts if c['contract_date']==실손가입일), '')
+    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품)   # ★실손 세대 자동판별(상품명 연도코드 반영)
     by['TextBox 59'].text_frame.word_wrap=False
     by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
     by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
@@ -1371,8 +1445,8 @@ def _autofit_ppt(by):
                 runs = [r for r in p.runs if r.text]
                 if not runs: continue
                 txt = ''.join(r.text for r in runs)
-                jong_line = ('1~5종' in txt) or ('1-5종' in txt) or (txt.strip().startswith('(') and '/' in txt)
-                _pt = max(6.0, round(9.0 * cap / len(txt), 1)) if (jong_line and len(txt) > cap) else 9.0
+                # ★v29v: 폭 초과 줄은 그 줄만 축소(겹침 방지 §11) — 나머지 줄은 9pt 고정 유지
+                _pt = max(6.0, round(9.0 * cap / len(txt), 1)) if len(txt) > cap else 9.0
                 for r in runs:
                     try: r.font.size = Pt(_pt)
                     except: pass
@@ -1614,7 +1688,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29u-cache-20260702'}
+def health(): return {'ok':True,'version':'v29z-audit-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
