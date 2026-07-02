@@ -610,6 +610,52 @@ def recalc_xlsx(path):
     except Exception:
         return False
 
+# ★v29u: LibreOffice 없는 환경(Railway)용 캐시 주입 — 합계 수식은 유지(§5)하고,
+#   계산값을 파이썬으로 구해 시트 XML <v>에 직접 기록 → 폰·미리보기·보장설명지 모두 값 표시.
+def inject_sum_cache(path):
+    import zipfile, shutil, tempfile
+    try:
+        wb = openpyxl.load_workbook(path)
+        ws = wb['보장분석']; last = ws.max_column
+        vals = {}
+        for r in range(2, ws.max_row+1):
+            f = ws.cell(r,last).value
+            if not (isinstance(f,str) and f.startswith('=')): continue
+            nums = [ws.cell(r,c).value for c in range(3,last) if isinstance(ws.cell(r,c).value,(int,float))]
+            s = sum(nums)
+            if f.startswith('=MIN('):
+                m = re.search(r',\s*(\d+)\s*\)\s*$', f); v = min(s, int(m.group(1))) if m else s
+            elif f.startswith('=IF(COUNT'):
+                v = max(nums) if nums else 0
+            elif f.startswith('=IF(SUM'):
+                v = 7 if s>0 else 0
+            else:
+                v = s
+            vals[ws.cell(r,last).coordinate] = v
+        if not vals: return False
+        zin = zipfile.ZipFile(path,'r')
+        # 보장분석 시트 XML 경로 확인 (workbook.xml 순서 + rels)
+        wbxml = zin.read('xl/workbook.xml').decode('utf-8')
+        rels  = zin.read('xl/_rels/workbook.xml.rels').decode('utf-8')
+        m = re.search(r'<sheet[^>]*name="보장분석"[^>]*r:id="(rId\d+)"', wbxml) or re.search(r'<sheet[^>]*r:id="(rId\d+)"[^>]*name="보장분석"', wbxml)
+        rid = m.group(1) if m else 'rId1'
+        m2 = re.search(r'Id="'+rid+r'"[^>]*Target="([^"]+)"', rels)
+        tgt = 'xl/'+m2.group(1).lstrip('/') if m2 else 'xl/worksheets/sheet1.xml'
+        sx = zin.read(tgt).decode('utf-8')
+        for coord, v in vals.items():
+            vv = ('%d' % v) if float(v).is_integer() else repr(float(v))
+            sx = re.sub(r'(<c r="'+coord+r'"[^>]*>)(<f[^>]*>[^<]*</f>)(?:<v>[^<]*</v>)?(</c>)', r'\1\2<v>'+vv+r'</v>\3', sx, count=1)
+        tmp = path+'.tmp'
+        zout = zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED)
+        for it in zin.infolist():
+            zout.writestr(it, sx.encode('utf-8') if it.filename==tgt else zin.read(it.filename))
+        zout.close(); zin.close()
+        shutil.move(tmp, path)
+        return True
+    except Exception as _e:
+        print(f'[INJECT_CACHE_ERR] {_e}')
+        return False
+
 # ★ LLM 매핑 엔진 — 마스터 표준 담보명에 의미기반 매핑 (앱 자동화 핵심)
 def load_std_dambo(ws):
     out=[]
@@ -1568,7 +1614,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29t-canon100-20260702'}
+def health(): return {'ok':True,'version':'v29u-cache-20260702'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -1593,7 +1639,8 @@ async def analyze(file:UploadFile=File(...),pw:str=Form('')):
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
-        unmapped=build_excel(data,xl); recalc_xlsx(xl)
+        unmapped=build_excel(data,xl)
+        if not recalc_xlsx(xl): inject_sum_cache(xl)   # ★v29u: Railway(LibreOffice 없음)에서도 합계 캐시 보장
         ppt_totals, sq, ss = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
         ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss)
         # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
