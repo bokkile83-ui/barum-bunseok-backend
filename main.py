@@ -90,20 +90,54 @@ def get_종번호(name):
     return 0
 
 def rule_extract(block_lines):
-    """기존 규칙 추출(담보명+금액 같은 줄). 폴백용."""
-    dambo = {}
+    """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
+    dambo={}; names=[]; amts=[]; pend=None
     UNIT = r'(?:\s*(원|만원|만))?'
-    for l in block_lines:
-        l = l.strip()
-        m = re.search(r'^(.+?)\s{2,}([\d,]+)' + UNIT + r'\s*$', l) or re.search(r'^(.+?)\s+([\d,]+)' + UNIT + r'\s*$', l)
-        if m:
+    NOISE = re.compile(r'지점|LP|☎|^\d{4}\.\d{2}\.\d{2}$|^\d+/\d+$|계약자|납입주기|보장기간|정상계약')
+    def _flush():
+        nonlocal pend
+        if pend:
+            nm=re.sub(r'\s+',' ',pend.strip())
+            if len(nm)>2 and not re.search(r'납입면제|납입지원',nm): names.append(nm)
+        pend=None
+    for raw in block_lines:
+        l=raw.strip()
+        if not l: continue
+        if NOISE.search(l): _flush(); continue
+        m = re.search(r'^(.+?)\s{2,}([\d,]+)'+UNIT+r'\s*$', l) or re.search(r'^(.+?)\s+([\d,]+)'+UNIT+r'\s*$', l)
+        if m and re.search(r'[가-힣]', m.group(1)):
+            _flush()
             name = re.sub(r'\s+', ' ', m.group(1).strip())
             try:
                 amt = int(m.group(2).replace(',',''))
                 if (m.group(3) or '') == '원': amt = amt // 10000
                 if 0 < amt <= 200000 and len(name) > 2:
+                    # ★v29t §8.1: 생보 '주계약_주계약'이 2줄(일반+재해)로 반복되는 별첨 → 병합 금지, 순번 접미사로 분리
+                    if '주계약_주계약' in name and name in dambo:
+                        k=2
+                        while f'{name}~{k}' in dambo: k+=1
+                        name=f'{name}~{k}'
                     dambo[name] = dambo.get(name,0) + amt
             except: pass
+            continue
+        m2 = re.match(r'^([\d,]+)'+UNIT+r'\s*$', l)
+        if m2:
+            _flush()
+            try:
+                amt = int(m2.group(1).replace(',',''))
+                if (m2.group(2) or '') == '원': amt = amt // 10000
+                if 0 < amt <= 200000: amts.append(amt)
+            except: pass
+            continue
+        if re.match(r'^\[\w+\]', l):
+            _flush(); pend = l; continue
+        if pend is not None:
+            pend += l; continue
+        if re.search(r'[가-힣]', l):
+            pend = l
+    _flush()
+    for i, nm in enumerate(names):
+        dambo[nm] = dambo.get(nm,0) + (amts[i] if i < len(amts) else 0)   # 금액 미확보=0 → [확인] 경유, 증발 금지
     return dambo
 
 def llm_extract(block_text):
@@ -216,8 +250,33 @@ def parse_txt(txt, filename=''):
                         _v=int(_m.group(1).replace(',',''))
                         if 0<_v<=200000: ci_jugye.append(_v)
                     except: pass
+        # ★v29t CI추가보장특약: 줄별 값 수집(병합 전 원값 보존)
+        ci_extra=[]
+        for _bl in block_lines:
+            _m=re.match(r'^\s*CI추가보장특약\s+([\d,]+)\s*$', _bl.strip())
+            if _m:
+                try:
+                    _v=int(_m.group(1).replace(',',''))
+                    if 0<_v<=200000: ci_extra.append(_v)
+                except: pass
+        # ★v29t 생보 입원특약 일당: 줄별 값 수집(병합 전 원값 보존)
+        ipwon=[]
+        for _bl in block_lines:
+            _m=re.match(r'^\s*입원특약\s+([\d,]+)\s*$', _bl.strip())
+            if _m:
+                try:
+                    _v=int(_m.group(1).replace(',',''))
+                    if 0<_v<=1000: ipwon.append(_v)
+                except: pass
+        # ★v29t (지점장 확정 2026.07.02): 생보 '입원특약' 일당 = 상해·질병 둘 다 해당 →
+        #   질병일당·상해일당 두 행에 한 줄 값(중복줄=동일특약 재출현 → max) 각각 기재. dambo 변환이라 엑셀·PPT 동일 반영.
+        if ipwon and any(k in (company or '') for k in ('생명','라이프','AIA','메트라이프','우체국','공제')) and '입원특약' in dambo:
+            _v1=max(ipwon)
+            dambo.pop('입원특약', None)
+            dambo['질병입원일당(입원특약)']=dambo.get('질병입원일당(입원특약)',0)+_v1
+            dambo['상해입원일당(입원특약)']=dambo.get('상해입원일당(입원특약)',0)+_v1
         if company:
-            contracts.append({'company':company,'product':product,'contract_date':contract_date,
+            contracts.append({'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye})
     # ★ 페이지 분할 중복 제거 (정본 체크리스트 ①②): 동일 계약키 병합
@@ -257,6 +316,8 @@ def parse_txt(txt, filename=''):
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
+    # ★v29t §8.1: 동양류 '[N] 주계약_주계약' 2줄 = 일반사망+상해사망 1:1 (~2 접미사=두 번째 줄)
+    '주계약_주계약~2':'상해사망','주계약_주계약':'일반사망',
     # 사망
     '상해사망':'상해사망','상해사망(갱신형) [보통약관]':'상해사망','일반상해사망':'상해사망',
     '기본계약(상해사망(간편가입Ⅲ))담보':'상해사망',
@@ -286,11 +347,11 @@ DMAP = {
     '뇌혈관질환수술비Ⅲ(건강맞춤형Ⅱ)(갱신형)':'뇌혈관수술비','심뇌혈관질환수술(간편가입Ⅲ)담보':'뇌혈관수술비',
     '뇌경색증(I63)혈전용해치료비':'혈전용해치료비','혈전용해치료비Ⅱ(뇌졸중)(간편가입Ⅲ)담보':'혈전용해치료비',
     # 심장 — B열: 협심증/심부전/염증/부정맥/산정특례심장/2대 주요치료비/급성심근경색/중대한 급성심근/혈전용해치료비
-    '허혈심장질환진단비Ⅲ(건강맞춤형Ⅱ)(갱신형)':'협심증','허혈심장질환진단비':'협심증',
-    '허혈심장질환진단(간편가입Ⅲ)담보':'협심증',
+    '허혈심장질환진단비Ⅲ(건강맞춤형Ⅱ)(갱신형)':'허혈성 진단비','허혈심장질환진단비':'허혈성 진단비',   # ★v29t §8.3 구규칙(=협심증) 폐기
+    '허혈심장질환진단(간편가입Ⅲ)담보':'허혈성 진단비',
     '급성심근경색증진단':'급성심근경색','급성심근경색증진단(간편가입Ⅲ)담보':'급성심근경색',
     '중증질환자(심장질환)산정특례대상진단비(연간1회한)(건강맞춤형Ⅱ)(갱신형)':'산정특례심장',
-    '허혈심장질환수술비Ⅲ(건강맞춤형Ⅱ)(갱신형)':'심장수술비','허혈심장질환수술비':'심장수술비',
+    '허혈심장질환수술비Ⅲ(건강맞춤형Ⅱ)(갱신형)':'허혈성수술비','허혈심장질환수술비':'허혈성수술비',   # ★v29t §8.3 허혈수술→허혈성수술비 행
     '급성심근경색증(I21)혈전용해치료비':'혈전용해치료비',
     # 일당 — B열: 질병일당/질병수술일당/질병종합병원일당/상해일당/간병인/간호통합병동/1인실 종합병원/1인실 상급병원/질병중환자실/상해중환자실
     '간병인사용질병입원일당(1일이상)(요양병원)(간편가입)(갱신형)':'간병인',
@@ -431,11 +492,12 @@ def resolve_kw(raw):
     if has('심근병증') or has('심근증'): return '심근병증',0
     if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
-    if has('허혈성진단') or (has('허혈성') and has('진단') and not has('수술')): return '허혈성 진단비',0
+    if has('허혈성진단') or ((has('허혈성') or has('허혈심장')) and has('진단') and not has('수술')): return '허혈성 진단비',0   # ★v29t 허혈심장질환진단 포함
     # ★KB '심장질환(특정Ⅰ/Ⅱ)진단비' = 한장보장표 우선(특정Ⅰ→허혈성·특정Ⅱ→급성심근). 묶음BUNDLE과 별개 단독.
     if has('심장질환') and has('특정') and has('진단') and no('수술','주요치료'):
         return ('급성심근경색' if 'Ⅱ' in raw else '허혈성 진단비'),0
-    if has('협심') or has('허혈'): return '협심증',0
+    if has('협심'): return '협심증',0
+    if has('허혈'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비(구 협심증행 폐기)
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
     if has('빈맥'): return '빈맥',0   # ★지점장 7/1: 빈맥(I47·48)≠부정맥(I49), 심부전 밑 전용행
@@ -515,7 +577,14 @@ def resolve2(raw):
         return (v, get_종번호(raw))
     for k, v in DMAP.items():
         if k and k in raw and v: return (v, get_종번호(raw))
-    return resolve_kw(raw)
+    # ★v29t (지점장 2026.07.02): 가족동승 부상치료비 = 자부상 아님 → [확인]
+    if '가족동승' in raw: return (None, 0)
+    # ★v29t: 방사선항암(소액암) 변형 = 합산 금지 → [확인] (수기 정본은 기본 방사선 100만 기재)
+    if '방사선' in raw and '소액암' in raw and '제외' not in raw: return (None, 0)
+    # ★v29t 부정어 처리: '(소액암제외)'·'(유사암제외)' 등 제외 문구를 지우고 키워드 매칭
+    #   (예 '암치료자금_암(소액암제외)진단비특약' → 소액암 오탐으로 유사암행 오매핑되던 버그 차단)
+    raw_kw = re.sub(r'[\(\[][^\)\]]*제외[\)\]]', '', raw)
+    return resolve_kw(raw_kw)
 
 def resolve(raw):
     return resolve2(raw)[0]
@@ -668,12 +737,24 @@ def build_excel(data, out):
                     _r=nm2r.get(_nm)
                     if _r:
                         ws.cell(_r,col).value=_bonche; ws.cell(_r,col).font = BL if gen else BK
-                _ril=nm2r.get('일반사망')
-                if _ril and not isinstance(ws.cell(_ril,col).value,(int,float)):
-                    ws.cell(_ril,col).value=_samang; ws.cell(_ril,col).font = BL if gen else BK
-                _rci=nm2r.get('중대한CI적용')   # 사망−본체=선지급 후 잔여 사망보험금(80%형=20%잔여). PPT 제외, 엑셀만.
+                # ★v29t 등식1: CI 사망은 dambo 합성 키로 주입 → 엑셀·PPT 분할합 동일 (셀 직접기재 폐기)
+                dambo['일반사망(종신주계약)']=dambo.get('일반사망(종신주계약)',0)+_samang
+                dambo['상해사망(종신주계약)']=dambo.get('상해사망(종신주계약)',0)+_samang   # §8.1 종신 1:1, 재해특약은 별도 합산
+                _rci=nm2r.get('중대한CI적용')   # 사망−본체=선지급 후 잔여 사망보험금(80%형=20%잔여).
                 if _rci:
                     ws.cell(_rci,col).value=_samang-_bonche; ws.cell(_rci,col).font = BL if gen else BK
+                # ★v29t (지점장 확정 2026.07.02, 김진구 정본): CI추가보장특약 = 급성심근 초과분 → 최대 1건 급성심근경색 행, 잔여 [확인]
+                _cex=ct.get('ci_extra') or []
+                if _cex and 'CI추가보장특약' in dambo:
+                    _mx=max(_cex)
+                    dambo.pop('CI추가보장특약', None)
+                    _rgs=nm2r.get('급성심근경색')   # 셀 직접 기재(§8.4 CI 재매핑 회피 — 초과분은 '일반' 급성심근경색 행)
+                    if _rgs:
+                        _ex0=ws.cell(_rgs,col).value
+                        ws.cell(_rgs,col).value=(_ex0+_mx) if isinstance(_ex0,(int,float)) else _mx
+                        ws.cell(_rgs,col).font = BL if gen else BK
+                    _lv=sum(_cex)-_mx
+                    if _lv>0: unmapped.append((col, ct['company'], 'CI추가보장특약(잔여)', _lv, '급성심근 초과분 외 잔여 → 약관 확인'))
                 dambo.pop('주계약', None)
             else:
                 unmapped.append((col, ct['company'], f'주계약(CI 80/50%판별실패 {_cij})', _samang, 'CI 본체비율 불명 → 좌측표 수기'))
@@ -797,6 +878,23 @@ def build_excel(data, out):
                 if _hc.value and _sg not in str(_hc.value):
                     _hc.value = str(_hc.value) + f'\n({_sg} 실손)'
 
+    # ★v29t (지점장 확정 2026.07.02): CI 존재 시 '중대한CI적용' 행 = CI 잔여액 + 비CI 계약의 일반사망 동일액 —
+    #   CI 적용/미적용 각각의 총 사망액이 양쪽 행에서 가로합산되도록.
+    _rci_all=None; _ril_all=None
+    for _rr in range(6, ws.max_row+1):
+        _b=str(ws.cell(_rr,2).value or '').strip()
+        if _b=='중대한CI적용': _rci_all=_rr
+        if _b=='일반사망': _ril_all=_rr
+    _has_ci=any(any(k in (c.get('product') or '') for k in ('CI보험','리빙케어','GI보험')) for c in contracts)
+    if _has_ci and _rci_all and _ril_all:
+        for _ix,_c in enumerate(contracts):
+            _cl=3+_ix
+            _isci=any(k in (_c.get('product') or '') for k in ('CI보험','리빙케어','GI보험'))
+            _ilv=ws.cell(_ril_all,_cl).value
+            if (not _isci) and isinstance(_ilv,(int,float)) and not isinstance(ws.cell(_rci_all,_cl).value,(int,float)):
+                ws.cell(_rci_all,_cl).value=_ilv
+                ws.cell(_rci_all,_cl).font=ws.cell(_ril_all,_cl).font.copy()
+
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
     first_L = get_column_letter(3)
@@ -805,7 +903,7 @@ def build_excel(data, out):
     hc.value = '합계'; hc.font = W; hc.fill = FILL_SUM; hc.alignment = AL
     # 보험료 합계 = 숫자만 표기(§3): 수식 아닌 계산된 숫자값. 글자 검정(흰바탕)
     if n_ct>0:
-        ws.cell(2, last_col).value = sum(c['premium'] for c in contracts)
+        ws.cell(2, last_col).value = f'=SUM(C2:{last_ct_L}2)'   # ★v29t §5: 보험료 합계도 동적 SUM
         ws.cell(2, last_col).font = BK
 
     for r in range(6, ws.max_row+1):
@@ -822,17 +920,16 @@ def build_excel(data, out):
         if is_slash and any(slash_t):
             sc.value = '/'.join(str(x) for x in slash_t); sc.font = BK   # 슬래시 행은 §3 SUM 예외
         else:
-            _hs = 0   # ★recalc(LibreOffice) 의존 제거: =SUM 수식 대신 동적 계산값 직접 기재 → 폰·뷰어에서도 합계 표시. 빈행=0.
-            for _hc in range(3, last_col):
-                _hv = ws.cell(r,_hc).value
-                if isinstance(_hv,(int,float)): _hs += _hv
+            # ★v29t: §5·v29c(2) 원복 — 합계는 동적 =SUM 수식(하드코딩 금지). 사용자가 값을 추가해도 자동 합산.
+            #   저장 후 recalc_xlsx가 캐시값 주입 → 폰·미리보기에서도 숫자 표시(수식 유지).
+            _rng = f'C{r}:{last_ct_L}{r}'
             _bnm=str(ws.cell(r,2).value).strip()
-            if _bnm=='입원': _hs=min(_hs,5000)
-            if _bnm=='간병인':
-                _bv=[ws.cell(r,_c).value for _c in range(3,last_col) if isinstance(ws.cell(r,_c).value,(int,float))]
-                _hs=max(_bv) if _bv else 0
-            if _bnm=='간호통합병동' and _hs>0: _hs=7
-            sc.value = _hs; sc.font = BK
+            if _bnm=='입원': sc.value = f'=MIN(SUM({_rng}),5000)'          # §8.8 입원 5,000 캡
+            elif _bnm=='자부상': sc.value = f'=MIN(SUM({_rng}),80)'          # ★지점장 2026.07.02: 자부상 최대 80만 캡
+            elif _bnm=='간병인': sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # 간병인=최댓값 1건
+            elif _bnm=='간호통합병동': sc.value = f'=IF(SUM({_rng})>0,7,0)'
+            else: sc.value = f'=SUM({_rng})'
+            sc.font = BK
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
@@ -840,7 +937,7 @@ def build_excel(data, out):
 
     # ★ 테두리: A(구분)~끝열(합계) 전체 격자 직접 그림 + 구분(키워드)마다 굵은 구분선.
     #   (마스터 A·B 테두리가 중간행에서 끊겨 '선 없음' 발생 → 전부 새로 그림)
-    _thin = Side(style='thin', color='000000'); _med = Side(style='medium', color='000000')
+    _thin = Side(style='thin', color='FF000000'); _med = Side(style='medium', color='FF000000')   # ★v29t: 6자리 색은 알파00(투명) 저장돼 일부 뷰어에서 선 사라짐 → FF 필수
     # 구분(그룹) 끝행 동적 계산: A열에 값 있는 행=그룹 시작 → 다음 시작-1 = 그룹 끝
     g_starts = [r for r in range(6, ws.max_row+1) if ws.cell(r,1).value not in (None,'')]
     g_end = set()
@@ -967,7 +1064,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
             if not amt: continue
             st=resolve(raw)
             if not st: continue
-            tgt=_gensum if _gen else _nonsum
+            tgt=_gensum if (_gen or '갱신' in raw) else _nonsum   # ★v29t: 담보명 (갱신형) = 파랑(엑셀 792행과 동일 기준)
             tgt[st]=tgt.get(st,0)+amt
     def _seg(run0, segs):
         run0.text=segs[0][0]
@@ -1121,6 +1218,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(8)
     if g('입원'): pv('TextBox 6',0,1,'입원',prefix=': ',suffix='')
     if g('통원'): pv('TextBox 6',1,1,'통원',prefix=': ',suffix=' / ')
+    if g('약값'): pv('TextBox 6',1,3,'약값',prefix=': ',suffix='')   # ★v29t 등식1: 약값 PPT 누락 수리
     if g('MRI'): pv('TextBox 6',2,0,'MRI',prefix='MRI : ',suffix='')
     if g('도수치료'): pv('TextBox 6',3,1,'도수치료',prefix=': ',suffix='')
     if g('비급여주사'): pv('TextBox 6',4,1,'비급여주사',prefix=': ',suffix='')
@@ -1157,26 +1255,85 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('상해중환자실'): pv('TextBox 22',2,5,'상해중환자실',prefix=': ',suffix='')
     if g('1인실 상급병원'): pv('TextBox 22',3,2,'1인실 상급병원',prefix=': ',suffix='')
     if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
+
+    # ★v29t CI 담보값 노란 배경(§8.4·§11): 중대한 계열을 해당 칸에 표기 + 값 run만 노랑 하이라이트
+    from pptx.oxml.ns import qn as _ciqn
+    import copy as _cicopy
+    from pptx.text.text import _Run as _ciRunCls
+    _CIHL_AFTER=[_ciqn('a:uLnTx'),_ciqn('a:uLn'),_ciqn('a:uFillTx'),_ciqn('a:uFill'),_ciqn('a:latin'),_ciqn('a:ea'),
+               _ciqn('a:cs'),_ciqn('a:sym'),_ciqn('a:hlinkClick'),_ciqn('a:hlinkMouseOver'),_ciqn('a:rtl'),_ciqn('a:extLst')]
+    def _hl_yellow(run):
+        rPr=run._r.get_or_add_rPr()
+        for old in rPr.findall(_ciqn('a:highlight')): rPr.remove(old)
+        hl=rPr.makeelement(_ciqn('a:highlight'),{}); hl.append(rPr.makeelement(_ciqn('a:srgbClr'),{'val':'FFFF00'}))
+        ins=None
+        for ch in rPr:
+            if ch.tag in _CIHL_AFTER: ins=ch; break
+        if ins is not None: ins.addprevious(hl)
+        else: rPr.append(hl)
+    def _ci_run(box,pidx,std,sep):
+        v=totals.get(std,0)
+        if not v or box not in by: return
+        tf=by[box].text_frame
+        if pidx>=len(tf.paragraphs): return
+        p=tf.paragraphs[pidx]
+        if not p.runs: return
+        base=p.runs[-1]
+        nr_el=_cicopy.deepcopy(base._r); base._r.addnext(nr_el)
+        nr=_ciRunCls(nr_el,p); nr.text=f'{sep}{v:,}'
+        _hl_yellow(nr)
+    def _ci_split(box,label,ci_std,extra_std):
+        # ★v29t: 라벨줄 + [CI값(노랑)] + [+일반값] 을 별도 run으로 구성 — 개행 포함 run의 하이라이트 미표시(파워포인트) 방지
+        civ=totals.get(ci_std,0)
+        if not civ or box not in by: return
+        tf=by[box].text_frame; p=tf.paragraphs[0]
+        if not p.runs: return
+        base=p.runs[0]
+        for _r in list(p.runs[1:]): _r._r.getparent().remove(_r._r)
+        base.text=f'{label}\n'
+        el1=_cicopy.deepcopy(base._r); base._r.addnext(el1)
+        r1=_ciRunCls(el1,p); r1.text=f'{civ:,}'; _hl_yellow(r1)
+        exv=totals.get(extra_std,0)
+        if exv:
+            el2=_cicopy.deepcopy(base._r); el1.addnext(el2)
+            r2=_ciRunCls(el2,p); r2.text=f'+{exv:,}'
+            try: r2.font.color.rgb=(_BLUE if _gensum.get(extra_std) else _BLACK)
+            except: pass
+    _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
+    _ci_split('TextBox 55','급성심근','중대한 급성심근','급성심근경색')
+    _ci_run('TextBox 14',0,'중대한 암','+')
+    _ci_run('TextBox 10',3,'중대한CI적용','+')
     _autofit_ppt(by)
     prs.save(out); return True
 
 
 _HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
+_SURGERY_BOXES={'TextBox 17','TextBox 19'}   # ★v29t: 질병수술·상해수술 9.0pt 고정(지점장 2026.07.02), 1~5종 줄만 축소 허용
 def _autofit_ppt(by):
-    """겹침·단락내림 방지(§11): 모든 값박스 word_wrap off + 가장 긴 단락 기준 폰트 일괄 축소.
-    같은 박스 안 단락은 같은 폰트여야 줄간격이 안 어긋난다 → 박스 단위로 한 번에 줄임."""
+    """겹침·단락내림 방지(§11): 값박스 word_wrap off + 최장 단락 기준 박스 단위 축소.
+    수술 박스 2개는 8.9pt 고정, '1~5종' 제목줄·슬래시 괄호줄만 축소 허용."""
     for _bn, sh in by.items():
-        if _bn in _HEADER_BOXES: continue   # 이름·날짜 헤더는 크기 고정(autofit 제외)
+        if _bn in _HEADER_BOXES: continue
         tf = sh.text_frame
         try:
-            tf.word_wrap = False           # 줄바꿈(단락 내려옴) 차단
+            tf.word_wrap = False
             w_in = sh.width / 914400.0
         except: continue
-        # 박스 내 모든 run 현재폰트 중 최댓값을 base로
+        if _bn in _SURGERY_BOXES:
+            cap = max(4, int(w_in * 72 / (9.0 * 0.62)))
+            for p in tf.paragraphs:
+                runs = [r for r in p.runs if r.text]
+                if not runs: continue
+                txt = ''.join(r.text for r in runs)
+                jong_line = ('1~5종' in txt) or ('1-5종' in txt) or (txt.strip().startswith('(') and '/' in txt)
+                _pt = max(6.0, round(9.0 * cap / len(txt), 1)) if (jong_line and len(txt) > cap) else 9.0
+                for r in runs:
+                    try: r.font.size = Pt(_pt)
+                    except: pass
+            continue
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
         if not runs_all: continue
         base = max((r.font.size.pt for r in runs_all if r.font.size), default=9)
-        # 가장 긴 단락이 한 줄에 들어가도록 cap 산정
         longest = max((sum(len(r.text) for r in p.runs) for p in tf.paragraphs), default=0)
         if longest <= 0: continue
         cap = max(4, int(w_in * 72 / (base * 0.62)))
@@ -1411,7 +1568,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29s-silson-20260702'}
+def health(): return {'ok':True,'version':'v29t-canon100-20260702'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
