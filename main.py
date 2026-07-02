@@ -61,6 +61,29 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     if pay_y and cov_y and pay_y == cov_y: return '갱신'
     return '비갱신'
 
+def silson_gen(contract_date, ipv=None):
+    """실손 세대 판별 — 가입일 경계(2026.07 확정). 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인]."""
+    if ipv==3000: return '1세대(구형)'
+    try: ym=int(str(contract_date)[:4])*100+int(str(contract_date)[5:7])
+    except: return ''
+    if not ym: return ''
+    if ym<200910:  return '1세대'
+    if ym<=201703: return '2세대'
+    if ym<=202106: return '3세대'
+    if ym<=202604: return '4세대'
+    return '5세대'
+
+def silson_gen_desc(gen):
+    """세대별 보장설명지용 한 줄 설명."""
+    return {
+      '1세대':'자기부담 0~20%·갱신3·5년·재가입없음(구실손)',
+      '1세대(구형)':'입원한도 3천·자기부담 0~20%(구실손 1세대)',
+      '2세대':'급여90%·비급여90%·재가입15년(표준화 실손)',
+      '3세대':'급여80%·비급여70~80%·도수 특약분리·재가입15년',
+      '4세대':'급여80%·비급여70%·비급여 할증·재가입5년',
+      '5세대':'입원 급여80%·비급여 중증70/비중증50%·도수 제외·재가입5년',
+    }.get(gen,'')
+
 def get_종번호(name):
     for i,k in enumerate(['(1종)','(2종)','(3종)','(4종)','(5종)'],1):
         if k in name: return i
@@ -767,6 +790,12 @@ def build_excel(data, out):
             if _ryk and not isinstance(_ykc,(int,float)):  # ① 별첨 약값 없을 때만 디폴트
                 _ykd = 5 if _guhy else (0 if _g4 else (10 if _life else 5))
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
+            # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
+            _sg = silson_gen(ct.get('contract_date',''), _ipv)
+            if _sg:
+                _hc = ws.cell(1,col)
+                if _hc.value and _sg not in str(_hc.value):
+                    _hc.value = str(_hc.value) + f'\n({_sg} 실손)'
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
@@ -1083,8 +1112,9 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     실손_dates=[ct['contract_date'] for ct in contracts
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
     실손가입일=min(실손_dates) if 실손_dates else '___________'
+    _sg=silson_gen(실손가입일, totals.get('입원'))   # ★실손 세대 자동판별
     by['TextBox 59'].text_frame.word_wrap=False
-    by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'
+    by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
     by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
     by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
     by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
@@ -1381,7 +1411,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29r-binmaek-20260702'}
+def health(): return {'ok':True,'version':'v29s-silson-20260702'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
