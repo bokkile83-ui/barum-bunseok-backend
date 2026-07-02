@@ -415,6 +415,7 @@ def resolve_kw(raw):
     if has('협심') or has('허혈'): return '협심증',0
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
+    if has('빈맥'): return '빈맥',0   # ★지점장 7/1: 빈맥(I47·48)≠부정맥(I49), 심부전 밑 전용행
     if has('부정맥'): return '부정맥',0
     if has('산정특례') and has('심'): return '산정특례심장',0
     if has('2대') and has('주요'): return '2대 주요치료비',0
@@ -656,26 +657,26 @@ def build_excel(data, out):
                 dambo.pop('주계약', None)
 
         for raw, amt in dambo.items():
-            # ★ 심장 묶음담보 6사 정본 매핑(2026.06.29). I20→협심증 / 허혈성칸=단독전용 / 순환계=전체5 / 급성심근=묶음제외 / 빈맥·심근병증 제외.
+            # ★ 심장 묶음담보 6사 정본 매핑(2026.06.29). I20→협심증 / 허혈성칸=단독전용 / 순환계=전체5 / 급성심근=묶음제외 / 빈맥 포함(★지점장 7/1)·심근병증 제외.
             _rn = re.sub(r'\s','',raw)
             _heart_bundle = None
             _co = ct.get('company','')
             if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
                 # ★순환계진단비=심장 전체 커버(허혈성 칸 쓰는 유일 예외) — 삼성 특정순환계 등
                 if '순환계' in _rn and '4종' not in _rn and '5종' not in _rn and '3종' not in _rn:
-                    _heart_bundle = ['협심증','심부전','염증','허혈성 진단비','부정맥']
+                    _heart_bundle = ['협심증','심부전','빈맥','염증','허혈성 진단비','부정맥']
                 # 현대 특정Ⅰ(I49 제외) = 협심증·심부전 (부정맥 없음)
                 elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
-                    _heart_bundle = ['협심증','심부전']
+                    _heart_bundle = ['협심증','심부전','빈맥']
                 # DB 순환계 4종 = 협심증·심부전 (심근병증 [확인])
                 elif '순환계' in _rn and '4종' in _rn:
-                    _heart_bundle = ['협심증','심부전']
+                    _heart_bundle = ['협심증','심부전','빈맥']
                 # DB 순환계 3종 = 염증·부정맥
                 elif '순환계' in _rn and '3종' in _rn:
                     _heart_bundle = ['염증','부정맥']
                 # KB 확대(특정)심장 / 한화 심혈관특정Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전
                 elif ('확대' in _rn and '심장' in _rn) or ('심혈관특정' in _rn) or ('특정심장' in _rn):
-                    _heart_bundle = ['협심증','부정맥','심부전']
+                    _heart_bundle = ['협심증','부정맥','심부전','빈맥']
             if _heart_bundle:
                 for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
@@ -1041,12 +1042,12 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('혈전용해치료비'): pv('TextBox 49',1,1,'혈전용해치료비',prefix=': ',suffix='')
     if g('2대 주요치료비'): pv('TextBox 49',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 뇌혈관쪽 2대주요치료비
 
-    # ★ 심장 4종 표기(지침 2026.06.28): 협심증/심부전/염증 한 줄 + 부정맥 다음 줄. 값 있는 것만. 급성심근은 별도칸.
+    # ★ 심장 표기: 협심증/심부전/염증/빈맥 한 줄(★지점장 7/1 빈맥추가) + 부정맥 다음 줄. 값 있는 것만. 급성심근 별도칸.
     if 'TextBox 심장4종' in by:
         _h4=by['TextBox 심장4종'].text_frame
-        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bj=totals.get('부정맥',0)
-        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym)] if v]
-        _amt=max(_hp,_sf,_ym)
+        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bm=totals.get('빈맥',0); _bj=totals.get('부정맥',0)
+        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym),('빈맥',_bm)] if v]   # ★지점장 7/1 빈맥 추가
+        _amt=max(_hp,_sf,_ym,_bm)
         if _names and len(_h4.paragraphs[0].runs)>=2:
             _h4.paragraphs[0].runs[0].text='/'.join(_names)+' '
             _h4.paragraphs[0].runs[1].text=f'{_amt:,}' if _amt else ''
@@ -1380,7 +1381,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29q-nulzero-20260701'}
+def health(): return {'ok':True,'version':'v29r-binmaek-20260702'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
