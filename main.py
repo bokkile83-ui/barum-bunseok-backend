@@ -68,7 +68,7 @@ def silson_gen(contract_date, ipv=None, product=''):
     if ipv==3000: return '1세대(구형)'
     try: ym=int(str(contract_date)[:4])*100+int(str(contract_date)[5:7])
     except: ym=0
-    _pm=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])(0[1-9]|1[0-2])(?!\d)', str(product or ''))
+    _pm=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])\.?(0[1-9]|1[0-2])(?!\d)', str(product or ''))   # ★v30 '25.01' 점 형식 포함
     if _pm:
         _pym=2000*100+int(_pm.group(1))*100+int(_pm.group(2))
         ym=_pym if not ym else min(ym,_pym)
@@ -322,6 +322,7 @@ def parse_txt(txt, filename=''):
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
+    '5대골절진단':'5대골절진단비',   # ★v30c '골절진단(간편Ⅲ)' 부분일치 오탐 차단(선순위)
     # ★v29t §8.1: 동양류 '[N] 주계약_주계약' 2줄 = 일반사망+상해사망 1:1 (~2 접미사=두 번째 줄)
     '주계약_주계약~2':'상해사망','주계약_주계약':'일반사망',
     # 사망
@@ -442,7 +443,7 @@ def resolve_kw(raw):
         if has('골절'): return '골절수술비',0
         if has('화상'): return '화상수술비',0
         if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
-        if has('암'): return '암수술',0
+        if has('암') and no('양성종양','유사암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인]
         if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
         if has('상해'):
             # §6 상해수술비 = 기본만. 병원규모 가산·부위/특정 변형은 합산 금지 → [확인]
@@ -453,9 +454,10 @@ def resolve_kw(raw):
             # ★v29 §8.5 질병수술비 합산군 = '질병수술비'·'질병입원수술비'·'질병수술비(**제외)' 만.
             #   변형(특정/부위/Ⅱ/대수술/종합/일당 등)·종(1-5종)은 합산 금지 → 매핑 제외(개별/[확인]).
             _base = has('질병수술비') or has('질병입원수술비')
-            _excl_ok = no('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
+            _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # ★v30c '(맞춤_간편고지Ⅱ)'류 접두 수식어 제거 후 변형 검사
+            _excl_ok = not any(k in _core for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
                           '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
-                          '2종','3종','4종','5종','부분','관혈','내시경','로봇')
+                          '2종','3종','4종','5종','부분','관혈','내시경','로봇'))
             if _base and _excl_ok and jong==0:
                 return '질병수술비',0
             return None,0
@@ -463,13 +465,20 @@ def resolve_kw(raw):
 
     # ── 암 치료비 ──
     if has('표적'): return '표적항암치료비',0
+    if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 암진단후 치료지원금(연간밴드) = 진단비 아님 → [확인]
+    if has('유사암') and has('주요치료'): return None,0   # ★v30 유사암 주요치료비 = 전용행 없음 → [확인]
+    if has('갑상선암') and has('진단') and no('주요치료','수술','일당'): return '유사암(갑.기.경.제)',0   # ★v30a 갑상선암(통합·초기·중증)=유사암(소액암)
+    if has('전이암') and has('진단') and no('주요치료','수술','통원','일당'): return '통합전이암',0   # ★v30a 전이암진단비=통합전이암 행(§8.2 대표 1개)
+    if has('암') and has('주요치료') and no('순환계','2대','유사암'): return '암주요치료비',0   # ★v30 '암주요치료' 명시가 비급여 수식어보다 우선
     if has('하이클래스'): return '하이클래스(암)',0
-    if (has('비급여') or has('하이클래스')) and has('주요치료'): return '하이클래스(암)',0   # 비급여 주요치료비=하이클래스(암)
-    if has('암') and has('주요치료') and no('순환계','2대'): return '암주요치료비',0          # 암(유사암제외)주요치료비
+    if (has('비급여') or has('하이클래스')) and has('주요치료'): return '하이클래스(암)',0   # 비급여 주요치료비(암 미명시)=하이클래스(암)
     if has('중입자'): return '중입자치료비',0
     if has('양성자'): return '양성자치료',0
     if has('세기조절'): return '세기조절치료',0
-    if has('항암') and (has('방사선') or has('약물')): return '항암방사선약물',0
+    if has('항암') and (has('방사선') or has('약물')):
+        # ★v30: 특정부위·특정암 한정 변형(예 남성생식기관련암 3,000)은 기본 항암방사선과 별개 → [확인]
+        if has('생식기') or has('전립선') or has('음경') or has('고환') or has('유방') or has('자궁') or has('갑상선'): return None,0
+        return '항암방사선약물',0
     if has('카티') or has('CAR-T') or has('CART'): return '항암방사선약물',0
     if has('고액암'): return '고액암',0
     # ★v29q-2 '암입원일당(…유사암들…)' = 암입원일당 키워드 우선 → 암일당 (유사암 판정보다 먼저)
@@ -500,9 +509,10 @@ def resolve_kw(raw):
     if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
     if has('허혈성진단') or ((has('허혈성') or has('허혈심장')) and has('진단') and not has('수술')): return '허혈성 진단비',0   # ★v29t 허혈심장질환진단 포함
-    # ★KB '심장질환(특정Ⅰ/Ⅱ)진단비' = 한장보장표 우선(특정Ⅰ→허혈성·특정Ⅱ→급성심근). 묶음BUNDLE과 별개 단독.
+    # ★v30 KB '심장질환(특정Ⅱ)'=급성심근경색. 특정Ⅰ은 묶음(협심증·심부전·빈맥·염증)에서 처리 — 여기 오면 [확인].
     if has('심장질환') and has('특정') and has('진단') and no('수술','주요치료'):
-        return ('급성심근경색' if 'Ⅱ' in raw else '허혈성 진단비'),0
+        return ('급성심근경색',0) if 'Ⅱ' in raw else (None,0)
+    if has('일당') and (has('허혈') or has('협심') or has('심부전') or has('부정맥') or has('빈맥') or has('뇌혈관') or has('심뇌')): return None,0   # ★v30b 질환별 입원일당 ≠ 진단비 → [확인] (조성래 허혈일당 오합산 수리)
     if has('협심'): return '협심증',0
     if has('허혈'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비(구 협심증행 폐기)
     if has('심부전'): return '심부전',0
@@ -543,6 +553,10 @@ def resolve_kw(raw):
     # ★v29v (지점장 2026.07.02): 밴드형 '입원비(1일이상/180일한도)' = 입원일당
     if has('입원비') and (has('1일') or has('180일')) and no('실손','의료비','수술'):
         return ('상해일당' if (has('상해') or has('재해')) else '질병일당'),0   # 재해=상해(§v29v)
+    # ★v30c AIG류 밴드 미표기 base 입원비 = 입원일당 (변형·질환한정 [확인])
+    if has('입원비') and no('실손','의료비','수술','중환자','상급','종합','중증','특정','암','뇌','허혈','심','간질환','감염'):
+        if has('질병'): return '질병일당',0
+        if has('상해') or has('재해'): return '상해일당',0
 
     # ── 운전자 (지침 §운전자 매핑) ──
     #  벌금(대인)→대인 / 벌금(대물)→대물 / 처리지원금(중상해포함)→합의금 / 처리지원금(6주미만)→6주미만
@@ -851,6 +865,9 @@ def build_excel(data, out):
                 # KB 확대(특정)심장 / 한화 심혈관특정질환Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전(+빈맥)
                 elif ('확대' in _rn and '심장' in _rn) or ('심혈관특정' in _rn) or ('특정심장' in _rn):
                     _heart_bundle = ['협심증','부정맥','심부전','빈맥']
+                # ★v30 (지점장 2026.07.03) KB 심장질환(특정Ⅰ)진단비Ⅲ = 협심증+심부전+빈맥+염증 4행 (v28 §8.3.1 정본 복원)
+                elif '심장질환' in _rn and '특정' in _rn and 'Ⅰ' in _rn and 'Ⅱ' not in _rn:
+                    _heart_bundle = ['협심증','심부전','빈맥','염증']
             if _heart_bundle:
                 for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
@@ -897,6 +914,7 @@ def build_excel(data, out):
                 trio_acc[_ti]=max(trio_acc[_ti],amt)   # 실손 계열=중복합산 금지, 대표 최댓값
                 continue
             r = nm2r.get(std)
+            if r is None and std=='n대수술비': r = nm2r.get('120대수술비')   # ★v30c std↔행명 별칭(1XX대 대표행)
             if r is None and std:             # 공백무시 재매칭 (화상 '진 단 비' 등)
                 r = nm2r_norm.get(re.sub(r'\s','', std))
             if not std or r is None:          # 마스터 미수록/매핑실패 -> [확인]
@@ -906,7 +924,9 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                if std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물') and isinstance(existing,(int,float)):   # ★v29v 방사선·약물 둘 중 대표 1건
+                _rep1 = std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암')
+                _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
+                if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
@@ -1020,7 +1040,7 @@ def build_excel(data, out):
             _bnm=str(ws.cell(r,2).value).strip()
             if _bnm=='입원': sc.value = f'=MIN(SUM({_rng}),5000)'          # §8.8 입원 5,000 캡
             elif _bnm=='자부상': sc.value = f'=MIN(SUM({_rng}),80)'          # ★지점장 2026.07.02: 자부상 최대 80만 캡
-            elif _bnm=='간병인': sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # 간병인=최댓값 1건
+            elif _bnm in ('간병인','중입자치료비','120대수술비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자·1XX대수술비=전 계약 통틀어 대표 최댓값 1건(지점장 2026.07.03)
             elif _bnm=='간호통합병동': sc.value = f'=IF(SUM({_rng})>0,7,0)'
             else: sc.value = f'=SUM({_rng})'
             sc.font = BK
@@ -1688,7 +1708,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v29z-audit-20260703'}
+def health(): return {'ok':True,'version':'v30d-nmax-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
