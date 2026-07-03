@@ -1,4 +1,4 @@
-# ===== BARUM main.py v29p-heart6sa-20260629 (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v30j-cancertx10k-20260703 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -445,9 +445,9 @@ def resolve_kw(raw):
         if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
         if has('암') and no('양성종양','유사암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인]
         if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
-        if has('상해'):
-            # §6 상해수술비 = 기본만. 병원규모 가산·부위/특정 변형은 합산 금지 → [확인]
-            if no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골'):
+        if has('상해') or has('재해'):   # ★v30h 재해수술비=상해수술비 동일 취급
+            # §6 상해수술비 = 기본만. 병원규모·부위/특정·통원 변형은 합산 금지 → [확인]
+            if no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','통원','외래'):
                 return '상해수술비',0
             return None,0
         if has('질병'):
@@ -457,7 +457,7 @@ def resolve_kw(raw):
             _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # ★v30c '(맞춤_간편고지Ⅱ)'류 접두 수식어 제거 후 변형 검사
             _excl_ok = not any(k in _core for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
                           '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
-                          '2종','3종','4종','5종','부분','관혈','내시경','로봇'))
+                          '2종','3종','4종','5종','부분','관혈','내시경','로봇','통원','외래','5대'))
             if _base and _excl_ok and jong==0:
                 return '질병수술비',0
             return None,0
@@ -465,7 +465,14 @@ def resolve_kw(raw):
 
     # ── 암 치료비 ──
     if has('표적'): return '표적항암치료비',0
-    if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 암진단후 치료지원금(연간밴드) = 진단비 아님 → [확인]
+    # ★v30h 암주요치료비 = 암특정치료비/암주요치료비/암(특정유사암포함)진단후(종합병원/상급종합병원)특정치료(지원금/비)
+    #   구간밴드(연간1천~1억) 다줄·부위별 = 대표 1개(max, §8.2). 뇌·심·순환계·비급여·재활·통원·검사는 제외(각 전용행).
+    if has('암') and (has('주요치료') or has('특정치료') or (has('진단후') and has('치료') and (has('종합병원') or has('특정'))))         and no('순환계','2대','뇌','허혈','심장','심근','비급여','하이클래스','재활','통원','입원일당','MRI','PET','초음파','검사','수술'):
+        return '암주요치료비',0
+    # 뇌혈관·허혈성심장 특정치료비 = 2대주요치료비(뇌·심 두 칸)
+    if (has('뇌혈관') or has('허혈') or has('심장') or has('순환계')) and (has('특정치료') or has('주요치료')) and no('암','수술'):
+        return '2대 주요치료비',0
+    if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 잔여 진단후 치료지원금(암·뇌·심 아닌) = 진단비 아님 → [확인]
     if has('유사암') and has('주요치료'): return None,0   # ★v30 유사암 주요치료비 = 전용행 없음 → [확인]
     if has('갑상선암') and has('진단') and no('주요치료','수술','일당'): return '유사암(갑.기.경.제)',0   # ★v30a 갑상선암(통합·초기·중증)=유사암(소액암)
     if has('전이암') and has('진단') and no('주요치료','수술','통원','일당'): return '통합전이암',0   # ★v30a 전이암진단비=통합전이암 행(§8.2 대표 1개)
@@ -774,6 +781,8 @@ def build_excel(data, out):
     all_raw = sorted({raw for c in contracts for raw in c['dambo']})
     LLMMAP = llm_resolve(all_raw, std_list)
     unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
+    cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
+    surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
     heart_trace = []   # ★v29z (지점장 2026.07.03): 심장 블록 기재 근거 — (회사, 원담보명, 기재행들, 금액). '없는 값이 튀어나옴' 방지용 감사 로그
     silson_trace = []  # ★v29z: 실손 세대 판정 근거 — (회사, 가입일, 상품코드, 판정)
 
@@ -862,8 +871,13 @@ def build_excel(data, out):
                 # 현대 특정Ⅰ(I49 제외) = 협심증·심부전(+빈맥)
                 elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
                     _heart_bundle = ['협심증','심부전','빈맥']
-                # KB 확대(특정)심장 / 한화 심혈관특정질환Ⅰ·Ⅱ / 메리츠 확대심장 = 협심증·부정맥·심부전(+빈맥)
-                elif ('확대' in _rn and '심장' in _rn) or ('심혈관특정' in _rn) or ('특정심장' in _rn):
+                # ★v30g 한화 심혈관특정질환Ⅰ·Ⅱ = 구성질환 코드 약관 미확인(2026.06.29 전수조사·07.03 재검색 실패) → 정본대로 [확인] 큐(4행 확정기재 폐기)
+                elif '심혈관특정' in _rn:
+                    unmapped.append((col, ct['company'], raw, amt, '심혈관특정질환Ⅰ·Ⅱ 구성질환 약관 미확인 → 수기'))
+                    heart_trace.append((ct['company'], raw, '[확인] 큐(구성 미확인)', amt))
+                    continue
+                # KB 확대(특정)심장 / 메리츠 확대심장 = 협심증·부정맥·심부전(+빈맥)
+                elif ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn):
                     _heart_bundle = ['협심증','부정맥','심부전','빈맥']
                 # ★v30 (지점장 2026.07.03) KB 심장질환(특정Ⅰ)진단비Ⅲ = 협심증+심부전+빈맥+염증 4행 (v28 §8.3.1 정본 복원)
                 elif '심장질환' in _rn and '특정' in _rn and 'Ⅰ' in _rn and 'Ⅱ' not in _rn:
@@ -897,16 +911,19 @@ def build_excel(data, out):
                 continue
             if std=='입원':                    # ② 입원한도 3,000=구형실손→3,000 유지 / 그 외 일반실손→5,000 고정
                 if amt != 3000: amt=5000
+            if std=='암주요치료비': amt=10000   # ★v30j 암주요치료비=연간 최대 1억 정액 → 구간밴드 스텝(1천 등) 무시, 10,000 고정 기재
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std == '종수술비공통' and 1 <= jong <= 5:   # ★v29q-12 상해/질병 미표기 → 상해·질병 양쪽 동일 기재
                 for _k in ('상해 종수술비(1-5종)','질병 종수술비(1-5종)'):
                     jong_acc[_k][jong-1] += amt
                     if blue: jong_blue[_k] = True
+                surg_trace.append((ct['company'], raw, f'상해·질병 종수술 양쪽 {jong}종 슬롯', amt))   # ★v30g
                 continue
             if std in jong_acc and 1 <= jong <= 5:
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
+                surg_trace.append((ct['company'], raw, f'{std} {jong}종 슬롯', amt))   # ★v30g
                 continue
             # ★v29y (지점장 2026.07.02): MRI·도수치료·비급여주사 = 'MRI/도수치료/비급여주사' 한 행 슬래시(1-5종 방식)
             if std in ('MRI','도수치료','비급여주사'):
@@ -934,6 +951,10 @@ def build_excel(data, out):
                 ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','일상배상책임')) else BK   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
                 if std in {'협심증','심부전','빈맥','염증','부정맥','심근병증','심장판막','산정특례심장','2대 주요치료비','허혈성 진단비','급성심근경색','중대한 급성심근','혈전용해치료비','심장수술비','허혈성수술비'}:
                     heart_trace.append((ct['company'], raw, std, amt))   # ★v29z 심장 단독 기재 근거
+                if '수술' in str(std) or std == '창상봉합술':
+                    surg_trace.append((ct['company'], raw, std, amt))   # ★v30g 수술 기재 근거
+                if std in {'일반암','유사암(갑.기.경.제)','통합전이암','고액암','중대한 암','암주요치료비','하이클래스(암)','암수술','암일당'}:
+                    cancer_trace.append((ct['company'], raw, std, amt))   # ★v30h 암 기재 근거
 
         for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
             if any(vals):
@@ -1112,6 +1133,16 @@ def build_excel(data, out):
         _rr += 2; ws2.cell(_rr,1,'[근거] 심장 블록 기재 내역 (원 담보명 → 기재 행) — 별첨 원문 그대로')
         _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
         for (_c,_raw,_rows,_a) in heart_trace:
+            _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
+    if surg_trace:   # ★v30g 수술 블록 근거 — 종수술 슬롯 이상치 즉시 추적용
+        _rr += 2; ws2.cell(_rr,1,'[근거] 수술 블록 기재 내역 (원 담보명 → 기재 행/슬롯) — 별첨 원문 그대로')
+        _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행/슬롯'); ws2.cell(_rr,4,'금액(만원)')
+        for (_c,_raw,_rows,_a) in surg_trace:
+            _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
+    if cancer_trace:   # ★v30h 암 블록 근거 — 일반암 과다·통합암 중복 즉시 추적
+        _rr += 2; ws2.cell(_rr,1,'[근거] 암 블록 기재 내역 (원 담보명 → 기재 행) — 별첨 원문 그대로')
+        _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
+        for (_c,_raw,_rows,_a) in cancer_trace:
             _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
     wb.save(out)
     return unmapped
@@ -1714,7 +1745,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v30f-eq1-20260703'}
+def health(): return {'ok':True,'version':'v30j-cancertx10k-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

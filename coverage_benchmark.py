@@ -19,11 +19,11 @@ import re, openpyxl
 #   사망·후유: 가장세대 보장공백 대비, 밴드별 상향
 BENCHMARK = {
     #          사망후유  암    뇌혈관  심장  수술비  사망후유는 '사망후유' 키
-    '20s': {'사망·후유':5000, '암':8000,  '뇌혈관':3000, '심장':3000, '수술비':1500},
-    '30s': {'사망·후유':10000,'암':10000, '뇌혈관':4000, '심장':3000, '수술비':2000},
-    '40s': {'사망·후유':15000,'암':10000, '뇌혈관':5000, '심장':3000, '수술비':2000},
-    '50s': {'사망·후유':10000,'암':10000, '뇌혈관':5000, '심장':4000, '수술비':2500},
-    '60s': {'사망·후유':5000, '암':8000,  '뇌혈관':5000, '심장':4000, '수술비':2500},
+    '20s': {'사망·후유':5000, '암':8000,  '뇌혈관':3000, '심장':3000},
+    '30s': {'사망·후유':10000,'암':10000, '뇌혈관':4000, '심장':3000},
+    '40s': {'사망·후유':15000,'암':10000, '뇌혈관':5000, '심장':3000},
+    '50s': {'사망·후유':10000,'암':10000, '뇌혈관':5000, '심장':4000},
+    '60s': {'사망·후유':5000, '암':8000,  '뇌혈관':5000, '심장':4000},
 }
 # 비금액(presence) 카테고리: 핵심담보 보유개수 / 기준개수
 PRESENCE = {
@@ -31,6 +31,8 @@ PRESENCE = {
     '입원·일당': {'keys':['간병인','상해일당','질병일당','간호통합','중환자'], 'need':3},
     '실손·일배책':{'keys':['입원','통원','약값','일상배상','일배책','MRI'],      'need':3},   # ★v30 행명 '입원' 매칭
     '골절·화상': {'keys':['골절','화상','깁스','5대골절','중증화상'],          'need':3},
+    # ★v30i 수술비 = 종·핵심수술담보 '개수' 기반(금액합·종슬래시 최댓값 폐기). 몇 종·몇 개 가입했는지가 기준.
+    '수술비':    {'keys':['수술','창상'],                                    'need':4},
     '응급실·독감':{'keys':['응급실','독감','식중독','骨'],                      'need':2},
 }
 # 리포트 10카테고리 ← 엑셀 A열 15그룹
@@ -102,12 +104,16 @@ def load_excel(path):
         if a and str(a).strip(): bounds.append((r,str(a).strip()))
     bounds.append((ws.max_row+1,'__END__'))
     grp_rows={}  # 엑셀그룹명 → [(담보,값)]
+    disp={}      # ★v30h 담보명 → 슬래시 원문 표시(진단서에서 합산·최댓값 대신 가로 그대로)
     for i in range(len(bounds)-1):
         r0,name=bounds[i]; r1=bounds[i+1][0]
         rows=[]
         for r in range(r0,r1):
-            b=ws.cell(r,2).value; v=_man(ws.cell(r,last).value)
-            if b: rows.append((str(b).strip(),v))
+            b=ws.cell(r,2).value; _raw=ws.cell(r,last).value; v=_man(_raw)
+            if b:
+                _b=str(b).strip(); rows.append((_b,v))
+                if isinstance(_raw,str) and '/' in _raw and any(c.isdigit() for c in _raw):
+                    disp[_b]='('+_raw.strip()+')'   # 종수술비(1-5종)·n대·MRI = 슬래시 원문
         grp_rows[name]=rows
     # ★v30e 등식3: 혈전용해치료비(심장, 일당 그룹 첫 행 구조) → 심장으로 재배치 / 뇌쪽 혈전용해는 뇌혈관 그룹에 이미 소속
     if '일당' in grp_rows:
@@ -115,6 +121,7 @@ def load_excel(path):
         if _mv:
             grp_rows['일당']=[(b,v) for b,v in grp_rows['일당'] if '혈전용해' not in b]
             grp_rows.setdefault('심장',[]).extend(_mv)
+    load_excel._disp=disp   # ★v30h caller에 표시맵 전달(반환 시그니처 불변 → 회귀 0)
     # 헤더(계약 메타)
     headers=[]
     for c in range(2,last):  # 마지막=합계 제외
@@ -172,7 +179,8 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             detail_map[cat]={'have':f'{have}개','rec':f"{spec['need']}개",'unit':'개'}
         status='full' if p>=70 else ('part' if p>=40 else 'gap')
         blue = cat in ('실손·일배책','입원·일당')  # 실손·간병인·일배책 항상 파랑
-        items=[{'t':b,'v':_fmt(v),**({'blue':True} if blue else {})} for b,v in top]
+        _disp=getattr(load_excel,'_disp',{})   # ★v30h 슬래시 원문 우선
+        items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),**({'blue':True} if blue else {})} for b,v in top]
         if not items or all(not it['v'] for it in items):
             items=[{'t':f'{cat} 없음','none':True}]
         coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
