@@ -1226,6 +1226,12 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
             if not _v: return
             segs=[(f'{prefix}{_v:,}{suffix}', _BLUE)]
             _seg(p.runs[ri], segs); return
+        # ★v30f 등식1 (지점장 승인 2026.07.03): PPT 표기 총액의 정본 = 완성 엑셀 끝열.
+        #   대표 1건·MAX·캡·[확인] 분리로 끝열 ≠ raw 분할합이면 끝열 값 단색 표기(색=우세 성분측).
+        _T = totals.get(std, None)
+        if isinstance(_T,(int,float)) and _T>0 and (gs+ns)!=_T:
+            if gs>=ns: gs,ns=int(_T),0
+            else: gs,ns=0,int(_T)
         if not gs and not ns: return
         if gs and ns:
             segs=[(f'{prefix}{gs:,}', _BLUE),(f'+{ns:,}{suffix}', _BLACK)]
@@ -1708,7 +1714,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v30d-nmax-20260703'}
+def health(): return {'ok':True,'version':'v30f-eq1-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
