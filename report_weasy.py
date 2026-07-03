@@ -16,6 +16,36 @@ def _donut(pct, color, size=92, sw=11):
 <text x="{c}" y="{c}" text-anchor="middle" dy="0.36em" font-size="21" font-weight="700" fill="{NAVY}" font-family="NanumSquareRound">{pct}%</text>
 </svg>'''
 
+_SCOPE_HEART = [
+    ('급성심근경색 I21~23', [1,1,1,1]),
+    ('협심증·만성허혈 I20·24·25', [1,1,1,1]),
+    ('판막·염증·부정맥·심부전·심근병 I05·I30~52', [1,0,1,1]),
+    ('대동맥·선천심장 I70~71·Q20~25', [1,0,0,1]),
+    ('류마티스·정맥류 I00~09·I85', [0,0,0,1]),
+]
+_SCOPE_BRAIN = [
+    ('뇌출혈 I60·61·62', [1,1,1,1]),
+    ('뇌경색 I63·65·66', [1,0,1,1]),
+    ('기타 뇌혈관 I64·67·68·69', [1,0,0,1]),
+    ('선천기형·두개내손상 Q28·S06', [1,0,0,0]),
+    ('동맥류·정맥류 I72·I77·I85', [0,0,0,1]),
+]
+_HCOLS = [('산정특례', GOLDD, '#FBF1D8'), ('허혈성', GAP, '#F7E4E6'), ('2대(심장특정)', GOOD, '#E4F0EA'), ('순환계', BLUE, '#E6F1FB')]
+_BCOLS = [('산정특례', GOLDD, '#FBF1D8'), ('뇌출혈', GAP, '#F7E4E6'), ('뇌졸중', GOOD, '#E4F0EA'), ('뇌혈관·순환계', BLUE, '#E6F1FB')]
+
+def _scope_table(title, rows, cols):
+    th = ''.join(f'<th style="background:{bg};color:{fg}">{_html.escape(nm)}</th>' for nm, fg, bg in cols)
+    body = ''
+    for nm, marks in rows:
+        tds = ''
+        for i, m in enumerate(marks):
+            dot = f'<span style="color:{cols[i][1]};font-size:10pt;font-weight:700">●</span>' if m else ''
+            tds += f'<td>{dot}</td>'
+        body += f'<tr><td class="nm">{_html.escape(nm)}</td>{tds}</tr>'
+    return (f'<div class="smxh">{_html.escape(title)}</div>'
+            f'<table class="smx"><colgroup><col class="scn"><col><col><col><col></colgroup>'
+            f'<thead><tr><th style="text-align:left">질병 (코드)</th>{th}</tr></thead><tbody>{body}</tbody></table>')
+
 def build_report_pdf(rep, out):
     """rep: 리포트 데이터 dict (아래 sample_rep 구조). out: 저장 경로(.pdf)"""
     cust=_html.escape(rep['client'])
@@ -157,6 +187,13 @@ body {{ color:{INK}; }}
 .rbox .pr {{ padding:1mm 4mm; font-size:9.5pt; overflow:hidden; }}
 .rbox .pr span {{ float:left; }} .rbox .pr b {{ float:right; }}
 .note {{ margin-top:4mm; padding:3.5mm 4mm; background:#F2EEE2; border-left:2.5pt solid {GOLD}; font-size:8.5pt; color:#5C5340; line-height:1.5; }}
+.smx {{ width:100%; border-collapse:collapse; table-layout:fixed; margin:0 0 3mm; }}
+.smx th,.smx td {{ border:0.6pt solid {LINE}; padding:1.7mm 0.5mm; text-align:center; font-size:8pt; color:{INK}; }}
+.smx td.nm {{ text-align:left; padding-left:2mm; color:{MUT}; font-size:7.5pt; line-height:1.25; }}
+.smx thead th {{ font-weight:700; font-size:7.5pt; line-height:1.2; }}
+.smx .scn {{ width:38%; }}
+.smxh {{ font-size:9.5pt; font-weight:800; color:{NAVY}; margin:2mm 0 2mm; }}
+.smxcap {{ margin-top:2mm; font-size:8pt; color:{MUT}; line-height:1.5; }}
 .note b {{ color:{GOLDD}; }}
 .pbar {{ margin-top:3mm; width:100%; border-collapse:collapse; }}
 .pbar td {{ padding:1.2mm 0; vertical-align:middle; }}
@@ -205,6 +242,8 @@ body {{ color:{INK}; }}
 .ft .r {{ float:right; }}
 '''
 
+    scope_heart = _scope_table('심장 — 질병코드별 담보 커버', _SCOPE_HEART, _HCOLS)
+    scope_brain = _scope_table('뇌 — 질병코드별 담보 커버', _SCOPE_BRAIN, _BCOLS)
     doc=f'''<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>
 <!-- P1 -->
 <div class="pg">
@@ -221,7 +260,7 @@ body {{ color:{INK}; }}
   <div class="sect">보장 현황 <span>CATEGORY COVERAGE</span></div>
   <table class="cov">{rows}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 4</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 5</span></div>
 </div>
 <!-- P2 -->
 <div class="pg">
@@ -242,7 +281,7 @@ body {{ color:{INK}; }}
   <div class="sect" style="margin-top:4mm">월 보험료 구성 <span>PREMIUM</span></div>
   <table class="pbar">{bars}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 4</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 5</span></div>
 </div>
 <!-- P3: 핵심 보장 분석 (CI 선지급 + 주요 치료비) -->
 <div class="pg">
@@ -255,7 +294,7 @@ body {{ color:{INK}; }}
   <table class="ctab">{crows}</table>
   {comment_html}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 4</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 5</span></div>
 </div>
 <!-- P4 -->
 <div class="pg">
@@ -277,7 +316,20 @@ body {{ color:{INK}; }}
   </table>
   <div class="note">※ <b>충족률 = 보유 ÷ 연령밴드 권장액 × 100</b> (상한 100%). 권장액은 업계 적정 가입금액 가이드(암 진단비 5천만~1억·뇌혈관 3천만~5천만·허혈성 심장 3천만 등) 기준이며 {band} 표준밴드를 적용했습니다. 운전자·실손·일당·응급실은 핵심담보 보유개수 기준입니다. 개인 소득·가족력에 따라 권장액은 상담을 통해 조정됩니다.{age_warn}</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 4</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 5</span></div>
+</div>
+<!-- P5: 보장범위 안내 (뇌·심·순환계·산정특례) -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
+  <div class="pgn"><b>5</b>보장범위 안내</div><div class="bar"></div></div>
+ <div class="body">
+  <div class="sect">담보별 보장범위 <span>DISEASE-CODE COVERAGE</span></div>
+  {scope_heart}
+  {scope_brain}
+  <div class="smxcap">● = 보장. 오른쪽 담보일수록 커버 범위가 넓습니다 (허혈성·뇌출혈 &lt; 2대·뇌졸중 &lt; 순환계·뇌혈관). <b>산정특례</b>는 중증질환 산정특례 등록 대상 진단 시 지급되는 <b>진단 기반 별개 담보</b>입니다. 근거 KB One-Q·BCARE 교육자료, 보험사·시기별로 상이할 수 있습니다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 5</span></div>
 </div>
 </body></html>'''
     HTML(string=doc).write_pdf(out)

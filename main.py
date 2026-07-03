@@ -1,4 +1,4 @@
-# ===== BARUM main.py v30j-cancertx10k-20260703 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v30n-gjfracsum-20260703 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -435,7 +435,7 @@ def resolve_kw(raw):
         if has('중대한','상해'): return '중대한상해수술비',0
         if has('5대기관') and has('비관혈'): return '5대기관 수술비 비관혈',0
         if has('5대기관'): return '5대기관 수술비 관혈',0
-        if re.search(r'1\d\d\s*대', r): return 'n대수술비',0   # 116/119/120/123대 등 → n대수술비(최댓값 1건)
+        if re.search(r'(?<!\d)\d{2,3}\s*대', r): return 'n대수술비',0   # ★v30k 10~150대(10·20·116·120·123대 등)→n대수술비. 5대기관은 위에서 처리, 2대주요치료비는 진단이라 여기 안 옴
         if has('뇌혈관') or has('심뇌혈관'): return '뇌혈관수술비',0
         if has('허혈'): return '허혈성수술비',0
         if has('심장') or has('심질환'): return '심장수술비',0
@@ -498,6 +498,9 @@ def resolve_kw(raw):
     if has('중대한') and has('암'): return '중대한 암',0
     if has('암') and has('진단') and no('고액','소액','표적','방사선','약물','수술','일당','양성자','세기','중입자','전이','뇌','보험료'):
         return '일반암',0
+    # ★v30l ○○암보험(진단 표기 없는 암 주계약, 예 신한생활비주는암보험·종합암보험) → 일반암 합산. 유사/고액/통합/전이/중대한/치료·수술·일당 계열은 위에서 이미 분기
+    if has('암보험') and no('유사','고액','소액','통합','전이','중대한','주요치료','특정치료','하이클래스','수술','일당','방사선','약물','표적','양성자','세기','중입자','보험료'):
+        return '일반암',0
     if has('암') and has('입원'): return '암일당',0
 
     # ── 뇌혈관 ──
@@ -555,8 +558,10 @@ def resolve_kw(raw):
     if has('중환자') and has('질병'): return '질병중환자실',0
     if (has('질병') or has('수술')) and has('일당') and has('수술'): return '질병수술일당',0
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
-    if has('상해일당') or has('상해입원일당'): return '상해일당',0   # 상해일당/상해입원일당(1-10/20/30/180 등)만
-    if has('질병일당') or has('질병입원일당'): return '질병일당',0   # 질병일당/질병입원일당(1-10/20/30/180 등)만
+    # ★v30k 교통상해입원일당 ≠ 상해입원일당(합산 금지). 질환·부위·교통 접두 변형은 base 아님 → [확인]
+    _dilqual = ('교통','암','뇌','심','허혈','간','신장','폐','위','골절','화상','특정','재해외','종합','요양','중환자','수술')
+    if (has('상해일당') or has('상해입원일당')) and no(*_dilqual): return '상해일당',0   # 순수 상해(입원)일당만
+    if (has('질병일당') or has('질병입원일당')) and no(*_dilqual): return '질병일당',0   # 순수 질병(입원)일당만
     # ★v29v (지점장 2026.07.02): 밴드형 '입원비(1일이상/180일한도)' = 입원일당
     if has('입원비') and (has('1일') or has('180일')) and no('실손','의료비','수술'):
         return ('상해일당' if (has('상해') or has('재해')) else '질병일당'),0   # 재해=상해(§v29v)
@@ -896,9 +901,14 @@ def build_excel(data, out):
             std, jong = resolve2(raw)
             jong = jong or get_종번호(raw)
             if not std:                       # 규칙이 못 잡은 것만 LLM 폴백
-                m = LLMMAP.get(raw) or {}
-                std = m.get('std')
-                if not jong: jong = m.get('jong', 0) or 0
+                # ★v30m 수술·일당은 resolve_kw(+DMAP)가 최종 판정. resolve_kw가 [확인](None)으로 보낸 변형을
+                #   Haiku가 질병/상해수술비·상해/질병일당 base 행으로 되끌어와 합산하던 문제 차단 → 변형은 그대로 [확인].
+                if re.search(r'수술|일당', raw):
+                    m = {}
+                else:
+                    m = LLMMAP.get(raw) or {}
+                    std = m.get('std')
+                    if not jong: jong = m.get('jong', 0) or 0
             else:
                 m = {}
             if std and any(_k in ct['product'] for _k in ('CI보험','리빙케어','GI보험')):
@@ -1061,7 +1071,11 @@ def build_excel(data, out):
             _bnm=str(ws.cell(r,2).value).strip()
             if _bnm=='입원': sc.value = f'=MIN(SUM({_rng}),5000)'          # §8.8 입원 5,000 캡
             elif _bnm=='자부상': sc.value = f'=MIN(SUM({_rng}),80)'          # ★지점장 2026.07.02: 자부상 최대 80만 캡
-            elif _bnm in ('간병인','중입자치료비','120대수술비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자·1XX대수술비=전 계약 통틀어 대표 최댓값 1건(지점장 2026.07.03)
+            elif _bnm=='120대수술비':                                       # ★v30k n대수술비=계약별 값 가로 슬래시(합산·최댓값 금지, 지점장 2026.07.03)
+                _nd=[ws.cell(r,c).value for c in range(3,last_col)]
+                _nd=[str(int(x)) for x in _nd if isinstance(x,(int,float)) and x>0]
+                sc.value = '/'.join(_nd) if _nd else f'=SUM({_rng})'
+            elif _bnm in ('간병인','중입자치료비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자=전 계약 대표 최댓값 1건
             elif _bnm=='간호통합병동': sc.value = f'=IF(SUM({_rng})>0,7,0)'
             else: sc.value = f'=SUM({_rng})'
             sc.font = BK
@@ -1229,6 +1243,9 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
             if not st: continue
             tgt=_gensum if (_gen or '갱신' in raw) else _nonsum   # ★v29t: 담보명 (갱신형) = 파랑(엑셀 792행과 동일 기준)
             tgt[st]=tgt.get(st,0)+amt
+    # ★v30n PPT 골절 = 골절(치아파절포함) + 골절(치아파절제외) 합산. 엑셀은 두 행 분리 유지, PPT만 하나로 합산 표기(지점장 2026.07.03)
+    for _b in (_gensum, _nonsum, totals):
+        _b['골절합산PPT'] = (_b.get('골절(치아파절포함)',0) or 0) + (_b.get('골절(치아파절제외)',0) or 0)
     def _seg(run0, segs):
         run0.text=segs[0][0]
         if segs[0][1] is not None:
@@ -1400,7 +1417,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('도수치료'): pv('TextBox 6',3,1,'도수치료',prefix=': ',suffix='')
     if g('비급여주사'): pv('TextBox 6',4,1,'비급여주사',prefix=': ',suffix='')
 
-    if g('골절(치아파절제외)'): pv('TextBox 7',0,1,'골절(치아파절제외)',prefix=': ',suffix='')
+    if g('골절합산PPT'): pv('TextBox 7',0,1,'골절합산PPT',prefix=': ',suffix='')   # ★v30n 엑셀 골절 두 행 합산 표기
     if g('화상진단비'): pv('TextBox 7',2,1,'화상진단비',prefix=': ',suffix='')
     if g('깁스진단비'): pv('TextBox 7',5,1,'깁스진단비',prefix=': ',suffix='')
     if g('응급실(응급)'): pv('TextBox 7',6,1,'응급실(응급)',prefix=': ',suffix='')
@@ -1745,7 +1762,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v30j-cancertx10k-20260703'}
+def health(): return {'ok':True,'version':'v30n-gjfracsum-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
