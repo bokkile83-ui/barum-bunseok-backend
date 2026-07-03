@@ -244,6 +244,36 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'ci':ci,
         'age_band':age_band,'age_known':age_known,
     }
+    # ── 리모델링 제안: 1-5종 권유 · 운전자 재가입 권유 (지침 §7·§8.6) ──
+    advice=[]
+    try:
+        _wb2=openpyxl.load_workbook(xlsx_path, data_only=True); _ws2=_wb2.active
+        _rowmap={}
+        for _r in range(6,_ws2.max_row+1):
+            _b=_ws2.cell(_r,2).value
+            if _b: _rowmap[str(_b).strip()]=_ws2.cell(_r,_ws2.max_column).value
+        def _has(nm):
+            v=_rowmap.get(nm); return (v not in (None,'',0)) and (str(v).strip() not in ('','0'))
+        def _num(nm):
+            v=_rowmap.get(nm)
+            try: return int(float(str(v).replace(',','').split('/')[0]))
+            except: return 0
+        # 수술: 1-8종/N대만 있고 1-5종 없으면 → 1-5종 권유
+        if (_has('상해 종수술비(1-8종)') or _has('질병 종수술비(1-8종)') or _has('120대수술비')) \
+           and not (_has('상해 종수술비(1-5종)') or _has('질병 종수술비(1-5종)')):
+            advice.append({'t':'수술비 리모델링 권유',
+                'd':'현재 수술비가 1-5종이 아닙니다(1-7·8·9종 또는 N대). 이 유형은 비급여 항목 미보장·청구 절차 복잡으로 실질 보장 범위가 좁습니다. 관혈/비관혈을 구분하고 비급여까지 보장하는 1-5종 수술비 가입(전환)을 권유드립니다.'})
+        # 운전자: 최신 기준 미달이면 → 재가입 권유
+        _std={'합의금':20000,'6주미만':1000,'대인':3000,'대물':500,'변호사':5000}
+        _lab={'합의금':'합의금(기준 2억)','6주미만':'6주미만 합의금(기준 1천만)','대인':'벌금 대인(기준 3천만)','대물':'벌금 대물(기준 500만)','변호사':'변호사선임(기준 5천만)'}
+        if any(_num(k)>0 for k in _std):
+            _short=[f"{_lab[k]}: {('보유 '+format(_num(k),',')+'만') if _num(k)>0 else '미보유'}" for k in _std if _num(k)<_std[k]]
+            if _short:
+                advice.append({'t':'운전자 리모델링 권유',
+                    'd':'2022년 보행자보호의무·처벌 강화로 옛 운전자보험은 담보가 부족합니다. 미달 항목 — '+' / '.join(_short)+'. 최신 기준으로 재가입(리모델링)을 권유드립니다.'})
+    except Exception:
+        pass
+    rep['advice']=advice
     return rep
 
 if __name__=='__main__':

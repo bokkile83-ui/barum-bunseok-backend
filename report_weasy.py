@@ -17,21 +17,41 @@ def _donut(pct, color, size=92, sw=11):
 </svg>'''
 
 _SCOPE_HEART = [
-    ('급성심근경색 I21~23', [1,1,1,1]),
-    ('협심증·만성허혈 I20·24·25', [1,1,1,1]),
-    ('판막·염증·부정맥·심부전·심근병 I05·I30~52', [1,0,1,1]),
-    ('대동맥·선천심장 I70~71·Q20~25', [1,0,0,1]),
-    ('류마티스·정맥류 I00~09·I85', [0,0,0,1]),
+    ('I20  협심증', [0,1,1,1,1]),
+    ('I21  급성심근경색증', [1,1,1,1,1]),
+    ('I22  후속 심근경색증', [1,1,1,1,1]),
+    ('I23  급성심근경색 후 합병증', [1,1,1,1,1]),
+    ('I24  기타 급성 허혈성 심장병', [0,1,1,1,1]),
+    ('I25  만성 허혈성 심장병', [0,1,1,1,1]),
+    ('I30·31  급성 심장막염', [0,0,1,1,1]),
+    ('I33  급성·아급성 심내막염', [0,0,1,1,1]),
+    ('I34~37  심장 판막질환', [0,0,1,1,1]),
+    ('I40·41  심근염', [0,0,1,1,1]),
+    ('I42·43  심근병증', [0,0,0,1,1]),
+    ('I47  발작성 빈맥', [0,0,1,1,1]),
+    ('I48  심방세동·조동', [0,0,1,1,1]),
+    ('I49  기타 심장 부정맥', [0,0,0,1,1]),
+    ('I50  심부전', [0,0,1,1,1]),
+    ('I70·71  대동맥 죽상경화·동맥류', [0,0,0,1,1]),
+    ('I00~09  류마티스 심장질환', [0,0,0,1,1]),
+    ('Q20~25  선천성 심장기형', [0,0,0,0,1]),
 ]
 _SCOPE_BRAIN = [
-    ('뇌출혈 I60·61·62', [1,1,1,1]),
-    ('뇌경색 I63·65·66', [1,0,1,1]),
-    ('기타 뇌혈관 I64·67·68·69', [1,0,0,1]),
-    ('선천기형·두개내손상 Q28·S06', [1,0,0,0]),
-    ('동맥류·정맥류 I72·I77·I85', [0,0,0,1]),
+    ('I60  거미막하 출혈', [1,1,1,1]),
+    ('I61  뇌내출혈', [1,1,1,1]),
+    ('I62  기타 비외상성 두개내출혈', [1,1,1,1]),
+    ('I63  뇌경색증', [0,1,1,1]),
+    ('I65  뇌전동맥 폐색·협착', [0,1,1,1]),
+    ('I66  대뇌동맥 폐색·협착', [0,1,1,1]),
+    ('I64  출혈·경색 미분류 뇌졸중', [0,0,1,1]),
+    ('I67  기타 뇌혈관질환', [0,0,1,1]),
+    ('I68  달리분류 뇌혈관장애', [0,0,1,1]),
+    ('I69  뇌혈관질환 후유증', [0,0,1,1]),
+    ('Q28.0~28.3  순환계 선천기형', [0,0,0,1]),
+    ('S06  두개내 손상', [0,0,0,1]),
 ]
-_HCOLS = [('산정특례', GOLDD, '#FBF1D8'), ('허혈성', GAP, '#F7E4E6'), ('2대(심장특정)', GOOD, '#E4F0EA'), ('순환계', BLUE, '#E6F1FB')]
-_BCOLS = [('산정특례', GOLDD, '#FBF1D8'), ('뇌출혈', GAP, '#F7E4E6'), ('뇌졸중', GOOD, '#E4F0EA'), ('뇌혈관·순환계', BLUE, '#E6F1FB')]
+_HCOLS = [('급성심근경색','#C0392B','#F7E0DC'), ('허혈성','#B9540B','#FBEADB'), ('2대주요','#1E7A46','#E4F0EA'), ('순환계','#1F5FA8','#E6F1FB'), ('산정특례','#9A7A12','#FBF1D8')]
+_BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), ('뇌혈관·순환계','#1F5FA8','#E6F1FB'), ('산정특례','#9A7A12','#FBF1D8')]
 
 def _scope_table(title, rows, cols):
     th = ''.join(f'<th style="background:{bg};color:{fg}">{_html.escape(nm)}</th>' for nm, fg, bg in cols)
@@ -39,12 +59,13 @@ def _scope_table(title, rows, cols):
     for nm, marks in rows:
         tds = ''
         for i, m in enumerate(marks):
-            dot = f'<span style="color:{cols[i][1]};font-size:10pt;font-weight:700">●</span>' if m else ''
+            dot = f'<span style="color:{cols[i][1]};font-size:8pt;font-weight:700">●</span>' if m else ''
             tds += f'<td>{dot}</td>'
         body += f'<tr><td class="nm">{_html.escape(nm)}</td>{tds}</tr>'
+    _colg = '<col class="scn">' + ('<col>' * len(cols))
     return (f'<div class="smxh">{_html.escape(title)}</div>'
-            f'<table class="smx"><colgroup><col class="scn"><col><col><col><col></colgroup>'
-            f'<thead><tr><th style="text-align:left">질병 (코드)</th>{th}</tr></thead><tbody>{body}</tbody></table>')
+            f'<table class="smx"><colgroup>{_colg}</colgroup>'
+            f'<thead><tr><th style="text-align:left">질병분류 (KCD 코드)</th>{th}</tr></thead><tbody>{body}</tbody></table>')
 
 def build_report_pdf(rep, out):
     """rep: 리포트 데이터 dict (아래 sample_rep 구조). out: 저장 경로(.pdf)"""
@@ -187,13 +208,13 @@ body {{ color:{INK}; }}
 .rbox .pr {{ padding:1mm 4mm; font-size:9.5pt; overflow:hidden; }}
 .rbox .pr span {{ float:left; }} .rbox .pr b {{ float:right; }}
 .note {{ margin-top:4mm; padding:3.5mm 4mm; background:#F2EEE2; border-left:2.5pt solid {GOLD}; font-size:8.5pt; color:#5C5340; line-height:1.5; }}
-.smx {{ width:100%; border-collapse:collapse; table-layout:fixed; margin:0 0 3mm; }}
-.smx th,.smx td {{ border:0.6pt solid {LINE}; padding:1.7mm 0.5mm; text-align:center; font-size:8pt; color:{INK}; }}
-.smx td.nm {{ text-align:left; padding-left:2mm; color:{MUT}; font-size:7.5pt; line-height:1.25; }}
-.smx thead th {{ font-weight:700; font-size:7.5pt; line-height:1.2; }}
-.smx .scn {{ width:38%; }}
-.smxh {{ font-size:9.5pt; font-weight:800; color:{NAVY}; margin:2mm 0 2mm; }}
-.smxcap {{ margin-top:2mm; font-size:8pt; color:{MUT}; line-height:1.5; }}
+.smx {{ width:100%; border-collapse:collapse; table-layout:fixed; margin:0 0 2mm; }}
+.smx th,.smx td {{ border:0.5pt solid {LINE}; padding:0.5mm 0.4mm; text-align:center; font-size:6.7pt; color:{INK}; }}
+.smx td.nm {{ text-align:left; padding-left:1.5mm; color:{INK}; font-size:6.7pt; line-height:1.05; }}
+.smx thead th {{ font-weight:700; font-size:6.3pt; line-height:1.1; }}
+.smx .scn {{ width:34%; }}
+.smxh {{ font-size:8.5pt; font-weight:800; color:{NAVY}; margin:1.5mm 0 1mm; }}
+.smxcap {{ margin-top:1.5mm; font-size:6.5pt; color:{MUT}; line-height:1.35; }}
 .note b {{ color:{GOLDD}; }}
 .pbar {{ margin-top:3mm; width:100%; border-collapse:collapse; }}
 .pbar td {{ padding:1.2mm 0; vertical-align:middle; }}
@@ -242,9 +263,29 @@ body {{ color:{INK}; }}
 .ft .r {{ float:right; }}
 '''
 
+    advice_html=''
+    for _a in rep.get('advice',[]):
+        advice_html += (f'<div class="note" style="margin-top:3mm;border-left-color:{GAP}">'
+                        f'<b style="color:{NAVY}">■ {_html.escape(_a["t"])}</b><br>'
+                        f'<span style="font-size:8.5pt">{_html.escape(_a["d"])}</span></div>')
     scope_heart = _scope_table('심장 — 질병코드별 담보 커버', _SCOPE_HEART, _HCOLS)
     scope_brain = _scope_table('뇌 — 질병코드별 담보 커버', _SCOPE_BRAIN, _BCOLS)
     doc=f'''<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>
+<!-- P0: 표지 -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm" style="font-size:23pt">{cust} <b>고객님</b> 보장 설명서</div>
+  <div class="bar"></div></div>
+ <div class="body" style="padding:0 11mm">
+  <div style="margin-top:185mm;border-top:1.2pt solid {GOLD};padding-top:6mm">
+   <div style="font-size:15pt;font-weight:800;color:{GOLDD};letter-spacing:0.5pt">MAKEONE</div>
+   <div style="margin-top:9mm;color:{MUT};font-size:9.5pt;line-height:3.2">
+    <span style="display:inline-block;border-bottom:0.6pt solid {INK};width:62mm">&nbsp;</span>&nbsp;&nbsp;( 이름 )<br>
+    <span style="display:inline-block;border-bottom:0.6pt solid {INK};width:62mm">&nbsp;</span>&nbsp;&nbsp;( 직책 )
+   </div>
+  </div>
+ </div>
+</div>
 <!-- P1 -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
@@ -315,6 +356,7 @@ body {{ color:{INK}; }}
     {brows}
   </table>
   <div class="note">※ <b>충족률 = 보유 ÷ 연령밴드 권장액 × 100</b> (상한 100%). 권장액은 업계 적정 가입금액 가이드(암 진단비 5천만~1억·뇌혈관 3천만~5천만·허혈성 심장 3천만 등) 기준이며 {band} 표준밴드를 적용했습니다. 운전자·실손·일당·응급실은 핵심담보 보유개수 기준입니다. 개인 소득·가족력에 따라 권장액은 상담을 통해 조정됩니다.{age_warn}</div>
+  {advice_html}
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 5</span></div>
 </div>

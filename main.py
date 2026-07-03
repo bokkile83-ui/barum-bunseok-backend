@@ -1,4 +1,4 @@
-# ===== BARUM main.py v30n-gjfracsum-20260703 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v30r-autoexclude-20260703 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -30,9 +30,16 @@ FILL_GREEN = PatternFill('solid', fgColor='375623')
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-EXCLUDE = ['실효','미납해지','농업인','자동차보험','다이렉트개인용']  # NH농협=포함, '농업인'·자동차(다이렉트개인용 포함)만 제외
+EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함. 자동차(다이렉트/애니카/하이카 개인·업무·영업용)는 is_excluded에서 별도 처리
 def is_excluded(company, product=''):
-    return any(kw in company+product for kw in EXCLUDE)
+    t = re.sub(r'[\s（）()_·]|TM', '', str(company)+str(product))
+    for kw in EXCLUDE:
+        if kw in t: return True
+    if '운전자' in t: return False   # ★운전자·운전자상해보험은 포함(§4)
+    # ★자동차보험(다이렉트/애니카/하이카 + 개인용/업무용/영업용/개인소유) = 제외
+    if any(b in t for b in ('다이렉트','애니카','하이카','개인용자동차','업무용자동차')) and any(x in t for x in ('개인용','업무용','영업용','개인소유')):
+        return True
+    return False
 
 def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     # 지침 §7 판정 순서
@@ -207,33 +214,74 @@ def parse_txt(txt, filename=''):
         i += 1
         while i < n and not lines[i].strip(): i += 1
         if i >= n: break
-        company = lines[i].strip(); i += 1
-        if is_excluded(company):
-            while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
-            continue
-        contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
-        for j in range(i, min(i+5, n)):
-            l = lines[j]
-            m = re.search(r'(\d{4}\.\d{2}\.\d{2})\s*~\s*(\d{4}\.\d{2}\.\d{2})', l)
-            if m: contract_date = m.group(1); expiry_date = m.group(2)
-            m2 = re.search(r'(\d{1,3})\s*/\s*(\d{2,3})\s*회', l) or re.search(r'월납\s+(\d{1,3})\s*/\s*(\d{2,3})', l) or re.search(r'(?<![\d.])(\d{1,3})\s*/\s*(\d{2,3})(?![\d.])', l)
-            if m2 and not pay_count: pay_count = f"{m2.group(1)}/{m2.group(2)}"
-            m3 = re.search(r'([\d,]+)원', l)
-            if m3:
-                v = int(m3.group(1).replace(',',''))
-                if 1000 < v < 5000000: premium = v
-            m4 = re.search(r'(\d+)년납', l)
-            if m4: pay_period = f"{m4.group(1)}년납"
-            m5 = re.search(r'월납\s*/\s*(\d+)년', l)
-            if m5 and not pay_period: pay_period = f"{m5.group(1)}년납"
-        while i < n and not lines[i].strip(): i += 1
-        product = ''
-        for j in range(i, min(i+6, n)):
-            l = lines[j].strip()
-            if l and not re.search(r'계약자|납입주기|보험료|보장기간', l):
-                if len(l) > 5 and not re.search(r'^\d+$', l) and not re.search(r'^\d{4}\.\d{2}', l):
-                    product = l; i = j + 1; break
-        # ★ 제외 재검사(§4): 회사명엔 없고 상품명에만 있는 자동차보험·농업인 등을 여기서 차단
+        # ★v30p+ 형태 자동 감지: 첫 줄에 계약자/탭/가입금액/Chtd 있으면 신형(다중헤더), 아니면 정상형(기존).
+        _first = lines[i]
+        if ('계약자' in _first) or ('\t' in _first) or ('가입금액' in _first) or ('Chtd' in _first):
+            # ── 신형 (오늘 PDF 업데이트 형태, 별첨 헤더 A/B/C 혼재) ──
+            # ★v30p 다중 별첨 헤더 형태 대응(A:계약자줄먼저→회사·상품 다음줄 / B:회사·상품+계약자 한줄 / C:계약자이름+회사+상품 한줄).
+            #   담보표 헤더('가입금액'·'담보명'·'Chtd') 전까지를 헤더영역으로 모아 회사·상품·보험료·날짜를 통째 추출.
+            _hdr=[]; _k=i
+            while _k < n and _k < i+6:
+                _lk = lines[_k]
+                if '가입금액' in _lk or 'Chtd' in _lk or '담보명' in _lk: break
+                if '정상계약 리스트' in _lk or '실효계약 리스트' in _lk: break
+                _hdr.append(_lk); _k += 1
+            _ht = ' '.join(_hdr).replace('\t',' ')
+            i = _k+1 if (_k<n and ('가입금액' in lines[_k] or 'Chtd' in lines[_k] or '담보명' in lines[_k])) else _k
+            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
+            _md = re.search(r'(\d{4}\.\d{2}\.\d{1,2})\s*[-~（卜\s]+(\d{4}\.\d{2}\.\d{1,2})', _ht)
+            if _md: contract_date=_md.group(1); expiry_date=_md.group(2)
+            _mp = re.search(r'보험료\s*([\d,\.]+)\s*원', _ht)
+            if _mp:
+                try:
+                    _pv=int(_mp.group(1).replace(',','').replace('.',''))
+                    if 1000 < _pv < 5000000: premium=_pv
+                except: pass
+            _mper = re.search(r'월납\s*/?\s*(\d+)\s*년', _ht)
+            if _mper: pay_period=f"{_mper.group(1)}년납"
+            _mpc = re.search(r'(\d{1,3})\s*/\s*(\d{2,3})\s*회', _ht)
+            if _mpc: pay_count=f"{_mpc.group(1)}/{_mpc.group(2)}"
+            # 회사·상품 분리: 계약자·납입·보험료·보장기간·단위 boilerplate 제거 후 보험사 키워드로 split
+            _ct = _ht
+            _ct = re.sub(r'계약자\s*\S+',' ',_ct)
+            _ct = re.sub(r'납입주기\s*/?\s*기간',' ',_ct)
+            _ct = re.sub(r'보험료\s*[\d,\.]+\s*원',' ',_ct)
+            _ct = re.sub(r'보장기\s*간|보장기간',' ',_ct)
+            _ct = re.sub(r'\d{4}\.\d{2}\.\d{1,2}\s*[-~（卜\s]+\d{4}\.\d{2}\.\d{1,2}',' ',_ct)
+            _ct = re.sub(r'월납\s*/?\s*\d+\s*년',' ',_ct)
+            _ct = re.sub(r'\d{1,3}\s*/\s*\d{2,3}\s*회',' ',_ct)
+            _ct = re.sub(r'[（(]?\s*단위\s*:?\s*만원\s*[）)]?',' ',_ct)
+            _ct = re.sub(r'\s+',' ',_ct).strip()
+            _mc = re.search(r'^(.*?(?:화재|손해보험|손보|해상|생명|라이프|증권))\s*(.*)$', _ct)
+            if _mc:
+                company = re.sub(r'\s','',_mc.group(1)); product = _mc.group(2).strip()
+            else:
+                _parts=_ct.split(' ',1); company=_parts[0] if _parts else lines[i].strip(); product=_parts[1].strip() if len(_parts)>1 else ''
+        else:
+            # ── 정상형 (기존, '가입금액' 헤더 없이 회사→상품→계약자줄→담보) ──
+            company = lines[i].strip(); i += 1
+            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
+            for _j in range(i, min(i+5, n)):
+                _l = lines[_j]
+                _m = re.search(r'(\d{4}\.\d{2}\.\d{2})\s*~\s*(\d{4}\.\d{2}\.\d{2})', _l)
+                if _m: contract_date = _m.group(1); expiry_date = _m.group(2)
+                _m2 = re.search(r'(\d{1,3})\s*/\s*(\d{2,3})\s*회', _l) or re.search(r'월납\s+(\d{1,3})\s*/\s*(\d{2,3})', _l)
+                if _m2 and not pay_count: pay_count = f"{_m2.group(1)}/{_m2.group(2)}"
+                _m3 = re.search(r'보험료\s*([\d,\.]+)\s*원', _l) or re.search(r'([\d,]+)원', _l)
+                if _m3:
+                    try:
+                        _v = int(_m3.group(1).replace(',','').replace('.',''))
+                        if 1000 < _v < 5000000: premium = _v
+                    except: pass
+                _m5 = re.search(r'월납\s*/?\s*(\d+)\s*년', _l)
+                if _m5 and not pay_period: pay_period = f"{_m5.group(1)}년납"
+            while i < n and not lines[i].strip(): i += 1
+            product = ''
+            for _j in range(i, min(i+6, n)):
+                _l = lines[_j].strip()
+                if _l and not re.search(r'계약자|납입주기|보험료|보장기간', _l):
+                    if len(_l) > 5 and not re.search(r'^[\d,]+$', _l) and not re.search(r'^\d{4}\.\d{2}', _l):
+                        product = _l; i = _j + 1; break
         if is_excluded(company, product):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
@@ -289,7 +337,7 @@ def parse_txt(txt, filename=''):
     merged = {}
     order = []
     for c in contracts:
-        key = (c['company'], c['contract_date'], c['expiry_date'], c['premium'])
+        key = (re.sub(r'\\s','',c['company']), c['premium'], re.sub(r'\\s','',c['product'])[:12])   # ★v30p 날짜 OCR 깨짐 대비 병합키
         if key not in merged:
             merged[key] = c; order.append(key)
         else:
@@ -403,6 +451,18 @@ import re
 # 순서 = 구체 우선. 앞에서 잡히면 끝.
 def _norm(s): return re.sub(r'\s+','',s)
 
+def _rmn(s):
+    """담보명 등급 로마숫자/숫자 판별 → 3/2/1/0. 괄호 속(건강맞춤형Ⅱ 등)은 제외."""
+    import re as _re
+    s2=_re.sub(r'[(（].*?[)）]','',str(s))
+    if 'Ⅲ' in s2 or 'III' in s2: return 3
+    if 'Ⅱ' in s2 or 'II' in s2: return 2
+    if 'Ⅰ' in s2: return 1
+    m=_re.search(r'진단비?\s*([123])(?!\d)',s2)
+    if m: return int(m.group(1))
+    if _re.search(r'[가-힣]I(?![A-Za-zI])',s2): return 1
+    return 0
+
 def resolve_kw(raw):
     """raw 담보명 -> (std표준명 or None, jong 0~5). API 불필요."""
     r = raw; n = _norm(raw)
@@ -491,6 +551,7 @@ def resolve_kw(raw):
     # ★v29q-2 '암입원일당(…유사암들…)' = 암입원일당 키워드 우선 → 암일당 (유사암 판정보다 먼저)
     if ('암입원일당' in n) or (has('암') and has('입원일당')): return '암일당',0
     # ★v29q-1 '암진단비(…유사암들…)' = 암진단비 키워드 우선 → 일반암 (괄호 유사암 구성 무시)
+    if has('소아암') and no('제외'): return None,0   # ★v30q 다발성소아암 등 = 일반암과 별개 담보 → [확인](합산 금지, 지점장 2026.07.03)
     if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
     if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
@@ -509,6 +570,11 @@ def resolve_kw(raw):
     if has('중대한') and has('뇌졸'): return '중대한 뇌졸증',0
     if has('뇌졸'): return '뇌졸증진단비',0
     if has('산정특례') and has('뇌'): return '산정특례뇌혈관',0
+    # ★v30o 고정(전 회사, 지점장 2026.07.03): 뇌혈관진단비Ⅰ→뇌혈관진단비 / 뇌혈관진단비Ⅱ→뇌졸증. Ⅲ은 뇌혈관진단비.
+    if has('뇌혈관') and has('진단') and no('수술','주요치료','산정특례','혈전'):
+        _n=_rmn(raw)
+        if _n==2: return '뇌졸증진단비',0
+        if _n in (1,3): return '뇌혈관진단비',0
     if has('뇌혈관') and has('진단'): return '뇌혈관진단비',0
     if has('혈전용해') and has('뇌'): return '혈전용해치료비',0
 
@@ -857,9 +923,14 @@ def build_excel(data, out):
             _heart_bundle = None
             _co = ct.get('company','')
             if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
+                # ★v30o 고정(메리츠, 지점장 2026.07.03): 심장질환진단비Ⅰ→허혈성 진단비 / 심장질환진단비Ⅱ→급성심근경색
+                if '메리츠' in _co and '심장질환' in _rn:
+                    _mn=_rmn(_rn)
+                    if _mn==2: _heart_bundle=['급성심근경색']
+                    elif _mn==1: _heart_bundle=['허혈성 진단비']
                 # ★v29w 심장 범위 재점검(지점장 2026.07.02, 6사 정본 대조):
                 # DB 순환계 5종(중증) = 급성심근경색 + 뇌졸중
-                if '순환계' in _rn and '5종' in _rn:
+                if _heart_bundle is None and '순환계' in _rn and '5종' in _rn:
                     _heart_bundle = ['급성심근경색','뇌졸증진단비']
                 # DB 순환계 4종 = 협심증·심부전(+빈맥, 심근병증 [확인])
                 elif '순환계' in _rn and '4종' in _rn:
@@ -1040,6 +1111,17 @@ def build_excel(data, out):
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
+    # ★v30q 유사암 자동유도(지점장 2026.07.03): 계약에 일반암 있고 유사암 담보가 따로 없으면 유사암 = 그 일반암 × 10%
+    _r일반암 = nm2r.get('일반암'); _r유사암 = nm2r.get('유사암(갑.기.경.제)')
+    if _r일반암 and _r유사암:
+        for _c in range(3, last_col):
+            _v일 = ws.cell(_r일반암, _c).value
+            _v유 = ws.cell(_r유사암, _c).value
+            if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
+                ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
+                try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색(갱신/비갱신) 따라감
+                except: pass
+
     first_L = get_column_letter(3)
     last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
     hc = ws.cell(1, last_col)
@@ -1762,7 +1844,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v30n-gjfracsum-20260703'}
+def health(): return {'ok':True,'version':'v30r-autoexclude-20260703'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
