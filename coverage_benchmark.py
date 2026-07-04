@@ -228,6 +228,22 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
         'items':[{'t':n,'v':_fmt(v)} for n,v in _ci_pairs]}
 
+    # ── Plan B: 비CI 진단비 정액 지급 구조 (CI 미보유 시 P3 상단 CI블록 대체) ──
+    def _sumnm(*names):
+        s=0
+        for rows in grp_rows.values():
+            for b,v in rows:
+                if str(b).strip() in names and v>0: s+=v
+        return s
+    _amt_cancer=max(_gv('일반암'),_gv('고액암'))
+    _amt_brain=_sumnm('뇌혈관진단비','뇌졸증진단비')
+    _amt_heart=_sumnm('급성심근경색','허혈성 진단비')
+    noci_items=[]
+    if _amt_cancer>0: noci_items.append({'t':'암 진단비','v':_fmt(_amt_cancer)})
+    if _amt_brain>0:  noci_items.append({'t':'뇌혈관·뇌졸증','v':_fmt(_amt_brain)})
+    if _amt_heart>0:  noci_items.append({'t':'급성심근·허혈성','v':_fmt(_amt_heart)})
+    noci={'present':(not ci['present']) and bool(noci_items),'items':noci_items}
+
     rep={
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
@@ -242,6 +258,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'band_label':{'20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대'}.get(age_band,age_band),
         'chiryo':chiryo,
         'ci':ci,
+        'noci':noci,
         'age_band':age_band,'age_known':age_known,
     }
     # ── 리모델링 제안: 1-5종 권유 · 운전자 재가입 권유 (지침 §7·§8.6) ──

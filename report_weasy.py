@@ -28,8 +28,6 @@ _SCOPE_HEART = [
     ('I34~37  심장 판막질환', [0,0,1,1,1]),
     ('I40·41  심근염', [0,0,1,1,1]),
     ('I42·43  심근병증', [0,0,0,1,1]),
-    ('I47  발작성 빈맥', [0,0,1,1,1]),
-    ('I48  심방세동·조동', [0,0,1,1,1]),
     ('I49  기타 심장 부정맥', [0,0,0,1,1]),
     ('I50  심부전', [0,0,1,1,1]),
     ('I70·71  대동맥 죽상경화·동맥류', [0,0,0,1,1]),
@@ -66,6 +64,16 @@ def _scope_table(title, rows, cols):
     return (f'<div class="smxh">{_html.escape(title)}</div>'
             f'<table class="smx"><colgroup>{_colg}</colgroup>'
             f'<thead><tr><th style="text-align:left">질병분류 (KCD 코드)</th>{th}</tr></thead><tbody>{body}</tbody></table>')
+
+def _ws_ch(rep, key):
+    for c in rep.get('chiryo',[]):
+        if c.get('name')==key:
+            return ('<b style="color:#C0444C">✘ 미가입</b>' if c.get('value')=='미가입'
+                    else f'<b style="color:#1F7A4D">✔ {_html.escape(str(c.get("value")))}</b>')
+    return '□ ___ 만원'
+
+def _ws_amt(rep, name):
+    return '✔ 가입 · ___ 만원'
 
 def build_report_pdf(rep, out):
     """rep: 리포트 데이터 dict (아래 sample_rep 구조). out: 저장 경로(.pdf)"""
@@ -149,6 +157,20 @@ def build_report_pdf(rep, out):
     else:
         ci_html=''
 
+    # ── Plan B: 비CI 진단비 정액 지급 구조 (CI 미보유 시 P3 상단 대체) ──
+    noci=rep.get('noci',{'present':False})
+    if (not ci.get('present')) and noci.get('present') and noci.get('items'):
+        _nchips=''.join(f'<span class="ci-it"><b>{_html.escape(i["t"])}</b> {_html.escape(i["v"])}</span>' for i in noci['items'])
+        noci_html=(f'<div class="sect">진단비 정액 지급 구조 <span>DIAGNOSIS · FIXED PAYOUT</span></div>'
+                   f'<div class="ci-wrap">'
+                   f'<div class="ci-top"><div class="ci-rate">비CI · <b>정액형</b></div>'
+                   f'<div class="ci-desc">CI(선지급형) 미보유 · 암·뇌·심 진단비는 진단 즉시 <b>정액 100%</b> 지급(선지급·차감·잔여 없음)</div></div>'
+                   f'<div class="ci-items" style="padding-top:3mm">{_nchips}</div>'
+                   f'<div class="ci-res">CI형과 달리 사망보험금 차감이 없어 <b>진단금 전액</b>이 치료비로 쓰이고, 사망보장은 별도로 유지됩니다.</div>'
+                   f'</div>')
+    else:
+        noci_html=''
+
     # ── 보장 진단 코멘트 (P3 하단 채움 + 설명서 성격) ──
     _sh=[_html.escape(s['h']) for s in rep.get('strength',[])][:4]
     _cm=f'{cust} 고객님은 보유 <b>{n_contract}건</b> · 월 <b>{premium:,}원</b>의 보장을 운용하고 있습니다. '
@@ -215,6 +237,22 @@ body {{ color:{INK}; }}
 .smx .scn {{ width:34%; }}
 .smxh {{ font-size:8.5pt; font-weight:800; color:{NAVY}; margin:1.5mm 0 1mm; }}
 .smxcap {{ margin-top:1.5mm; font-size:6.5pt; color:{MUT}; line-height:1.35; }}
+.chsub {{ font-size:9.5pt; font-weight:800; color:{NAVY}; margin:3mm 0 1.5mm; }}
+.chsub span {{ font-size:7.5pt; color:{GOLDD}; font-weight:700; margin-left:2mm; }}
+.chv {{ width:100%; border-collapse:collapse; margin-bottom:1mm; }}
+.chv td {{ border:0.4pt solid {LINE}; padding:1.6mm 2.2mm; font-size:8pt; color:{INK}; line-height:1.35; vertical-align:top; }}
+.chv td.g {{ width:32mm; background:#F4F1E8; font-weight:800; color:{NAVY}; }}
+.chv td.g span {{ font-weight:700; color:{GOLDD}; font-size:7pt; }}
+.chv2 {{ width:100%; border-collapse:collapse; margin:1mm 0; }}
+.chv2 td {{ border:0.4pt solid {LINE}; padding:1.4mm 2.2mm; font-size:8pt; }}
+.chv2 td.v {{ text-align:right; font-weight:800; color:{NAVY}; }}
+.chnote {{ margin-top:2.5mm; font-size:7pt; color:{MUT}; line-height:1.4; background:#F4F1E8; border-left:1.5pt solid {GOLD}; padding:2mm 3mm; }}
+.wsg {{ font-size:9pt; font-weight:800; color:#fff; background:{NAVY}; padding:1.6mm 3mm; margin:3mm 0 0; border-radius:1mm 1mm 0 0; }}
+.ws {{ width:100%; border-collapse:collapse; margin-bottom:1mm; }}
+.ws td {{ border:0.4pt solid {LINE}; padding:2mm 2.5mm; font-size:8.5pt; }}
+.ws td.wl {{ width:34mm; font-weight:800; color:{NAVY}; }}
+.ws td.wd {{ color:{MUT}; font-size:7.5pt; }}
+.ws td.wc {{ width:34mm; text-align:right; }}
 .note b {{ color:{GOLDD}; }}
 .pbar {{ margin-top:3mm; width:100%; border-collapse:collapse; }}
 .pbar td {{ padding:1.2mm 0; vertical-align:middle; }}
@@ -301,7 +339,7 @@ body {{ color:{INK}; }}
   <div class="sect">보장 현황 <span>CATEGORY COVERAGE</span></div>
   <table class="cov">{rows}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 5</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 7</span></div>
 </div>
 <!-- P2 -->
 <div class="pg">
@@ -322,7 +360,7 @@ body {{ color:{INK}; }}
   <div class="sect" style="margin-top:4mm">월 보험료 구성 <span>PREMIUM</span></div>
   <table class="pbar">{bars}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 5</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 7</span></div>
 </div>
 <!-- P3: 핵심 보장 분석 (CI 선지급 + 주요 치료비) -->
 <div class="pg">
@@ -330,12 +368,12 @@ body {{ color:{INK}; }}
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
   <div class="pgn"><b>3</b>핵심 보장 분석</div><div class="bar"></div></div>
  <div class="body">
-  {ci_html}
-  <div class="sect"{' style="margin-top:5mm"' if ci_html else ''}>주요 치료비 정리 <span>TREATMENT BENEFITS</span></div>
+  {ci_html}{noci_html}
+  <div class="sect"{' style="margin-top:5mm"' if (ci_html or noci_html) else ''}>주요 치료비 정리 <span>TREATMENT BENEFITS</span></div>
   <table class="ctab">{crows}</table>
   {comment_html}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 5</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 7</span></div>
 </div>
 <!-- P4 -->
 <div class="pg">
@@ -358,7 +396,7 @@ body {{ color:{INK}; }}
   <div class="note">※ <b>충족률 = 보유 ÷ 연령밴드 권장액 × 100</b> (상한 100%). 권장액은 업계 적정 가입금액 가이드(암 진단비 5천만~1억·뇌혈관 3천만~5천만·허혈성 심장 3천만 등) 기준이며 {band} 표준밴드를 적용했습니다. 운전자·실손·일당·응급실은 핵심담보 보유개수 기준입니다. 개인 소득·가족력에 따라 권장액은 상담을 통해 조정됩니다.{age_warn}</div>
   {advice_html}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 5</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 7</span></div>
 </div>
 <!-- P5: 보장범위 안내 (뇌·심·순환계·산정특례) -->
 <div class="pg">
@@ -369,9 +407,71 @@ body {{ color:{INK}; }}
   <div class="sect">담보별 보장범위 <span>DISEASE-CODE COVERAGE</span></div>
   {scope_heart}
   {scope_brain}
-  <div class="smxcap">● = 보장. 오른쪽 담보일수록 커버 범위가 넓습니다 (허혈성·뇌출혈 &lt; 2대·뇌졸중 &lt; 순환계·뇌혈관). <b>산정특례</b>는 중증질환 산정특례 등록 대상 진단 시 지급되는 <b>진단 기반 별개 담보</b>입니다. 근거 KB One-Q·BCARE 교육자료, 보험사·시기별로 상이할 수 있습니다.</div>
+  <div class="smxcap">● = 보장. 오른쪽 담보일수록 커버 범위가 넓습니다 (허혈성·뇌출혈 &lt; 2대·뇌졸중 &lt; 순환계·뇌혈관). <b>빈맥(I47·48) = 마스터 무행·전 묶음 제외 → 본 표 미기재</b>(고정사실). <b>산정특례</b> = 진단 기반 <b>별개 개별 담보</b>(각각 보상). 대상 코드범위 <b>[심] I20~50·판막 / [뇌] I60~69·Q28·S06</b> 전체. 지급조건·기간은 회사·약관별 [확인]. 근거 현대해상 교육자료.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 5</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 7</span></div>
+</div>
+
+<!-- P6: 주요치료비 변천사 (교육) -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
+  <div class="pgn"><b>6</b>주요치료비 변천사</div><div class="bar"></div></div>
+ <div class="body">
+  <div class="sect">3대 주요치료비 담보의 변천사 <span>①비례형 → ②정액형 → ③비급여 → 생활비</span></div>
+  <div class="chsub">■ 암 주요치료비 · 4세대 진화</div>
+  <table class="chv"><tbody>
+   <tr><td class="g">① 비례형(구간형)</td><td>치료비 발생 구간 하한 도달 시 그 구간 정액 지급(지출 없으면 미지급). <b>2024.11 단종</b>·재가입 불가 — 보유자 해지 금지. 실손과 중복 수령 가능.</td></tr>
+   <tr><td class="g">② 정액형 <span>24.11~</span></td><td>치료 사실만으로 약정금 정액 지급(실비 무관). 암수술·항암방사선·항암약물 각 보장. 면책 90일·감액 일부. <b>가입금액 100만원부터</b>.</td></tr>
+   <tr><td class="g">③ 비급여(하이클래스) <span>25.03~</span></td><td>급여 전액본인부담금 + 비급여 치료비 정액. 산정특례가 안 주는 <b>양성자·중입자·표적·면역</b> 커버. 2천만×10년=2억. 25.08~ 생활비형 추가.</td></tr>
+   <tr><td class="g">④ 왜 필요한가</td><td>5세대 실손 비급여 = 자기부담 50%·통원 회당 5만·한도 1,000만(축소). 표적·면역 고가 약값엔 부족 → 주요치료비·하이클래스가 메운다.</td></tr>
+  </tbody></table>
+  <div class="chsub">■ 뇌·심장 주요치료비 · 암과 동일 진화</div>
+  <table class="chv"><tbody>
+   <tr><td class="g">① 비례형(병원비형)</td><td>급여 본인부담 기준(100만 미만 면책). 종합병원 2대질병 주요치료비 = 본인부담 연 100만↑ → 3,000만 한도·10년. <b>~24.11 단종</b>.</td></tr>
+   <tr><td class="g">② 정액형(2대) <span>24.11~</span></td><td>수술·혈전용해·중환자실 치료 사실만으로 정액(100만~). 메리츠 최초, 연 2천만×5년=1억.</td></tr>
+   <tr><td class="g">③ 확대(순환계)·생활비 <span>25.01~</span></td><td>부정맥·심부전·동맥류 확대(52질환·연 8천만·100세). 생활비형 = 치료 하나만 받아도 연 1회.</td></tr>
+  </tbody></table>
+  <div class="chsub">■ 재발률 · 실제 수술비용 <span style="font-size:8pt;color:{MUT}">(심평원·건보공단)</span></div>
+  <table class="chv2"><tbody>
+   <tr><td>뇌경색 재발</td><td>1년 10% · 5년 20~30%</td><td>심장수술(개흉)</td><td class="v">2,832만</td></tr>
+   <tr><td>급성심근경색 재발</td><td>1년 30% · 3년 50%</td><td>관상동맥우회술</td><td class="v">2,690만</td></tr>
+   <tr><td>스텐트 5년 재협착</td><td>15%</td><td>뇌동맥류 코일색전술</td><td class="v">1,100~1,600만</td></tr>
+  </tbody></table>
+  <div class="chnote">세대 판별 = 계약일 기준. ~24.11 비례형(단종·유지) / 24.11~ 정액형(100만~) / 25~ 비급여·생활비. <b>비례형 보유자 = 단종 담보, 해지 금지</b>. 치료비 담보 설명 전용(진단비 축과 별개)·구간액 회사별 상이 [확인]. 근거 교육자료 2607 + 심평원·건보공단(2026.07).</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 7</span></div>
+</div>
+
+<!-- P7: 상담 워크시트 -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
+  <div class="pgn"><b>7</b>상담 워크시트</div><div class="bar"></div></div>
+ <div class="body">
+  <div class="sect">지금 고객의 3대 주요치료비는? <span>WORKSHEET</span></div>
+  <div class="wsg">암</div>
+  <table class="ws"><tbody>
+   <tr><td class="wl">진단비</td><td class="wd">걸렸을 때 일시금(기본)</td><td class="wc">{_ws_amt(rep,'일반암')}</td></tr>
+   <tr><td class="wl">암 주요치료비</td><td class="wd">수술·방사선·약물 정액(100만~)</td><td class="wc">{_ws_ch(rep,'암주요치료비')}</td></tr>
+   <tr><td class="wl">하이클래스(비급여)</td><td class="wd">표적·면역·중입자 전액본인</td><td class="wc">{_ws_ch(rep,'비급여주요치료비')}</td></tr>
+   <tr><td class="wl">암 생활비</td><td class="wd">치료 중 소득보상</td><td class="wc">□ 만원</td></tr>
+  </tbody></table>
+  <div class="wsg">뇌·심장</div>
+  <table class="ws"><tbody>
+   <tr><td class="wl">뇌·심 진단비</td><td class="wd">뇌혈관·허혈성 일시금</td><td class="wc">{_ws_amt(rep,'급성심근경색')}</td></tr>
+   <tr><td class="wl">2대 주요치료비</td><td class="wd">수술·혈전용해·중환자실(100만~)</td><td class="wc">{_ws_ch(rep,'순환계주요치료비')}</td></tr>
+   <tr><td class="wl">순환계 주요치료비</td><td class="wd">부정맥·심부전 확대</td><td class="wc">□ 만원</td></tr>
+   <tr><td class="wl">순환계 생활비</td><td class="wd">치료 중 소득보상</td><td class="wc">□ 만원</td></tr>
+  </tbody></table>
+  <div class="wsg">산정특례 — 뇌·심 각각 개별 담보 · 진단만으로 지급</div>
+  <table class="ws"><tbody>
+   <tr><td class="wl">산정특례(뇌)</td><td class="wd">뇌혈관질환 I60~69 · Q28 · S06</td><td class="wc">{_ws_ch(rep,'산정특례(뇌혈관)')}</td></tr>
+   <tr><td class="wl">산정특례(심장)</td><td class="wd">심혈관질환 I20~50 · 판막 전체</td><td class="wc">{_ws_ch(rep,'산정특례(심장)')}</td></tr>
+  </tbody></table>
+  <div class="chnote">✔ = 보유 / ✘ = 미가입 → 보완 추천. 진단비(일시금)와 주요치료비(치료 실비·정액)는 <b>별개 축</b>이라 둘 다 필요하다. 산정특례는 진단만으로 지급되는 개별 담보다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 7</span></div>
 </div>
 </body></html>'''
     HTML(string=doc).write_pdf(out)
