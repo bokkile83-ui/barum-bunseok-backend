@@ -1,32 +1,32 @@
-BARUM 보장분석 — 최종 산출물 (2026.07.04)
+BARUM 최종본 (2026.07.05) = 어제 v31n-heart-20260705 + 오늘 report_pptx
 
-[1_code/]  ← Railway/GitHub 배포용 완전체
-  main.py               = v30t-brainheart-20260704 (회귀 11/11 통과)
-                          ※ 베이스 v30r + 버전태그. 현대 뇌혈관Ⅰ·Ⅱ·Ⅲ 이미 구현(_rmn 괄호오검출 차단)
-  report_weasy.py       = 보장설명서 8p PDF 생성기 (P5 산정특례·순환계 컬럼 포함)
-  master.xlsx           = 99행 정본 (빈맥40·산정특례심장45·산정특례뇌혈관35·외상성뇌출혈34)
-  ppt_form.pptx         = PPT 폼
-  coverage_benchmark.py = 충족률 벤치마크
+★중요: 베이스 = v31n-heart-20260705 (어제 진짜 최종). 
+  오늘 세션서 report_pptx.py(설명지=진단서PPT 일치)만 추가.
 
-[2_report/]
-  BARUM_report_kimjingu_final_8p.pdf = 보장설명서 최종본 8p
-    표지(담당줄삭제)/보장현황/AI진단/CI선지급80%/부위별충족률/
-    담보별보장범위(각축 개별·산정특례 기준박스)/주요치료비변천사/상담워크시트
+[1_code/]  ← 배포용
+  main.py               v31n-heart-20260705 (어제 최종, v28 canon 정렬)
+  report_weasy.py       보장설명지 PDF (CI분기 포함)
+  report_pptx.py        ★오늘 신규★ 보장진단서 PPT (설명지와 동일 rep=100% 일치)
+  coverage_benchmark.py rep 생성
+  master.xlsx / ppt_form.pptx
 
-[3_guide/]
-  guide_v30t.md          = 오늘까지 전체 확정 통합정본 (정본)
-  guide_v30m_detail.md   = v30m 상세정본 (참고)
-  master_sample_99row.xlsx
+[2_sample/] 주정은 설명지PDF·분석지PPT·엑셀 (v31n-heart-20260705 산출)
+[3_guide/]  지침_정본_v31n-heart-20260705 = 정본 / 프로젝트_업로드_안내.md
 
-■ 오늘(07.04) 확정:
-  · 뇌·심 담보축 = 각각 개별·각각 보상 (뇌 3축/심 4축)
-  · 묶음=구성질환 중 1개 보상 / 묶음 외 단독=개별보상
-  · 심장 특정Ⅰ·Ⅱ·Ⅲ = 회사별 범위 습득(고정 아님)
-  · 현대 뇌혈관Ⅱ→뇌졸증 / Ⅰ→뇌혈관진단비 (괄호수식어 오검출 차단)
-  · 빈맥=심장포함·전용행40 / 산정특례·순환계·외상성뇌출혈=각각 단독
-  · 산정특례 코드범위 확정 / 지급조건(30일·5%)=[확인]
+■ v31n-heart-20260705 = v28 canon 기준 (어제 정렬):
+  · 빈맥 = 마스터 무행·[확인] (v28정본) + 심장6사 묶음엔 지점장 7/1 지시로 포함
+  · 전이암진단비·고액항암 = __무시__ 센티넬로 완전 드롭
+  · 통합전이암 = 대표1개 (PPT·설명지 반영)
+  · 세부가입 파서·오버랩 근절·CI판정·표준금액 제외 전부 포함
 
-■ 배포: GitHub main 현재본 확인 → v30t 덮기 → Railway Deploy → /health로 v30t 확인
+■ 오늘 추가(report_pptx.py):
+  · 설명지 PDF = 진단서 PPT 동일 rep → 100% 일치
+  · CI/비CI 자동 분기 (P4): CI 80%형 / 비CI Plan B
+  · 검증: 주정은 CI 80%·사망3,000 정확
+
+■ 배포:
+  1. GitHub에 main.py + report_weasy.py + report_pptx.py(신규) + coverage_benchmark.py
+  2. Railway Deploy 클릭
+  3. /health로 버전 확인
   보장분석실: https://web-production-4a155.up.railway.app
   /health:    https://web-production-4a155.up.railway.app/health
-  GitHub:     https://github.com/bokkile83-ui/barum-bunseok-backend
