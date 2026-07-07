@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BARUM 배포 링크 · v32o</title>
+<style>
+  :root{--navy:#111c30;--card:#16233b;--line:#2c3d5c;--gold:#C9A24B;--goldl:#E7C978;
+    --ink:#E8EDF5;--mut:#9AA8BF;--pass:#3FA96B;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--navy);color:var(--ink);
+    font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;padding:18px;line-height:1.5;}
+  .wrap{max-width:720px;margin:0 auto;}
+  h1{font-size:19px;margin:0 0 2px;font-weight:800;}
+  h1 b{color:var(--goldl);}
+  .sub{color:var(--mut);font-size:12px;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:12px;}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;}
+  .sec .h{color:var(--goldl);font-weight:800;font-size:14px;margin-bottom:12px;border-left:3px solid var(--gold);padding-left:8px;}
+  a.link{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ink);
+    background:#1b2a45;border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px;transition:.15s;}
+  a.link:active{background:#243758;}
+  a.link .ic{flex:0 0 auto;width:30px;height:30px;border-radius:8px;background:var(--gold);color:#111c30;
+    font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;}
+  a.link .tx{flex:1;min-width:0;}
+  a.link .tx .nm{font-weight:700;font-size:14px;}
+  a.link .tx .u{color:var(--goldl);font-size:11px;word-break:break-all;}
+  a.link .go{flex:0 0 auto;color:var(--mut);font-size:18px;}
+  .step{display:flex;gap:10px;font-size:13px;padding:7px 0;border-top:1px solid #22314c;}
+  .step:first-child{border-top:none;}
+  .step .n{flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--gold);color:#111c30;
+    font-weight:800;font-size:12px;text-align:center;line-height:20px;}
+  .step .d b{color:#fff;}
+  .warn{background:#2a2620;border:1px solid #5f4e26;border-radius:10px;padding:11px 13px;color:#EBD9A8;font-size:12px;margin-top:6px;}
+  .warn b{color:var(--goldl);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><b>BARUM</b> 배포 링크 <span style="color:var(--mut);font-size:13px;">· v32o</span></h1>
+  <div class="sub">아래는 바로 클릭. 배포 파일(zip)은 이 카드와 함께 첨부.</div>
+
+  <div class="sec">
+    <div class="h">클릭 링크</div>
+    <a class="link" href="https://github.com/bokkile83-ui/barum-bunseok-backend" target="_blank" rel="noopener">
+      <span class="ic">GH</span>
+      <span class="tx"><span class="nm">GitHub 정본 리포</span><span class="u">github.com/bokkile83-ui/barum-bunseok-backend</span></span>
+      <span class="go">›</span>
+    </a>
+    <a class="link" href="https://web-production-4a155.up.railway.app" target="_blank" rel="noopener">
+      <span class="ic">앱</span>
+      <span class="tx"><span class="nm">보장분석실(BARUM) 백엔드</span><span class="u">web-production-4a155.up.railway.app</span></span>
+      <span class="go">›</span>
+    </a>
+    <a class="link" href="https://web-production-4a155.up.railway.app/health" target="_blank" rel="noopener">
+      <span class="ic">✓</span>
+      <span class="tx"><span class="nm">/health — 배포 버전 검증</span><span class="u">web-production-4a155.up.railway.app/health</span></span>
+      <span class="go">›</span>
+    </a>
+  </div>
+
+  <div class="sec">
+    <div class="h">배포 3단계</div>
+    <div class="step"><span class="n">1</span><span class="d"><b>GitHub 현재본 확인</b> — 덮기 전 리포의 main.py가 v32 계열인지 직접 확인(후퇴 방지).</span></div>
+    <div class="step"><span class="n">2</span><span class="d"><b>파일 교체</b> — zip 안 report_weasy.py·main.py를 GitHub에 커밋(나머지는 무변경분이라 선택).</span></div>
+    <div class="step"><span class="n">3</span><span class="d"><b>Railway Deploy</b> — 커밋되면 자동배포. 끝나면 <b>/health</b>로 버전 확인.</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="h">프로젝트(지식) 업로드</div>
+    <div class="step"><span class="n">−</span><span class="d">삭제: 이전 버전 report_weasy·설명서 PDF(구버전).</span></div>
+    <div class="step"><span class="n">+</span><span class="d">추가: zip 안 <b>report_weasy.py · main.py · coverage_benchmark.py · report_pptx.py · master.xlsx</b> + 샘플 설명서 PDF.</span></div>
+  </div>
+
+  <div class="warn">
+    <b>직접 못 본 것</b> — GitHub 리포가 비공개라 이 환경에서 라이브 확인 불가. 위 URL은 정본 기록 기준이다. 클릭해서 열리는지·/health 버전은 지점장이 직접 확인해야 한다. 색이모지는 Railway에 <b>fonts-noto-color-emoji</b> 없으면 빈칸으로 나온다.
+  </div>
+</div>
+</body>
+</html>

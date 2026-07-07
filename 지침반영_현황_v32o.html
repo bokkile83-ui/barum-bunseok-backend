@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BARUM 지침반영 현황 · v32o</title>
+<style>
+  :root{
+    --navy:#111c30; --navy2:#1b2a45; --card:#16233b; --line:#2c3d5c;
+    --gold:#C9A24B; --goldl:#E7C978; --ink:#E8EDF5; --mut:#9AA8BF;
+    --pass:#3FA96B; --hold:#D8A13A; --fail:#D2564B;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--navy);color:var(--ink);
+    font-family:-apple-system,'Malgun Gothic','Apple SD Gothic Neo',sans-serif;
+    padding:18px;line-height:1.5;}
+  .wrap{max-width:760px;margin:0 auto;}
+  h1{font-size:19px;margin:0 0 2px;font-weight:800;}
+  h1 b{color:var(--goldl);}
+  .sub{color:var(--mut);font-size:12px;margin-bottom:16px;border-bottom:1px solid var(--line);padding-bottom:12px;}
+  .verdict{background:linear-gradient(135deg,#3a1f22,#2a1a2a);border:1px solid #7a3b3b;
+    border-radius:12px;padding:14px 16px;margin-bottom:18px;}
+  .verdict .t{color:var(--fail);font-weight:800;font-size:15px;margin-bottom:4px;}
+  .verdict .d{color:#F0D9D9;font-size:13px;}
+  .sec{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px;margin-bottom:14px;}
+  .sec .h{color:var(--goldl);font-weight:800;font-size:14px;margin-bottom:10px;
+    border-left:3px solid var(--gold);padding-left:8px;}
+  .row{display:flex;gap:10px;padding:7px 0;border-top:1px solid #22314c;font-size:13px;align-items:flex-start;}
+  .row:first-of-type{border-top:none;}
+  .badge{flex:0 0 auto;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px;white-space:nowrap;margin-top:1px;}
+  .b-pass{background:rgba(63,169,107,.16);color:#7BD6A0;border:1px solid #2f6e4b;}
+  .b-hold{background:rgba(216,161,58,.16);color:var(--goldl);border:1px solid #7a5f26;}
+  .b-fail{background:rgba(210,86,75,.16);color:#EC8E86;border:1px solid #7a3b36;}
+  .txt{flex:1;}
+  .txt b{color:#fff;}
+  .txt .n{color:var(--mut);font-size:12px;}
+  .foot{color:var(--mut);font-size:11.5px;margin-top:6px;padding-top:10px;border-top:1px solid var(--line);}
+  .foot b{color:var(--goldl);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><b>BARUM</b> 지침반영 현황 <span style="color:var(--mut);font-size:13px;">· v32o · 2026.07.07</span></h1>
+  <div class="sub">이번 세션 실제 작업 = <b style="color:var(--goldl)">보장설명서 PDF(report_weasy)</b> + main.py 수술폰트 1줄. 아래는 자화자찬 없는 실측 상태표.</div>
+
+  <div class="verdict">
+    <div class="t">✕ "지침 100% 반영"이라 말할 수 없다</div>
+    <div class="d">설명서 PDF 레이아웃은 좌표검증 통과. 그러나 §13 엑셀·PPT 정합(①~⑧)은 이번 세션에 안 돌렸고, 육안검수(⑨)는 이미지뷰 도구가 죽어 불가. 지침대로면 "완료" 금지 → 아래 자진보고.</div>
+  </div>
+
+  <div class="sec">
+    <div class="h">이번 세션 통과분 (좌표·텍스트 검증)</div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>OCR PDF 입력</b> — main.py <span class="n">pdf_to_txt(pdftotext -layout 직독·무키 / 2순위 비전OCR), /analyze .pdf 수용, _split_cols 다열분해 = 코드 존재 확인</span></div></div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>설명서 = 엑셀 연계</b> <span class="n">map_excel_to_report(xl) → 같은 rep로 설명지 PDF + 진단서 PPT 생성 (등식3 충족, 코드 라인 확인)</span></div></div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>P6 표 겹침 해소</b> <span class="n">암·뇌심 4열 그리드, 암값 우측침범 0건(x좌표)</span></div></div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>P6 하단 2줄 제거·채움 95%</b> <span class="n">세대판별·근거줄 0건, 잘림 없음</span></div></div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>P7 카드·값·전폭 산정특례·이름 32pt·채움 92%</b> <span class="n">1억500만·7,000만 주입, 산정특례 전폭(156·194mm)</span></div></div>
+    <div class="row"><span class="badge b-pass">통과</span><div class="txt"><b>P3 CI/비CI 분기</b> <span class="n">CI계약=선지급 분석 / 비CI="CI 계약 아님" 명시</span></div></div>
+  </div>
+
+  <div class="sec">
+    <div class="h">§13 체크리스트 — 이번 세션 미검증 (엑셀·PPT)</div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>① 한장보장표=엑셀=PPT 일치</b> <span class="n">엑셀·PPT 실렌더 안 함</span></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>② 별첨 전수+세부 교차</b></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>③ 헤더 5행+갱신·비갱신 색</b></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>④ 끝열 가로 SUM 동적+보험료 숫자만</b></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>⑤ 수술비 1~5종 슬래시</b> <span class="n">main.py 폰트 1줄만 손댐, 슬래시 로직 재검 안 함</span></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>⑥ 제외 4종 외 전부 포함</b></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>⑦ 골절 치아·100만↑ 제외·일당 화이트리스트</b></div></div>
+    <div class="row"><span class="badge b-hold">미검증</span><div class="txt"><b>⑧ 실손 입원5000·합의금 캡·일상배상 갱신</b></div></div>
+    <div class="row"><span class="badge b-fail">불가</span><div class="txt"><b>⑨ 렌더 육안검수</b> <span class="n">이미지 뷰 도구 사망 — 픽셀 못 봄. 좌표·텍스트로만 대체 검증</span></div></div>
+    <div class="row"><span class="badge b-pass">이행</span><div class="txt"><b>⑩ 미통과 자진보고</b> <span class="n">이 카드가 그것</span></div></div>
+  </div>
+
+  <div class="sec">
+    <div class="h">직접 못 본 것 (Railway·환경)</div>
+    <div class="row"><span class="badge b-hold">확인요</span><div class="txt"><b>OCR PDF end-to-end</b> <span class="n">코드만 확인, 라이브 poppler로 실통과 안 돌림</span></div></div>
+    <div class="row"><span class="badge b-hold">확인요</span><div class="txt"><b>색이모지 렌더</b> <span class="n">Railway에 fonts-noto-color-emoji 없으면 빈칸</span></div></div>
+    <div class="row"><span class="badge b-hold">확인요</span><div class="txt"><b>report_pptx(진단서 PPT)</b> <span class="n">연결만 확인, 실렌더 검증 안 함</span></div></div>
+  </div>
+
+  <div class="foot">
+    <b>결론</b> — 설명서 PDF 레이아웃은 좌표검증까지 통과(v32o 확정). 엑셀/PPT §13 정합과 픽셀 육안검수는 이번 세션에서 직접 못 했다. "지침 100% 반영"으로 표기하지 않는다. 최종 확정하려면 별도 세션에서 엑셀·PPT를 실제 돌려 §13 ①~⑧을 검증해야 한다.
+  </div>
+</div>
+</body>
+</html>
