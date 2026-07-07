@@ -232,7 +232,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _ci_rate=round(_ci_bonche/_ci_samang*100) if _ci_samang else 0
     ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
-        'items':[{'t':n,'v':_fmt(v)} for n,v in _ci_pairs]}
+        'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
     # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
     _ci_prod=any(('CI' in str(h.get('nm','')) or '리빙케어' in str(h.get('nm','')) or 'GI보험' in str(h.get('nm',''))) for h in headers)
     if _ci_pairs or _ci_apply>0:
