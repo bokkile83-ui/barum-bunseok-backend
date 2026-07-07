@@ -218,6 +218,12 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             for b,v in rows:
                 if str(b).strip()==nm: return v
         return 0
+    # ★P5 상단 핵심 진단비 3종(지점장 지시): 뇌출혈·뇌졸증·급성심근경색
+    def _fv(v): return _fmt(v) if v and v>0 else '미가입'
+    _p5=[('뇌출혈진단비',_gv('뇌출혈진단비') or _gv('중대한 뇌졸증')),
+         ('뇌졸증진단비',_gv('뇌졸증진단비') or _gv('뇌혈관진단비')),
+         ('급성심근경색',_gv('급성심근경색') or _gv('중대한 급성심근') or _gv('허혈성 진단비'))]
+    p5_own=[{'t':n,'v':_fv(v)} for n,v in _p5]
     _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근')]
     _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
     _ci_apply=_gv('중대한CI적용')
@@ -227,6 +233,14 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
         'items':[{'t':n,'v':_fmt(v)} for n,v in _ci_pairs]}
+    # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
+    _ci_prod=any(('CI' in str(h.get('nm','')) or '리빙케어' in str(h.get('nm','')) or 'GI보험' in str(h.get('nm',''))) for h in headers)
+    if _ci_pairs or _ci_apply>0:
+        ci['status']='ci'          # 담보값 있음 = 확실 CI
+    elif _ci_prod:
+        ci['status']='check'       # 상품명 CI인데 담보값 없음/애매 = 회색지대 [확인]
+    else:
+        ci['status']='none'        # 상품명·담보 둘 다 없음 = 확실 비CI
 
     # ── Plan B: 비CI 진단비 정액 지급 구조 (CI 미보유 시 P3 상단 CI블록 대체) ──
     def _sumnm(*names):
@@ -259,6 +273,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'chiryo':chiryo,
         'ci':ci,
         'noci':noci,
+        'p5_own':p5_own,
         'age_band':age_band,'age_known':age_known,
     }
     # ── 리모델링 제안: 1-5종 권유 · 운전자 재가입 권유 (지침 §7·§8.6) ──
@@ -290,6 +305,30 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                     'd':'2022년 보행자보호의무·처벌 강화로 옛 운전자보험은 담보가 부족합니다. 미달 항목 — '+' / '.join(_short)+'. 최신 기준으로 재가입(리모델링)을 권유드립니다.'})
     except Exception:
         pass
+    # ── ★P5 질병코드 커버표: 고객 실제 보유 감지 (하드코딩 제거) ──
+    _allnm=set()
+    for _rows in grp_rows.values():
+        for _b,_v in _rows:
+            if _v and _v>0: _allnm.add(str(_b).strip())
+    def _any(*subs):
+        return any(any(s in nm for s in subs) for nm in _allnm)
+    scope_brain=[]   # 보유 행 key
+    if _any('뇌출혈','뇌혈관진단','중대한 뇌졸증','뇌졸증진단'): scope_brain.append('hem')
+    if _any('뇌경색','뇌졸증진단','뇌혈관진단'): scope_brain.append('infarct')
+    if _any('뇌혈관진단'): scope_brain.append('other')
+    if _any('외상성뇌출혈','외상성 뇌출혈'): scope_brain.append('trauma')
+    if _any('산정특례뇌','산정특례(뇌'): scope_brain.append('brain_snjt')
+    scope_heart=[]
+    if _any('급성심근','중대한 급성심근'): scope_heart.append('ami')
+    if _any('허혈성 진단비','허혈심장','허혈성진단'): scope_heart+=['angina','chronic']
+    if _any('부정맥'): scope_heart.append('arrhy')
+    if _any('심부전'): scope_heart.append('hf')
+    if _any('심장판막','판막'): scope_heart.append('valve')
+    if _any('심장염증','심근염','심내막','심장막'): scope_heart.append('inflam')
+    if _any('심근병증'): scope_heart.append('cardiomyo')
+    if _any('산정특례심장','산정특례(심'): scope_heart.append('heart_snjt')
+    rep['scope_brain']=scope_brain
+    rep['scope_heart']=scope_heart
     rep['advice']=advice
     return rep
 

@@ -1,4 +1,4 @@
-# ===== BARUM main.py v30z6-v28align-20260705 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v31n-heart-20260705 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -69,7 +69,7 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
     return '비갱신'
 
 def silson_gen(contract_date, ipv=None, product=''):
-    """실손 세대 판별 — 가입일 경계(2026.07 확정). 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인].
+    """실손 세대 판별 — 5세대=2026.05부터(정본 확정). 4세대=2021.07~2026.04. 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인].
     ★v29v: 상품명 연도코드(YYMM 4자리, 예 '1804'=2018.04 출시)가 있으면 판정일로 우선 사용 —
     갱신 재가입일(계약일)로 세대를 오판(예 2018 실손을 4세대로)하는 것 차단."""
     if ipv==3000: return '1세대(구형)'
@@ -102,7 +102,30 @@ def get_종번호(name):
         if k in name: return i
     return 0
 
+def _split_cols(block_lines):
+    """★OCR PDF(pdftotext -layout) 별첨 다열(담보명|금액|담보명|금액|담보명|금액) → 1쌍 1줄로 분해.
+    열 구분=공백 3개↑ 또는 탭. 담보명 내부 단일공백은 보존. 숫자 토큰=직전 담보명의 가입금액."""
+    import re as _re
+    out=[]
+    for raw in block_lines:
+        l=str(raw).rstrip()
+        if not l.strip(): out.append(l); continue
+        toks=[t for t in _re.split(r'\t+|\s{3,}', l.strip()) if t!='']
+        if len(toks)<=1: out.append(l); continue
+        name_acc=[]
+        for t in toks:
+            if _re.fullmatch(r'[\d,]+', t):          # 순수 숫자 = 값
+                if name_acc:
+                    out.append(' '.join(name_acc)+'    '+t); name_acc=[]
+                else:
+                    out.append(t)                    # 고아 숫자 → amts 폴백
+            else:
+                name_acc.append(t)
+        if name_acc: out.append(' '.join(name_acc))  # 값없는 담보명 → pend 경유
+    return out
+
 def rule_extract(block_lines):
+    block_lines=_split_cols(block_lines)   # ★다열 별첨 분해(OCR PDF 대응)
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
     dambo={}; names=[]; amts=[]; pend=None
@@ -181,8 +204,22 @@ def llm_extract(block_text):
 
 
 def pdf_to_txt(pdf_bytes):
-    """★v30z5 PDF(이미지 전용·회전) → Claude 비전 OCR → parse_txt가 먹는 txt 문자열.
-    Adobe 변환 깨짐 우회. 키 없거나 렌더 실패 시 '' → 호출부에서 txt로 폴백."""
+    """★v32 OCR PDF 입력(2026.07.07 지점장 정답): 1순위=텍스트레이어 직독(pdftotext -layout, 무키·100%),
+    2순위=Claude 비전 OCR(이미지 전용 PDF). Adobe .txt 변환 없이 OCR PDF 1개로 완결."""
+    # ── 1순위: 텍스트레이어 직독 (드래그 선택 가능한 OCR PDF면 API 없이 100% 추출) ──
+    try:
+        import subprocess, tempfile
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as _f:
+            _f.write(pdf_bytes); _pp=_f.name
+        _tl = subprocess.run(['pdftotext','-layout',_pp,'-'], capture_output=True, text=True, timeout=60).stdout
+        try: os.unlink(_pp)
+        except: pass
+        if _tl and len(_tl) > 1500 and ('별첨' in _tl or '정상계약' in _tl or '보장' in _tl):
+            print(f'[PDF_TEXTLAYER] ok chars={len(_tl)}'); return _tl
+        print(f'[PDF_TEXTLAYER] 얇음/미검출 chars={len(_tl) if _tl else 0} -> 비전 폴백')
+    except Exception as _e:
+        print(f'[PDF_TEXTLAYER_ERR] {_e} -> 비전 폴백')
+    # ── 2순위: Claude 비전 OCR (텍스트레이어 없는 이미지 스캔본) ──
     key = os.environ.get('ANTHROPIC_API_KEY','')
     if not key:
         print('[PDF_VISION] no api key -> skip'); return ''
@@ -660,19 +697,27 @@ def resolve_kw(raw):
         if has('암') and no('양성종양','유사암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인]
         if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
         if has('상해') or has('재해'):   # ★v30h 재해수술비=상해수술비 동일 취급
-            # §6 상해수술비 = 기본만. 병원규모·부위/특정·통원 변형은 합산 금지 → [확인]
-            if no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','통원','외래'):
+            # §6 상해수술비 = 기본만. 병원규모·부위/특정·통원·자XXXX 접두변형은 합산 금지 → [확인]
+            # ★XXXX상해수술비(질병/상해수술비 앞 어떤 접두든) = 별개 아님→[확인](지점장 2026.07.05)
+            _core_s = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)
+            _core_s2 = _core_s.strip().replace(' ','')
+            _core_s2 = re.sub(r'^재해상해', '상해', _core_s2)   # 재해상해=상해(중복 정리)
+            _core_s2 = re.sub(r'^재해수술', '상해수술', _core_s2)  # 재해수술비=상해수술비
+            _is_pure_s = _core_s2.startswith('상해수술비') or _core_s2.startswith('상해입원수술비')
+            if _is_pure_s and no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','통원','외래','자궁','자녀','자가','교통'):
                 return '상해수술비',0
             return None,0
         if has('질병'):
-            # ★v29 §8.5 질병수술비 합산군 = '질병수술비'·'질병입원수술비'·'질병수술비(**제외)' 만.
-            #   변형(특정/부위/Ⅱ/대수술/종합/일당 등)·종(1-5종)은 합산 금지 → 매핑 제외(개별/[확인]).
-            _base = has('질병수술비') or has('질병입원수술비')
-            _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # ★v30c '(맞춤_간편고지Ⅱ)'류 접두 수식어 제거 후 변형 검사
+            # ★v29 §8.5 질병수술비 합산군 = '질병수술비'·'질병입원수술비' 만.
+            #   ★XXXX질병수술비(어떤 접두든) = 별개→[확인](지점장 2026.07.05) → [확인]
+            _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # 접두 수식어 괄호 제거
+            _core_strip = _core.strip().replace(' ','')
+            # 순수 질병수술비/질병입원수술비로 시작해야 함(자XXXX 등 한글 접두 배제)
+            _is_pure_q = _core_strip.startswith('질병수술비') or _core_strip.startswith('질병입원수술비')
             _excl_ok = not any(k in _core for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
                           '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
-                          '2종','3종','4종','5종','부분','관혈','내시경','로봇','통원','외래','5대'))
-            if _base and _excl_ok and jong==0:
+                          '2종','3종','4종','5종','부분','관혈','내시경','로봇','통원','외래','5대','자궁','자가','자녀'))
+            if _is_pure_q and _excl_ok and jong==0:
                 return '질병수술비',0
             return None,0
     if has('창상') or has('봉합'): return '창상봉합술',0
@@ -749,7 +794,7 @@ def resolve_kw(raw):
     if has('허혈'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비(구 협심증행 폐기)
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
-    if has('빈맥'): return None,0   # ★v30z6 v28정본: 빈맥(I47·48)=마스터 무행·모든 묶음 제외 → [확인]
+    if has('빈맥'): return '빈맥',0   # ★지점장 2026.07.05: 빈맥(I47·48)=master 40행 정식 사용(v30z6 '무행' 폐기). 빈맥≠부정맥(I49)
     if has('부정맥'): return '부정맥',0
     if has('산정특례') and has('심'): return '산정특례심장',0
     if has('2대') and has('주요'): return '2대 주요치료비',0
@@ -781,9 +826,10 @@ def resolve_kw(raw):
     if (has('질병') or has('수술')) and has('일당') and has('수술'): return '질병수술일당',0
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
     # ★v30k 교통상해입원일당 ≠ 상해입원일당(합산 금지). 질환·부위·교통 접두 변형은 base 아님 → [확인]
+    # ★병원규모(상급종합/종합) 명시 = 개별 전용행 / 일반 질병입원일당(밴드) = 합산 (지점장 2026.07.05)
     _dilqual = ('교통','암','뇌','심','허혈','간','신장','폐','위','골절','화상','특정','재해외','종합','요양','중환자','수술')
-    if (has('상해일당') or has('상해입원일당')) and no(*_dilqual): return '상해일당',0   # 순수 상해(입원)일당만
-    if (has('질병일당') or has('질병입원일당')) and no(*_dilqual): return '질병일당',0   # 순수 질병(입원)일당만
+    if (has('상해일당') or has('상해입원일당') or has('재해일당') or has('재해입원일당')) and no(*_dilqual): return '상해일당',0   # ★재해=상해 동일(정본)
+    if (has('질병일당') or has('질병입원일당')) and no(*_dilqual): return '질병일당',0   # 순수 질병(입원)일당만 합산
     # ★v29v (지점장 2026.07.02): 밴드형 '입원비(1일이상/180일한도)' = 입원일당
     if has('입원비') and (has('1일') or has('180일')) and no('실손','의료비','수술'):
         return ('상해일당' if (has('상해') or has('재해')) else '질병일당'),0   # 재해=상해(§v29v)
@@ -992,10 +1038,59 @@ def llm_resolve(raw_names, std_list):
         print(f'[LLM_RESOLVE_ERR] {e}')
         return {x:{'std':None,'jong':0,'note':''} for x in raw_names}
 
+def _fix_silson(contracts):
+    """★정본 §8.8 실손 후처리 (2026.07.05 지점장): 손보/생보 구분 + 입원=명시값 최우선(1세대 1억·5천·3천 다 유지) + 통원·약값 규칙.
+    우선순위 ①보장표 명시값 ②입원한도 3000짜리 구형=통원10·약5(입원 3000유지) ③회사유형(손보 통원25·약5 / 생보 통원20·약10) ④4세대(통원20·약0)."""
+    for c in contracts:
+        d=c.get('dambo',{})
+        co=str(c.get('company','') or '')
+        prod=str(c.get('product','') or '')
+        cd=str(c.get('contract_date','') or '')
+        is_saengbo = ('생명' in co or '라이프' in co) and ('화재' not in co and '손해' not in co and '손보' not in co and '해상' not in co)
+        # 원본 담보키 → 표준(입원/통원/약값) 위치 찾기
+        _kmap={}  # 표준명 → 원본키
+        for _rk in list(d.keys()):
+            _std,_=resolve_kw(_rk)
+            if _std in ('입원','통원','약값') and _std not in _kmap:
+                _kmap[_std]=_rk
+        if '입원' not in _kmap: continue  # 실손 없음
+        def _get(std):
+            k=_kmap.get(std)
+            if not k: return None
+            try: return float(str(d[k]).replace(',',''))
+            except: return None
+        def _set(std,val):
+            k=_kmap.get(std)
+            if k: d[k]=val
+            else: d[std]=val  # 없던 항목(약값 등)은 표준키로 신설
+        ipw=_get('입원')
+        if ipw is None: continue
+        # ★입원 = 보장표 명시값 최우선(1세대 1억·5천·3천 다 있음, 절대 뭉개지 말 것).
+        #   명시값이 있으면 그대로 유지. 통원·약값만 규칙 보정.
+        _tw=_get('통원'); _yk=_get('약값')
+        # ★4·5세대(2021.07~) = 통원+약 합쳐서 20 (약값 별도 없음)
+        _ym=None
+        _mm=re.search(r'(\d{4})\.(\d{2})',cd)
+        if _mm: _ym=int(_mm.group(1))*100+int(_mm.group(2))
+        _gen=silson_gen(cd, ipw, prod)
+        if _gen in ('4세대','5세대') or (_ym and _ym>=202107):
+            _set('통원', _tw if (_tw and _tw<=20) else 20)
+            _set('약값', 0)
+            continue
+        # 1~3세대: 통원·약값 명시값 우선, 없으면 회사유형 기본값.
+        if is_saengbo:
+            if not _tw: _set('통원',20)
+            if not _yk: _set('약값',10)
+        else:
+            if not _tw: _set('통원',25)
+            if not _yk: _set('약값',5)
+    return contracts
+
+
 def build_excel(data, out):
     wb = openpyxl.load_workbook(TPL_XL)
     ws = wb['보장분석']
-    client = data['client']; contracts = data['contracts']
+    client = data['client']; contracts = _fix_silson(data['contracts'])
 
     # 담보명 -> 행번호 맵 (A/B열 유지)
     nm2r = {}
@@ -1122,26 +1217,62 @@ def build_excel(data, out):
                 # DB 순환계 3종 = 염증·부정맥
                 elif '순환계' in _rn and '3종' in _rn:
                     _heart_bundle = ['염증','부정맥']
-                # ★순환계진단비=심장 전체+뇌혈관 커버(허혈성 칸 쓰는 유일 예외) — 삼성 특정순환계 등
+                # ★순환계3대(허혈성심장 I20~25 + 뇌혈관 I60~69 + 말초 I70~79) — 삼성·DB 등. 말초=전용행無(누락 감수)
                 elif '순환계' in _rn:
-                    _heart_bundle = ['협심증','심부전','염증','허혈성 진단비','부정맥','뇌혈관진단비']
-                # 현대 심혈관 특정Ⅱ(중증) = 급성심근경색 (한화 심혈관특정질환Ⅰ·Ⅱ 묶음과 회사로 구분)
-                elif '심혈관' in _rn and ('현대' in _co) and ('중증' in _rn or 'Ⅱ' in _rn):
-                    _heart_bundle = ['급성심근경색']
-                # 현대 특정Ⅰ(I49 제외) = 협심증·심부전(+빈맥)
-                elif '심혈관' in _rn and ('특정' in _rn or 'I49' in _rn) and 'I49' in _rn:
-                    _heart_bundle = ['협심증','심부전']
-                # ★v30g 한화 심혈관특정질환Ⅰ·Ⅱ = 구성질환 코드 약관 미확인(2026.06.29 전수조사·07.03 재검색 실패) → 정본대로 [확인] 큐(4행 확정기재 폐기)
-                elif '심혈관특정' in _rn:
-                    unmapped.append((col, ct['company'], raw, amt, '심혈관특정질환Ⅰ·Ⅱ 구성질환 약관 미확인 → 수기'))
-                    heart_trace.append((ct['company'], raw, '[확인] 큐(구성 미확인)', amt))
-                    continue
-                # KB 확대(특정)심장 / 메리츠 확대심장 = 협심증·부정맥·심부전(+빈맥)
-                elif ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn):
-                    _heart_bundle = ['협심증','부정맥','심부전']
-                # ★v30 (지점장 2026.07.03) KB 심장질환(특정Ⅰ)진단비Ⅲ = 협심증+심부전+빈맥+염증 4행 (v28 §8.3.1 정본 복원)
-                elif '심장질환' in _rn and '특정' in _rn and 'Ⅰ' in _rn and 'Ⅱ' not in _rn:
-                    _heart_bundle = ['협심증','심부전','염증']
+                    if ('DB' in _co) or ('디비' in _co):
+                        _heart_bundle = ['급성심근경색','빈맥','부정맥','심부전']   # DB 순환계3대=심장정지I46.0·부정맥I47~49·심부전I50
+                    else:
+                        _heart_bundle = ['협심증','급성심근경색','허혈성 진단비','뇌혈관진단비']
+                # ===== BARUM 10사 질병코드 분류표 정본(2026.07.05 지점장 확정): 특정Ⅰ/Ⅱ 라벨=회사마다 다름 → 회사별 표대로 =====
+                elif any(_k in _rn for _k in ('심혈관','심장','허혈','부정맥','빈맥','심부전','심근병','판막','협심','전도','방실')):
+                    _t=_rmn(_rn)
+                    _i49excl=('제외' in _rn) and (('I49' in _rn) or ('부정맥' in _rn))   # ★(기타심장부정맥제외)=Ⅰ에서 I49 뺀 묶음(부정맥 담보 아님)
+                    _i49=(not _i49excl) and (('I49' in _rn) or ('기타부정맥' in _rn) or ('기타심장부정맥' in _rn))
+                    # 흥국·롯데: 특정Ⅰ=급성심근 / 특정Ⅱ=협심증+허혈+염증 / 롯데 15대=판막·심근병·빈맥·심부전
+                    if ('흥국' in _co) or ('롯데' in _co):
+                        if _i49excl: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # 흥국 특정심혈관질환(기타심장부정맥제외)=협심·허혈·빈맥·심부전(별표70)
+                        elif _i49: _heart_bundle=['부정맥']
+                        elif '심근병' in _rn: _heart_bundle=['심근병증']
+                        elif '15대' in _rn: _heart_bundle=['심장판막','심근병증','빈맥','심부전']
+                        elif ('방실' in _rn) or ('전도' in _rn): pass   # 전용행無→[확인]
+                        elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)) or ('심낭' in _rn): _heart_bundle=['염증']
+                        elif _t==1: _heart_bundle=['급성심근경색']
+                        elif _t==2: _heart_bundle=['협심증','허혈성 진단비','염증']
+                    # ★DB(정본 재수정): 특정Ⅰ=협심증·허혈·염증 / 특정Ⅱ=급성심근 / 특정Ⅲ=판막·빈맥·심부전 / 심근병증
+                    elif ('DB' in _co) or ('디비' in _co):
+                        if _t==2: _heart_bundle=['급성심근경색']
+                        elif _t==3: _heart_bundle=['심장판막','빈맥','심부전']
+                        elif '심근병' in _rn: _heart_bundle=['심근병증']
+                        elif _i49: _heart_bundle=['부정맥']
+                        elif _t==1: _heart_bundle=['협심증','허혈성 진단비','염증']
+                    # 한화·NH농협: Ⅰ=협심증+허혈+빈맥+부정맥+심부전 / Ⅱ=급성심근 / (I49제외)=부정맥 뺀 묶음 / 심근병증
+                    elif ('한화' in _co) or ('농협' in _co) or ('NH' in _co):
+                        if _i49excl: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # Ⅰ에서 I49(부정맥) 제외 묶음
+                        elif _t==2: _heart_bundle=['급성심근경색']
+                        elif '심근병' in _rn: _heart_bundle=['심근병증']
+                        elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)): _heart_bundle=['염증']
+                        elif _i49: _heart_bundle=['부정맥']
+                        elif '특정질환' in _rn: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # 한화 심혈관특정질환=Ⅰ에서 I49제외
+                        elif _t==1: _heart_bundle=['협심증','허혈성 진단비','빈맥','부정맥','심부전']
+                    # KB: 특정Ⅰ=협심증+허혈+빈맥+심부전(염증X·부정맥X) / Ⅱ=급성심근 / 심장판막=판막+염증 / I49=부정맥(빈맥X)
+                    elif ('KB' in _co) or ('케이비' in _co):
+                        if _t==2: _heart_bundle=['급성심근경색']
+                        elif '심근병' in _rn: _heart_bundle=['심근병증']
+                        elif '판막' in _rn: _heart_bundle=['심장판막','염증']
+                        elif _i49: _heart_bundle=['부정맥']
+                        elif _t==1 or ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn): _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']
+                    # 현대(정본 재수정, 6가지): 허혈성심장=협심증+허혈 / 특정허혈=급성심근 / 특정Ⅰ=빈맥+심부전 / 특정Ⅱ=급성심근 / 주요염증 / 특정2대+I49=부정맥
+                    elif '현대' in _co:
+                        if '특정허혈' in _rn: _heart_bundle=['급성심근경색']
+                        elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['협심증','허혈성 진단비']
+                        elif '심근병' in _rn: _heart_bundle=['심근병증']
+                        elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)): _heart_bundle=['염증']
+                        elif ('특정2대' in _rn) or ('방실' in _rn) or ('전도' in _rn) or _i49: _heart_bundle=['부정맥']   # 특정2대+기타부정맥(I49) 병합→부정맥(전도장애 전용행無)
+                        elif _t==2: _heart_bundle=['급성심근경색']   # ★현대 특정Ⅱ=급성심근경색(정본 재수정)
+                        elif _t==1 or '심혈관' in _rn: _heart_bundle=['빈맥','심부전']
+                    # 삼성·메리츠: 허혈성심장질환 6가지 → 급성심근+협심증+허혈성 (메리츠는 기존 심장질환진단Ⅰ/Ⅱ와 병존)
+                    elif ('삼성' in _co) or ('메리츠' in _co):
+                        if ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['급성심근경색','협심증','허혈성 진단비']
             if _heart_bundle:
                 for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
@@ -1622,20 +1753,34 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     if g('혈전용해치료비'): pv('TextBox 49',1,1,'혈전용해치료비',prefix=': ',suffix='')
     if g('2대 주요치료비'): pv('TextBox 49',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 뇌혈관쪽 2대주요치료비
 
-    # ★ 심장 표기: 협심증/심부전/염증/빈맥 한 줄(★지점장 7/1 빈맥추가) + 부정맥 다음 줄. 값 있는 것만. 급성심근 별도칸.
+    # ★ 심장 표기(설명서와 동일 8종): 1줄 협심증/심부전/염증/빈맥 · 2줄 부정맥/심근병증/심장판막. 값 있는 것만. 급성심근·허혈성 별도칸.
     if 'TextBox 심장4종' in by:
         _h4=by['TextBox 심장4종'].text_frame
-        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bm=totals.get('빈맥',0); _bj=totals.get('부정맥',0)
-        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym)] if v]   # ★v30z6 빈맥 무행(v28정본)
+        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bm=totals.get('빈맥',0)
+        _bj=totals.get('부정맥',0); _mbz=totals.get('심근병증',0); _pmz=totals.get('심장판막',0)
+        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym),('빈맥',_bm)] if v]   # ★지점장 2026.07.05 빈맥 복원(40행 정식)
         _amt=max(_hp,_sf,_ym,_bm)
         if _names and len(_h4.paragraphs[0].runs)>=2:
             _h4.paragraphs[0].runs[0].text='/'.join(_names)+' '
             _h4.paragraphs[0].runs[1].text=f'{_amt:,}' if _amt else ''
         elif len(_h4.paragraphs[0].runs)>=1:
             _h4.paragraphs[0].runs[0].text=''
+        # 2줄 = 부정맥·심근병증·심장판막(★지점장 2026.07.05: 설명서와 동일하게 심근병증·판막 추가)
+        _names2=[n for n,v in [('부정맥',_bj),('심근병증',_mbz),('심장판막',_pmz)] if v]
+        _amt2=max(_bj,_mbz,_pmz)
         if len(_h4.paragraphs)>1 and len(_h4.paragraphs[1].runs)>=2:
-            _h4.paragraphs[1].runs[1].text=f'{_bj:,}' if _bj else ''
-            if not _bj: _h4.paragraphs[1].runs[0].text=''  
+            if _names2:
+                _h4.paragraphs[1].runs[0].text='/'.join(_names2)+' '
+                _h4.paragraphs[1].runs[1].text=f'{_amt2:,}' if _amt2 else ''
+            else:
+                _h4.paragraphs[1].runs[0].text=''
+                _h4.paragraphs[1].runs[1].text=''
+    # ★허혈성 진단비 값 채움(TextBox 54) — 설명서와 동일하게(★지점장 2026.07.05, 기존 미채움 버그 수정)
+    if 'TextBox 54' in by:
+        _hv=totals.get('허혈성 진단비',0)
+        _t54=by['TextBox 54'].text_frame
+        if _t54.paragraphs[0].runs:
+            _t54.paragraphs[0].runs[0].text = (f'허혈성 : {_hv:,}' if _hv else '허혈성')
     if g('급성심근경색'): pv('TextBox 55',0,0,'급성심근경색',prefix='급성심근\n',suffix='')
     if g('산정특례심장'): pv('TextBox 56',0,3,'산정특례심장',prefix=': ',suffix='')
     if g('2대 주요치료비'): pv('TextBox 56',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 심장쪽 2대주요치료비
@@ -1782,16 +1927,14 @@ def _autofit_ppt(by):
             w_in = sh.width / 914400.0
         except: continue
         if _bn in _SURGERY_BOXES:
-            cap = max(4, int(w_in * 72 / (9.0 * 0.62)))
+            # ★수술비 폰트(지점장 규정 2026.07.07): 1-5종 슬래시 줄만 6pt, 나머지 수술 줄은 9pt 고정(축소 금지)
             for p in tf.paragraphs:
-                runs = [r for r in p.runs if r.text]
-                if not runs: continue
-                txt = ''.join(r.text for r in runs)
-                # ★v29v: 폭 초과 줄은 그 줄만 축소(겹침 방지 §11) — 나머지 줄은 9pt 고정 유지
-                _pt = max(6.0, round(9.0 * cap / len(txt), 1)) if len(txt) > cap else 9.0
-                for r in runs:
-                    try: r.font.size = Pt(_pt)
-                    except: pass
+                ptxt=''.join(r.text for r in p.runs)
+                _sz = 6.0 if ('/' in ptxt) else 9.0   # 슬래시(1-5종 종별)만 6pt, 그 외 9pt
+                for r in p.runs:
+                    if r.text:
+                        try: r.font.size = Pt(_sz)
+                        except: pass
             continue
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
         if not runs_all: continue
@@ -1923,14 +2066,14 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </div>
 <div class="app" id="app">
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장설명서</b></h1>
-    <div class="sub">TXT 넣으면 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
+    <div class="sub">TXT 또는 OCR PDF 1개 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
-    <div class="msg bot">보장분석지 <b>TXT 파일</b>을 올려주세요. 엑셀·PPT 파일을 각각 드려요.<br><br>
-      <span style="font-size:11px;color:var(--mute)">💡 Adobe Acrobat → 편집 → 모두선택(Ctrl+A) → 복사(Ctrl+C)<br>→ 메모장 붙여넣기 → .txt 저장 → 여기 업로드</span></div>
+    <div class="msg bot">보장분석지 <b>OCR PDF</b> 또는 <b>TXT</b> 1개를 올려주세요(둘 다 가능). 엑셀·PPT를 각각 드려요.<br><br>
+      <span style="font-size:11px;color:var(--mute)">💡 OCR PDF는 그대로 업로드 · TXT는 Adobe에서 텍스트 저장 후 업로드</span></div>
   </div>
   <div class="bar">
+    <label class="up" id="upp">📑 <span id="upplabel">OCR PDF 선택</span></label>
     <label class="up" id="up">📄 <span id="uplabel">TXT 선택</span></label>
-    <label class="up" id="upp">📑 <span id="upplabel">PDF 선택(선택)</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
   <div class="qlbl" id="qlbl">📋 분석된 보장분석지에 대해 질문하세요</div>
@@ -1938,7 +2081,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v30z5</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v32-ocrpdf</b></footer>
 </div>
 <input type="file" id="fi" accept=".txt,text/plain" style="display:none">
 <input type="file" id="fp" accept=".pdf,application/pdf" style="display:none">
@@ -1955,7 +2098,7 @@ function _syncSend(){$("#send").disabled=!(file||pdfFile);}
 $("#up").onclick=()=>$("#fi").click();
 $("#upp").onclick=()=>$("#fp").click();
 $("#fi").onchange=e=>{file=e.target.files[0]||null;$("#uplabel").textContent=file?file.name:"TXT 선택";_syncSend();};
-$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"PDF 선택(선택)";_syncSend();};
+$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"OCR PDF 선택";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
@@ -2011,7 +2154,7 @@ $("#send").onclick=async()=>{
         `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
-  file=null;$("#uplabel").textContent="다음 고객 TXT 선택";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  file=null;$("#uplabel").textContent="TXT(선택)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
   if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
   if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 TXT를 올리면 이어서 분석합니다.',"bot");}
@@ -2039,7 +2182,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v30r-autoexclude-20260703'}
+def health(): return {'ok':True,'version':'v32-ocrpdf-20260707'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -2065,15 +2208,14 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
             except: pass
         else: txt=raw.decode('utf-8',errors='ignore')
 
-    # ★ OR 로직: txt 없거나 깨졌으면 PDF 비전으로 대체/보완. 둘 다 있으면 제목·깨짐 재검 후 나은 소스 채택.
+    # ★OCR PDF 우선(2026.07.07 지점장 정답): PDF 있으면 pdftotext 직독을 주 소스. 깨지면 txt 폴백.
     src_note=''
     try:
         _txt_data = parse_txt(txt, fname) if txt.strip() else None
     except Exception:
         _txt_data=None
-    _txt_broken = (_txt_data is None) or _looks_broken(_txt_data)
-
-    if _pdf_f and (_txt_broken or not txt.strip()):
+    _pdf_data=None
+    if _pdf_f:
         pdf_bytes=await _pdf_f.read()
         pdf_txt=pdf_to_txt(pdf_bytes)
         if pdf_txt.strip():
@@ -2081,21 +2223,14 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
                 _pdf_data=parse_txt(pdf_txt, _pdf_f.filename)
             except Exception:
                 _pdf_data=None
-            if _pdf_data and _pdf_data.get('contracts'):
-                # 두 소스 다 있으면 깨짐 적은 쪽 채택(제목·담보키 건전성 비교)
-                if _txt_data and not _looks_broken(_pdf_data) and _txt_broken:
-                    data=_pdf_data; src_note='PDF(비전) 채택: txt 깨짐 감지'
-                elif not _txt_data:
-                    data=_pdf_data; src_note='PDF(비전) 단독 입력'
-                else:
-                    data=_pdf_data if _looks_broken(_txt_data) else _txt_data
-                    src_note='PDF 우선(txt 깨짐)' if data is _pdf_data else 'txt 우선'
-            else:
-                data=_txt_data; src_note='PDF 비전 추출 실패 → txt 사용'
-        else:
-            data=_txt_data; src_note='PDF 비전 미작동(키/렌더) → txt 사용'
+    if _pdf_data and _pdf_data.get('contracts') and not _looks_broken(_pdf_data):
+        data=_pdf_data; src_note='OCR PDF 직독(주)'
+    elif _txt_data and _txt_data.get('contracts'):
+        data=_txt_data; src_note='TXT 입력'
+    elif _pdf_data and _pdf_data.get('contracts'):
+        data=_pdf_data; src_note='OCR PDF(깨짐 감지)'
     else:
-        data=_txt_data; src_note='txt 단독'
+        data=_txt_data; src_note='추출 실패'
 
     try:
         if not data or not data.get('contracts'):

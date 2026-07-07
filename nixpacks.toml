@@ -1,1 +1,11 @@
+# BARUM Railway 빌드 — OCR PDF 직독(pdftotext) + WeasyPrint + CJK/이모지 폰트
 [phases.setup]
+aptPkgs = [
+  "poppler-utils",
+  "libpango-1.0-0",
+  "libpangocairo-1.0-0",
+  "libgdk-pixbuf2.0-0",
+  "libffi-dev",
+  "fonts-noto-cjk",
+  "fonts-noto-color-emoji"
+]
