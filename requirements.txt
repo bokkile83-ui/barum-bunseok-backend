@@ -7,3 +7,4 @@ lxml
 httpx
 weasyprint==69.0
 matplotlib
+pdf2image
