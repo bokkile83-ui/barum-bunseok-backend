@@ -1,18 +1,5 @@
 # -*- coding: utf-8 -*-
-"""BARUM 보장진단서 PPT v35 — 뼈대 그대로, 결과값 칸만 입력·수정 가능.
-   지점장 지시(2026.07.08): 07.07 디자인을 100% 유지하고, 값이 들어가는 칸에만 입력이 되게 하라.
-
-   방식:
-     ① report_weasy 로 보장설명서 PDF 생성            ← 디자인 원본
-     ② 각 페이지를 고해상 이미지로 렌더 → 슬라이드 배경  ← 뼈대·라벨·표·게이지 그대로
-     ③ rep 에서 '결과값' 문자열 목록을 만든다
-     ④ pdftotext -bbox-layout 으로 그 값 단어의 좌표만 찾는다
-     ⑤ 그 자리만 배경색으로 지우고 텍스트 상자를 얹는다
-
-   → 라벨·제목·표·심혈관 분류는 손대지 않는다. 값만 클릭·수정된다.
-   추가 패키지 없음 (poppler = pdftotext·pdftoppm, 이미 Dockerfile에 있음).
-   pdftotext 실패 시 자동으로 종전 이미지 방식으로 폴백 → 앱 안 죽음.
-"""
+"""BARUM 보장진단서 PPT v36 — 뼈대 그대로, 결과값 칸만 입력·수정 가능."""
 import os, subprocess, tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -40,7 +27,6 @@ def _setfont(run, name=FONT):
 
 
 def _valueset(rep):
-    """rep 에서 '결과값' 문자열만 모은다. 공백 제거 후 비교."""
     V = set()
 
     def add(x):
@@ -73,14 +59,31 @@ def _valueset(rep):
         add(c.get('v'))
     for i in rep.get('p5_own', []):
         add(i.get('v'))
+    add(rep.get('client'))                      # v36 고객명
+    add(rep.get('band_label'))                  # v36 연령밴드
     return V
 
 
-def _value_boxes(xml_path, V):
-    """페이지별 [(값, xMin, yMin, xMax, yMax)] — 값에 해당하는 단어(묶음)만"""
+def _pageset(rep):
+    """v36: 특정 페이지에서만 여는 값. {페이지index0: set}"""
+    P = set()
+    for b in rep.get('premium_bars', []):
+        nm = str(b.get('nm', '')).strip().replace(' ', '')
+        if nm:
+            P.add(nm)
+        try:
+            P.add(f"{int(b.get('amt', 0)):,}")
+        except Exception:
+            pass
+    return {2: P}                               # 3페이지만
+
+
+def _value_boxes(xml_path, V, PG=None):
     root = ET.parse(xml_path).getroot()
+    PG = PG or {}
     out = []
-    for pg in root.findall('.//x:page', NS):
+    for pi, pg in enumerate(root.findall('.//x:page', NS)):
+        VV = V | PG.get(pi, set())
         pw, ph = float(pg.get('width')), float(pg.get('height'))
         found = []
         for ln in pg.findall('.//x:line', NS):
@@ -89,11 +92,11 @@ def _value_boxes(xml_path, V):
                   for w in ln.findall('x:word', NS)]
             n = len(ws); i = 0
             while i < n:
-                for L in (4, 3, 2, 1):                      # 긴 묶음 우선 ('1억2,310만' > '1억')
+                for L in (8, 7, 6, 5, 4, 3, 2, 1):
                     if i + L > n:
                         continue
                     grp = ws[i:i + L]
-                    if ''.join(g[0] for g in grp) in V:
+                    if ''.join(g[0] for g in grp) in VV:
                         txt = ' '.join(g[0] for g in grp)
                         found.append((txt, grp[0][1], min(g[2] for g in grp),
                                       grp[-1][3], max(g[4] for g in grp)))
@@ -106,7 +109,6 @@ def _value_boxes(xml_path, V):
 
 
 def _fg_of(img, bx):
-    """글자색 = bbox 안에서 주변 배경색과 가장 먼 픽셀 (흰 글자·컬러 글자 대응)"""
     x0, y0, x1, y1 = bx
     W, H = img.size
     x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
@@ -122,7 +124,6 @@ def _fg_of(img, bx):
 
 
 def _ink(img, bx):
-    """잉크 밀도 → 굵기 판정"""
     x0, y0, x1, y1 = bx
     W, H = img.size
     x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
@@ -136,7 +137,6 @@ def _ink(img, bx):
 
 
 def _erase(img, bx):
-    """가로 한 줄씩 좌우 바깥 픽셀 색으로 채운다 → 색 띠·배지·표 배경 보존"""
     x0, y0, x1, y1 = bx
     W, H = img.size
     x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
@@ -168,9 +168,9 @@ def build_report_pptx(rep, out, dpi=DPI):
         xml = os.path.join(tmp, 'bb.xml')
         subprocess.run(['pdftotext', '-bbox-layout', pdf, xml], check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        pages = _value_boxes(xml, _valueset(rep))
+        pages = _value_boxes(xml, _valueset(rep), _pageset(rep))
     except Exception:
-        pages = []                                   # 폴백 = 종전 이미지 방식
+        pages = []
 
     imgs = convert_from_path(pdf, dpi=dpi)
 
@@ -220,15 +220,3 @@ def build_report_pptx(rep, out, dpi=DPI):
 
     prs.save(out)
     return True
-
-
-if __name__ == '__main__':
-    import sys
-    from coverage_benchmark import map_excel_to_report
-    if len(sys.argv) < 2:
-        print('사용법: python report_pptx.py <엑셀> [고객명]'); sys.exit(1)
-    _cn = sys.argv[2] if len(sys.argv) > 2 else '고객'
-    _rep = map_excel_to_report(sys.argv[1], settings={'client': _cn, 'branch': '온빛센터 바름지점',
-                                                      'manager': '최은혜', 'title': '지점장', 'phone': ''})
-    build_report_pptx(_rep, f'보장진단서_{_cn}.pptx')
-    print('진단서 PPT 생성 완료(뼈대 유지 · 값 칸만 편집)')
