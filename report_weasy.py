@@ -130,8 +130,14 @@ def _wc_status(rep, lookup):
     """(status, value) — status: 'on'(가입)/'off'(미가입)"""
     if lookup.startswith('diag:'):
         kind=lookup[5:]
-        v=_cov_val(rep,'암','일반암') if kind=='암' else (_cov_val(rep,'뇌혈관','뇌졸증진단','뇌혈관진단') or _cov_val(rep,'심장','급성심근','허혈성'))
-        return ('on', v) if v else ('off','')
+        if kind=='암':
+            v=_cov_val(rep,'암','일반암')
+            return ('on', v) if v else ('off','')
+        # 뇌·심 진단비 = 가입된 진단비 담보 나열 (뇌혈관·뇌졸증·급성심근·허혈성)
+        _order=[('뇌혈관진단비','뇌혈관'),('뇌졸증진단비','뇌졸증')]
+        _pv={_it.get('t'):_it.get('v') for _it in rep.get('p5_own',[])}
+        parts=[lab+' '+str(_pv[t]) for t,lab in _order if _pv.get(t) and _pv.get(t)!='미가입']
+        return ('on', '·'.join(parts)) if parts else ('off','')
     for c in rep.get('chiryo',[]):
         if c.get('name')==lookup:
             val=c.get('value')
@@ -145,12 +151,14 @@ def _wcard(rep, title, desc, lookup, mode):
         return (f'<div class="wcard plain"><div class="wct">{_html.escape(title)}</div>'
                 f'<div class="wcd">{_html.escape(desc)}</div>'
                 f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
-    st,_=_wc_status(rep, lookup)
+    st,val=_wc_status(rep, lookup)
     variant,check=('green','✔') if mode=='diag' else ('red','✘')
     chip=('<span class="wchip g">가입</span>' if st=='on' else '<span class="wchip r">미가입</span>')
+    _bv=_html.escape(val) if (st=='on' and val) else ''
+    _box=(f'<span class="wbox">{_bv}</span>' if _bv else '<span class="wbox"></span><span class="wunit">만원</span>')
     return (f'<div class="wcard {variant}"><div class="wct">{check} {_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>'
-            f'<div class="wcf">{chip}<span class="wbox"></span><span class="wunit">만원</span></div></div>')
+            f'<div class="wcf">{chip}{_box}</div></div>')
 
 def _wcard_sj(rep, title, desc, lookup):
     # 산정특례 = 나란히 2칸, 회색 '상태' 칩, 빈 박스 (레퍼런스 그대로)
@@ -430,7 +438,7 @@ body {{ color:{INK}; }}
 .wsmain .wscap {{ flex:0 0 auto; }}
 .wsmain .wsr {{ min-height:39mm; display:flex; flex-direction:column; justify-content:center; }}
 .wsr .box {{ display:block; margin-top:1.6mm; border:0.6pt solid {LINE}; border-radius:1mm; height:6mm; background:#FCFDFE; }}
-.wsmid {{ flex:0 0 30mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
+.wsmid {{ flex:0 0 22mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
 .wsmid .lb {{ font-size:6.5pt; color:{MUT}; letter-spacing:1px; font-weight:700; }}
 .wsmid .nm {{ font-size:32pt; font-weight:800; color:{NAVY}; line-height:1.02; letter-spacing:0; margin:2mm 0 0; }}
 .wsmid .nmsub {{ font-size:12pt; font-weight:800; color:{GOLDD}; margin:1.5mm 0 2mm; }}
@@ -450,7 +458,7 @@ body {{ color:{INK}; }}
 .wchip.g {{ background:#3E9A63; }}
 .wchip.r {{ background:#C0444C; }}
 .wchip.n {{ background:#9AA5B4; }}
-.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:7.5mm; line-height:7.5mm; padding:0 2.5mm; font-size:10.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; }}
+.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:7.5mm; line-height:7.5mm; padding:0 2mm; font-size:8.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
 .wunit {{ font-size:8.6pt; color:{MUT}; }}
 .wcard.sj {{ min-height:22mm; margin-bottom:0; background:#fff; }}
 .wcard.sj .wct {{ font-size:11pt; }}
@@ -659,7 +667,7 @@ body {{ color:{INK}; }}
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
     _amt_brain={}; _amt_heart={}
-    _AMTKEY={'뇌출혈진단비':('b','hem'),'뇌졸증진단비':('b','infarct'),'뇌졸중진단비':('b','infarct'),'급성심근경색':('h','ami')}
+    _AMTKEY={'뇌출혈진단비':('b','hem'),'뇌졸증진단비':('b','infarct'),'뇌졸중진단비':('b','infarct'),'급성심근경색':('h','ami'),'뇌혈관진단비':('b','other'),'허혈성 진단비':('h','chronic')}
     for _it in rep.get('p5_own',[]):
         _v=_it.get('v')
         if not _v or _v=='미가입': continue

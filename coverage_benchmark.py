@@ -222,7 +222,9 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     def _fv(v): return _fmt(v) if v and v>0 else '미가입'
     _p5=[('뇌출혈진단비',_gv('뇌출혈진단비') or _gv('중대한 뇌졸증')),
          ('뇌졸증진단비',_gv('뇌졸증진단비') or _gv('뇌혈관진단비')),
-         ('급성심근경색',_gv('급성심근경색') or _gv('중대한 급성심근') or _gv('허혈성 진단비'))]
+         ('급성심근경색',_gv('급성심근경색') or _gv('중대한 급성심근') or _gv('허혈성 진단비')),
+         ('뇌혈관진단비',_gv('뇌혈관진단비')),
+         ('허혈성 진단비',_gv('허혈성 진단비') or _gv('허혈성심장질환'))]
     p5_own=[{'t':n,'v':_fv(v)} for n,v in _p5]
     _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근')]
     _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
