@@ -1177,7 +1177,9 @@ def build_excel(data, out):
                     ws.cell(_rci,col).value=_samang-_bonche; ws.cell(_rci,col).font = BL if gen else BK
                 # ★v29t (지점장 확정 2026.07.02, 김진구 정본): CI추가보장특약 = 급성심근 초과분 → 최대 1건 급성심근경색 행, 잔여 [확인]
                 _cex=ct.get('ci_extra') or []
-                if _cex and 'CI추가보장특약' in dambo:
+                # ★v33 dambo 조건 제거 — OCR 다열 레이아웃에서 'CI 추가보장특약' 키가 생성되지 않아
+                #     ci_extra 를 수집하고도 급성심근경색 행에 반영되지 않던 버그.
+                if _cex:
                     _mx=max(_cex)
                     dambo.pop('CI추가보장특약', None)
                     _rgs=nm2r.get('급성심근경색')   # 셀 직접 기재(§8.4 CI 재매핑 회피 — 초과분은 '일반' 급성심근경색 행)
