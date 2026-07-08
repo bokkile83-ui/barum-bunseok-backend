@@ -3,7 +3,7 @@
 report_pptx_shapes.py  —  BARUM 보장설명서 도형·텍스트 기반 10p 생성기 (B안)
 정본 원칙: 값 출처 = 완성 엑셀 데이터셀(C ~ 끝열-1) 직접 합산. SUM 캐시 의존 금지.
 """
-import sys, os
+import sys, os, re
 from pptx import Presentation
 from pptx.util import Inches, Pt, Emu
 from pptx.dml.color import RGBColor
@@ -19,9 +19,22 @@ LIGHT = RGBColor(0xF2, 0xF3, 0xF5)
 GREEN = RGBColor(0x1D, 0x7A, 0x46)
 RED = RGBColor(0xC0, 0x39, 0x2B)
 BLACK = RGBColor(0x1A, 0x1A, 0x1A)
-FONT = "Noto Sans CJK KR"
+FONT = "맑은 고딕"
 
 W, H = Inches(13.333), Inches(7.5)
+
+
+def _setfont(run, name):
+    """latin + ea + cs 전부 지정. ea 누락 시 한글이 테마폰트로 치환됨."""
+    run.font.name = name
+    rPr = run._r.get_or_add_rPr()
+    for tag in ("a:ea", "a:cs"):
+        el = rPr.find(f"{{http://schemas.openxmlformats.org/drawingml/2006/main}}{tag[2:]}")
+        if el is None:
+            from pptx.oxml.ns import qn
+            el = rPr.makeelement(qn(tag), {})
+            rPr.append(el)
+        el.set("typeface", name)
 
 
 def box(slide, x, y, w, h, text, size=12, bold=False, color=BLACK,
@@ -38,7 +51,7 @@ def box(slide, x, y, w, h, text, size=12, bold=False, color=BLACK,
         p.alignment = align
         r = p.add_run(); r.text = ln
         r.font.size = Pt(size); r.font.bold = bold
-        r.font.color.rgb = color; r.font.name = FONT
+        r.font.color.rgb = color; _setfont(r, FONT)
     return sh
 
 
@@ -101,14 +114,35 @@ def table(slide, x, y, cols, rows_data, widths, hdr_h=0.32, row_h=0.3, fs=9):
     return yy
 
 
-def gauge(slide, cx, cy, pct, label):
-    """도넛 링 + % — 밴드 색으로 상태 표현"""
-    col = GREEN if pct >= 70 else (GOLD if pct >= 40 else RED)
+def _gauge_png(pct, path, px=440):
+    """부분 채움 도넛 링 — PIL 픽셀 렌더. 투명 배경."""
+    from PIL import Image, ImageDraw
+    S = px * 4                                     # 4x 슈퍼샘플링 → 안티에일리어싱
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    col = ((0x1D, 0x7A, 0x46) if pct >= 70 else
+           (0xC9, 0xA2, 0x27) if pct >= 40 else (0xC0, 0x39, 0x2B))
+    ring = int(S * 0.085)
+    pad = ring // 2 + 4
+    bbox = [pad, pad, S - pad, S - pad]
+    d.arc(bbox, 0, 360, fill=(0xE3, 0xE5, 0xE9, 255), width=ring)   # 트랙
+    if pct > 0:
+        d.arc(bbox, -90, -90 + 360 * pct / 100, fill=col + (255,), width=ring)
+        if pct < 100:                                                # 진행 끝점 캡
+            import math
+            a = math.radians(-90 + 360 * pct / 100)
+            r = (S - 2 * pad) / 2
+            cx, cy = S / 2 + r * math.cos(a), S / 2 + r * math.sin(a)
+            d.ellipse([cx - ring / 2, cy - ring / 2, cx + ring / 2, cy + ring / 2],
+                      fill=col + (255,))
+    img.resize((px, px), Image.LANCZOS).save(path)
+    return path
+
+
+def gauge(slide, cx, cy, pct, label, tmpdir):
     d = Inches(1.15)
-    shp = slide.shapes.add_shape(MSO_SHAPE.DONUT, cx - d / 2, cy - d / 2, d, d)
-    shp.fill.solid(); shp.fill.fore_color.rgb = col
-    shp.line.fill.background(); shp.shadow.inherit = False
-    shp.adjustments[0] = 0.14
+    p = _gauge_png(pct, os.path.join(tmpdir, f"g{pct}_{abs(hash(label))%9999}.png"))
+    slide.shapes.add_picture(p, cx - d / 2, cy - d / 2, d, d)
     box(slide, cx - d / 2, cy - Inches(0.16), d, Inches(0.32),
         f"{pct}%", 13, True, BLACK, PP_ALIGN.CENTER, wrap=False)
     box(slide, cx - Inches(0.9), cy + d / 2 + Inches(0.04), Inches(1.8), Inches(0.28),
@@ -144,7 +178,23 @@ def load(xlsx):
                 slash = v
             elif isinstance(v, (int, float)):
                 vals.append(v)
-        cov[str(nm).strip()] = slash if slash else (sum(vals) if vals else 0)
+        if slash:
+            cov[str(nm).strip()] = slash
+            continue
+        # 합계열 수식이 정한 집계 규칙을 그대로 따른다 (SUM 일괄 적용 금지)
+        f = str(ws.cell(r, last).value or "").upper()
+        s = sum(vals) if vals else 0
+        if "MAX(" in f:
+            v = max(vals) if vals else 0
+        elif "MIN(" in f:
+            m = re.search(r",\s*(\d+)\s*\)\s*$", f)
+            v = min(s, int(m.group(1))) if m else s
+        elif f.startswith("=IF(SUM"):
+            m = re.search(r">\s*0\s*,\s*(\d+)", f)
+            v = (int(m.group(1)) if m else s) if s > 0 else 0
+        else:
+            v = s
+        cov[str(nm).strip()] = v
     return name, contracts, cov, ncon
 
 
@@ -162,7 +212,8 @@ def won(v):
 
 
 # ────────────────────────────── 슬라이드 ──────────────────────────────
-def build(xlsx, out):
+def build(xlsx, out, tmpdir='/tmp/_g'):
+    os.makedirs(tmpdir, exist_ok=True)
     name, contracts, cov, ncon = load(xlsx)
     prem_sum = sum(c["prem"] for c in contracts)
     ren = sum(1 for c in contracts if "[갱신]" in c["tag"])
@@ -200,8 +251,8 @@ def build(xlsx, out):
         ("뇌혈관", ["뇌혈관진단비", "뇌졸증진단비", "뇌출혈진단비", "외상성뇌출혈"]),
         ("심장", ["허혈성 진단비", "급성심근경색", "부정맥", "심부전"]),
         ("수술비", ["상해수술비", "중대한상해수술비", "심장수술비", "상해 종수술비(1-5종)"]),
-        ("운전자", ["합의금", "변호사", "대인", "대물"]),
-        ("입원·일당", ["상해중환자실", "간호통합병동", "상해수술일당", "질병일당"]),
+        ("운전자", ["합의금", "변호사", "대인", "대물", "6주미만", "자부상"]),
+        ("입원·일당", ["간병인", "간호통합병동", "상해중환자실", "상해수술일당", "질병일당", "상해일당"]),
         ("실손·일배책", ["일상배상책임", "입원", "통원", "약값"]),
         ("골절·화상", ["중증화상진단비", "골절(치아파절제외)", "5대골절진단비", "화상진단비"]),
         ("응급실·독감", ["응급실(응급)", "독감"]),
@@ -312,7 +363,7 @@ def build(xlsx, out):
     ]
     calc = [(a, min(100, round(v / g * 100)) if g else 0, v, g, u) for a, v, g, u in areas]
     for i, (a, p, *_ ) in enumerate(calc):
-        gauge(s, Inches(1.35 + (i % 5) * 2.55), Inches(2.15 + (i // 5) * 1.85), p, a)
+        gauge(s, Inches(1.35 + (i % 5) * 2.55), Inches(2.15 + (i // 5) * 1.85), p, a, tmpdir)
     box(s, Inches(0.5), Inches(5.55), Inches(6), Inches(0.3),
         "충족률 산정 근거   보유 ÷ 40대 권장", 11, True, NAVY)
     rows = [(a, f"{v:,}{u}", f"{g:,}{u}",
@@ -418,9 +469,10 @@ def build(xlsx, out):
         x = Inches(x0); yy = yl if x0 == 0.5 else yr2
         ok = "미가입" not in val
         rect(s, x, yy, Inches(5.9), Inches(1.15), WHITE, line=GOLD if ok else RGBColor(0xDD, 0xDD, 0xDD))
-        box(s, x + Inches(0.15), yy + Inches(0.08), Inches(4.0), Inches(0.32), t, 11, True, NAVY)
-        box(s, x + Inches(0.15), yy + Inches(0.42), Inches(4.0), Inches(0.6), sub, 8.5, False, GREY)
-        box(s, x + Inches(3.9), yy, Inches(1.9), Inches(1.15), val, 11.5, True,
+        box(s, x + Inches(0.15), yy + Inches(0.08), Inches(3.5), Inches(0.32), t, 11, True, NAVY)
+        box(s, x + Inches(0.15), yy + Inches(0.42), Inches(3.5), Inches(0.6), sub, 8.5, False, GREY)
+        vs = 11.5 if len(val) <= 12 else (9.5 if len(val) <= 24 else 8.5)
+        box(s, x + Inches(3.55), yy, Inches(2.25), Inches(1.15), val, vs, True,
             NAVY if ok else RED, PP_ALIGN.RIGHT, anchor=MSO_ANCHOR.MIDDLE)
         if x0 == 0.5: yl = yy + Inches(1.3)
         else:         yr2 = yy + Inches(1.3)
