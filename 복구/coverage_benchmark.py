@@ -1,3 +1,4 @@
+# ===== BARUM coverage_benchmark.py v33-ci-rate-20260708 (선지급률=CI계약열 직접산출·50/80 고정) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -92,6 +93,36 @@ def _bundle_adjust(path):
                     if n_b>1: adj['뇌혈관']+=amt*(n_b-1)
     except Exception: pass
     return adj
+
+
+def _ci_meta(path):
+    """★v33 선지급률 정본 계산 — CI 계약 '열'에서 직접 읽는다.
+    끝열 '중대한CI적용' 은 비CI 계약 일반사망이 합산돼 오염되어 있어 사용 금지.
+    지침: 선지급률은 50% 또는 80% 두 가지뿐."""
+    wb=openpyxl.load_workbook(path,data_only=True); ws=wb.active
+    last=ws.max_column
+    def _isci(t):
+        t=re.sub(r'[\s\u3000]','',str(t or ''))
+        return any(k in t for k in ('CI보험','리빙케어','GI보험'))
+    cols=[c for c in range(3,last) if _isci(ws.cell(1,c).value)]
+    if not cols: return None
+    rows={}
+    for r in range(6,ws.max_row+1):
+        b=str(ws.cell(r,2).value or '').strip()
+        if b in ('중대한 암','중대한 뇌졸증','중대한 급성심근','중대한CI적용'): rows[b]=r
+    c=cols[0]
+    # 본체 = 중대한 암·뇌졸증 (급성심근은 CI추가보장특약이 가산돼 오염)
+    pure=[_man(ws.cell(rows[k],c).value) for k in ('중대한 암','중대한 뇌졸증') if k in rows]
+    pure=[v for v in pure if v>0]
+    if not pure: return None
+    bonche=max(pure)
+    resid=_man(ws.cell(rows['중대한CI적용'],c).value) if '중대한CI적용' in rows else 0
+    samang=bonche+resid
+    if not samang: return None
+    raw=bonche/samang*100
+    pct=80 if abs(raw-80)<=abs(raw-50) else 50     # ★50/80 두 가지뿐
+    return {'bonche':bonche,'samang':samang,'resid':resid,'pct':pct,'raw':round(raw)}
+
 
 def load_excel(path):
     """완성 엑셀 → (groups_rows, headers). groups_rows[cat]=[(담보명,끝열값),..]"""
@@ -230,8 +261,14 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
     _ci_apply=_gv('중대한CI적용')
     _ci_bonche=max((v for _,v in _ci_pairs), default=0)
-    _ci_samang=_ci_bonche+_ci_apply
-    _ci_rate=round(_ci_bonche/_ci_samang*100) if _ci_samang else 0
+    # ★v33 선지급률: 끝열(_ci_apply)은 비CI 일반사망 오염 → CI 계약 열에서 직접 산출
+    _cm=_ci_meta(xlsx_path)
+    if _cm:
+        _ci_bonche=_cm['bonche']; _ci_samang=_cm['samang']; _ci_rate=_cm['pct']; _ci_apply=_cm['resid']
+    else:
+        _ci_samang=_ci_bonche+_ci_apply
+        _ci_rate=round(_ci_bonche/_ci_samang*100) if _ci_samang else 0
+        _ci_rate=(80 if abs(_ci_rate-80)<=abs(_ci_rate-50) else 50) if _ci_rate else 0
     ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
         'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
