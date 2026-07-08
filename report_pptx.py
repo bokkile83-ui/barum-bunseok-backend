@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""BARUM 보장진단서 PPT v36 — 뼈대 그대로, 결과값 칸만 입력·수정 가능."""
+"""BARUM 보장진단서 PPT v37 — 뼈대 그대로, 결과값 칸만 입력·수정 가능."""
 import os, subprocess, tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -59,13 +59,13 @@ def _valueset(rep):
         add(c.get('v'))
     for i in rep.get('p5_own', []):
         add(i.get('v'))
-    add(rep.get('client'))                      # v36 고객명
-    add(rep.get('band_label'))                  # v36 연령밴드
+    add(rep.get('client'))
+    add(rep.get('band_label'))
     return V
 
 
 def _pageset(rep):
-    """v36: 특정 페이지에서만 여는 값. {페이지index0: set}"""
+    """페이지 한정 값. {페이지index0: set}"""
     P = set()
     for b in rep.get('premium_bars', []):
         nm = str(b.get('nm', '')).strip().replace(' ', '')
@@ -75,7 +75,7 @@ def _pageset(rep):
             P.add(f"{int(b.get('amt', 0)):,}")
         except Exception:
             pass
-    return {2: P}                               # 3페이지만
+    return {2: P, 7: {'.'}}      # 3p 보험료막대 / 8p 워크시트 빈칸
 
 
 def _value_boxes(xml_path, V, PG=None):
@@ -156,9 +156,32 @@ def _erase(img, bx):
                 img.putpixel((xx, yy), tuple(int(lc[k] + (rc[k] - lc[k]) * t) for k in range(3)))
 
 
+def _patch_worksheet_dots():
+    """워크시트 빈 값상자에 '.' 주입 → 클릭·입력 가능. report_weasy 원본 무수정."""
+    import report_weasy as _rw
+    if getattr(_rw, '_barum_dot', False):
+        return
+    _EMPTY = '<span class="wbox"></span>'
+    _DOT = '<span class="wbox">.</span>'
+    for _fn in ('_wcard', '_wcard_sj'):
+        _o = getattr(_rw, _fn, None)
+        if _o is None:
+            continue
+        def _mk(o):
+            def _w(*a, **k):
+                return o(*a, **k).replace(_EMPTY, _DOT)
+            return _w
+        setattr(_rw, _fn, _mk(_o))
+    _rw._barum_dot = True
+
+
 def build_report_pptx(rep, out, dpi=DPI):
     from report_weasy import build_report_pdf
     from pdf2image import convert_from_path
+    try:
+        _patch_worksheet_dots()
+    except Exception:
+        pass
 
     tmp = tempfile.mkdtemp()
     pdf = os.path.join(tmp, 'rep.pdf')
@@ -203,6 +226,9 @@ def build_report_pptx(rep, out, dpi=DPI):
             h_pt = y1 - y0
             fs = max(5.0, round(h_pt * 0.90, 1))
             pad = 2.0
+            if txt == '.':
+                x0 = x1 - 28.0
+                fs = 8.5
             sh = s.shapes.add_textbox(Emu(int((x0 - pad) * EMU_PER_PT)),
                                       Emu(int((y0 - pad * 0.6) * EMU_PER_PT)),
                                       Emu(int((x1 - x0 + pad * 2.4) * EMU_PER_PT)),
@@ -211,7 +237,8 @@ def build_report_pptx(rep, out, dpi=DPI):
             tf.word_wrap = False
             tf.vertical_anchor = MSO_ANCHOR.MIDDLE
             tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
-            p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
+            p = tf.paragraphs[0]
+            p.alignment = PP_ALIGN.RIGHT if txt == '.' else PP_ALIGN.LEFT
             r = p.add_run(); r.text = txt
             r.font.size = Pt(fs)
             r.font.color.rgb = RGBColor(*fg)
