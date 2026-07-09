@@ -145,25 +145,38 @@ def _wc_status(rep, lookup):
             return ('on', val)
     return ('off','')
 
+def _wc_raw(rep, lookup):
+    """워크시트 흰칸용 원본담보명 (chiryo raw). 없으면 ''"""
+    for c in rep.get('chiryo',[]):
+        if c.get('name')==lookup:
+            return c.get('raw') or ''
+    return ''
+
 def _wcard(rep, title, desc, lookup, mode):
     # mode: 'diag'(초록·✔·가입/미가입) / 'main'(빨강·✘·미가입/가입) / 'na'(회색·상태). 박스=빈칸(워크시트).
     if mode=='na':
+        _rw=_wc_raw(rep, lookup)
+        _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
         return (f'<div class="wcard plain"><div class="wct">{_html.escape(title)}</div>'
-                f'<div class="wcd">{_html.escape(desc)}</div>'
+                f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
                 f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
     st,val=_wc_status(rep, lookup)
     variant,check=('green','✔') if mode=='diag' else ('red','✘')
     chip=('<span class="wchip g">가입</span>' if st=='on' else '<span class="wchip r">미가입</span>')
+    _rw=_wc_raw(rep, lookup)
+    _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
     _bv=_html.escape(val) if (st=='on' and val) else ''
     _box=(f'<span class="wbox">{_bv}</span>' if _bv else '<span class="wbox"></span><span class="wunit">만원</span>')
     return (f'<div class="wcard {variant}"><div class="wct">{check} {_html.escape(title)}</div>'
-            f'<div class="wcd">{_html.escape(desc)}</div>'
+            f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
             f'<div class="wcf">{chip}{_box}</div></div>')
 
 def _wcard_sj(rep, title, desc, lookup):
     # 산정특례 = 나란히 2칸, 회색 '상태' 칩, 빈 박스 (레퍼런스 그대로)
+    _rw=_wc_raw(rep, lookup)
+    _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
     return (f'<div class="wcard plain sj"><div class="wct">{_html.escape(title)}</div>'
-            f'<div class="wcd">{_html.escape(desc)}</div>'
+            f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
             f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
 
 def build_report_pdf(rep, out):
@@ -295,7 +308,7 @@ body {{ color:{INK}; }}
 .top .pgn {{ position:absolute; right:11mm; top:9mm; text-align:right; font-size:9pt; color:#9FB0C6; }}
 .top .pgn b {{ display:block; font-size:22pt; color:#fff; font-weight:400; }}
 .body {{ padding:7mm 11mm; }}
-.sbody {{ padding:5mm 8mm; }}
+.sbody {{ padding:3mm 8mm 4mm; }}
 .scv2 {{ display:flex; gap:5mm; }}
 .scvcol {{ flex:1; }}
 .scvhd {{ font-size:11pt; font-weight:800; padding-bottom:1.5mm; border-bottom:2pt solid {GOLD}; margin-bottom:2mm; }}
@@ -430,7 +443,7 @@ body {{ color:{INK}; }}
 .wslack {{ background:#FBF6E6; border:0.5pt solid #E6D08A; border-radius:1.4mm; padding:2.4mm 3mm; margin:3mm 0 2mm; font-size:9pt; }}
 .wslack .h {{ font-weight:800; color:{GOLDD}; font-size:8pt; }}
 .wslack .bl {{ display:inline-block; border-bottom:0.6pt solid {INK}; width:48mm; height:3mm; }}
-.wslack .lackbox {{ height:18mm; }}
+.wslack .lackbox {{ height:30mm; }}
 .wstalk {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2mm 3mm; font-size:7.6pt; line-height:1.5; color:{NAVY}; font-style:italic; }}
 .wstalk .h {{ font-style:normal; font-weight:800; color:{BLUE}; }}
 .ws3 {{ display:flex; gap:2.5mm; align-items:stretch; }}
@@ -444,8 +457,8 @@ body {{ color:{INK}; }}
 .wsmid .nmsub {{ font-size:12pt; font-weight:800; color:{GOLDD}; margin:1.5mm 0 2mm; }}
 .wsmid .cnt {{ font-size:13pt; font-weight:800; color:{NAVY}; }}
 .wsmid .cnt small {{ display:block; font-size:6.2pt; color:{MUT}; font-weight:600; }}
-.wssj {{ margin-top:3mm; border:1pt solid #D8B65A; border-radius:2mm; background:#FDFAF0; padding:3mm 3.5mm 3.5mm; }}
-.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:2.8mm 3mm; margin-bottom:2.4mm; min-height:26mm; display:flex; flex-direction:column; }}
+.wssj {{ margin-top:2mm; border:1pt solid #D8B65A; border-radius:2mm; background:#FDFAF0; padding:3mm 3.5mm 3.5mm; }}
+.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:3.2mm 3mm; margin-bottom:3.2mm; min-height:42mm; display:flex; flex-direction:column; }}
 .wcard.green {{ border-color:#3E9A63; background:#F4FBF7; }}
 .wcard.red {{ border-color:#DE9A9A; background:#FDF4F3; }}
 .wcard.plain {{ border-color:{LINE}; background:#FCFDFE; }}
@@ -453,14 +466,15 @@ body {{ color:{INK}; }}
 .wcard.green .wct {{ color:#1F7A4D; }}
 .wcard.red .wct {{ color:#C0444C; }}
 .wcard .wcd {{ font-size:8.6pt; color:{MUT}; margin:1.4mm 0 auto; }}
-.wcard .wcf {{ display:flex; align-items:center; gap:2mm; margin-top:2.2mm; }}
+.wcard .wdn {{ font-size:8pt; font-weight:700; color:#2B3A52; margin:1.2mm 0 0.6mm; line-height:1.25; word-break:break-all; }}
+.wcard .wcf {{ display:flex; align-items:center; gap:2mm; margin-top:1.2mm; }}
 .wchip {{ font-size:9pt; font-weight:800; color:#fff; padding:1.1mm 3.2mm; border-radius:1.5mm; white-space:nowrap; }}
 .wchip.g {{ background:#3E9A63; }}
 .wchip.r {{ background:#C0444C; }}
 .wchip.n {{ background:#9AA5B4; }}
-.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:7.5mm; line-height:7.5mm; padding:0 2mm; font-size:8.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
+.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:15mm; line-height:15mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
 .wunit {{ font-size:8.6pt; color:{MUT}; }}
-.wcard.sj {{ min-height:22mm; margin-bottom:0; background:#fff; }}
+.wcard.sj {{ min-height:34mm; margin-bottom:0; background:#fff; }}
 .wcard.sj .wct {{ font-size:11pt; }}
 .wssj .cap {{ font-size:9.4pt; font-weight:800; color:{GOLDD}; padding:0 0 2mm; }}
 
@@ -887,7 +901,6 @@ body {{ color:{INK}; }}
     {_wcard_sj(rep,'산정특례 (심장)','심혈관질환 I20~50 · 판막 전체','산정특례(심장)')}
    </div>
   </div>
-  <div class="wslack"><span class="h">부족한 담보 → 보완 추천</span><div class="lackbox"></div></div>
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 9</span></div>
 </div>

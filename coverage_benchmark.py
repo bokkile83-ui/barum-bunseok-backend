@@ -241,7 +241,26 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     for rows in grp_rows.values():
         for b,v in rows:
             if v>0: allrows[b]=max(allrows.get(b,0),v)
-    chiryo=[{'name':lab,'value':(_fmt(allrows.get(key,0)) or '미가입')} for lab,key in CHIRYO]
+    # ★v39 원본담보명 로드 (_dambo_raw 숨김시트) → 워크시트 흰칸에 '담보명 금액' 표기
+    _raw_map={}
+    try:
+        import openpyxl as _ox
+        _wbr=_ox.load_workbook(xlsx_path, data_only=True)
+        if '_dambo_raw' in _wbr.sheetnames:
+            _rs=_wbr['_dambo_raw']
+            for _r in range(2,_rs.max_row+1):
+                _s=_rs.cell(_r,1).value; _rw=_rs.cell(_r,2).value
+                if _s and _rw: _raw_map[str(_s).strip()]=str(_rw).strip()
+    except Exception:
+        pass
+    def _clean_dnm(nm):   # 원본담보명 정리: 괄호주석·병원접두·회차 제거해 짧게
+        import re as _re
+        s=_re.sub(r'[（(].*?[）)]','',nm)                       # 괄호내용 제거
+        s=_re.sub(r'상급종합병원[ᅵI|\s]*(II|Ⅱ|III|Ⅲ)?\s*','',s) # 병원접두 제거
+        s=_re.sub(r'\s+',' ',s).strip(' ·-|Ⅲ III II')
+        return s[:22]
+    chiryo=[{'name':lab,'value':(_fmt(allrows.get(key,0)) or '미가입'),
+             'raw':_clean_dnm(_raw_map[key]) if _raw_map.get(key) else ''} for lab,key in CHIRYO]
 
     # ── CI/생명보험 선지급 분석 (사망값 의존X: 선지급률=본체/(본체+잔여)) ──
     def _gv(nm):

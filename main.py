@@ -1,4 +1,4 @@
-# ===== BARUM main.py v33-ci-fix-20260708 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v39-damboname-20260709 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -48,18 +48,16 @@ def is_excluded(company, product=''):
         return True
     return False
 
-def judge_renewal(product, expiry, pay_count, contract='', pay_period=''):
-    # 지침 §7 판정 순서
+def judge_renewal(product, expiry, pay_count, contract='', pay_period='', company=''):
+    # 지침 §6 판정 (2026.07.09 개정: 240회 규칙 삭제 / 삼성화재 예외 / 납입==보장→갱신)
     # 1) '갱신형' 명시 -> 갱신
     if '갱신형' in product and '비갱신' not in product: return '갱신'
     if '갱신' in product and '비갱신' not in product: return '갱신'
     # 2) 만기 9999(종신) -> 비갱신
     if expiry.startswith('9999'): return '비갱신(종신)'
-    # 3) 총회차 240 초과 -> 비갱신
-    try:
-        _, b = pay_count.split('/')
-        if int(b.strip()) > 240: return '비갱신'
-    except: pass
+    # 3) ★삼성화재 예외: 납입기간을 갱신기간으로 잡는 특수 회사 → 기간동일이어도 주계약 비갱신
+    #    (담보명에 '갱신' 표시된 특약만 색에서 파랑 처리, judge_renewal은 주계약 판정)
+    if '삼성' in str(company): return '비갱신'
     # 4) 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
     pay_y = 0; cov_y = 0
     m = re.search(r'(\d+)\s*년', pay_period or '')
@@ -429,7 +427,7 @@ def parse_txt(txt, filename=''):
         if is_excluded(company, product):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
-        renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period)
+        renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period, company)
         # 담보 블록 텍스트 수집 (다음 '정상계약/실효계약 리스트'까지)
         block_lines = []; j = i
         while j < n:
@@ -514,7 +512,7 @@ def parse_txt(txt, filename=''):
             if pc: c['pay_count'] = pc
     # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
     for c in deduped:
-        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'])
+        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
         # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
         if not c['expiry_date'].startswith('9999') and c['dambo']:
             _dk=list(c['dambo'].keys())
@@ -729,7 +727,16 @@ def resolve_kw(raw):
             return None,0
     if has('창상') or has('봉합'): return '창상봉합술',0
 
-    # ── 암 치료비 ──
+    # ★v35 중증질환자 산정특례대상보장 = 산정특례 전용행. 파서가 담보명 3줄분할·OCR깨짐으로 조각냄
+    #   실측조각(이성준KB 2026.07.09): ①'중증질환자（뇌혈관）'단독 ②'산정특례대상보장…중•증걸 환■자■（삼장）'
+    if (has('중증질환자') or has('중증환자')) and has('뇌혈관') and no('수술'): return '산정특례뇌혈관',0
+    if has('삼장') and no('수술'): return '산정특례심장',0   # OCR '삼장'=심장, 중증질환자 산특 조각 전용
+    if (has('중증질환자') or has('중증환자')) and (has('심장') or has('삼장')) and no('수술'): return '산정특례심장',0
+    # ── 암 치료비 ── (지점장 2026.07.09 최종: 담보명=[병원]+[핵심분류]+[설명]. 핵심분류로 매핑)
+    if has('유사암') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
+    if has('하이클래스'): return '하이클래스(암)',0   # ②핵심분류=하이클래스→하이클래스(암)행(뒤 '암주요치료비'·'항암약물' 설명 무시). 2건이면 아래 합산
+    if has('주요치료') and no('순환계','2대','뇌','허혈','심장','심근','유사암','하이클래스'):   # ③하이클래스 없는 '병원+암주요치료비'→암주요치료비행. ★심장 추가(심장/순환계 주요치료비=2대주요치료비로, v38d)
+        return '암주요치료비',0
     if has('고액항암') or (has('고액') and has('항암') and has('치료')): return '__무시__',0   # ★v30z 고액항암치료비=표적+양성자+세기조절+카티 합계값 → 무시(구성 치료비는 아래에서 각각 개별 매핑)
     if has('표적'): return '표적항암치료비',0
     # ★v30h 암주요치료비 = 암특정치료비/암주요치료비/암(특정유사암포함)진단후(종합병원/상급종합병원)특정치료(지원금/비)
@@ -865,9 +872,10 @@ def resolve_kw(raw):
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
-    # §골절: '치아제외/파절제외' 명시된 것만 제외 행. 단독 골절진단비·치아포함은 포함 행.
-    if has('골절') and (has('치아제외') or has('파절제외')): return '골절(치아파절제외)',0
-    if has('골절') and (has('치아포함') or has('파절포함')): return '골절(치아파절포함)',0
+    # §골절: '치아/파절 제외' 명시된 것만 제외 행. 단독 골절진단비·치아포함은 포함 행.
+    #   ★삼성형 '치아파절 (깨짐, 부러짐) 제외'처럼 중간에 딴말 껴도 잡도록 (치아 or 파절) + 제외 동반 판정
+    if has('골절') and has('제외') and (has('치아') or has('파절')): return '골절(치아파절제외)',0
+    if has('골절') and (has('치아포함') or has('파절포함') or (has('제외') is False and (has('치아') or has('파절')))): return '골절(치아파절포함)',0
     if has('골절') and has('진단'): return '골절(치아파절포함)',0
     if _norm(raw)=='골절' or has('골절') and no('수술','일당','입원','깁스','부목'): return '골절(치아파절포함)',0
     if (has('응급실') or (has('응급') and has('내원'))) and no('비응급'): return '응급실(응급)',0   # ★v29q-11 응급 단독, 비응급 합산 차단→[확인]
@@ -1129,6 +1137,7 @@ def build_excel(data, out):
     unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
     cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
     surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
+    raw_by_std = {}   # ★v39 워크시트 담보명 카피: 표준명→원본담보명(최댓값 담보 기준)
     heart_trace = []   # ★v29z (지점장 2026.07.03): 심장 블록 기재 근거 — (회사, 원담보명, 기재행들, 금액). '없는 값이 튀어나옴' 방지용 감사 로그
     silson_trace = []  # ★v29z: 실손 세대 판정 근거 — (회사, 가입일, 상품코드, 판정)
 
@@ -1314,7 +1323,7 @@ def build_excel(data, out):
                 continue
             if std=='입원':                    # ② 입원한도 3,000=구형실손→3,000 유지 / 그 외 일반실손→5,000 고정
                 if amt != 3000: amt=5000
-            if std=='암주요치료비': amt=10000   # ★v30j 암주요치료비=연간 최대 1억 정액 → 구간밴드 스텝(1천 등) 무시, 10,000 고정 기재
+            # ★v34 암주요치료비 10,000 강제 폐기(지점장 2026.07.09): 실제 가입금액 사용. 하이클래스는 별도행 합산.
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std == '종수술비공통' and 1 <= jong <= 5:   # ★v29q-12 상해/질병 미표기 → 상해·질병 양쪽 동일 기재
@@ -1346,7 +1355,7 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                _rep1 = std in ('표적항암치료비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암')
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암')
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -1354,6 +1363,12 @@ def build_excel(data, out):
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
                 # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
                 ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','일상배상책임')) else BK   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
+                # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
+                _WS_STD = ('암주요치료비','하이클래스(암)','2대 주요치료비','산정특례뇌혈관','산정특례심장','일반암','뇌혈관진단비','뇌졸증진단비','급성심근경색','허혈성 진단비')
+                if std in _WS_STD:
+                    _prev = raw_by_std.get(std)
+                    if _prev is None or amt >= _prev[1]:
+                        raw_by_std[std] = (str(raw).strip(), amt)
                 if std in {'협심증','심부전','빈맥','염증','부정맥','심근병증','심장판막','산정특례심장','2대 주요치료비','허혈성 진단비','급성심근경색','중대한 급성심근','혈전용해치료비','심장수술비','허혈성수술비'}:
                     heart_trace.append((ct['company'], raw, std, amt))   # ★v29z 심장 단독 기재 근거
                 if '수술' in str(std) or std == '창상봉합술':
@@ -1564,6 +1579,15 @@ def build_excel(data, out):
         _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
         for (_c,_raw,_rows,_a) in cancer_trace:
             _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
+    # ★v39 워크시트 담보명 카피: 원본담보명을 숨김 시트 _dambo_raw 에 저장 (등식·기존시트 무손상)
+    try:
+        if '_dambo_raw' in wb.sheetnames: del wb['_dambo_raw']
+        _rs = wb.create_sheet('_dambo_raw'); _rs.sheet_state='hidden'
+        _rs.cell(1,1,'std'); _rs.cell(1,2,'raw'); _rs.cell(1,3,'amt')
+        for _i,(_std,(_rw,_am)) in enumerate(raw_by_std.items(), start=2):
+            _rs.cell(_i,1,_std); _rs.cell(_i,2,_rw); _rs.cell(_i,3,_am)
+    except Exception:
+        pass
     wb.save(out)
     return unmapped
 
