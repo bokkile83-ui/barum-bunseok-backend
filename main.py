@@ -1,4 +1,4 @@
-# ===== BARUM main.py v39-damboname-20260709 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v40b-kbsim-20260709 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -732,9 +732,10 @@ def resolve_kw(raw):
     if (has('중증질환자') or has('중증환자')) and has('뇌혈관') and no('수술'): return '산정특례뇌혈관',0
     if has('삼장') and no('수술'): return '산정특례심장',0   # OCR '삼장'=심장, 중증질환자 산특 조각 전용
     if (has('중증질환자') or has('중증환자')) and (has('심장') or has('삼장')) and no('수술'): return '산정특례심장',0
-    # ── 암 치료비 ── (지점장 2026.07.09 최종: 담보명=[병원]+[핵심분류]+[설명]. 핵심분류로 매핑)
+    # ── 암 치료비 ── (지점장 2026.07.09 최종확정: '암주요치료비' 명시 > 하이클래스 > 유사암무시)
     if has('유사암') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
-    if has('하이클래스'): return '하이클래스(암)',0   # ②핵심분류=하이클래스→하이클래스(암)행(뒤 '암주요치료비'·'항암약물' 설명 무시). 2건이면 아래 합산
+    if has('암주요치료비') and no('유사암'): return '암주요치료비',0   # ★②담보명에 '암주요치료비' 있으면 하이클래스보다 우선→암주요치료비행 (하이클래스 암주요치료비형)
+    if has('하이클래스'): return '하이클래스(암)',0   # ③암주요치료비 없는 하이클래스(항암약물형 등)→하이클래스(암)행. 2건이면 합산
     if has('주요치료') and no('순환계','2대','뇌','허혈','심장','심근','유사암','하이클래스'):   # ③하이클래스 없는 '병원+암주요치료비'→암주요치료비행. ★심장 추가(심장/순환계 주요치료비=2대주요치료비로, v38d)
         return '암주요치료비',0
     if has('고액항암') or (has('고액') and has('항암') and has('치료')): return '__무시__',0   # ★v30z 고액항암치료비=표적+양성자+세기조절+카티 합계값 → 무시(구성 치료비는 아래에서 각각 개별 매핑)
@@ -800,9 +801,15 @@ def resolve_kw(raw):
     if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
     if has('허혈성진단') or ((has('허혈성') or has('허혈심장')) and has('진단') and not has('수술')): return '허혈성 진단비',0   # ★v29t 허혈심장질환진단 포함
-    # ★v30 KB '심장질환(특정Ⅱ)'=급성심근경색. 특정Ⅰ은 묶음(협심증·심부전·빈맥·염증)에서 처리 — 여기 오면 [확인].
+    # ★v40b KB '심장질환(특정)' 진단비: 특정Ⅱ=급성심근경색 / 특정Ⅰ=허혈성 진단비 (지침 §8.3.1 KB).
+    #   OCR이 로마숫자를 Ⅱ/II/2 등으로 흘려 매칭 실패하던 버그 수정 → 세 표기 모두 인식.
     if has('심장질환') and has('특정') and has('진단') and no('수술','주요치료'):
-        return ('급성심근경색',0) if 'Ⅱ' in raw else (None,0)
+        _rr=str(raw)
+        _is2 = ('Ⅱ' in _rr) or ('특정 II' in _rr) or ('특정II' in _rr) or ('특정 2' in _rr) or ('특정2' in _rr) or ('(특정 II)' in _rr) or ('（특정 II）' in _rr)
+        _is1 = ('Ⅰ' in _rr) or ('특정 I' in _rr) or ('특정I' in _rr) or ('특정 1' in _rr) or ('특정1' in _rr) or ('(특정 I)' in _rr) or ('（특정 I）' in _rr)
+        if _is2 and not _is1: return '급성심근경색',0
+        if _is1 and not _is2: return '허혈성 진단비',0
+        return '급성심근경색',0   # 구분 불가 시 급성심근경색(보수적)
     if has('일당') and (has('허혈') or has('협심') or has('심부전') or has('부정맥') or has('빈맥') or has('뇌혈관') or has('심뇌')): return None,0   # ★v30b 질환별 입원일당 ≠ 진단비 → [확인] (조성래 허혈일당 오합산 수리)
     if has('협심'): return '협심증',0
     if has('허혈'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비(구 협심증행 폐기)

@@ -184,6 +184,22 @@ def _erase(img, bx):
                 img.putpixel((xx, yy), tuple(int(lc[k] + (rc[k] - lc[k]) * t) for k in range(3)))
 
 
+def _txt_w(txt, fs):
+    """텍스트 렌더 폭(pt) 추정. 한글=fs*1.0, 숫자/영문/기호=fs*0.55, 공백=fs*0.3"""
+    w = 0.0
+    for ch in txt:
+        o = ord(ch)
+        if o > 0x1100 and o < 0xD7A4:      # 한글
+            w += fs * 1.0
+        elif ch == ' ':
+            w += fs * 0.3
+        elif ch in ',.·/':
+            w += fs * 0.35
+        else:                               # 숫자·영문·기타
+            w += fs * 0.55
+    return w
+
+
 def build_report_pptx(rep, out, dpi=DPI):
     from report_weasy import build_report_pdf
     from pdf2image import convert_from_path
@@ -239,6 +255,12 @@ def build_report_pptx(rep, out, dpi=DPI):
             if txt == '.':
                 x0 = x1 - 28.0
                 fs = 8.5
+            else:
+                # ★폭 기반 자동 축소: 문자열이 상자폭 넘으면 폰트 줄임(오버 방지)
+                box_w = (x1 - x0) + pad * 1.0   # 가용 폭(pt), 좌우 여백 약간 남김
+                need = _txt_w(txt, fs)
+                if need > box_w and need > 0:
+                    fs = max(5.0, round(fs * box_w / need, 1))
             sh = s.shapes.add_textbox(Emu(int((x0 - pad) * EMU_PER_PT)),
                                       Emu(int((y0 - pad * 0.6) * EMU_PER_PT)),
                                       Emu(int((x1 - x0 + pad * 2.4) * EMU_PER_PT)),
