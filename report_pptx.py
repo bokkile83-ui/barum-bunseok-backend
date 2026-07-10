@@ -75,7 +75,7 @@ def _patch_worksheet():
     _E = '<span class="wbox"></span>'
     _D = '<span class="wbox">.</span>'
     _RX = re.compile(r'<span class="wbox">(.*?)</span>')
-    for _fn in ('_wcard', '_wcard_sj'):
+    for _fn in ('_wcard', '_wcard_sj', '_wcard_fix'):
         _o = getattr(_rw, _fn, None)
         if _o is None:
             continue
@@ -103,7 +103,7 @@ def _pageset(rep):
             P.add(f"{int(b.get('amt', 0)):,}")
         except Exception:
             pass
-    return {2: P, 7: set(_WS)}
+    return {2: P, 7: set(_WS), 8: {'.'}}
 
 
 def _value_boxes(xml_path, V, PG=None):

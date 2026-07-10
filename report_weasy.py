@@ -134,7 +134,7 @@ def _wc_status(rep, lookup):
             v=_cov_val(rep,'암','일반암')
             return ('on', v) if v else ('off','')
         # 뇌·심 진단비 = 가입된 진단비 담보 나열 (뇌혈관·뇌졸증·급성심근·허혈성)
-        _order=[('뇌혈관진단비','뇌혈관'),('뇌졸증진단비','뇌졸증')]
+        _order=[('뇌혈관진단비','뇌혈관'),('뇌졸증진단비','뇌졸증'),('뇌출혈진단비','뇌출혈'),('급성심근경색','급성심근'),('허혈성 진단비','허혈성')]
         _pv={_it.get('t'):_it.get('v') for _it in rep.get('p5_own',[])}
         parts=[lab+' '+str(_pv[t]) for t,lab in _order if _pv.get(t) and _pv.get(t)!='미가입']
         return ('on', '·'.join(parts)) if parts else ('off','')
@@ -157,7 +157,8 @@ def _wcard(rep, title, desc, lookup, mode):
     if mode=='na':
         _rw=_wc_raw(rep, lookup)
         _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
-        return (f'<div class="wcard plain"><div class="wct">{_html.escape(title)}</div>'
+        _half=' half' if lookup in ('암생활비','순환계생활비') else ''
+        return (f'<div class="wcard plain{_half}"><div class="wct">{_html.escape(title)}</div>'
                 f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
                 f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
     st,val=_wc_status(rep, lookup)
@@ -166,10 +167,29 @@ def _wcard(rep, title, desc, lookup, mode):
     _rw=_wc_raw(rep, lookup)
     _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
     _bv=_html.escape(val) if (st=='on' and val) else ''
-    _box=(f'<span class="wbox">{_bv}</span>' if _bv else '<span class="wbox"></span><span class="wunit">만원</span>')
+    _wrap=' wrap' if (_bv and ('·' in _bv or len(_bv)>12)) else ''
+    _box=(f'<span class="wbox{_wrap}">{_bv}</span>' if _bv else '<span class="wbox"></span><span class="wunit">만원</span>')
     return (f'<div class="wcard {variant}"><div class="wct">{check} {_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
             f'<div class="wcf">{chip}{_box}</div></div>')
+
+def _wcard_fix(title, desc):
+    """9페이지 비갱신 추천 카드: 상담용 빈 흰칸(값은 현장에서 기입)."""
+    import html as _html
+    return (f'<div class="wcard plain fx"><div class="wct">{_html.escape(title)}</div>'
+            f'<div class="wcd">{_html.escape(desc)}</div>'
+            f'<div class="wcf"><span class="wchip b">비갱신 추천</span>'
+            f'<span class="wbox"></span><span class="wunit">만원</span></div></div>')
+
+
+def _wcard_fix_list(title, desc, rows):
+    """9페이지 세분화 카드: 항목별 라벨 + 개별 흰칸 (수술 등)."""
+    import html as _html
+    lines=''.join(f'<div class="fxsub"><span class="lbl">{_html.escape(r)}</span><span class="mb"></span></div>' for r in rows)
+    return (f'<div class="wcard plain fx tall"><div class="wct">{_html.escape(title)}</div>'
+            f'<div class="wcd">{_html.escape(desc)}</div>'
+            f'<div class="fxlist">{lines}</div></div>')
+
 
 def _wcard_sj(rep, title, desc, lookup):
     # 산정특례 = 나란히 2칸, 회색 '상태' 칩, 빈 박스 (레퍼런스 그대로)
@@ -458,7 +478,10 @@ body {{ color:{INK}; }}
 .wsmid .cnt {{ font-size:13pt; font-weight:800; color:{NAVY}; }}
 .wsmid .cnt small {{ display:block; font-size:6.2pt; color:{MUT}; font-weight:600; }}
 .wssj {{ margin-top:2mm; border:1pt solid #D8B65A; border-radius:2mm; background:#FDFAF0; padding:3mm 3.5mm 3.5mm; }}
-.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:3.2mm 3mm; margin-bottom:3.2mm; min-height:42mm; display:flex; flex-direction:column; }}
+.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:3.2mm 3mm; margin-bottom:3.2mm; min-height:47mm; display:flex; flex-direction:column; }}
+.wcard.half {{ min-height:22mm; padding:2.2mm 3mm; }}
+.wcard.half .wcd {{ margin:0.8mm 0 auto; }}
+.wcard.half .wbox {{ height:9mm; line-height:9mm; }}
 .wcard.green {{ border-color:#3E9A63; background:#F4FBF7; }}
 .wcard.red {{ border-color:#DE9A9A; background:#FDF4F3; }}
 .wcard.plain {{ border-color:{LINE}; background:#FCFDFE; }}
@@ -472,7 +495,20 @@ body {{ color:{INK}; }}
 .wchip.g {{ background:#3E9A63; }}
 .wchip.r {{ background:#C0444C; }}
 .wchip.n {{ background:#9AA5B4; }}
+.wchip.b {{ background:#2E5A88; }}
+.wscap.n2 {{ background:#2E5A88; color:#fff; }}
+.wcard.fx {{ min-height:46mm; }}
+.wcard.fx.tall {{ min-height:auto; }}
+.fxlist {{ margin-top:1.6mm; }}
+.fxsub {{ display:flex; align-items:center; gap:2mm; margin:1.1mm 0; font-size:8.4pt; }}
+.fxsub .lbl {{ flex:0 0 27mm; font-weight:700; color:#2B3A52; }}
+.fxsub .mb {{ flex:1; border:0.6pt solid {LINE}; border-radius:1mm; height:5.6mm; background:#fff; }}
+.wssj.fixnote {{ background:#EEF4FB; border-color:#9BBBD8; }}
+.fixnote .cap {{ color:#2E5A88; }}
+.fxrow {{ font-size:9pt; line-height:1.5; margin:1.5mm 0; color:#2B3A52; }}
+.fxrow b {{ color:#2E5A88; }}
 .wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:15mm; line-height:15mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
+.wbox.wrap {{ white-space:normal; word-break:keep-all; line-height:1.3; height:auto; min-height:15mm; display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; padding:1.4mm 2.6mm; font-size:8pt; }}
 .wunit {{ font-size:8.6pt; color:{MUT}; }}
 .wcard.sj {{ min-height:34mm; margin-bottom:0; background:#fff; }}
 .wcard.sj .wct {{ font-size:11pt; }}
@@ -903,6 +939,40 @@ body {{ color:{INK}; }}
   </div>
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 9</span></div>
+</div>
+
+<!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
+<div class="pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
+  <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
+  <div class="pgn"><b>8</b>비갱신 추천</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="ws3">
+   <div class="wscol wsmain">
+    <div class="wscap n2">🩺 진단비 · 수술</div>
+    {_wcard_fix('진단비','암·뇌출혈·급성심근경색 등 진단 일시금')}
+    {_wcard_fix_list('수술','종별 · 부위별 세분화',['질병 / 상해 수술비','1~5종','1~7·9종','N대 수술비','뇌혈관 수술비','허혈성 수술비','심장 수술비'])}
+   </div>
+   <div class="wsmid">
+    <div class="lb">OUR CLIENT</div>
+    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
+    <div class="nmsub">고객님</div>
+    <div class="cnt">평생<small>비갱신 고정</small></div>
+   </div>
+   <div class="wscol wsmain">
+    <div class="wscap n2">🏥 일당 · 상해</div>
+    {_wcard_fix('일당','질병·상해 입원일당')}
+    {_wcard_fix('상해','상해 후유장해·사망 등')}
+   </div>
+  </div>
+  <div class="wssj fixnote">
+   <div class="cap">왜 비갱신인가 — 은퇴 후를 지키는 3가지</div>
+   <div class="fxrow"><b>① 평생 고정</b> 은퇴(60~65세) 이후 소득이 없을 때 갱신 보험료 인상은 큰 부담. 비갱신은 납입 끝나면 보험료 0원, 보장은 평생 유지.</div>
+   <div class="fxrow"><b>② 납입면제</b> 암·뇌출혈·급성심근경색 등 중대질환 진단 시 이후 보험료가 면제되고 보장은 그대로 이어짐 (특약 가입 시).</div>
+   <div class="fxrow"><b>③ 진단·수술·일당·상해</b> 이 4가지는 나이 들수록 발생률이 오르므로, 은퇴 전 비갱신으로 미리 확정해두는 것이 유리.</div>
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / 9</span></div>
 </div>
 {heart_chart}
 </body></html>'''
