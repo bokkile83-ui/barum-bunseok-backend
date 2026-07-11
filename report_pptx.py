@@ -90,6 +90,24 @@ def _patch_worksheet():
                 return h
             return _w
         setattr(_rw, _fn, _mk(_o))
+
+    # ★_wcard_fix_list(.mb 흰칸) 개방: 빈 .mb → '.' 주입, 채워진 값은 _WS 수집
+    _EM = '<span class="mb"></span>'
+    _DM = '<span class="mb">.</span>'
+    _RXM = re.compile(r'<span class="mb">(.*?)</span>')
+    _ol = getattr(_rw, '_wcard_fix_list', None)
+    if _ol is not None:
+        def _mkl(o):
+            def _w(*a, **k):
+                h = o(*a, **k).replace(_EM, _DM)
+                for m in _RXM.finditer(h):
+                    t = m.group(1).strip().replace(' ', '')
+                    if t and t != '.':
+                        _WS.add(t)
+                return h
+            return _w
+        setattr(_rw, '_wcard_fix_list', _mkl(_ol))
+
     _rw._barum_ws = True
 
 
@@ -103,7 +121,10 @@ def _pageset(rep):
             P.add(f"{int(b.get('amt', 0)):,}")
         except Exception:
             pass
-    return {2: P, 7: set(_WS), 8: {'.'}}
+    # 편집 대상 페이지(0-based): 2=보험료막대 / 7=워크시트 / 8=비갱신 / 9=운전자 / 10=간병 / 11=재가 / 12=실손
+    D = {'.'}
+    return {2: P, 7: set(_WS) | D, 8: set(_WS) | D, 9: set(_WS) | D,
+            10: set(_WS) | D, 11: set(_WS) | D, 12: set(_WS) | D}
 
 
 def _value_boxes(xml_path, V, PG=None):
@@ -111,7 +132,7 @@ def _value_boxes(xml_path, V, PG=None):
     PG = PG or {}
     out = []
     for pi, pg in enumerate(root.findall('.//x:page', NS)):
-        VV = V | PG.get(pi, set())
+        VV = V | PG.get(pi, set()) | {'.'}
         pw, ph = float(pg.get('width')), float(pg.get('height'))
         found = []
         for ln in pg.findall('.//x:line', NS):
@@ -201,7 +222,9 @@ def _txt_w(txt, fs):
 
 
 def build_report_pptx(rep, out, dpi=DPI):
+    import report_weasy
     from report_weasy import build_report_pdf
+    report_weasy._PPT_MODE = True
     from pdf2image import convert_from_path
     try:
         _WS.clear()
