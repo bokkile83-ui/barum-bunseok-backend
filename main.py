@@ -2296,16 +2296,8 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)
         if rep is not None:
-            # 충족률 PDF (weasyprint 미복구면 실패 허용)
-            try:
-                from report_weasy import build_report_pdf
-                rp=os.path.join(d,f'보장설명지_{cust}.pdf')
-                build_report_pdf(rep, rp)
-                if os.path.exists(rp):
-                    response['report_b64']=base64.b64encode(open(rp,'rb').read()).decode()
-                    response['report_name']=f'보장설명지_{cust}.pdf'
-            except Exception as _re:
-                response['report_error']=str(_re)
+            # ★ 보장설명지 PDF 별도 생성 중단(2026.07.11 지점장 지시): 보장진단서 PPT가 동일 내용(PDF 페이지 이미지)이라
+            #    별도 PDF는 렌더 1회(약 60초)를 중복 유발 → 속도 위해 스킵. 필요 시 이 블록 복구.
             # ★ 보장진단서 PPT (편집가능) — 같은 rep로 생성
             try:
                 from report_pptx import build_report_pptx
