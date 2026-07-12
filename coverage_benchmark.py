@@ -77,8 +77,9 @@ def _bundle_adjust(path):
     adj={'심장':0.0,'뇌혈관':0.0}
     try:
         wb=openpyxl.load_workbook(path,data_only=True)
-        if '📋확인사항' not in wb.sheetnames: return adj
-        qs=wb['📋확인사항']; on=False
+        _qn=next((n for n in ('확인사항','📋확인사항') if n in wb.sheetnames), None)   # ★v41 시트명 이모지 제거 호환
+        if not _qn: return adj
+        qs=wb[_qn]; on=False
         for r in range(1,qs.max_row+1):
             a=str(qs.cell(r,1).value or '')
             if '[근거] 심장' in a: on=True; continue
@@ -441,6 +442,14 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                 _gj+=int(_v)
     if _gj>0: _dm['골절합산']=_fmt(_gj)
     rep['dambo']=_dm
+    # ★v41 (지점장 2026.07.12) 보장나무(6p) CI 유동표시용 : 담보key → 금액. CI 계약일 때만 채운다.
+    _ciamt={}
+    if ci.get('status')=='ci':
+        _cvz=_gv('중대한 뇌졸증'); _cam=_gv('중대한 급성심근'); _cca=_gv('중대한 암')
+        if _cvz: _ciamt['hem']=_fmt(_cvz); _ciamt['infarct']=_fmt(_cvz)
+        if _cam: _ciamt['ami']=_fmt(_cam)
+        if _cca: _ciamt['__cancer__']=_fmt(_cca)
+    rep['ci_amounts']=_ciamt
     # ★2026.07.11 실손 세대 자동판별(CI식 3상태): 실손 계약 가입일 → 세대
     def _gen_of(js, comp=''):
         import re as _r

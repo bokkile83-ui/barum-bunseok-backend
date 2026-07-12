@@ -257,6 +257,15 @@ def _ac(label):
         '대인 벌금':['대인'], '대물 벌금':['대물'], '합의금':['합의금'], '6주미만 합의금':['6주미만'],
         '변호사비':['변호사'], '자동차부상위로금':['자부상'],
         '간병인지원일당':['간병인'], '간호통합병동':['간호통합병동'],
+        # ★v41 8p 진단·수술 라벨 정본화 (수술 라벨이 진단비 값을 끌어오던 오매칭 차단)
+        '급성심근':['급성심근경색'], '협심증':['협심증'], '심부전':['심부전'],
+        '염증':['염증'], '부정맥':['부정맥'],
+        '질병수술비':['질병수술비'], '상해수술비':['상해수술비'],
+        '뇌혈관수술비':['뇌혈관수술비'], '허혈성수술비':['허혈성수술비'], '심장수술비':['심장수술비'],
+        '암수술비':['암수술비'], '골절수술비':['골절수술비'], '5대골절수술비':['5대골절수술비'],
+        '화상수술비':['화상수술비'], '중대상해수술비':['중대한상해수술비','중대상해수술비'],
+        '창상봉합':['창상봉합술'], 'N대수술비':['n대수술비'], '1~5종':[],
+        'CI 중대한 암':['중대한 암'], 'CI 중대한 뇌졸증':['중대한 뇌졸증'], 'CI 중대한 급성심근':['중대한 급성심근'],
     }
     # 1) 뇌·심 진단비 (p5_own, 담보명 확정)
     _P={'뇌혈관':'뇌혈관진단비','뇌졸증':'뇌졸증진단비','뇌출혈':'뇌출혈진단비',
@@ -323,6 +332,21 @@ def _wcard_fix_group(title, desc, groups):
     return (f'<div class="wcard plain fx tall two"><div class="wct">{_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>{body}</div>')
 
+
+def _dx_groups(rep):
+    """★v41 8p 진단비 그룹 — CI 계약이면 '중대한OO' 행을 CI 칩으로 추가(유동)."""
+    _ci = (rep or {}).get('ci', {}) or {}
+    cam = ['고액암','일반암','유사암']
+    brn = ['뇌혈관','뇌졸증','뇌출혈']
+    hrt = ['허혈성','협심증','급성심근','심부전','염증','부정맥']
+    if str(_ci.get('status'))=='ci':
+        cam = cam + ['CI 중대한 암']
+        brn = brn + ['CI 중대한 뇌졸증']
+        hrt = hrt + ['CI 중대한 급성심근']
+    return [('■ 암',cam),('■ 뇌',brn),('■ 심장',hrt)]
+
+_SURG_GROUPS=[('■ 질병',['질병수술비','1~5종','N대수술비','뇌혈관수술비','허혈성수술비','심장수술비','암수술비']),
+              ('■ 상해',['상해수술비','1~5종','중대상해수술비','창상봉합','골절수술비','5대골절수술비','화상수술비'])]
 
 def _wcard_sj(rep, title, desc, lookup):
     # 산정특례 = 나란히 2칸, 회색 '상태' 칩, 빈 박스 (레퍼런스 그대로)
@@ -518,11 +542,11 @@ body {{ color:{INK}; }}
 .scvcol {{ flex:1; }}
 .scvhd {{ font-size:9.5pt; font-weight:800; padding-bottom:1mm; border-bottom:2pt solid {GOLD}; margin-bottom:1.4mm; }}
 .scvhd.brain {{ color:#1F5FA8; }} .scvhd.heart {{ color:{GAP}; }}
-.scvt {{ width:100%; border-collapse:collapse; font-size:8.4pt; }}
+.scvt {{ width:100%; border-collapse:collapse; font-size:7.8pt; }}
 .scvt th {{ background:{NAVY}; color:#fff; padding:1.1mm 0.7mm; font-size:7.6pt; text-align:center; font-weight:800; }}
 .scvt th.dl {{ text-align:left; }}
 .scvt th:last-child {{ background:{GOLDD}; }}
-.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.9mm 0.7mm; text-align:center; }}
+.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.55mm 0.6mm; text-align:center; }}
 .scvt td.dl {{ text-align:left; }}
 .scvt td.dl .cd {{ font-size:6.8pt; color:{MUT}; }}
 .scvt tr.grp td {{ background:#EEF1F6; font-size:7pt; font-weight:800; color:{NAVY}; text-align:left; padding:0.8mm 0.7mm; }}
@@ -534,10 +558,10 @@ body {{ color:{INK}; }}
 .on {{ color:#1F7A4D; font-weight:800; }} .off {{ color:#B9C2CE; }}
 .hold {{ color:{GOLDD}; font-weight:700; font-size:6pt; }}
 .chip {{ background:{GOLD}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1mm; border-radius:2mm; }}
-.cichip {{ background:{NAVY}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1.2mm; border-radius:2mm; margin-left:1.2mm; }}
-.scvt .amtbox.cibox {{ background:#F4F7FB; border-color:{NAVY}; min-width:9mm; }}
+.cichip {{ background:{NAVY}; color:#fff; font-size:5pt; font-weight:800; padding:0.2mm 1.2mm; border-radius:2mm; margin-left:1.2mm; }}
+.scvt .amtbox.cibox {{ background:#F4F7FB; border-color:{NAVY}; min-width:13mm; }}
 .scvt .amt {{ color:{NAVY}; font-weight:800; font-size:8.6pt; margin-left:0.8mm; }}
-.scvt .amtbox {{ display:inline-block; min-width:9mm; height:6.6mm; line-height:6.6mm; border:0.6pt solid #C9CFD8; border-radius:1mm; padding:0 1.2mm; margin-left:0.8mm; background:#fff; color:{NAVY}; font-weight:800; font-size:8.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
+.scvt .amtbox {{ display:inline-block; min-width:13mm; height:4.4mm; line-height:4.4mm; border:0.6pt solid #C9CFD8; border-radius:1mm; padding:0 0.9mm; margin-left:0.6mm; background:#fff; color:{NAVY}; font-weight:800; font-size:7.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
 .scvleg {{ font-size:6.2pt; color:{MUT}; margin:1.5mm 0; }} .own2 {{ color:{GOLDD}; font-weight:700; }}
 .scvnote {{ font-size:5.6pt; line-height:1.35; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
 .scvnote b {{ color:{NAVY}; }} .scvnote b.r {{ color:{GAP}; }}
@@ -774,6 +798,9 @@ body {{ color:{INK}; }}
 .g5tab td, .g5tab th {{ font-size:10.6pt; line-height:1.45; padding:2.0mm 2.2mm; }}
 .silgenpg .fixnote .fxrow {{ font-size:10.6pt; line-height:1.5; margin:1.5mm 0; }}
 .silgenpg .fixnote .cap {{ font-size:11.5pt; }}
+/* ★v41 5p 실손세대: 행 세로폭 확대(여백 제거) */
+.silgenpg .gentab td, .silgenpg .gentab th {{ padding:1.1mm 1.7mm; font-size:7.6pt; line-height:1.25; }}
+.silgenpg .renote .renrow {{ font-size:9pt; padding:0.9mm 0; }}
 .silgenpg .note.bigfact {{ font-size:10.4pt; line-height:1.5; }}
 .gentab .smn, .g5tab .smn {{ font-size:10pt; color:#6B7686; font-weight:700; }}
 .gentab .smn {{ color:#C0444C; font-size:10pt; }}
@@ -839,12 +866,12 @@ body {{ color:{INK}; }}
 .sumcard.ng .sv {{ color:{GAP}; }}
 .sumcard .sk {{ font-size:11pt; font-weight:700; color:{MUT}; margin-top:2mm; }}
 .citab {{ width:100%; border-collapse:separate; border-spacing:2.6mm 0; table-layout:fixed; margin-top:1.5mm; }}
-.citab th {{ font-size:12pt; font-weight:900; padding:2.6mm 3.2mm; border-radius:2mm 2mm 0 0; color:#fff; text-align:left; }}
+.citab th {{ font-size:13pt; font-weight:900; padding:2.6mm 3.2mm; border-radius:2mm 2mm 0 0; color:#fff; text-align:left; }}
 .citab th.cig {{ background:#1F7A4D; }} .citab th.cir {{ background:{GAP}; }}
-.citab td {{ vertical-align:top; padding:3.6mm 3.6mm; border-radius:0 0 2mm 2mm; border:1pt solid; }}
+.citab td {{ vertical-align:top; padding:3.4mm 3.6mm; border-radius:0 0 2mm 2mm; border:1pt solid; }}
 .citab td.cig {{ background:#F4FBF7; border-color:#3E9A63; }}
 .citab td.cir {{ background:#FDF4F3; border-color:#DE9A9A; }}
-.cil {{ font-size:8.4pt; font-weight:700; color:{INK}; line-height:1.35; padding:1.4mm 0 1.4mm 3mm; text-indent:-3mm; border-bottom:0.6pt solid #D8DDE4; }}
+.cil {{ font-size:9.8pt; font-weight:700; color:{INK}; line-height:1.4; padding:2.2mm 0 2.2mm 3.4mm; text-indent:-3.4mm; border-bottom:0.6pt solid #D8DDE4; }}
 .citab td .cil:last-child {{ border-bottom:none; }}
 .cil:before {{ content:'● '; color:#1F7A4D; }}
 .cil.r:before {{ content:'× '; color:{GAP}; }}
@@ -1146,12 +1173,12 @@ body {{ color:{INK}; }}
 .gcard.cir  .gh {{ background:#2A3F63; }} .gcard.cir  {{ background:#EEF1F6; }}
 .sect {{ font-size:12pt; font-weight:800; color:{NAVY}; border-bottom:1.5pt solid {NAVY}; padding-bottom:2mm; margin-bottom:4mm; }}
 .sect span {{ font-size:8pt; color:{GOLDD}; font-weight:700; margin-left:3mm; }}
-.meta {{ width:100%; border-collapse:collapse; border-top:0.5pt solid {LINE}; border-bottom:0.5pt solid {LINE}; margin-bottom:6mm; }}
-.meta td {{ padding:4mm 5mm; border-right:0.5pt solid {LINE}; width:25%; }}
+.meta {{ width:100%; border-collapse:collapse; border:1.2pt solid {NAVY}; border-radius:2mm; margin:1mm 0 4.5mm; background:#F4F7FB; }}
+.meta td {{ padding:5.2mm 5mm; border-right:0.8pt solid #C4CEDC; width:25%; }}
 .meta td:last-child {{ border-right:none; }}
-.meta .k {{ font-size:8.5pt; color:{MUT}; }}
-.meta .v {{ font-size:15pt; font-weight:800; color:{NAVY}; margin-top:1mm; }}
-.meta .v small {{ font-size:9pt; color:{MUT}; font-weight:400; }}
+.meta .k {{ font-size:10.5pt; font-weight:800; color:{NAVY}; letter-spacing:0.2mm; }}
+.meta .v {{ font-size:19pt; font-weight:900; color:{NAVY}; margin-top:1.6mm; }}
+.meta .v small {{ font-size:11pt; color:{MUT}; font-weight:700; }}
 .cov {{ width:100%; border-collapse:collapse; }}
 .cov-cell {{ width:50%; vertical-align:top; padding:2mm 5mm 2mm 0; border-bottom:0.5pt solid {LINE}; }}
 .cov-h {{ margin-bottom:2mm; }}
@@ -1536,8 +1563,6 @@ body {{ color:{INK}; }}
   <div class="pgn"><b>3</b>핵심 보장 분석</div><div class="bar"></div></div>
  <div class="body">
   {ci_html}{noci_html}
-  <div class="sect"{' style="margin-top:5mm"' if (ci_html or noci_html) else ''}>중대질병(CI) 진단 담보 <span>CRITICAL ILLNESS BENEFITS</span></div>
-  <table class="ctab">{crows}</table>
   {comment_html}
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 17</span></div>
@@ -1698,8 +1723,8 @@ body {{ color:{INK}; }}
    <div class="wscol wsmain">
     <div class="wscap n2">■ 사망 · 진단비 · 수술</div>
     {_wcard_fix_list('사망','평생 유지 · 종신형',['종신 사망','질병 사망','상해 사망'])}
-    {_wcard_fix_group('진단비','암·뇌·심 진단 일시금',[('■ 암',['고액암','일반암','유사암']),('■ 뇌',['뇌혈관','뇌졸증','뇌출혈']),('■ 심장',['허혈성','협심증','급성심근','심부전','염증','부정맥'])])}
-    {_wcard_fix_group('수술','질병 · 상해 구분',[('■ 질병',['질병수술','1~5종','N대수술','뇌혈관','허혈성','심장','암수술']),('■ 상해',['상해수술','1~5종','중대상해','창상봉합','골절수술','5대골절','화상수술'])])}
+    {_wcard_fix_group('진단비','암·뇌·심 진단 일시금 (CI 계약 시 중대한OO 자동 추가)',_dx_groups(rep))}
+    {_wcard_fix_group('수술','질병 · 상해 구분',_SURG_GROUPS)}
    </div>
    <div class="wsmid">
     <div class="lb">OUR CLIENT</div>

@@ -95,18 +95,20 @@ def _patch_worksheet():
     _EM = '<span class="mb"></span>'
     _DM = '<span class="mb">.</span>'
     _RXM = re.compile(r'<span class="mb">(.*?)</span>')
-    _ol = getattr(_rw, '_wcard_fix_list', None)
-    if _ol is not None:
-        def _mkl(o):
-            def _w(*a, **k):
-                h = o(*a, **k).replace(_EM, _DM)
-                for m in _RXM.finditer(h):
-                    t = m.group(1).strip().replace(' ', '')
-                    if t and t != '.':
-                        _WS.add(t)
-                return h
-            return _w
-        setattr(_rw, '_wcard_fix_list', _mkl(_ol))
+    def _mkl(o):
+        def _w(*a, **k):
+            h = o(*a, **k).replace(_EM, _DM)
+            for m in _RXM.finditer(h):
+                t = m.group(1).strip().replace(' ', '')
+                if t and t != '.':
+                    _WS.add(t)
+            return h
+        return _w
+    # ★v41 _wcard_fix_group(8p 진단비·수술 그룹칸)도 편집칸으로 개방
+    for _fn2 in ('_wcard_fix_list', '_wcard_fix_group'):
+        _ol = getattr(_rw, _fn2, None)
+        if _ol is not None:
+            setattr(_rw, _fn2, _mkl(_ol))
 
     _rw._barum_ws = True
 

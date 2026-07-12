@@ -1,4 +1,4 @@
-# ===== BARUM main.py v40b-kbsim-20260709 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
+# ===== BARUM main.py v41-fix12-20260712 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
@@ -8,7 +8,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from pptx import Presentation
 from pptx.util import Pt
-from pptx.enum.text import MSO_AUTO_SIZE
+from pptx.enum.text import MSO_AUTO_SIZE, PP_ALIGN
 from pptx.dml.color import RGBColor
 import copy as _copy
 from pptx.oxml.ns import qn as _qn
@@ -843,7 +843,9 @@ def resolve_kw(raw):
     if has('간병인') and has('요양병원') and no('제외'): return None,0  # ★요양병원 포함형 미기재(지점장)
     if has('간병인') and has('지원'): return '간병인지원일당',0   # ★v29w (지점장 2026.07.02) 간병인지원일당 전용행
     if has('간병인'): return '간병인',0
-    if has('간호') and (has('통합') or has('간병')): return '간호통합병동',0
+    if has('간호') and (has('통합') or has('간병')):
+        if has('181'): return None,0        # ★v41 간호통합병동 = 1-180일 기준만(181일이상 제외)
+        return '간호통합병동',0
     if has('1인실') and has('상급'): return '1인실 상급병원',0
     if has('1인실') and has('종합'): return '1인실 종합병원',0
     if has('중환자') and has('상해'): return '상해중환자실',0
@@ -1101,6 +1103,10 @@ def _fix_silson(contracts):
         _gen=silson_gen(cd, ipw, prod)
         if _gen in ('4세대','5세대') or (_ym and _ym>=202107):
             _set('통원', _tw if (_tw and _tw<=20) else 20)
+            _set('약값', 0)
+            continue
+        # ★v41 정본(지점장 2026.07.12): 1세대 = 통원 한도에 약제비 포함 → 약값 행 미표기
+        if _gen == '1세대':
             _set('약값', 0)
             continue
         # 1~3세대: 통원·약값 명시값 우선, 없으면 회사유형 기본값.
@@ -1374,7 +1380,7 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암')
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동')
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -1438,8 +1444,9 @@ def build_excel(data, out):
             if _rtw and not isinstance(_twc,(int,float)):  # ① 별첨 통원 없을 때만 디폴트
                 _twd = 10 if _guhy else (20 if _g4 else (20 if _life else 25))
                 ws.cell(_rtw,col).value=_twd; ws.cell(_rtw,col).font=BL
+            _g1=(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product','')) == '1세대')   # ★v41
             if _ryk and not isinstance(_ykc,(int,float)):  # ① 별첨 약값 없을 때만 디폴트
-                _ykd = 5 if _guhy else (0 if _g4 else (10 if _life else 5))
+                _ykd = 0 if (_g4 or _g1) else (5 if _guhy else (10 if _life else 5))   # ★v41 1세대=약값 통원포함
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
             # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
             _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))
@@ -1516,7 +1523,7 @@ def build_excel(data, out):
                 _nd=[str(int(x)) for x in _nd if isinstance(x,(int,float)) and x>0]
                 sc.value = '/'.join(_nd) if _nd else f'=SUM({_rng})'
             elif _bnm in ('간병인','중입자치료비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자=전 계약 대표 최댓값 1건
-            elif _bnm=='간호통합병동': sc.value = f'=IF(SUM({_rng})>0,7,0)'
+            elif _bnm=='간호통합병동': sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'   # ★v41 1-180일 최댓값 1건
             else: sc.value = f'=SUM({_rng})'
             sc.font = BK
 
@@ -1558,8 +1565,9 @@ def build_excel(data, out):
         ws.delete_cols(last_col+1, ws.max_column - last_col)
 
     # ── 확인사항 시트: LLM 매핑 실패 담보 노출(자가진단, §10) ──
-    if '📋확인사항' in wb.sheetnames: del wb['📋확인사항']
-    ws2 = wb.create_sheet('📋확인사항')
+    for _sn in ('📋확인사항','확인사항'):
+        if _sn in wb.sheetnames: del wb[_sn]
+    ws2 = wb.create_sheet('확인사항')   # ★v41 이모지·외부하이퍼링크 제거(엑셀 '편집사용' 지연 원인)
     ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}')
     ws2.cell(3,1,'계약수'); ws2.cell(3,2,n_ct)
     ws2.cell(4,1,'월보험료합계'); ws2.cell(4,2,f'{sum(c["premium"] for c in contracts):,}원')
@@ -1572,9 +1580,8 @@ def build_excel(data, out):
         prod = contracts[col-3]['product'] if 0<=col-3<len(contracts) else ''
         prod_key = re.sub(r'[\(\)\[\]ⅠⅡⅢ_]', ' ', prod)[:18].strip()
         q = f"{comp} {prod_key} {raw[:12]} 약관 보장내용"
-        cell = ws2.cell(rr,5,'🔗약관검색')
-        cell.hyperlink = "https://search.naver.com/search.naver?query=" + urllib.parse.quote(q)
-        cell.font = LINKF
+        # ★v41 hyperlink 객체 금지 → 평문 URL(엑셀이 열 때 외부링크 검증 안 함 = 편집사용 즉시)
+        ws2.cell(rr,5, "https://search.naver.com/search.naver?query=" + urllib.parse.quote(q))
     ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
     # ★v29z 근거 감사 로그 — '없는 값' 논쟁 즉시 검증용
     _rr = 9 + len(unmapped)
@@ -1778,6 +1785,8 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
             try: by[_hb].text_frame.auto_size=MSO_AUTO_SIZE.NONE
             except: pass
             for _pp in by[_hb].text_frame.paragraphs:
+                try: _pp.alignment = PP_ALIGN.CENTER      # ★v41 이름·날짜 우측쏠림 → 가운데
+                except: pass
                 for _rr in _pp.runs:
                     try: _rr.font.size=Pt(18)
                     except: pass
@@ -1964,7 +1973,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     prs.save(out); return True
 
 
-_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
+_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29','TextBox 59'}
 _SURGERY_BOXES={'TextBox 17','TextBox 19'}   # ★v29t: 질병수술·상해수술 9.0pt 고정(지점장 2026.07.02), 1~5종 줄만 축소 허용
 def _autofit_ppt(by):
     """겹침·단락내림 방지(§11): 값박스 word_wrap off + 최장 단락 기준 박스 단위 축소.
@@ -1992,11 +2001,18 @@ def _autofit_ppt(by):
         longest = max((sum(len(r.text) for r in p.runs) for p in tf.paragraphs), default=0)
         if longest <= 0: continue
         cap = max(4, int(w_in * 72 / (base * 0.62)))
+        # ★v41 정본(지점장 2026.07.12): 축소 하한 = 9pt. 뇌·심 진단명+금액이 들어가도 9pt 고정.
+        #   6pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
         if longest > cap:
-            newpt = max(6.0, round(base * cap / longest, 1))
-            for r in runs_all:
-                try: r.font.size = Pt(newpt)
-                except: pass
+            newpt = max(9.0, round(base * cap / longest, 1))
+            if newpt < base:
+                for r in runs_all:
+                    try: r.font.size = Pt(newpt)
+                    except: pass
+        for r in runs_all:
+            try:
+                if r.font.size and r.font.size.pt < 9.0: r.font.size = Pt(9)
+            except: pass
 
 
 def build_chiryo(data, out, totals=None, unmapped=None):
@@ -2232,7 +2248,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v32-ocrpdf-20260707'}
+def health(): return {'ok':True,'version':'v41-fix12-20260712'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
