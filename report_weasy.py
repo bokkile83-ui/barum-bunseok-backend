@@ -66,8 +66,8 @@ _BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), 
 
 _BRAIN_TBL=[('grp','출혈성 뇌혈관 (I60~62)',None,None,None),('row','뇌출혈','I60~62','hem',[1,1,1]),('grp','허혈성 뇌혈관 (I63~66)',None,None,None),('row','뇌졸증·뇌경색','I63·65·66','infarct',[1,1,1]),('grp','기타 뇌혈관 (I64·67~69)',None,None,None),('row','기타 뇌혈관질환','I64·67·68·69','other',[1,1,1]),('grp','순환계 확장·선천',None,None,None),('row','뇌동맥류·정맥류','I71·72','aneur',[0,1,0]),('row','선천 뇌혈관기형','Q28.0~28.3','congen',[0,0,1]),('row','외상성 뇌출혈','S06','trauma',[0,0,1])]
 _HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','기타·만성 허혈','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
-def _scv_build(tbl, headers, held, amounts=None):
-    held=set(held or []); amounts=amounts or {}; ncol=len(headers)+1
+def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None):
+    held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; ncol=len(headers)+1
     th=''.join('<th>'+h+'</th>' for h in headers)
     out=['<table class="scvt"><tr><th class="dl">질병 (코드)</th>'+th+'</tr>']
     for kind,label,code,key,cells in tbl:
@@ -78,10 +78,13 @@ def _scv_build(tbl, headers, held, amounts=None):
         rowcls=' class="own"' if own else ''
         def cell(c): return '<td><span class="on">●</span></td>' if c else '<td><span class="off">○</span></td>'
         _amtbox=' <span class="mb amtbox">'+(_html.escape(amt) if amt else '')+'</span>'
+        # ★CI 계약일 때만 유동 노출: 'CI' 미니칩 + 진단금액
+        _ci = ci_amounts.get(key)
+        _cibox=(' <span class="cichip">CI</span><span class="mb amtbox cibox">'+_html.escape(_ci)+'</span>') if _ci else ''
         if own:
-            first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+' <span class="chip">보유</span>'+_amtbox
+            first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+' <span class="chip">보유</span>'+_amtbox+_cibox
         else:
-            first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+_amtbox
+            first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+_amtbox+_cibox
         tds='<td>'+first+'</td>'+''.join(cell(c) for c in cells[1:])
         out.append('<tr'+rowcls+'><td class="dl"><b>'+_html.escape(label)+'</b><br><span class="cd">'+_html.escape(code)+'</span></td>'+tds+'</tr>')
     out.append('</table>'); return ''.join(out)
@@ -106,9 +109,9 @@ def _ws_ch(rep, key):
         if c.get('name')==key:
             v=c.get('value')
             if not v or v=='미가입':
-                return '<b style="color:#C0444C">✘ 미가입</b>'
-            return f'<b style="color:#1F7A4D">✔ 가입 · {_html.escape(str(v))}</b>'
-    return '<b style="color:#C0444C">✘ 미가입</b>'
+                return '<b style="color:#C0444C">× 미가입</b>'
+            return f'<b style="color:#1F7A4D">✓ 가입 · {_html.escape(str(v))}</b>'
+    return '<b style="color:#C0444C">× 미가입</b>'
 
 def _cov_val(rep, cat, *names):
     for c in rep.get('coverage',[]):
@@ -125,8 +128,8 @@ def _ws_amt(rep, kind):
     else:
         v=_cov_val(rep,'뇌혈관','뇌졸증진단','뇌혈관진단') or _cov_val(rep,'심장','급성심근','허혈성')
     if v:
-        return f'<b style="color:#1F7A4D">✔ 가입 · {_html.escape(str(v))}</b>'
-    return '<b style="color:#C0444C">✘ 미가입</b>'
+        return f'<b style="color:#1F7A4D">✓ 가입 · {_html.escape(str(v))}</b>'
+    return '<b style="color:#C0444C">× 미가입</b>'
 
 def _wc_status(rep, lookup):
     """(status, value) — status: 'on'(가입)/'off'(미가입)"""
@@ -143,12 +146,18 @@ def _wc_status(rep, lookup):
         else:
             pairs=[('뇌혈관', _pvv('뇌혈관진단비')),
                    ('뇌졸증', _pvv('뇌졸증진단비')),
+                   ('뇌출혈', _pvv('뇌출혈진단비')),
                    ('협심증', _cov_val(rep,'심장','협심증')),
                    ('심부전', _cov_val(rep,'심장','심부전')),
                    ('염증', _cov_val(rep,'심장','염증','심장염증')),
                    ('부정맥', _cov_val(rep,'심장','부정맥')),
                    ('허혈성', _pvv('허혈성 진단비')),
                    ('급성심근경색', _pvv('급성심근경색'))]
+        # ★2026.07.12 지점장: 뇌·심 진단비는 '보유한 담보만' 유동 표시(빈 담보는 행 자체를 없앤다).
+        #   → 빈 자리에 CI 행(중대한OO)을 따로 박을 수 있다. CI 급성심근 + 일반 급성심근은 별도 행.
+        if kind!='암':
+            _own=[(l,v) for l,v in pairs if v]
+            if _own: pairs=_own
         return ('list', [(l,(v or '')) for l,v in pairs])
     for c in rep.get('chiryo',[]):
         if c.get('name')==lookup:
@@ -165,7 +174,7 @@ def _wc_raw(rep, lookup):
     return ''
 
 def _wcard(rep, title, desc, lookup, mode):
-    # mode: 'diag'(초록·✔·가입/미가입) / 'main'(빨강·✘·미가입/가입) / 'na'(회색·상태). 박스=빈칸(워크시트).
+    # mode: 'diag'(초록·✓·가입/미가입) / 'main'(빨강·×·미가입/가입) / 'na'(회색·상태). 박스=빈칸(워크시트).
     if mode=='na':
         _rw=_wc_raw(rep, lookup)
         _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
@@ -174,7 +183,7 @@ def _wcard(rep, title, desc, lookup, mode):
                 f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
                 f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
     st,val=_wc_status(rep, lookup)
-    variant,check=('green','✔') if mode=='diag' else ('red','✘')
+    variant,check=('green','✓') if mode=='diag' else ('red','×')
     _half=' half' if lookup in ('암주요치료비','2대주요치료비') else ''
     if st=='list':
         _any=any(v for l,v in val)
@@ -182,6 +191,17 @@ def _wcard(rep, title, desc, lookup, mode):
         _dgcls=' dgcancer' if '암' in str(lookup) else (' dgheart' if any(k in str(lookup) for k in ('뇌','심')) else '')
         _rows=''.join(f'<div class="dgrow"><span class="dglab">{_html.escape(l)}</span>'
                       f'<span class="mb">{_html.escape(v)}</span><span class="dgu">만</span></div>' for l,v in val)
+        # ★CI 계약일 때만 유동 노출: CI 미니칩 + 진단명 + 진단금액 (7p 워크시트)
+        _cinfo=(_CURREP or {}).get('ci',{}) if _CURREP else {}
+        if str(_cinfo.get('status'))=='ci':
+            _lk=str(lookup)
+            for _it in _cinfo.get('items',[]):
+                _nm=str(_it.get('t','')); _v=str(_it.get('v',''))
+                _isam = ('암' in _nm)
+                _ishs = any(k in _nm for k in ('뇌','심근','심장'))
+                if ('암' in _lk and _isam) or ('뇌심' in _lk and _ishs):
+                    _rows += (f'<div class="dgrow cirow"><span class="dglab"><span class="cichip">CI</span> {_html.escape(_nm)}</span>'
+                              f'<span class="mb cibox">{_html.escape(_v)}</span><span class="dgu">만</span></div>')
         return (f'<div class="wcard {variant} dgcard{_dgcls}"><div class="wct">{check} {_html.escape(title)}</div>'
                 f'<div class="wcd">{_html.escape(desc)}</div>'
                 f'<div class="wcf">{chip}<div class="dglist">{_rows}</div></div></div>')
@@ -268,10 +288,40 @@ def _wcard_fix_list(title, desc, rows):
         inner=_html.escape(v) if v else ''
         return (f'<div class="fxsub"><span class="lbl">{_html.escape(r)}</span>'
                 f'<span class="mb">{inner}</span></div>')
+    # ★항목 10개 이상이면 형식(박스칸) 유지하고 가로 2열로 배치 (지점장 2026.07.12)
+    if len(rows)>=10:
+        _tr=''
+        for i in range(0,len(rows),2):
+            _l=f'<td class="fx2c">{_cell(rows[i])}</td>'
+            _r=f'<td class="fx2c">{_cell(rows[i+1])}</td>' if i+1<len(rows) else '<td class="fx2c"></td>'
+            _tr+=f'<tr>{_l}{_r}</tr>'
+        lines=f'<table class="fx2">{_tr}</table>'
+        return (f'<div class="wcard plain fx tall two"><div class="wct">{_html.escape(title)}</div>'
+                f'<div class="wcd">{_html.escape(desc)}</div>{lines}</div>')
     lines=''.join(_cell(r) for r in rows)
     return (f'<div class="wcard plain fx tall"><div class="wct">{_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>'
             f'<div class="fxlist">{lines}</div></div>')
+
+
+def _wcard_fix_group(title, desc, groups):
+    """★진단비 카드: 암·뇌·심 그룹 구분 + 가로 2열 박스칸 (지점장 2026.07.12)"""
+    import html as _html
+    def _cell(r):
+        v=_ac(r)
+        return (f'<div class="fxsub"><span class="lbl">{_html.escape(r)}</span>'
+                f'<span class="mb">{_html.escape(v) if v else ""}</span></div>')
+    body=''
+    for gname, rows in groups:
+        tr=''
+        for i in range(0,len(rows),2):
+            l=f'<td class="fx2c">{_cell(rows[i])}</td>'
+            r=f'<td class="fx2c">{_cell(rows[i+1])}</td>' if i+1<len(rows) else '<td class="fx2c"></td>'
+            tr+=f'<tr>{l}{r}</tr>'
+        body+=(f'<div class="fxg">{_html.escape(gname)}</div>'
+               f'<table class="fx2">{tr}</table>')
+    return (f'<div class="wcard plain fx tall two"><div class="wct">{_html.escape(title)}</div>'
+            f'<div class="wcd">{_html.escape(desc)}</div>{body}</div>')
 
 
 def _wcard_sj(rep, title, desc, lookup):
@@ -353,9 +403,21 @@ def build_report_pdf(rep, out):
     age_warn='' if rep.get('age_known') else ' <b>[확인]</b> 고객 나이·성별 미추출 → 40대 표준밴드로 산정(추후 정밀화).'
 
     def _cv(v): return f'<span style="color:{GAP}">미가입</span>' if v=='미가입' else f'<b style="color:{NAVY}">{_html.escape(v)}</b>'
-    crows=''.join(f'<td class="cc"><div class="cl">{_html.escape(c["name"])}</div><div class="cval">{_cv(c["value"])}</div></td>'
-                  for c in rep.get('chiryo',[]))
-    crows=f'<tr>{crows}</tr>' if crows else '<tr><td>—</td></tr>'
+    # ★2026.07.12 지점장: 3p 카드 = 중대한OO 4종 고정
+    _JUNG=[('중대한 암진단','중대한 암'),('중대한 뇌졸증','중대한 뇌졸증'),
+           ('중대한 뇌출혈','중대한 뇌출혈'),('중대한 급성심근경색','중대한 급성심근')]
+    def _jval(key):
+        for c in rep.get('chiryo',[]):
+            if str(c.get('name','')).strip()==key: return str(c.get('value','미가입'))
+        for cat in rep.get('coverage',[]):
+            for it in cat.get('items',[]):
+                if str(it.get('name','')).strip()==key:
+                    v=it.get('value') or it.get('amt')
+                    if v: return str(v)
+        return '미가입'
+    crows=''.join(f'<td class="cc"><div class="cl">{_html.escape(lb)}</div><div class="cval">{_cv(_jval(k))}</div></td>'
+                  for lb,k in _JUNG)
+    crows=f'<tr>{crows}</tr>'
 
     # ── CI 선지급 분석 블록 (rep['ci'], 없으면 빈 문자열) ──
     ci=rep.get('ci',{'present':False})
@@ -409,16 +471,33 @@ def build_report_pdf(rep, out):
     _strong=''
     if _sh:
         _chips=''.join(f'<span class="stchip">{h}</span>' for h in _sh)
-        _strong=f'<div class="sumrow"><span class="sumlb ok">✔ 강점</span><span class="sumtx">{_chips}</span></div>'
+        _strong=f'<div class="sumrow"><span class="sumlb ok">✓ 강점</span><span class="sumtx">{_chips}</span></div>'
     _cirow=''
     if ci.get('present'):
         _cirow=(f'<div class="sumrow"><span class="sumlb ci">CI 선지급</span>'
                 f'<span class="sumtx">중대질병 진단 시 <b>즉시 지급</b> · 진단 후에도 사망보장 '
                 f'<b>{_html.escape(ci.get("residual","-"))}</b> 유지</span></div>')
-    _gaprow=(f'<div class="sumrow"><span class="sumlb {_okc}">{"✔ 결론" if gap_cnt==0 else "! 결론"}</span>'
+    _gaprow=(f'<div class="sumrow"><span class="sumlb {_okc}">{"✓ 결론" if gap_cnt==0 else "! 결론"}</span>'
              f'<span class="sumtx">{"핵심담보 균형이 <b>양호</b>합니다. 지금 보장을 <b>유지</b>하십시오." if gap_cnt==0 else f"공백 <b>{gap_cnt}개</b> — 상담을 통한 <b>보완</b>이 필요합니다."}</span></div>')
-    comment_html=(f'<div class="sect" style="margin-top:5mm">보장 진단 코멘트 <span>SUMMARY</span></div>'
-                  f'<div class="sumwrap">{_cards}</div>{_strong}{_cirow}{_gaprow}')
+    _citab=('<div class="sect" style="margin-top:4.5mm">CI보험 — 장점 vs 단점 <span>CRITICAL ILLNESS</span></div>'
+            '<table class="citab">'
+            '<tr><th class="cig">■ 장점</th><th class="cir">■ 단점 — 이것 때문에 못 받는다</th></tr>'
+            '<tr><td class="cig">'
+            '<div class="cil"><b>주계약 = 중대한 담보가 종신보장</b> — 만기 없이 평생 유지</div>'
+            '<div class="cil"><b>원스톱</b> — 사망 + 중대질병 한 상품</div>'
+            '<div class="cil"><b>선지급</b> — 진단 즉시 사망보험금 50~80% 지급</div>'
+            '<div class="cil"><b>잔여 사망보장 유지</b> — 선지급 후에도 남은 사망금 지급</div>'
+            '<div class="cil"><b>주계약 중대한 담보가 종신보장</b> — 만기 없이 평생 유지</div>'
+            '<div class="cil"><b>납입면제</b> 특약 결합 용이</div>'
+            '</td><td class="cir">'
+            '<div class="cil r"><b>암·뇌·심 중 딱 1가지만</b> — 먼저 발생한 1회만 선지급, 이후 다른 중증질환은 <b>중복 보장 불가</b></div>'
+            '<div class="cil r"><b>[뇌] 25% 후유장해가 영구적</b>이어야 지급 — 재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태. 일과성 허혈발작(TIA)·외상성 출혈 제외</div>'
+            '<div class="cil r"><b>[심장] 효소검사 3가지 전부 충족</b> — ①전형적 흉통 ②새 심전도 변화(ST상승·Q파·T파역전) ③심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증 제외</b></div>'
+            '<div class="cil r"><b>[암] 침윤·파괴적 증식만</b> — 상피내암·경계성·초기전립선암·피부암 제외</div>'
+            '<div class="cil r"><b>선지급 = 사망보험금 감소</b> · 보험료 비쌈 · 분쟁 다발</div>'
+            '</td></tr></table>'
+            '<div class="cint">※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드(기초약관·장점·단점). 가입 시기·보험사별 약관 상이 → 원문 확인 필수.</div>')
+    comment_html=_citab
 
     css=f'''
 @page {{ size:A4; margin:0; }}
@@ -440,25 +519,58 @@ body {{ color:{INK}; }}
 .scvhd {{ font-size:9.5pt; font-weight:800; padding-bottom:1mm; border-bottom:2pt solid {GOLD}; margin-bottom:1.4mm; }}
 .scvhd.brain {{ color:#1F5FA8; }} .scvhd.heart {{ color:{GAP}; }}
 .scvt {{ width:100%; border-collapse:collapse; font-size:8.4pt; }}
-.scvt th {{ background:{NAVY}; color:#fff; padding:1.6mm 1mm; font-size:7.6pt; text-align:center; font-weight:800; }}
+.scvt th {{ background:{NAVY}; color:#fff; padding:1.1mm 0.7mm; font-size:7.6pt; text-align:center; font-weight:800; }}
 .scvt th.dl {{ text-align:left; }}
 .scvt th:last-child {{ background:{GOLDD}; }}
-.scvt td {{ border-top:0.4pt solid {LINE}; padding:1.85mm 1.2mm; text-align:center; }}
+.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.9mm 0.7mm; text-align:center; }}
 .scvt td.dl {{ text-align:left; }}
 .scvt td.dl .cd {{ font-size:6.8pt; color:{MUT}; }}
-.scvt tr.grp td {{ background:#EEF1F6; font-size:7.6pt; font-weight:800; color:{NAVY}; text-align:left; padding:1.3mm 1.2mm; }}
-.scvt tr.own td {{ background:#FBF6E6; }}
+.scvt tr.grp td {{ background:#EEF1F6; font-size:7pt; font-weight:800; color:{NAVY}; text-align:left; padding:0.8mm 0.7mm; }}
+.scvt tr.own td {{ background:#FBF6E6; border-top:1.4pt solid {GOLD}; border-bottom:1.4pt solid {GOLD}; }}
+.scvt tr.own td:first-child {{ border-left:1.4pt solid {GOLD}; }}
+.scvt tr.own td:last-of-type {{ border-right:1.4pt solid {GOLD}; }}
 .scvt td:last-child {{ background:#F2F6F1; }}
 .scvt tr.own td:last-child {{ background:#F0EFD8; }}
 .on {{ color:#1F7A4D; font-weight:800; }} .off {{ color:#B9C2CE; }}
 .hold {{ color:{GOLDD}; font-weight:700; font-size:6pt; }}
 .chip {{ background:{GOLD}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1mm; border-radius:2mm; }}
+.cichip {{ background:{NAVY}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1.2mm; border-radius:2mm; margin-left:1.2mm; }}
+.scvt .amtbox.cibox {{ background:#F4F7FB; border-color:{NAVY}; min-width:9mm; }}
 .scvt .amt {{ color:{NAVY}; font-weight:800; font-size:8.6pt; margin-left:0.8mm; }}
-.scvt .amtbox {{ display:inline-block; min-width:15mm; height:4.6mm; line-height:4.6mm; border:0.7pt solid {NAVY}; border-radius:1mm; padding:0 1.4mm; margin-left:1mm; background:#FFF9E8; color:{NAVY}; font-weight:800; font-size:8.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
+.scvt .amtbox {{ display:inline-block; min-width:9mm; height:6.6mm; line-height:6.6mm; border:0.6pt solid #C9CFD8; border-radius:1mm; padding:0 1.2mm; margin-left:0.8mm; background:#fff; color:{NAVY}; font-weight:800; font-size:8.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
 .scvleg {{ font-size:6.2pt; color:{MUT}; margin:1.5mm 0; }} .own2 {{ color:{GOLDD}; font-weight:700; }}
-.scvnote {{ font-size:6pt; line-height:1.4; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
+.scvnote {{ font-size:5.6pt; line-height:1.35; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
 .scvnote b {{ color:{NAVY}; }} .scvnote b.r {{ color:{GAP}; }}
-.scvbot {{ font-size:6.6pt; line-height:1.55; color:{INK}; background:#FBF7EE; border:0.6pt solid {GOLD}; border-radius:1.6mm; padding:2.4mm 3mm; margin-top:3mm; }}
+.rngbox {{ border:0.8pt solid {LINE}; border-radius:1.8mm; background:#FBFCFD; padding:2mm 2.4mm; margin-top:2mm; }}
+.rngt {{ font-size:7.4pt; font-weight:800; color:{NAVY}; margin-bottom:1.4mm; }}
+.rngtab {{ width:100%; border-collapse:collapse; }}
+.rgcol {{ width:27mm; vertical-align:middle; }}
+.rgtxt {{ vertical-align:middle; padding-left:2mm; }}
+.rngc {{ position:relative; height:26mm; }}
+.rgo {{ position:absolute; bottom:0; border-radius:50%; border:1pt solid; text-align:center; }}
+.rgo .rgp {{ position:absolute; left:0; right:0; top:1.2mm; font-size:6.6pt; font-weight:900; }}
+.rgo.o1 {{ left:0; width:26mm; height:26mm; background:#E6F1FB; border-color:#1F5FA8; }}
+.rgo.o1 .rgp {{ color:#1F5FA8; }}
+.rgo.o2 {{ left:4mm; width:18mm; height:18mm; background:#C9DFF5; border-color:#1F5FA8; }}
+.rgo.o2 .rgp {{ color:#14406F; }}
+.rgo.o3 {{ left:9mm; width:8mm; height:8mm; background:#1F5FA8; border-color:#14406F; }}
+.rgo.o3 .rgp {{ color:#fff; top:1mm; font-size:5.6pt; }}
+.rgo.o1.h {{ background:#FBEBEB; border-color:{GAP}; }} .rgo.o1.h .rgp {{ color:{GAP}; }}
+.rgo.o2.h {{ background:#F2C9C9; border-color:{GAP}; }} .rgo.o2.h .rgp {{ color:#8E2B2B; }}
+.rgo.o3.h {{ background:{GAP}; border-color:#8E2B2B; }} .rgo.o3.h .rgp {{ color:#fff; }}
+.rgl {{ font-size:6.8pt; font-weight:700; color:{INK}; line-height:1.35; padding:1mm 0; border-bottom:0.4pt solid #EDF0F3; white-space:nowrap; }}
+.rgl:last-child {{ border-bottom:none; }}
+.rgl .cdx {{ font-size:5.8pt; color:{MUT}; }}
+.rgl .pc {{ color:#1F5FA8; margin-left:1mm; }} .rgl .pc.r {{ color:{GAP}; }}
+.rgl b {{ color:{NAVY}; }}
+.rgl .d {{ display:inline-block; width:2mm; height:2mm; border-radius:50%; margin-right:1.2mm; }}
+.rgl .d1 {{ background:#E6F1FB; border:0.6pt solid #1F5FA8; }}
+.rgl .d2 {{ background:#C9DFF5; border:0.6pt solid #1F5FA8; }}
+.rgl .d3 {{ background:#1F5FA8; }}
+.rgl .d1h {{ background:#FBEBEB; border:0.6pt solid {GAP}; }}
+.rgl .d2h {{ background:#F2C9C9; border:0.6pt solid {GAP}; }}
+.rgl .d3h {{ background:{GAP}; }}
+.scvbot {{ font-size:6pt; line-height:1.45; color:{INK}; background:#FBF7EE; border:0.6pt solid {GOLD}; border-radius:1.6mm; padding:1.6mm 2.4mm; margin-top:1.6mm; }}
 .scvbot .h {{ font-size:8pt; font-weight:800; color:{GOLDD}; margin-bottom:1mm; }}
 .scvbot b {{ color:{NAVY}; }}
 
@@ -487,23 +599,31 @@ body {{ color:{INK}; }}
 .noci-one .d {{ font-size:9.8pt; line-height:1.65; color:{INK}; }}
 .noci-one .d b {{ color:{NAVY}; }}
 
-.cvbar {{ height:9mm; background:{NAVY}; }}
-.cvbody {{ padding:16mm 16mm 12mm; height:271mm; display:flex; flex-direction:column; }}
+.cvpg {{ position:relative; overflow:hidden; }}
+.cvbar {{ height:14mm; background:{NAVY}; border-bottom:2.4mm solid {GOLD}; }}
+.cvfootbar {{ position:absolute; left:0; bottom:0; width:100%; height:6mm; background:{NAVY}; }}
+.cvmark {{ position:absolute; right:10mm; top:46mm; font-size:60pt; font-weight:900; color:#F2F4F7; letter-spacing:-3px; }}
+.cveyebrow {{ font-size:9.5pt; font-weight:800; color:{GOLDD}; letter-spacing:4px; margin-top:26mm; }}
+.cvrule {{ width:34mm; height:1.8mm; background:{GOLD}; margin:5mm 0 6mm; }}
+.cvnamebox {{ margin-top:9mm; padding:5mm 6mm; background:#F4F7FB; border-left:4pt solid {NAVY}; border-radius:0 2.5mm 2.5mm 0; }}
+.cvnamebox .g {{ font-size:44pt; font-weight:900; color:{NAVY}; letter-spacing:-1px; }}
+.cvnamebox .s {{ font-size:17pt; font-weight:800; color:{GOLDD}; margin-left:3mm; }}
+.cvbody {{ padding:14mm 16mm 12mm; height:277mm; display:flex; flex-direction:column; position:relative; }}
 .cvbrand {{ font-size:14pt; font-weight:800; color:{NAVY}; letter-spacing:5px; }}
 .cvbrand .ln {{ width:24mm; height:1.6mm; background:{GOLD}; margin-top:2.5mm; }}
-.cvtitle {{ font-size:64pt; font-weight:900; color:{NAVY}; line-height:1.1; margin-top:14mm; letter-spacing:-2px; }}
+.cvtitle {{ font-size:60pt; font-weight:900; color:{NAVY}; line-height:1.05; margin-top:3mm; letter-spacing:-2px; position:relative; }}
 .cvname {{ font-size:30pt; font-weight:800; color:{NAVY}; line-height:1.1; margin-top:12mm; text-align:right; }}
 .cvname .g {{ color:#C9A15A; font-size:72pt; letter-spacing:-1px; }}
 .cvsub {{ font-size:13pt; font-weight:700; color:{NAVY}; margin-top:6mm; }}
 .cvhr {{ border-top:1.6pt solid {GOLD}; margin:3mm 0 5mm; }}
-.cvstats {{ display:flex; gap:6mm; }}
-.cvst {{ flex:1; }}
+.cvstats {{ display:flex; gap:4mm; margin-top:12mm; }}
+.cvst {{ flex:1; border:1pt solid {LINE}; border-top:2.4pt solid {GOLD}; border-radius:2mm; padding:3.4mm 3.6mm; background:#fff; }}
 .cvst .k {{ font-size:9pt; color:{MUT}; font-weight:700; }}
 .cvst .v {{ font-size:17pt; font-weight:800; color:{NAVY}; margin-top:2mm; }}
 .cvst .v small {{ font-size:9pt; color:{MUT}; font-weight:600; }}
 .cvspacer {{ flex:1; }}
-.cvname2 {{ font-size:34pt; font-weight:900; color:{NAVY}; line-height:1.05; text-align:right; margin-top:14mm; margin-bottom:2mm; }}
-.cvname2 .g {{ color:#C9A15A; font-size:100pt; font-weight:900; letter-spacing:-3px; }}
+.cvname2 {{ font-size:26pt; font-weight:900; color:{NAVY}; line-height:1.15; text-align:right; margin-top:10mm; margin-bottom:4mm; }}
+.cvname2 .g {{ color:#C9A15A; font-size:52pt; font-weight:900; letter-spacing:-1px; line-height:1.1; }}
 .cvhr2 {{ border-top:0.5pt solid {LINE}; margin-bottom:4mm; }}
 .cvfoot {{ text-align:center; font-size:9.5pt; font-weight:700; color:{NAVY}; }}
 
@@ -588,18 +708,18 @@ body {{ color:{INK}; }}
 .wsmid .cnt {{ font-size:10pt; font-weight:800; color:{NAVY}; }}
 .wsmid .cnt small {{ display:block; font-size:6.2pt; color:{MUT}; font-weight:600; }}
 .wssj {{ margin-top:1mm; border:1pt solid #D8B65A; border-radius:2mm; background:#FDFAF0; padding:2mm 3mm 2.4mm; }}
-.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:1.8mm 2.2mm; margin-bottom:1.4mm; min-height:34mm; display:flex; flex-direction:column; }}
+.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:1.4mm 2mm; margin-bottom:1.2mm; min-height:12mm; display:flex; flex-direction:column; }}
 .wcard.half {{ min-height:26mm; padding:1.8mm 2.2mm; }}
 .wcard.half .wcd {{ margin:0.8mm 0 auto; }}
 .wcard.half .wbox {{ height:11mm; line-height:11mm; }}
 .wcard.green {{ border-color:#3E9A63; background:#F4FBF7; }}
 .wcard.red {{ border-color:#DE9A9A; background:#FDF4F3; }}
 .wcard.plain {{ border-color:{LINE}; background:#FCFDFE; }}
-.wcard .wct {{ font-size:10pt; font-weight:800; color:{NAVY}; }}
+.wcard .wct {{ font-size:11.5pt; font-weight:800; color:{NAVY}; }}
 .wcard.green .wct {{ color:#1F7A4D; }}
 .wcard.red .wct {{ color:#C0444C; }}
-.wcard .wcd {{ font-size:7.8pt; color:{MUT}; margin:0.9mm 0 auto; }}
-.wcard .wdn {{ font-size:8pt; font-weight:700; color:#2B3A52; margin:1.2mm 0 0.6mm; line-height:1.25; word-break:break-all; }}
+.wcard .wcd {{ font-size:8.8pt; color:{MUT}; margin:1.2mm 0 auto; }}
+.wcard .wdn {{ font-size:9pt; font-weight:700; color:#2B3A52; margin:1.4mm 0 0.8mm; line-height:1.25; word-break:break-all; }}
 .wcard .wcf {{ display:flex; align-items:center; gap:2mm; margin-top:1.2mm; }}
 .wchip {{ font-size:9pt; font-weight:800; color:#fff; padding:1.1mm 3.2mm; border-radius:1.5mm; white-space:nowrap; }}
 .wchip.g {{ background:#3E9A63; }}
@@ -613,6 +733,13 @@ body {{ color:{INK}; }}
 .fxsub {{ display:flex; align-items:center; gap:2mm; margin:0.7mm 0; font-size:8.2pt; }}
 .fxsub .lbl {{ flex:0 0 30mm; font-weight:700; color:#2B3A52; font-size:8pt; white-space:normal; word-break:keep-all; line-height:1.15; }}
 .fxsub .mb {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:4.8mm; line-height:4.8mm; padding:0 2mm; background:#fff; text-align:right; font-size:8.2pt; font-weight:800; color:{NAVY}; white-space:nowrap; overflow:hidden; }}
+.fxg {{ font-size:6.8pt; font-weight:900; color:{NAVY}; background:#EEF1F6; border-radius:1mm; padding:0.4mm 1.2mm; margin:0.8mm 0 0.3mm; }}
+/* ★2열형: 형식(박스칸) 유지 + 가로 2개씩 */
+.fx2 {{ width:100%; border-collapse:separate; border-spacing:1mm 0; table-layout:fixed; margin-top:0; }}
+.fx2 td.fx2c {{ width:50%; vertical-align:middle; overflow:hidden; }}
+.wcard.two .fxsub {{ display:table; width:100%; margin:0.1mm 0; }}
+.wcard.two .fxsub .lbl {{ display:table-cell; width:44%; flex:none; font-size:6.4pt; white-space:nowrap; overflow:hidden; vertical-align:middle; padding-right:1mm; }}
+.wcard.two .fxsub .mb {{ display:table-cell; width:56%; flex:none; height:3.8mm; line-height:3.8mm; font-size:6.8pt; padding:0 1mm; overflow:hidden; vertical-align:middle; }}
 .wsectcap {{ margin-bottom:2.6mm; border-radius:1.4mm; }}
 .wsectcap.gap2 {{ margin-top:0.9mm; }}
 .wstalk2 {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2.2mm 3.2mm; font-size:8pt; line-height:1.5; color:{NAVY}; margin-top:2.6mm; }}
@@ -670,10 +797,10 @@ body {{ color:{INK}; }}
 .g5nt {{ font-size:8.5pt; color:{MUT}; font-weight:700; }}
 .barwrap {{ display:table; width:100%; border-spacing:2mm 0; margin:1.2mm 0 0.6mm; }}
 .barcol {{ display:table-cell; width:20%; vertical-align:bottom; text-align:center; }}
-.barlb.vt {{ writing-mode:vertical-rl; text-orientation:upright; letter-spacing:0.2pt; margin:0.8mm auto 0; font-size:6.6pt; line-height:1; white-space:nowrap; }}
+.barlb.vt {{ writing-mode:vertical-rl; text-orientation:upright; letter-spacing:0.2pt; margin:0.8mm auto 0; font-size:8.4pt; line-height:1; white-space:nowrap; }}
 .barlb.vt.bad {{ color:{GAP}; }}
 .hbar {{ border-radius:1.5mm 1.5mm 0 0; padding:0.8mm 0; text-align:center; }}
-.hbar span {{ font-size:8pt; font-weight:800; color:#fff; }}
+.hbar span {{ font-size:11pt; font-weight:800; color:#fff; }}
 .b30 {{ height:6mm; background:#8FA8C8; }}
 .b40 {{ height:8mm; background:#C9A15A; }}
 .b50 {{ height:10mm; background:#D08B4A; }}
@@ -711,6 +838,18 @@ body {{ color:{INK}; }}
 .sumcard.ok .sv {{ color:{GOOD}; }}
 .sumcard.ng .sv {{ color:{GAP}; }}
 .sumcard .sk {{ font-size:11pt; font-weight:700; color:{MUT}; margin-top:2mm; }}
+.citab {{ width:100%; border-collapse:separate; border-spacing:2.6mm 0; table-layout:fixed; margin-top:1.5mm; }}
+.citab th {{ font-size:12pt; font-weight:900; padding:2.6mm 3.2mm; border-radius:2mm 2mm 0 0; color:#fff; text-align:left; }}
+.citab th.cig {{ background:#1F7A4D; }} .citab th.cir {{ background:{GAP}; }}
+.citab td {{ vertical-align:top; padding:3.6mm 3.6mm; border-radius:0 0 2mm 2mm; border:1pt solid; }}
+.citab td.cig {{ background:#F4FBF7; border-color:#3E9A63; }}
+.citab td.cir {{ background:#FDF4F3; border-color:#DE9A9A; }}
+.cil {{ font-size:8.4pt; font-weight:700; color:{INK}; line-height:1.35; padding:1.4mm 0 1.4mm 3mm; text-indent:-3mm; border-bottom:0.6pt solid #D8DDE4; }}
+.citab td .cil:last-child {{ border-bottom:none; }}
+.cil:before {{ content:'● '; color:#1F7A4D; }}
+.cil.r:before {{ content:'× '; color:{GAP}; }}
+.cil b {{ color:{NAVY}; }} .cil.r b {{ color:{GAP}; }}
+.cint {{ font-size:8pt; color:{MUT}; font-weight:600; margin-top:3mm; padding-top:2.4mm; border-top:0.6pt solid {LINE}; }}
 .sumrow {{ display:table; width:100%; margin-top:3mm; }}
 .sumlb {{ display:table-cell; width:24mm; font-size:12pt; font-weight:800; color:#fff; background:{NAVY}; border-radius:2mm; padding:2.5mm 2mm; text-align:center; vertical-align:middle; }}
 .sumlb.ok {{ background:{GOOD}; }}
@@ -743,32 +882,84 @@ body {{ color:{INK}; }}
 .gxb {{ height:18mm; background:#8B1A1A; }}
 .gzb {{ height:19mm; background:#5A0F0F; }}
 .g4wrap {{ display:table; width:100%; border-spacing:2mm 2mm; }}
-.g4cell {{ display:table-cell; width:50%; border:1pt solid {LINE}; border-radius:2mm; padding:2mm 2.5mm; vertical-align:top; background:#FBFCFD; }}
-.g4tt {{ font-size:10.5pt; font-weight:800; color:{NAVY}; margin-bottom:1mm; }}
-.g4nt {{ font-size:9pt; font-weight:700; color:{INK}; margin-top:1mm; text-align:center; }}
-.q1 {{ height:3mm; background:#9CB8A0; }}
-.q2 {{ height:5mm; background:#8FA8C8; }}
-.q3 {{ height:7mm; background:#6E90BC; }}
-.q4 {{ height:9mm; background:#C9A15A; }}
-.q5 {{ height:22mm; background:#8B1A1A; }}
-.q5b {{ height:14mm; background:{GAP}; }}
-.w1 {{ height:22mm; background:#9CB8A0; }}
-.w2 {{ height:12mm; background:#8FA8C8; }}
-.w5 {{ height:4mm; background:{GAP}; }}
-.extab td, .extab th {{ font-size:7.8pt; line-height:1.3; padding:1.2mm 1.4mm; }}
+.g4cell {{ display:table-cell; width:50%; border:1.2pt solid {LINE}; border-radius:2mm; padding:3mm 3.5mm; vertical-align:top; background:#FBFCFD; }}
+.g4tt {{ font-size:14pt; font-weight:800; color:{NAVY}; margin-bottom:1.8mm; }}
+.g4nt {{ font-size:9.4pt; font-weight:700; color:{INK}; margin-top:2mm; text-align:center; }}
+.q1 {{ height:4mm; background:#9CB8A0; }}
+.q2 {{ height:6mm; background:#8FA8C8; }}
+.q3 {{ height:9mm; background:#6E90BC; }}
+.q4 {{ height:11mm; background:#C9A15A; }}
+.q5 {{ height:26mm; background:#8B1A1A; }}
+.q5b {{ height:17mm; background:{GAP}; }}
+.w1 {{ height:26mm; background:#9CB8A0; }}
+.w2 {{ height:15mm; background:#8FA8C8; }}
+.w5 {{ height:5mm; background:{GAP}; }}
+.extab td, .extab th {{ font-size:7.6pt; line-height:1.25; padding:0.9mm 1.2mm; }}
 .extab td.good, .extab .good {{ color:{GOOD}; }}
-.exn {{ font-size:7.8pt; font-weight:700; color:{INK}; margin-top:1.5mm; padding:1.5mm 2mm; background:#F1F4F8; border-radius:1.5mm; line-height:1.45; }}
+/* ── MRI 입원 vs 통원 그래프 (얇은형) ── */
+.mricap {{ font-size:10pt; font-weight:800; color:{NAVY}; margin:2.4mm 0 1.2mm; }}
+.mrig {{ width:92%; border-collapse:separate; border-spacing:3mm 1.2mm; table-layout:fixed; margin:1.2mm auto 0; }}
+.mrc {{ width:50%; vertical-align:middle; text-align:left; }}
+.mrbw {{ background:#EDF0F4; border-radius:1.2mm; height:6.6mm; overflow:hidden; }}
+.mrfill {{ width:58%; margin:0 auto; border-radius:1mm 1mm 0 0; }}
+.mrfill.g {{ background:#C9A15A; }} .mrfill.r {{ background:#E29A9A; }}
+.mrv {{ font-size:11pt; font-weight:900; margin-top:1mm; }}
+.mrv.g {{ color:#9C7C32; }} .mrv.r {{ color:{GAP}; }}
+.mrcap {{ font-size:8.4pt; font-weight:800; color:{NAVY}; line-height:1.25; }}
+.mrsub {{ font-size:7.4pt; font-weight:700; color:{MUT}; }}
+.mrcut {{ font-size:7.4pt; font-weight:800; color:{GAP}; }}
+.mrbar {{ height:6.6mm; line-height:6.6mm; border-radius:1.2mm; color:#fff; font-size:9.6pt; font-weight:900; text-align:right; padding-right:2mm; }}
+.mrbar.g {{ background:#B98C33; }} .mrbar.r {{ background:{GAP}; }}
+.dx3 {{ display:table; width:100%; border-spacing:2.4mm 0; table-layout:fixed; margin-top:2.4mm; }}
+.dxc {{ display:table-cell; width:33.33%; border:1pt solid {LINE}; border-radius:2mm; background:#fff; padding:2.4mm 2.6mm; vertical-align:top; }}
+.dxh {{ font-size:9.8pt; font-weight:800; color:{NAVY}; margin-bottom:1.4mm; }}
+.dxg {{ font-size:9.4pt; font-weight:800; color:#9C7C32; line-height:1.5; }}
+.dxr {{ font-size:9.4pt; font-weight:800; color:{GAP}; line-height:1.5; }}
+.dxs {{ font-size:7.6pt; font-weight:700; color:{MUT}; margin-top:1mm; }}
+.dstab {{ display:table; width:100%; border-spacing:2.6mm 0; table-layout:fixed; margin-bottom:2mm; }}
+.dscell {{ display:table-cell; vertical-align:top; border:1pt solid {LINE}; border-radius:2mm; background:#fff; padding:2.4mm 2.6mm; }}
+.dsh {{ font-size:11pt; font-weight:900; color:{NAVY}; margin-bottom:1.6mm; }}
+.dsh2 {{ font-size:10pt; font-weight:900; color:{NAVY}; margin-bottom:1.6mm; }}
+.dsg {{ width:100%; border-collapse:collapse; }}
+.dsg th {{ background:{NAVY}; color:#fff; font-size:8.4pt; font-weight:800; padding:1.2mm 1mm; text-align:center; }}
+.dsg td {{ border:0.5pt solid {LINE}; font-size:9pt; font-weight:700; color:{INK}; padding:1.6mm 1mm; text-align:center; }}
+.dsg td.a {{ font-weight:900; font-size:10pt; }}
+.dsg td.a.good {{ color:#1F5FA8; }} .dsg td.a.bad {{ color:{GAP}; }}
+.dsg td.bad {{ color:{GAP}; font-weight:900; }}
+.dsg tr.hl td {{ background:#FCF3F3; }}
+.dsg td.g1 {{ background:#1B3E6F; color:#fff; font-weight:800; }}
+.dsg td.g2 {{ background:#2F6BAF; color:#fff; font-weight:800; }}
+.dsg td.g3 {{ background:#2E9E96; color:#fff; font-weight:800; }}
+.dsg td.g4 {{ background:#6B4FA8; color:#fff; font-weight:800; }}
+.dsg td.g5 {{ background:{GAP}; color:#fff; font-weight:800; }}
+.dsn {{ font-size:7.8pt; font-weight:700; color:{MUT}; text-align:center; margin-bottom:2.4mm; }}
+.dsl {{ font-size:8.6pt; font-weight:700; color:{INK}; line-height:1.4; margin-bottom:1.4mm; }}
+.dsl.r {{ color:{GAP}; }}
+.dsl b {{ color:{NAVY}; }}
+.hjtab {{ width:100%; border-collapse:collapse; margin-top:1.2mm; table-layout:fixed; }}
+.hjtab th {{ background:{NAVY}; color:#fff; font-size:8pt; font-weight:800; padding:0.9mm 1mm; text-align:center; border:0.5pt solid #fff; }}
+.hjtab td {{ border:0.6pt solid {LINE}; text-align:center; padding:1mm 1mm; }}
+.hjtab td.k {{ font-size:8pt; font-weight:700; color:{INK}; background:#F6F8FB; }}
+.hjtab td.v {{ font-size:9.6pt; font-weight:900; }}
+.hjtab td.v.ok {{ color:{GOOD}; background:#EFF7F2; }} .hjtab td.v.n {{ color:{MUT}; }}
+.hjtab td.v.w {{ color:#B5750C; background:#FDF6EA; }} .hjtab td.v.w2 {{ color:#C2531E; background:#FBEDE7; }}
+.hjtab td.v.b {{ color:{GAP}; background:#FBEBEB; }}
+.hjtag {{ display:inline-block; font-size:7.4pt; font-weight:800; padding:0.5mm 1.4mm; border-radius:1mm; margin:1mm 1mm 0 0; }}
+.hjtag.ok {{ background:#E4F0EA; color:{GOOD}; }} .hjtag.n {{ background:#EEF1F5; color:{MUT}; }}
+.hjtag.w {{ background:#FBEEDA; color:#B5750C; }} .hjtag.w2 {{ background:#FADFD6; color:#C2531E; }}
+.hjtag.b {{ background:#F7DCDC; color:{GAP}; }}
+.exn {{ font-size:7.4pt; font-weight:700; color:{INK}; margin-top:1mm; padding:1.2mm 1.8mm; background:#F1F4F8; border-radius:1.5mm; line-height:1.45; }}
 .silbox {{ border:1.2pt solid {GOLD}; border-radius:2mm; padding:2mm 2.5mm; margin-top:1.6mm; background:#FBF7EE; }}
 .silbox.none {{ border-color:{GAP}; background:#FCF3F3; }}
 .sbt {{ font-size:10.5pt; font-weight:800; color:{NAVY}; margin-bottom:1.2mm; }}
 .sbt b {{ color:{GOLDD}; }}
 .sltab {{ width:100%; border-collapse:collapse; }}
-.sltab th {{ background:{NAVY}; color:#fff; font-size:7.6pt; font-weight:800; padding:0.8mm 1.5mm; text-align:center; }}
-.sltab td {{ border:0.6pt solid {LINE}; background:#fff; font-size:8.4pt; font-weight:700; color:{INK}; padding:1mm 1.5mm; text-align:center; }}
-.sltab td.slp {{ text-align:left; font-size:7.8pt; }}
+.sltab th {{ background:{NAVY}; color:#fff; font-size:9.4pt; font-weight:800; padding:2.4mm 1.5mm; text-align:center; }}
+.sltab td {{ border:0.6pt solid {LINE}; background:#fff; font-size:10pt; font-weight:800; color:{INK}; padding:6.4mm 1.5mm; text-align:center; }}
+.sltab td.slp {{ text-align:left; font-size:8.4pt; }}
 .sltab td.slc {{ font-weight:800; color:{NAVY}; }}
 .sltab td.sla {{ font-weight:800; }}
-.sbn {{ font-size:7.6pt; color:{MUT}; font-weight:600; margin-top:1mm; }}
+.sbn {{ font-size:7pt; color:{MUT}; font-weight:600; margin-top:0.6mm; line-height:1.25; }}
 .ezbox {{ border:1.2pt solid {LINE}; border-radius:2.5mm; padding:2.5mm 3mm; margin-bottom:2.5mm; background:#FBFCFD; }}
 .eztt {{ font-size:13pt; font-weight:800; color:{NAVY}; margin-bottom:2mm; }}
 .eznum {{ display:inline-block; width:6mm; height:6mm; line-height:6mm; text-align:center; border-radius:50%; background:{NAVY}; color:#fff; font-size:10pt; margin-right:1.5mm; }}
@@ -800,6 +991,29 @@ body {{ color:{INK}; }}
 .ezsum {{ border:1.5pt solid {NAVY}; border-radius:2.5mm; padding:3mm 3.5mm; background:#F4F7FB; }}
 .ezst {{ font-size:12pt; font-weight:800; color:{NAVY}; }}
 .ezsl {{ font-size:14pt; font-weight:800; color:{GAP}; margin:1.5mm 0; line-height:1.4; }}
+/* ── 급여 통원 5카드(그림형) ── */
+.gvcap {{ font-size:11pt; font-weight:800; color:{NAVY}; margin:3mm 0 1.6mm; }}
+.gvcap b {{ color:{GOLDD}; }}
+.gvtab {{ display:table; width:97%; border-spacing:1.2mm 0; table-layout:fixed; margin:0 auto; }}
+.gvc {{ display:table-cell; width:20%; vertical-align:top; border-radius:2mm; border:1.4pt solid; overflow:hidden; }}
+.gvc.c1 {{ border-color:#1E9E5A; }} .gvc.c2 {{ border-color:#E8A317; }} .gvc.c3 {{ border-color:#DE7B2B; }}
+.gvc.c4 {{ border-color:#D9433F; }} .gvc.c5 {{ border-color:#8A4FBF; }}
+.gvh {{ color:#fff; font-size:9.4pt; font-weight:800; text-align:center; padding:2.2mm 0.5mm; line-height:1.2; white-space:nowrap; }}
+.gvc.c1 .gvh {{ background:#1E9E5A; }} .gvc.c2 .gvh {{ background:#E8A317; }} .gvc.c3 .gvh {{ background:#DE7B2B; }}
+.gvc.c4 .gvh {{ background:#D9433F; }} .gvc.c5 .gvh {{ background:#8A4FBF; }}
+.gvsm {{ font-size:7.6pt; font-weight:700; }}
+.gvb {{ background:#fff; text-align:center; padding:2mm 0.5mm 2.4mm; }}
+.gvk {{ font-size:7.4pt; font-weight:700; color:{MUT}; margin-top:0.8mm; }}
+.gvp {{ font-size:17pt; font-weight:900; line-height:1.15; }}
+.gvc.c1 .gvp {{ color:#1E9E5A; }} .gvc.c2 .gvp {{ color:#E8A317; }} .gvc.c3 .gvp {{ color:#DE7B2B; }}
+.gvc.c4 .gvp {{ color:#D9433F; }} .gvc.c5 .gvp {{ color:#8A4FBF; }}
+.gvhr {{ border-top:1.4pt solid #E3E7EC; margin:1.6mm 2mm; }}
+.gvm {{ font-size:12.5pt; font-weight:900; color:{GAP}; line-height:1.2; }}
+.gvr {{ font-size:12.5pt; font-weight:900; color:{GOOD}; line-height:1.2; }}
+.gvtag {{ font-size:7.6pt; font-weight:800; margin-top:1.6mm; white-space:nowrap; }}
+.gvtag.ok {{ color:{GOOD}; }} .gvtag.wn {{ color:#C9820A; }} .gvtag.no {{ color:{GAP}; }}
+.gvfoot {{ text-align:center; font-size:9pt; font-weight:700; color:{MUT}; margin-top:2.2mm; }}
+.gvfoot b {{ color:{INK}; }} .gvfoot .bad {{ color:{GAP}; }}
 .ezsn {{ font-size:9.8pt; font-weight:700; color:{INK}; line-height:1.5; }}
 /* ── 중증 vs 비중증 (그림형) ── */
 .svdef {{ border:1.5pt solid {NAVY}; border-radius:2.5mm; background:#F4F7FB; padding:2.4mm 3mm; margin-bottom:2.6mm; }}
@@ -827,7 +1041,7 @@ body {{ color:{INK}; }}
 .svchip {{ display:inline-block; font-size:8.6pt; font-weight:800; padding:0.9mm 2mm; border-radius:1.4mm; margin:0 1mm 1mm 0; border:0.8pt solid; }}
 .svc.g .svchip {{ background:#fff; color:#8A6A1E; border-color:#C9A15A; }}
 .svc.r .svchip {{ background:#fff; color:{GAP}; border-color:#E8B4B4; }}
-.svrow {{ display:table; width:100%; border-top:0.7pt solid #DCD3C2; padding:1.9mm 0; }}
+.svrow {{ display:table; width:100%; border-top:0.7pt solid #DCD3C2; padding:2.7mm 0; }}
 .svc.r .svrow {{ border-top-color:#E8CACA; }}
 .svk {{ display:table-cell; width:30%; font-size:8.8pt; font-weight:800; color:{MUT}; vertical-align:middle; }}
 .svv {{ display:table-cell; font-size:9.6pt; font-weight:800; color:{INK}; line-height:1.4; vertical-align:middle; }}
@@ -887,24 +1101,26 @@ body {{ color:{INK}; }}
 .fixnote .cap {{ color:#2E5A88; }}
 .fxrow {{ font-size:9pt; line-height:1.5; margin:1.5mm 0; color:#2B3A52; }}
 .fxrow b {{ color:#2E5A88; }}
-.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:12mm; line-height:12mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
+.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:24mm; line-height:24mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
 .wbox.wrap {{ white-space:normal; word-break:keep-all; line-height:1.3; height:auto; min-height:15mm; display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; padding:1.4mm 2.6mm; font-size:8pt; }}
 .dglist {{ flex:1; }}
-.wcard.dgcard {{ min-height:auto; display:flex; flex-direction:column; }}
+.wcard.dgcard {{ min-height:100mm; display:flex; flex-direction:column; }}
 .wcard.dgcard .wcf {{ flex:1; align-items:flex-start; }}
-.wcard.dgcard .dglist {{ flex:1; align-self:stretch; display:flex; flex-direction:column; justify-content:space-around; }}
+.wcard.dgcard .dglist {{ flex:1; align-self:stretch; display:flex; flex-direction:column; justify-content:flex-start; }}
 .dgrow {{ display:flex; align-items:center; gap:1mm; margin:0.4mm 0; }}
-.dgcancer .dgrow .mb {{ height:4.8mm; line-height:4.8mm; font-size:8.2pt; }}
-.dgcancer .dglab {{ flex:0 0 24mm; font-size:6.8pt; line-height:1.1; white-space:nowrap; }}
-.dgcancer .dgrow {{ margin:0.7mm 0; }}
-.dgheart .dgrow .mb {{ height:4.8mm; line-height:4.8mm; font-size:8.2pt; }}
+.dgcancer .dgrow .mb {{ height:7.4mm; line-height:7.4mm; font-size:9pt; }}
+.dgcancer .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
+.dgcancer .dgrow {{ margin:1.2mm 0; }}
+.dgheart .dgrow .mb {{ height:7.4mm; line-height:7.4mm; font-size:9pt; }}
 .dgheart .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
-.dgheart .dgrow {{ margin:0.7mm 0; }}
+.dgheart .dgrow {{ margin:1.2mm 0; }}
 .dgrow .dglab {{ flex:0 0 11.5mm; font-size:6.6pt; font-weight:700; color:{NAVY}; }}
-.dgrow .mb {{ flex:1; min-width:0; border:0.6pt solid {LINE}; border-radius:1mm; height:4.4mm; line-height:4.4mm; padding:0 1mm; background:#fff; text-align:right; font-size:6.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; }}
+.dgrow .mb {{ flex:1; min-width:0; border:0.6pt solid {LINE}; border-radius:1mm; height:8.8mm; line-height:8.8mm; padding:0 1mm; background:#fff; text-align:right; font-size:6.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; }}
 .dgrow .dgu {{ flex:0 0 auto; font-size:6pt; color:{MUT}; }}
+.dgrow.cirow .dglab {{ color:{NAVY}; font-weight:800; }}
+.dgrow .mb.cibox {{ background:#F4F7FB; border-color:{NAVY}; color:{NAVY}; }}
 .wunit {{ font-size:8.6pt; color:{MUT}; }}
-.wcard.sj {{ min-height:34mm; margin-bottom:0; background:#fff; }}
+.wcard.sj {{ min-height:19mm; margin-bottom:0; background:#fff; }}
 .wcard.sj .wct {{ font-size:11pt; }}
 .wssj .cap {{ font-size:9.4pt; font-weight:800; color:{GOLDD}; padding:0 0 1.2mm; }}
 
@@ -937,11 +1153,11 @@ body {{ color:{INK}; }}
 .meta .v {{ font-size:15pt; font-weight:800; color:{NAVY}; margin-top:1mm; }}
 .meta .v small {{ font-size:9pt; color:{MUT}; font-weight:400; }}
 .cov {{ width:100%; border-collapse:collapse; }}
-.cov-cell {{ width:50%; vertical-align:top; padding:4.2mm 5mm 4.2mm 0; border-bottom:0.5pt solid {LINE}; }}
-.cov-h {{ margin-bottom:3mm; }}
-.cov-h .cn {{ font-size:14pt; font-weight:800; color:{NAVY}; }}
+.cov-cell {{ width:50%; vertical-align:top; padding:2mm 5mm 2mm 0; border-bottom:0.5pt solid {LINE}; }}
+.cov-h {{ margin-bottom:2mm; }}
+.cov-h .cn {{ font-size:12.5pt; font-weight:800; color:{NAVY}; }}
 .cov-h .bd {{ font-size:10pt; font-weight:800; padding:0.8mm 3mm; border-radius:8pt; float:right; }}
-.items .it {{ display:inline-block; font-size:10.8pt; font-weight:600; padding:1.2mm 2.6mm; margin:0.9mm 1.2mm 0.9mm 0; border-radius:2.5pt; background:#EEF1F5; color:{INK}; }}
+.items .it {{ display:inline-block; font-size:9.8pt; font-weight:600; padding:1.2mm 2.6mm; margin:0.9mm 1.2mm 0.9mm 0; border-radius:2.5pt; background:#EEF1F5; color:{INK}; }}
 .items .it b {{ color:{NAVY}; }}
 .items .it.bl b {{ color:{BLUE}; }}
 .items .it.r {{ color:{MUT}; background:transparent; border:0.5pt dashed {LINE}; }}
@@ -973,16 +1189,47 @@ body {{ color:{INK}; }}
 .smxcap {{ margin-top:1.5mm; font-size:6.5pt; color:{MUT}; line-height:1.35; }}
 .note b {{ color:{GOLDD}; }}
 .warn10 {{ font-size:7pt; margin-left:0.8mm; }}
-.gdcrit {{ border:1pt solid {GOLD}; border-left:4pt solid {GOLD}; border-radius:2mm; padding:3mm 4.5mm; margin-top:4.5mm; background:#FBF8F1; }}
-.gdtt {{ font-size:12pt; font-weight:800; color:{NAVY}; margin-bottom:1.5mm; }}
+.gdcrit {{ border:0; border-radius:2.6mm; padding:0; margin:0 0 3.4mm; background:linear-gradient(0deg,#FBF8F1,#FBF8F1); border:1.2pt solid {GOLD}; overflow:hidden; }}
+.gdhead {{ background:{NAVY}; padding:1.8mm 4mm; }}
+.gdtt {{ font-size:11.5pt; font-weight:900; color:#fff; letter-spacing:-0.3px; }}
+.gdtt b {{ color:{GOLD}; }}
+.gdeng {{ font-size:7pt; font-weight:700; color:#9FB0C6; letter-spacing:3px; margin-top:0.6mm; }}
+.gdwrap {{ padding:2.2mm 3mm 0; }}
+.gdtab {{ width:100%; border-collapse:collapse; table-layout:fixed; margin:0; }}
+.gdtab td {{ padding:0 1.2mm; }}
+.gdtab td:first-child {{ padding-left:0; }}
+.gdtab td:last-child {{ padding-right:0; }}
+.gdtab td {{ width:33.33%; vertical-align:top; text-align:center; padding:0 1.2mm; }}
+.gdtab td:first-child {{ padding-left:0; }}
+.gdtab td:last-child {{ padding-right:0; }}
+.gdn {{ width:6.4mm; height:6.4mm; line-height:6.4mm; margin:0 auto 1.2mm; text-align:center; border-radius:50%; background:{NAVY}; color:#fff; font-size:9.6pt; font-weight:900; }}
+.gdk {{ font-size:7.6pt; font-weight:700; color:{MUT}; line-height:1.3; }}
+.gdv {{ font-size:9.6pt; font-weight:900; color:{NAVY}; line-height:1.3; margin-top:0.8mm; }}
+.gdnt2 {{ font-size:7.4pt; font-weight:700; color:{MUT}; padding:1.8mm 4mm 2mm; }}
+.gdnt2 b {{ color:{GAP}; }}
+/* ── 보험 인포메이션 간지 (화이트) ── */
+.infopg {{ background:#fff; }}
+.ibar {{ height:8mm; background:{NAVY}; border-bottom:2mm solid {GOLD}; }}
+.ibody {{ padding:34mm 22mm 14mm; height:287mm; position:relative; }}
+.ieyebrow {{ font-size:9pt; font-weight:800; color:{GOLDD}; letter-spacing:6px; }}
+.ititle2 {{ font-size:50pt; font-weight:900; color:{NAVY}; line-height:1.12; margin-top:4mm; letter-spacing:-1.5px; }}
+.ititle2 b {{ color:{GOLDD}; }}
+.irule {{ width:32mm; height:1.8mm; background:{GOLD}; margin:7mm 0 6mm; }}
+.isub {{ font-size:11.5pt; font-weight:700; color:{MUT}; line-height:1.6; margin-bottom:22mm; }}
+.isub b {{ color:{NAVY}; }}
+.irow {{ display:table; width:100%; padding:7mm 0; border-top:0.8pt solid #E3E7EC; }}
+.irow:last-of-type {{ border-bottom:0.8pt solid #E3E7EC; }}
+.inum {{ display:table-cell; width:22mm; vertical-align:middle; font-size:20pt; font-weight:900; color:{GOLD}; letter-spacing:-1px; }}
+.itx {{ display:table-cell; vertical-align:middle; }}
+.ih {{ font-size:17pt; font-weight:900; color:{NAVY}; line-height:1.25; }}
+.ip {{ font-size:9.6pt; font-weight:700; color:{MUT}; margin-top:1.6mm; }}
+.ipg {{ display:table-cell; width:26mm; vertical-align:middle; text-align:right; font-size:10pt; font-weight:800; color:{NAVY}; }}
+.ifoot {{ position:absolute; left:22mm; right:22mm; bottom:14mm; text-align:center; font-size:8.4pt; font-weight:700; color:{MUT}; padding-top:3mm; border-top:0.6pt solid {LINE}; }}
+.flexnote {{ font-size:8pt; font-weight:700; color:{MUT}; background:#F4F6F9; border-left:2.6pt solid {NAVY}; border-radius:1.4mm; padding:1.6mm 2.4mm; margin-top:2.4mm; line-height:1.4; }}
+.flexnote b {{ color:{NAVY}; }}
 .gdrow {{ font-size:11pt; font-weight:700; color:{INK}; margin:1.3mm 0; }}
 .gdrow b {{ color:{NAVY}; }}
-.gdn {{ display:inline-block; width:5mm; height:5mm; line-height:5mm; text-align:center; border-radius:50%; background:{GOLD}; color:#fff; font-size:8.5pt; font-weight:800; margin-right:1.5mm; }}
-.gdnt2 {{ font-size:8.6pt; font-weight:600; color:{MUT}; margin-left:3mm; }}
-.gdtab {{ width:100%; border-collapse:collapse; margin-top:1.5mm; }}
-.gdtab td {{ width:33.33%; vertical-align:top; font-size:10.2pt; font-weight:700; color:{INK}; line-height:1.45; padding-right:3mm; }}
 .gdtab td b {{ color:{NAVY}; }}
-.gdnt {{ font-size:8.6pt; font-weight:600; color:{MUT}; margin-top:1.6mm; }}
 .pbar {{ margin-top:3mm; width:100%; border-collapse:collapse; }}
 .pbar td {{ padding:1.2mm 0; vertical-align:middle; }}
 .pbar td {{ padding:0.95mm 0; }}
@@ -992,7 +1239,10 @@ body {{ color:{INK}; }}
 .pbar .fill {{ height:6mm; border-radius:3mm; }}
 .pbar .bv {{ width:24mm; text-align:right; font-size:9pt; font-weight:700; padding-left:3mm; }}
 .dtab {{ width:100%; border-collapse:collapse; }}
-.dcell {{ text-align:center; padding:1.5mm 0; }}
+.dcell {{ text-align:center; padding:2.6mm 0; }}
+.memo4 {{ border:1.2pt solid {LINE}; border-radius:2mm; padding:3mm 4mm; background:#FCFCFD; }}
+.memo4 .ml {{ height:12mm; border-bottom:0.6pt dashed #C9CFD8; }}
+.memo4 .ml:last-child {{ border-bottom:none; }}
 
 .dcell .dn {{ font-size:9pt; font-weight:700; color:{NAVY}; margin-top:1mm; }}
 .legend {{ display:flex; justify-content:center; gap:12mm; margin:3mm 0 2mm; font-size:11pt; font-weight:700; color:{INK}; }}
@@ -1005,9 +1255,9 @@ body {{ color:{INK}; }}
 .btab td {{ padding:1.2mm 3mm; text-align:center; border-bottom:.5pt solid {LINE}; color:{INK}; }}
 .btab td.bn {{ text-align:left; font-weight:700; color:{NAVY}; }}
 .ctab {{ width:100%; border-collapse:separate; border-spacing:2.5mm 0; table-layout:fixed; }}
-.ctab .cc {{ background:#F6F8FB; border:0.8pt solid {LINE}; border-radius:2mm; padding:2mm 1.5mm; text-align:center; vertical-align:top; }}
-.ctab .cl {{ font-size:8.5pt; color:{MUT}; font-weight:700; margin-bottom:1.5mm; }}
-.ctab .cval {{ font-size:11pt; }}
+.ctab .cc {{ background:#F6F8FB; border:0.8pt solid {LINE}; border-top:2.4pt solid {NAVY}; border-radius:2mm; padding:4.4mm 1.5mm; text-align:center; vertical-align:top; }}
+.ctab .cl {{ font-size:9.6pt; color:{MUT}; font-weight:800; margin-bottom:2.4mm; }}
+.ctab .cval {{ font-size:14pt; }}
 .ci-wrap {{ border:0.8pt solid {GOLD}; border-radius:4pt; overflow:hidden; margin-bottom:5mm; }}
 .ci-top {{ background:{NAVY}; color:#fff; padding:3mm 4mm; }}
 .ci-top .ci-rate {{ font-size:13pt; font-weight:800; }}
@@ -1118,10 +1368,10 @@ body {{ color:{INK}; }}
     _n8='<div class="hcnote">★ <b>"특정Ⅰ·Ⅱ"는 회사마다 뜻이 다릅니다 — 라벨 말고 질병코드로 확인.</b> 흥국·롯데 특정Ⅰ=급성심근경색 / 한화·NH 특정Ⅰ=협심증·허혈·빈맥·부정맥·심부전 / DB 특정Ⅰ=협심증·허혈·염증 / KB 특정Ⅰ=협심증·허혈·빈맥·심부전 / 현대 특정Ⅰ=빈맥·심부전. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     _n9='<div class="hcnote">★ 삼성·메리츠는 허혈성심장질환을 6가지로 세분(급성기·후속·합병증·협심증·기타급성·만성). 롯데 특정심장Ⅰ=급성심근경색 / 흥국은 특정심혈관질환(기타부정맥제외)=협심·허혈·빈맥·심부전(급성심근 아님). 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>.</div>'
     _n8b='<div class="hcnote">★ 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
-    heart_chart = _fullpage(14,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
-                  _fullpage(15,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
-                  _fullpage(16,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
-                  _fullpage(17,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
+    heart_chart = _fullpage(16,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
+                  _fullpage(17,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
+                  _fullpage(18,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
+                  _fullpage(19,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
     _amt_brain={}; _amt_heart={}
@@ -1132,8 +1382,11 @@ body {{ color:{INK}; }}
         _m=_AMTKEY.get(_it.get('t',''))
         if not _m: continue
         (_amt_brain if _m[0]=='b' else _amt_heart)[_m[1]]=_v
-    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain)
-    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart)
+    # ★CI 계약(ci status=='ci')일 때만 CI 금액 맵 구성 → 없으면 6p에 CI칸 미표시(유동)
+    _cimap = rep.get('ci_amounts') or {}
+    if str(rep.get('ci',{}).get('status'))!='ci': _cimap={}
+    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap)
+    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap)
     # ★2026.07.11 실손 세대 자동판별(CI식) → 검출 세대 강조 표 + 세대별 맞춤 화법
     _sg=rep.get('silson_gen',{'status':'none'})
     # ★2026.07.11 지점장 확정 세분화: 2세대 3분할 / 1세대 생보·손보 구분(상해의료비)
@@ -1154,7 +1407,7 @@ body {{ color:{INK}; }}
         cls=(base+' genhit').strip() if hit else base
         pcls=' class="bad"' if gk=='5' else ' class="g"'
         fcls=' class="bad"' if gk=='5' else ''
-        star='<span class="hitmk">✔ 가입</span>' if hit else ''
+        star='<span class="hitmk">✓ 가입</span>' if hit else ''
         _rws.append(f'<tr class="{cls}"><td class="g">{lbl}{star}</td><td{pcls}>{per}</td><td class="rencol">{ren}</td><td{fcls}>{feat}</td></tr>')
     _gentab=('<table class="st gentab"><tr><th style="width:18%">세대</th><th style="width:18%">판매시기 (가입일)</th>'
              '<th style="width:14%">갱신 · 재가입</th><th style="width:52%">핵심 특징</th></tr>'+''.join(_rws)+'</table>')
@@ -1179,36 +1432,40 @@ body {{ color:{INK}; }}
             f'<td class="slp">{_html.escape(x["prod"])}</td>'
             f'<td class="sld">{_html.escape(x["join"])}</td>'
             f'<td class="sla">{x["amt"]:,}원</td></tr>' for x in _sl)
-        _silbox=('<div class="silbox"><div class="sbt">📌 고객님의 <b>실손보험은 여기</b> 들어 있습니다</div>'
+        _silbox=('<div class="silbox"><div class="sbt">■ 고객님의 <b>실손보험은 여기</b> 들어 있습니다</div>'
                  '<table class="sltab"><tr><th>보험사</th><th>상품명</th><th>가입일</th><th>월 보험료</th></tr>'
                  f'{_rows}</table>'
                  f'<div class="sbn">위 계약의 <b>가입일 기준</b>으로 세대를 판별했습니다. 실손이 여러 개면 <b>가장 오래된 계약</b>이 기준입니다.</div></div>')
     else:
-        _silbox=('<div class="silbox none"><div class="sbt">📌 실손보험 <b>미보유</b></div>'
+        _silbox=('<div class="silbox none"><div class="sbt">■ 실손보험 <b>미보유</b></div>'
                  '<div class="sbn">보유 계약에서 실손 담보(입원·통원·약값)가 확인되지 않습니다. 실손 가입 검토가 필요합니다.</div></div>')
     if _sg.get('status')=='auto':
         _g=_sg['gen']; _sub=_sg.get('sub',''); _t=_GEN_TALK[_talkkey(_g,_sub)]
         _lbl=(f"{_g}세대 ({_sub})" if (_g==1 and _sub) else (_sub+'세대' if _g==2 and _sub else f'{_g}세대'))
-        _silverd=(f'<div class="silverd g{_g}"><div class="svhead">🎯 고객님 실손 = <b>{_html.escape(_lbl)}</b>'
+        _silverd=(f'<div class="silverd g{_g}"><div class="svhead">● 고객님 실손 = <b>{_html.escape(_lbl)}</b>'
                   f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} · 가입 {_html.escape(str(_sg.get("date","")))} (자동 판별)</span></div>'
-                  f'<div class="svbody"><b>{_t[0]}</b><br>{_t[1]}<br><span class="svtx">🖐 {_t[2]}</span></div></div>')
+                  f'<div class="svbody"><b>{_t[0]}</b><br>{_t[1]}<br><span class="svtx">■ {_t[2]}</span></div></div>')
     elif _sg.get('status')=='check':
-        _silverd=('<div class="silverd chk"><div class="svhead">🔎 실손 세대 — 확인 필요'
+        _silverd=('<div class="silverd chk"><div class="svhead">■ 실손 세대 — 확인 필요'
                   f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} 실손 보유 · 가입일 미확정</span></div>'
                   '<div class="svbody">증권에서 <b>실손 가입일</b>을 확인하면 세대가 자동 결정됩니다. 아래 칸에 가입일을 기입하세요.</div></div>')
     else:
-        _silverd=('<div class="silverd none"><div class="svhead">ℹ️ 실손보험 미보유</div>'
+        _silverd=('<div class="silverd none"><div class="svhead">ℹ 실손보험 미보유</div>'
                   '<div class="svbody">현재 실손 담보가 확인되지 않습니다. 실손 가입 검토를 권유드립니다.</div></div>')
+    _md = '.' if _PPT_MODE else ''
+    memo_lines = ''.join('<div class="ml">%s</div>' % _md for _ in range(10))
     doc=f'''<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>
-<!-- P0: 표지 (최종본 260707 스펙) -->
-<div class="pg">
+<!-- P0: 표지 -->
+<div class="pg cvpg">
  <div class="cvbar"></div>
+ <div class="cvmark">MAKEONE</div>
  <div class="cvbody">
   <div class="cvbrand">MAKEONE<div class="ln"></div></div>
+  <div class="cveyebrow">COVERAGE DIAGNOSIS REPORT</div>
   <div class="cvtitle">보장 진단서</div>
+  <div class="cvrule"></div>
   <div class="cvsub">{rep.get('meta','')}</div>
-  <div class="cvname2"><span class="g">{cust}</span> 고객님</div>
-  <div class="cvhr"></div>
+  <div class="cvnamebox"><span class="g">{cust}</span><span class="s">고객님</span></div>
   <div class="cvstats">
    <div class="cvst"><div class="k">보유 계약</div><div class="v">{rep.get('n_contract',0)} <small>건</small></div></div>
    <div class="cvst"><div class="k">월 납입보험료</div><div class="v">{rep.get('premium',0):,} <small>원</small></div></div>
@@ -1218,6 +1475,7 @@ body {{ color:{INK}; }}
   <div class="cvhr2"></div>
   <div class="cvfoot">MAKEONE · 보장분석 자동화 리포트</div>
  </div>
+ <div class="cvfootbar"></div>
 </div>
 <!-- P1 -->
 <div class="pg">
@@ -1225,6 +1483,19 @@ body {{ color:{INK}; }}
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
   <div class="pgn"><b>1</b>보장 현황</div><div class="bar"></div></div>
  <div class="body">
+  <div class="gdcrit">
+   <div class="gdhead">
+    <div class="gdtt">좋은 보험 <b>가입 기준</b></div>
+    <div class="gdeng">GOOD INSURANCE CRITERIA</div>
+   </div>
+   <div class="gdwrap"><table class="gdtab"><tr>
+    <td><div class="gdcard"><div class="gdn">1</div><div class="gdk">보험료 대비</div><div class="gdv">담보의 다양성</div></div></td>
+    <td><div class="gdcard"><div class="gdn">2</div><div class="gdk">보상이 잘 되는 담보</div><div class="gdv">제대로 가입됐는지</div></div></td>
+    <td><div class="gdcard"><div class="gdn">3</div><div class="gdk">은퇴 · 노후</div><div class="gdv">준비되어 있는지</div></div></td>
+   </tr></table></div>
+   <div class="gdnt2">※ 월 보험료 <b>10만원 이상</b> = 아래 표에서 <b>빨간색 ▲</b>로 표시됩니다.</div>
+  </div>
+
   <table class="meta"><tr>
    <td><div class="k">보유 계약</div><div class="v">{n_contract}<small> 건</small></div></td>
    <td><div class="k">월 납입보험료</div><div class="v">{premium:,}<small> 원</small></div></td>
@@ -1254,14 +1525,7 @@ body {{ color:{INK}; }}
   </tr></table>
   <div class="sect" style="margin-top:4.5mm">월 보험료 구성 <span>PREMIUM</span></div>
   <table class="pbar">{bars}</table>
-  <div class="gdcrit">
-   <div class="gdtt">✅ 좋은 보험 가입 기준 <span class="gdnt2">※ 월 보험료 <b style="color:{GAP}">10만원 이상</b> = <b style="color:{GAP}">빨간색 ▲</b></span></div>
-   <table class="gdtab"><tr>
-    <td><span class="gdn">1</span> 보험료 대비<br><b>담보의 다양성</b></td>
-    <td><span class="gdn">2</span> <b>보상이 잘 되는 담보</b>로<br>가입되어 있는지 체크</td>
-    <td><span class="gdn">3</span> <b>은퇴 · 노후</b>가<br>준비되어 있는지 체크</td>
-   </tr></table>
-  </div>
+  <div class="flexnote">※ 이 페이지는 <b>계약 건수에 따라 표 길이·막대 개수가 유동적으로 바뀌는 페이지</b>입니다. 계약이 많아지면 갱신/비갱신 목록과 보험료 막대가 늘어나 배치가 자동 조정됩니다.</div>
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 17</span></div>
 </div>
@@ -1272,7 +1536,7 @@ body {{ color:{INK}; }}
   <div class="pgn"><b>3</b>핵심 보장 분석</div><div class="bar"></div></div>
  <div class="body">
   {ci_html}{noci_html}
-  <div class="sect"{' style="margin-top:5mm"' if (ci_html or noci_html) else ''}>주요 치료비 정리 <span>TREATMENT BENEFITS</span></div>
+  <div class="sect"{' style="margin-top:5mm"' if (ci_html or noci_html) else ''}>중대질병(CI) 진단 담보 <span>CRITICAL ILLNESS BENEFITS</span></div>
   <table class="ctab">{crows}</table>
   {comment_html}
  </div>
@@ -1307,13 +1571,13 @@ body {{ color:{INK}; }}
   <div class="nm">실손보험 <b>세대 구분</b> — 고객님은 몇 세대이신가요?</div>
   <div class="pgn"><b>5</b>실손 세대 구분</div><div class="bar"></div></div>
  <div class="body sbody">
-  <div class="wscap n2 wsectcap gap2">📅 실손 세대 구분 — 판매시기(가입일) 기준</div>
+  <div class="wscap n2 wsectcap gap2">■ 실손 세대 구분 — 판매시기(가입일) 기준</div>
   {_gentab}
   <div class="note">※ 세대 판별은 <b>가입일</b> 기준입니다. 표준화 실손은 2009.10월부터 판매되어, 본 진단서는 <b>2009.09월까지 1세대 / 2009.10월부터 2세대</b>로 적용합니다.</div>
   {_silverd}
   {_silbox}
   <div class="renote">
-   <div class="rentt">🔄 재가입 주기 — 약관이 바뀌는 시점</div>
+   <div class="rentt">▶ 재가입 주기 — 약관이 바뀌는 시점</div>
    <div class="renrow"><b>2013.01 ~</b> &nbsp;재가입 <b>15년</b></div>
    <div class="renrow"><b>2021.07 ~</b> &nbsp;재가입 <b>5년</b> <span class="smn">(4세대)</span></div>
    <div class="renrow"><b>2026.05.06 ~</b> &nbsp;재가입 <b>5년</b> <span class="smn">(5세대)</span></div>
@@ -1323,11 +1587,273 @@ body {{ color:{INK}; }}
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 17</span></div>
 </div>
+<!-- P5: 담보별 보장범위 (최종본 260707 스펙) -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
+  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
+  <div class="pgn"><b>6</b>담보별 보장범위</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="sect">담보별 보장범위 — 질병코드 커버 <span>DISEASE-CODE COVERAGE · 각 축=개별 담보·각각 보상 · 산정특례·순환계·외상성뇌출혈=단독</span></div>
+  {p5box}
+  <div class="scv2">
+   <div class="scvcol">
+    <div class="scvhd brain">뇌 — 질병코드별 커버</div>
+    {scv_brain}
+    <div class="scvleg"><span class="on">●</span> 보장 &nbsp;<span class="off">○</span> 미보장 &nbsp;<span class="hold">[확인]</span> 산정특례 HOLD &nbsp;<span class="own2">노란행=보유</span></div>
+    <div class="scvnote">· {cust} 보유 = <b>뇌출혈진단비(I60~62)</b> → <b class="r">뇌경색(I63)부터 공백</b>, 순환계·2대주요치료비로 확장 필요<br>· <b>외상성 뇌출혈(S06)</b> = 뇌혈관진단비 <b class="r">미보장</b>(산정특례 축only)<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 뇌혈관질환 전체 I60~69 + Q28 선천 + S06(개별 담보·각각 보상). 지급조건은 회사·약관별 [확인]</div>
+    <div class="rngbox">
+     <div class="rngt">■ 뇌혈관 보장범위 <span class="smn">(발병률 · 심평원)</span></div>
+     <table class="rngtab"><tr>
+      <td class="rgcol">
+       <div class="rngc">
+        <div class="rgo o1"><span class="rgp">100%</span></div>
+        <div class="rgo o2"><span class="rgp">60.8%</span></div>
+        <div class="rgo o3"><span class="rgp">9.3%</span></div>
+       </div>
+      </td>
+      <td class="rgtxt">
+       <div class="rgl"><span class="d d3"></span><b>뇌출혈</b> <span class="cdx">I60·61·62</span> <b class="pc">9.3%</b></div>
+       <div class="rgl"><span class="d d2"></span><b>뇌졸중</b> <span class="cdx">+뇌경색 I63·65·66</span> <b class="pc">60.8%</b></div>
+       <div class="rgl"><span class="d d1"></span><b>뇌혈관질환</b> <span class="cdx">전체 I60~69</span> <b class="pc">100%</b></div>
+      </td>
+     </tr></table>
+    </div>
+   </div>
+   <div class="scvcol">
+    <div class="scvhd heart">심장 — 질병코드별 커버</div>
+    {scv_heart}
+    <div class="scvleg"><span class="on">●</span> 보장 &nbsp;<span class="off">○</span> 미보장 &nbsp;<span class="hold">[확인]</span> 산정특례 HOLD &nbsp;<span class="own2">노란행=보유</span></div>
+    <div class="scvnote">· {cust} 보유 = <b>허혈성진단비 + 부정맥(I49)</b> → 허혈성(I20~25)·부정맥 커버, <b class="r">판막·염증·심부전은 심장특정/순환계 영역</b><br>· <b>빈맥(I47·48)</b> = 마스터 무행·전 묶음 <b class="r">제외</b> → 본 표 미기재<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 심혈관질환 전체 I20~50 + 판막(개별 담보·각각 보상). 지급조건 [확인]<br>· <b>순환계</b> = 가장 넓은 범위(2대 + 동맥류·정맥류 등 순환기 전반). 세부 대상코드 회사·약관별 상이 [확인]</div>
+    <div class="rngbox">
+     <div class="rngt">■ 심장 보장범위 <span class="smn">(발병률 · 심평원)</span></div>
+     <table class="rngtab"><tr>
+      <td class="rgcol">
+       <div class="rngc">
+        <div class="rgo o1 h"><span class="rgp">100%</span></div>
+        <div class="rgo o2 h"><span class="rgp">50%</span></div>
+        <div class="rgo o3 h"><span class="rgp">9%</span></div>
+       </div>
+      </td>
+      <td class="rgtxt">
+       <div class="rgl"><span class="d d3h"></span><b>급성심근경색</b> <span class="cdx">I21·22·23</span> <b class="pc r">9%</b></div>
+       <div class="rgl"><span class="d d2h"></span><b>허혈성심장</b> <span class="cdx">+협심증 I20·24·25</span> <b class="pc r">50%</b></div>
+       <div class="rgl"><span class="d d1h"></span><b>심장특정질환</b> <span class="cdx">판막·염증·부정맥·심부전</span> <b class="pc r">100%</b></div>
+      </td>
+     </tr></table>
+    </div>
+
+   </div>
+  </div>
+  <div class="scvbot"><div class="h">산정특례 기준 (진단 기반 · 별개 담보축)</div>· 산정특례 = 위 4범위(허혈성·2대·순환계)와 <b>축이 다른 별개 담보</b> — 마스터 '산정특례심장'·'산정특례뇌혈관' 전용행에서 진단코드 기반으로 지급. &nbsp;· 외상성 뇌출혈(S06) = 뇌혈관진단비 미보장 → <b>산정특례 축only</b>로만 커버(고정사실). &nbsp;· 대상 코드범위(확정): <b>[뇌]</b> I60~69 전체 + I67.0·1·5·6 + Q28 선천 + S06 / <b>[심]</b> I20~25·I30~41·I42~45·I46·I47~50 + 판막. <b>각각 개별 담보로 각각 보상.</b> 지급조건·기간(30일·5% 등)만 회사·약관별 [확인].</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 17</span></div>
+</div>
+
+<!-- P7: 상담 워크시트 (FINAL版·3단 중앙이름+산정특례) -->
+<div class="pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 상담 워크시트</div>
+  <div class="nm">지금 고객의 <b>3대 주요치료비</b>는?</div>
+  <div class="pgn"><b>7</b>상담 워크시트</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="ws3">
+   <div class="wscol wsmain">
+    <div class="wscap c">● 암 주요치료비</div>
+    {_wcard(rep,'암 진단비','걸렸을 때 일시금 (기본)','diag:암','diag')}
+    {_wcard(rep,'암 주요치료비','수술·방사선·약물 정액 (100만~)','암주요치료비','main')}
+    {_wcard(rep,'하이클래스 (비급여)','표적·면역·중입자 전액본인 커버','비급여주요치료비','na')}
+    {_wcard(rep,'암 생활비','치료 중 소득보상','암생활비','na')}
+   </div>
+   <div class="wsmid">
+    <div class="lb">OUR CLIENT</div>
+    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
+    <div class="nmsub">고객님</div>
+    <div class="cnt">2/8<small>3대 치료비 보유</small></div>
+   </div>
+   <div class="wscol wsmain">
+    <div class="wscap h">● 뇌·심장 주요치료비</div>
+    {_wcard(rep,'뇌·심 진단비','뇌혈관·허혈성 일시금','diag:뇌심','diag')}
+    {_wcard(rep,'2대 주요치료비','수술·혈전용해·중환자실 (100만~)','2대주요치료비','main')}
+    {_wcard(rep,'순환계 주요치료비','부정맥·심부전 확대','순환계주요치료비','na')}
+    {_wcard(rep,'순환계 생활비','치료 중 소득보상','순환계생활비','na')}
+   </div>
+  </div>
+  <div class="wssj">
+   <div class="cap">산정특례 — 뇌·심 각각 개별 담보 · 진단만으로 지급</div>
+   <div class="ws2">
+    {_wcard_sj(rep,'산정특례 (뇌)','뇌혈관질환 I60~69 전체 · Q28 · S06','산정특례(뇌혈관)')}
+    {_wcard_sj(rep,'산정특례 (심장)','심혈관질환 I20~50 · 판막 전체','산정특례(심장)')}
+   </div>
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 17</span></div>
+</div>
+
+<!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
+<div class="pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
+  <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
+  <div class="pgn"><b>8</b>비갱신 추천</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="ws3">
+   <div class="wscol wsmain">
+    <div class="wscap n2">■ 사망 · 진단비 · 수술</div>
+    {_wcard_fix_list('사망','평생 유지 · 종신형',['종신 사망','질병 사망','상해 사망'])}
+    {_wcard_fix_group('진단비','암·뇌·심 진단 일시금',[('■ 암',['고액암','일반암','유사암']),('■ 뇌',['뇌혈관','뇌졸증','뇌출혈']),('■ 심장',['허혈성','협심증','급성심근','심부전','염증','부정맥'])])}
+    {_wcard_fix_group('수술','질병 · 상해 구분',[('■ 질병',['질병수술','1~5종','N대수술','뇌혈관','허혈성','심장','암수술']),('■ 상해',['상해수술','1~5종','중대상해','창상봉합','골절수술','5대골절','화상수술'])])}
+   </div>
+   <div class="wsmid">
+    <div class="lb">OUR CLIENT</div>
+    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
+    <div class="nmsub">고객님</div>
+    <div class="cnt">평생<small>비갱신 고정</small></div>
+   </div>
+   <div class="wscol wsmain">
+    <div class="wscap n2">■ 후유장해 · 상해 · 일당</div>
+    {_wcard_fix_list('후유장해','상해·질병 각 3% · 80%',['상해 후유 3%','상해 후유 80%','질병 후유 3%','질병 후유 80%'])}
+    {_wcard_fix_list('상해','골절·화상·깁스·응급실',['골절','5대 골절','화상진단비','중대화상진단비','반깁스','깁스','응급실'])}
+    {_wcard_fix_list('일당','입원·수술·중환자실',['질병 입원일당','상해 입원일당','질병 수술일당','상해 수술일당','질병 중환자실','상해 중환자실','1인실(종합/상급)'])}
+   </div>
+  </div>
+  <div class="wscap n2 wsectcap gap2">■ 연금 · 종신 · 저축 — 은퇴 후 평생 소득</div>
+  <div class="ws2">
+   {_wcard_fix_list('연금','달러 · 노후 소득',['달러연금','달러종신'])}
+   {_wcard_fix_list('종신 · 저축','평생 보장 · 목돈 마련',['종신','저축보장'])}
+  </div>
+  <div class="wssj fixnote">
+   <div class="cap">비갱신 3대 이유</div>
+   <div class="fxrow"><b>① 평생 고정</b> 납입 끝나면 보험료 0원 · <b>② 납입면제</b> 중대질환 진단 시 이후 면제 · <b>③ 은퇴 전 확정</b> 나이 들수록 발생률↑, 미리 잠근다.</div>
+  </div>
+  <div class="note24">● 바뀌지 않는 담보는 <b>비갱신</b>으로 가입하셔서 <b>은퇴 후</b>를 준비해야 합니다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / 17</span></div>
+</div>
+<!-- P10: 운전자 · 간병 (병합) -->
+<div class="pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
+  <div class="nm">운전자 · 간병 <b>— 일상 리스크 대비</b></div>
+  <div class="pgn"><b>9</b>운전자·간병</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="wscap n2 wsectcap">■ 운전자보험 담보</div>
+  <div class="ws2">
+   {_wcard_fix_list('벌금 · 합의금','교통사고 형사·행정',['대인 벌금','대물 벌금','합의금','6주미만 합의금'])}
+   {_wcard_fix_list('변호사 · 위로금','기타 지원',['변호사비','자동차부상위로금','영업용 운전면허취소지원'])}
+  </div>
+  <table class="st cmp mini"><tr><th style="width:18%">구분</th><th>자동차보험 <span style="font-weight:400">(의무)</span></th><th>운전자보험 <span style="font-weight:400">(선택)</span></th></tr>
+   <tr><td class="g">보장 대상</td><td>타인의 피해</td><td class="bad">운전자 본인</td></tr>
+   <tr><td class="g">책임 종류</td><td>민사 배상</td><td class="bad">형사·행정</td></tr>
+   <tr><td class="g">주요 보장</td><td>대인 · 대물</td><td class="bad">벌금 · 형사합의금 · 변호사선임비</td></tr></table>
+  <div class="wscap n2 wsectcap gap2">■ 간병비 담보</div>
+  <div class="ws2">
+   {_wcard_fix_list('간병인 지원','보험사 파견',['간병인지원일당','간호통합병동'])}
+   {_wcard_fix_list('간병인 사용','직접 고용',['간병인사용일당','간병인사용일당(체증형)','요양병원 간호통합병동'])}
+  </div>
+  <table class="st cmp"><tr><th style="width:20%">구분</th><th>간병인지원일당</th><th>간병인사용일당</th></tr>
+   <tr><td class="g">방식</td><td>보험사가 간병인 <b>직접 배정</b></td><td>내가 <b>직접 고용</b> 후 정액 지급</td></tr>
+   <tr><td class="g">간병인 선택</td><td>불가 (배정 · 교체 가능)</td><td class="ok"><b>간병인 or 지인</b> 가능</td></tr>
+   <tr><td class="g">갱신</td><td>5 · 10 · 15 · 20년 갱신</td><td class="ok">비갱신 선택 가능</td></tr>
+   <tr><td class="g">납입면제</td><td>갱신형이라 <b>갱신 끝나면 다시 납부</b></td><td class="ok"><b>납입면제 가능</b></td></tr>
+   <tr><td class="g">간호통합병동</td><td>가입금액 보장 (정액)</td><td>가입금액 보장 (정액)</td></tr>
+   <tr><td class="g">인건비 상승</td><td>간병인 배정 (교체 가능)</td><td>체증형 (5년 10%↑)</td></tr></table>
+  <div class="wscap n2 wsectcap gap2">■ 간병인사용일당 — 이렇게 하면 됩니다 (쉬운 6단계)</div>
+  <div class="steprow big">
+   <div class="stepc"><div class="stepn">1</div><b>간병인 부르기</b>입원하면 <b>바로</b> 간병협회·등록업체·앱(예: 케어네이션)에 연락해 간병인을 부른다. <b>늦으면 소급이 안 되니 입원 첫날에!</b></div>
+   <div class="stepc"><div class="stepn">2</div><b>간병 받기</b>입원 동안 간병인이 식사·세면·체위변경·이동을 돕는다. 가족·지인도 가능(단 <b>24시간 같이 생활</b>).</div>
+   <div class="stepc"><div class="stepn">3</div><b>서류 챙기기</b>퇴원 전에 병원서 <b>입퇴원확인서</b>, 업체서 <b>간병사용확인서</b>, 그리고 <b>간병비 영수증</b>을 받는다.</div>
+   <div class="stepc"><div class="stepn">4</div><b>간병비 내기</b>간병비를 <b>실제로 지급</b>하고 증빙을 남긴다. 계좌이체 메모에 "○○○ 간병비"라 적으면 깔끔.</div>
+   <div class="stepc"><div class="stepn">5</div><b>청구서류 모으기</b>입원확인서 + 간병사용확인서 + 지급내역(이체·카드) + <b>업체 사업자등록증</b>을 한 번에.</div>
+   <div class="stepc"><div class="stepn">6</div><b>보험사에 청구</b>모은 서류를 보험사에 내면 <b>심사 후 간병비가 지급</b>된다. 끝!</div>
+  </div>
+  <div class="note24">● <b>간병인 사용일당</b> 사용 시 환자와 <b>24시간 동행</b>해야 인정됩니다.</div>
+  </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / 17</span></div>
+</div>
+<!-- P12: 재가보험 -->
+<div class="pg jgbig">
+ <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
+  <div class="nm">재가보험 <b>— 장기요양 · 노후 돌봄</b></div>
+  <div class="pgn"><b>10</b>재가보험</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="wscap n2 wsectcap">■ 재가보험 · 장기요양</div>
+  <div class="ws2">
+   {_wcard_fix_list('장기요양 등급','등급 판정 · 인지지원',['1등급','2등급','3등급','4등급','5등급','인지지원등급'])}
+   {_wcard_fix_list('복합재가 (통합재가)','한 기관·한 계약 · 5종 복합',['주야간보호 (노치원)','방문요양','방문목욕','방문간호','단기보호'])}
+  </div>
+  <div class="wscap n2 wsectcap gap2">■ 복지용구 18품목 — 품목별 한도가 다릅니다 (연 160만원 · 본인부담 0~15%)</div>
+  <div class="ws2">
+   <div class="wscol">
+    <table class="st wg"><tr><th style="width:44%">구입품목 (10)</th><th>내구연한</th><th>개수 한도</th></tr>
+     <tr><td class="n">이동변기</td><td>5년</td><td>1개</td></tr>
+     <tr><td class="n">목욕의자</td><td>5년</td><td>1개</td></tr>
+     <tr><td class="n">성인용보행기</td><td>5년</td><td class="ok">2개</td></tr>
+     <tr><td class="n">욕창예방방석</td><td>3년</td><td>1개</td></tr>
+     <tr><td class="n">지팡이</td><td>2년</td><td>1개</td></tr>
+     <tr><td class="n">자세변환용구</td><td>-</td><td>연 5개</td></tr>
+     <tr><td class="n">간이변기</td><td>-</td><td>연 2개</td></tr>
+     <tr><td class="n">안전손잡이</td><td>-</td><td>연 10개</td></tr>
+     <tr><td class="n">미끄럼방지(양말)</td><td>-</td><td>연 6켤레</td></tr>
+     <tr><td class="n">요실금팬티</td><td>-</td><td>연 4개</td></tr></table>
+   </div>
+   <div class="wscol">
+    <table class="st wg"><tr><th style="width:52%">대여품목 (6)</th><th>내구연한</th></tr>
+     <tr><td class="n">수동휠체어</td><td>5년</td></tr>
+     <tr><td class="n">전동침대</td><td>10년</td></tr>
+     <tr><td class="n">수동침대</td><td>10년</td></tr>
+     <tr><td class="n">이동욕조</td><td>5년</td></tr>
+     <tr><td class="n">목욕리프트</td><td>3년</td></tr>
+     <tr><td class="n">배회감지기</td><td>5년</td></tr></table>
+    <table class="st wg" style="margin-top:2mm"><tr><th style="width:52%">구입 또는 대여 (2)</th><th>내구연한</th></tr>
+     <tr><td class="n">욕창예방매트리스</td><td>3년</td></tr>
+     <tr><td class="n">경사로</td><td>실내 2년(6개)/실외 8년</td></tr></table>
+   </div>
+  </div>
+  <div class="wssj fixnote">
+   <div class="cap">신인 설계사 · 이것만 기억하세요</div>
+   <div class="fxrow"><b>한도</b> 등급 무관 <b>연 160만원</b>(구입+대여 합산) · 본인부담 0~15%(기초수급 0%) · 초과분은 전액 본인부담 · 미사용 잔액 이월 안 됨(유효기간 1년).</div>
+   <div class="fxrow"><b>품목별 규칙</b> 내구연한 있는 품목은 그 기간 내 1개(성인용보행기 2·경사로 실내 6 예외) · 내구연한 없는 소모품은 연 개수 한도 · <b>시설 입소 시 전면 불가</b>, 의료기관 15일↑ 입원 중 침대·이동욕조·목욕리프트 대여 불가.</div>
+   <div class="fxrow"><b>상담 포인트</b> 재가등급(1~5·인지지원)만 받으면 누구나 이용 · "급여확인서"에 사용가능 품목이 찍혀 나옴 · 온·오프라인 복지용구 사업소에서 구입/대여. <b>시설급여</b>(요양원 입소)·<b>특별현금급여</b>(가족요양비)는 재가·복지용구와 별개 급여.</div>
+  </div>
+  <div class="wstalk2"><b>■ 노치원(주야간보호)</b> — 어르신을 <b>낮 동안 시설에서 돌봄</b>(식사·목욕·재활·프로그램)하고 저녁엔 집으로 귀가. 가족은 낮에 생업·휴식이 가능하다. 복합재가 5종 중 하나로, 등급만 있으면 이용.</div>
+  <div class="wstalk2"><b>■ 장기요양등급, 언제 신청?</b> — <b>만 65세 이상</b>은 소득 무관 누구나 신청. <b>65세 미만이라도</b> 치매·뇌혈관질환·파킨슨병 등 <b>노인성 질병</b>이 있으면 <b>의사소견서(진단서)</b> 첨부해 <b>미리 신청 가능</b>. 건강보험공단(■1577-1000)·앱·홈페이지 신청 → 방문조사 → 약 30일 내 등급 판정. 65세 전에 준비해 두면 은퇴 후 돌봄 공백을 막는다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / 17</span></div>
+<!-- P-INFO: 보험 인포메이션 간지 -->
+<div class="pg infopg">
+ <div class="ibar"></div>
+ <div class="ibody">
+  <div class="ieyebrow">INSURANCE INFORMATION</div>
+  <div class="ititle2">보험 <b>인포메이션</b></div>
+  <div class="irule"></div>
+  <div class="isub">고객 계약과 무관한 <b>공통 참고 자료</b>입니다.</div>
+
+  <div class="irow">
+   <div class="inum">01</div>
+   <div class="itx"><div class="ih">5세대 실손보험</div><div class="ip">급여 · 비급여 · 도수 · 체외충격파</div></div>
+   <div class="ipg">11 – 14</div>
+  </div>
+  <div class="irow">
+   <div class="inum">02</div>
+   <div class="itx"><div class="ih">3대 주요치료비 변천사</div><div class="ip">비례형 → 정액형 → 비급여</div></div>
+   <div class="ipg">15</div>
+  </div>
+  <div class="irow">
+   <div class="inum">03</div>
+   <div class="itx"><div class="ih">심혈관 담보 분류</div><div class="ip">보험사별 · 질병코드 기준</div></div>
+   <div class="ipg">16 – 19</div>
+  </div>
+  <div class="irow">
+   <div class="inum">04</div>
+   <div class="itx"><div class="ih">회사별 비교표</div><div class="ip">11개 비교표 · 설계사 참고용</div></div>
+   <div class="ipg">부1 – 부3</div>
+  </div>
+
+  <div class="ifoot">MAKEONE · 보장분석 자동화 리포트 &nbsp;|&nbsp; 자료기준일 2026.06.30 · 정리 BARUM지점 최은혜</div>
+ </div>
+</div>
 <!-- P5d: 5세대 쉽게 이해하기 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대 실손 <b>— 쉽게 딱 3가지만</b></div>
-  <div class="pgn"><b>6</b>5세대 쉽게</div><div class="bar"></div></div>
+  <div class="pgn"><b>11</b>5세대 쉽게</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="ezbox ez1">
@@ -1348,7 +1874,7 @@ body {{ color:{INK}; }}
   </div>
 
   <div class="ezbox ez2">
-   <div class="eztt"><span class="eznum">2</span> 급여 — <b>큰 병원 갈수록 내 돈이 커진다</b></div>
+   <div class="eztt"><span class="eznum">2</span> 급여 통원 — <b>큰 병원 갈수록 내 돈이 커진다</b></div>
    <div class="ezhosp">
     <table class="ezhtab">
      <tr>
@@ -1365,44 +1891,58 @@ body {{ color:{INK}; }}
     </table>
    </div>
    <div class="ezn"><b>통원(외래)만</b> 해당. <b>입원은 어느 병원이든 20%</b>로 똑같다.<br>※ 4세대는 병원 상관없이 20%였다 → 5세대는 <b class="bad">대학병원 가면 60%를 내가 낸다.</b></div>
-  </div>
 
-  <div class="ezbox ez3">
-   <div class="eztt"><span class="eznum">3</span> 비급여 — <b>큰 병이냐 아니냐</b>로 갈린다</div>
-   <table class="eztab">
+   <div class="gvcap">■ 내가 낸 <b>급여 본인부담금 10만원</b> 기준 — 직접 계산해보면</div>
+   <table class="gvtab">
     <tr>
-     <td class="ezc ezgold">
-      <div class="ezh">중증 <span class="ezsub">특약1</span></div>
-      <div class="ezbig">내 돈 <b>30%</b></div>
-      <div class="ezd"><b>산정특례 = 암 · 뇌 · 심장 · 희귀난치</b><br>4세대와 <b>똑같다</b> ✔<br>연 5,000만 · 통원 회당 20만<br><span class="good">★1년에 500만 넘게 내면 그 뒤론 <b>보험이 다 낸다</b></span></div>
-     </td>
-     <td class="ezc ezpink">
-      <div class="ezh">비중증 <span class="ezsub">특약2</span></div>
-      <div class="ezbig bad">내 돈 <b>50%</b></div>
-      <div class="ezd"><b>그 외 전부</b> (허리·두통·감기)<br>4세대 30% → <b class="bad">50%로 올랐다</b><br>한도 5,000만 → <b class="bad">1,000만</b><br><span class="bad">★도수·체외충격파·영양주사는 <b>아예 안 나온다</b></span></div>
-     </td>
+     <td class="gvc c1"><div class="gvh">동네 의원</div><div class="gvb">
+       <div class="gvk">건보 부담률</div><div class="gvp">30%</div><div class="gvhr"></div>
+       <div class="gvk">내 부담</div><div class="gvm">3만원</div>
+       <div class="gvk">돌려받는 돈</div><div class="gvr">7만원</div>
+       <div class="gvtag ok">✓ 가장 유리</div></div></td>
+     <td class="gvc c2"><div class="gvh">병원</div><div class="gvb">
+       <div class="gvk">건보 부담률</div><div class="gvp">40%</div><div class="gvhr"></div>
+       <div class="gvk">내 부담</div><div class="gvm">4만원</div>
+       <div class="gvk">돌려받는 돈</div><div class="gvr">6만원</div>
+       <div class="gvtag ok">✓ 무난</div></div></td>
+     <td class="gvc c3"><div class="gvh">종합병원</div><div class="gvb">
+       <div class="gvk">건보 부담률</div><div class="gvp">50%</div><div class="gvhr"></div>
+       <div class="gvk">내 부담</div><div class="gvm">5만원</div>
+       <div class="gvk">돌려받는 돈</div><div class="gvr">5만원</div>
+       <div class="gvtag wn">※ 절반만</div></div></td>
+     <td class="gvc c4"><div class="gvh">대학병원</div><div class="gvb">
+       <div class="gvk">건보 부담률</div><div class="gvp">60%</div><div class="gvhr"></div>
+       <div class="gvk">내 부담</div><div class="gvm">6만원</div>
+       <div class="gvk">돌려받는 돈</div><div class="gvr">4만원</div>
+       <div class="gvtag wn">※ 주의</div></div></td>
+     <td class="gvc c5"><div class="gvh">권역응급 <span class="gvsm">(경증)</span></div><div class="gvb">
+       <div class="gvk">건보 부담률</div><div class="gvp">90%</div><div class="gvhr"></div>
+       <div class="gvk">내 부담</div><div class="gvm">9만원</div>
+       <div class="gvk">돌려받는 돈</div><div class="gvr">1만원</div>
+       <div class="gvtag no">× 거의 없음</div></div></td>
     </tr>
    </table>
+   <div class="gvfoot"><b>4세대였다면?</b> 어느 병원이든 내 부담 <b>2만원</b> → 돌려받는 돈 <b>8만원</b> &nbsp;|&nbsp; <span class="bad">× 권역응급 경증: 청구해도 1만원만!</span></div>
   </div>
 
   <div class="ezsum">
-   <div class="ezst">💡 한 줄로 외우세요</div>
-   <div class="ezsl"><b>"큰 병은 그대로, 작은 병은 반만. 큰 병원 갈수록 내 돈이 커진다."</b></div>
-   <div class="ezsn">암·뇌·심장 같은 <b>큰 병은 4세대와 똑같이</b> 보장받고 오히려 500만원 상한까지 생겼다.<br>대신 <b class="bad">허리·어깨 도수치료, 영양주사는 5세대에서 아예 못 받는다.</b> 자주 받는 분은 지금 실손을 <b>유지</b>하는 게 낫다.</div>
+   <div class="ezst">★ 한 줄로 외우세요</div>
+   <div class="ezsl"><b>"급여는 큰 병원 갈수록 내 돈이 커진다. 비급여는 큰 병이냐 아니냐로 갈린다."</b></div>
+   <div class="ezsn">급여(건보 적용) = <b>병원 규모로 갈린다</b> — 동네의원 30%, 대학병원 60%, 응급실 경증 90%.<br>비급여 = <b>중증(30%) vs 비중증(50%)</b>으로 갈린다 → <b>다음 장에서 상세히 본다.</b></div>
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 17</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / 17</span></div>
 </div>
 <!-- P5f: 중증 vs 비중증 (그림형) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">중증 vs 비중증 <b>— 기준은 '산정특례'다</b></div>
-  <div class="pgn"><b>7</b>중증·비중증</div><div class="bar"></div></div>
+  <div class="pgn"><b>12</b>중증·비중증</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="svdef">
-   <div class="svdt">🏥 중증의 기준 = <b>건강보험 산정특례 대상자</b></div>
+   <div class="svdt">■ 중증의 기준 = <b>건강보험 산정특례 대상자</b></div>
    <div class="svdd">보험사가 정하는 게 아니다. <b>국민건강보험공단에 산정특례로 등록된 질환이면 '중증(특약1)'</b>, 아니면 전부 '비중증(특약2)'이다.<br>
    산정특례 = 암·뇌혈관·심장·희귀난치질환 등 큰 병에 대해 <b>건보 본인부담을 5~10%로 낮춰주는 제도</b>. 진단 후 공단에 등록하면 산정특례 등록증이 나온다.<br>
    <span class="bad">※ 같은 도수치료라도 — 암 치료 목적이면 중증(보장), 허리 통증이면 비중증(0원). 병명이 아니라 <b>산정특례 등록 여부</b>가 갈림길이다.</span></div>
@@ -1422,7 +1962,7 @@ body {{ color:{INK}; }}
      <div class="svrow"><div class="svk">자기부담</div><div class="svv">입원 30% / 통원 Max[30%, 3만]</div></div>
      <div class="svrow"><div class="svk">한도</div><div class="svv">연 <b>5,000만</b> · 통원 회당 20만<br><span class="smn">입원 한도 없음</span></div></div>
      <div class="svrow"><div class="svk">상한</div><div class="svv"><span class="ok">★ 상급종합·종합 입원 시<br>연 자기부담 500만 초과분 <b>전액 보장</b></span></div></div>
-     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="ok">모두 보장 ✔</span> <span class="smn">면책 없음</span></div></div>
+     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="ok">모두 보장 ✓</span> <span class="smn">면책 없음</span></div></div>
      <div class="svrow"><div class="svk">보험료 할증</div><div class="svv"><span class="ok">없음</span> <span class="smn">아무리 써도 그대로</span></div></div>
     </div>
    </div>
@@ -1439,7 +1979,7 @@ body {{ color:{INK}; }}
      <div class="svrow"><div class="svk">자기부담</div><div class="svv">입원 50% / 통원 Max[50%, 5만]</div></div>
      <div class="svrow"><div class="svk">한도</div><div class="svv">연 <span class="no">1,000만</span> · 입원 회당 300만<br><span class="smn">통원 1일 20만</span></div></div>
      <div class="svrow"><div class="svk">상한</div><div class="svv"><span class="no">없음</span> <span class="smn">초과분은 전부 본인 부담</span></div></div>
-     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="no">보장 제외 ✘</span> <span class="smn">+ 미등재 신의료기술</span></div></div>
+     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="no">보장 제외 ×</span> <span class="smn">+ 미등재 신의료기술</span></div></div>
      <div class="svrow"><div class="svk">보험료 할증</div><div class="svv"><span class="no">최대 +300%</span> <span class="smn">비급여 보험료 4배</span></div></div>
     </div>
    </div>
@@ -1447,39 +1987,39 @@ body {{ color:{INK}; }}
 
   <div class="svex">
    <div class="svec">
-    <div class="svet">💰 비급여 <b>100만원</b> 냈다면</div>
+    <div class="svet">■ 비급여 <b>100만원</b> 냈다면</div>
     <div class="sveg">중증 → <b>70만원</b> 환급</div>
     <div class="sver">비중증 → <b>50만원</b> 환급</div>
     <div class="svesm">같은 100만원인데 20만원 차이. 비중증은 소액일수록 더 불리하다(4만원 청구 = 0원).</div>
    </div>
    <div class="svec">
-    <div class="svet">💉 <b>도수치료</b> 100만원</div>
+    <div class="svet">■ <b>도수치료</b> 100만원</div>
     <div class="sveg">중증(암 치료) → <b>70만원</b></div>
     <div class="sver">비중증(요통) → <b>0원</b></div>
     <div class="svesm">2026.07.01부터 도수는 관리급여(1회 43,850원·본인 95%). 체외충격파·비급여주사는 비중증이면 그대로 0원.</div>
    </div>
    <div class="svec">
-    <div class="svet">🧲 <b>MRI</b> 50만원 (통원)</div>
-    <div class="sveg">중증 → <b>35만원</b> 환급</div>
-    <div class="sver">비중증 → <b>25만원</b> 환급</div>
-    <div class="svesm">MRI 별도 한도는 없다. 각 특약 규칙대로 — 중증 Max[30%,3만] / 비중증 Max[50%,5만].</div>
+    <div class="svet">■ <b>MRI</b> 50만원</div>
+    <div class="sveg">입원 → 중증 <b>35만</b> / 비중증 <b>25만</b></div>
+    <div class="sver">통원 → <b>둘 다 20만</b> (한도컷)</div>
+    <div class="svesm">자기부담 = 중증 Max[30%,3만] / 비중증 Max[50%,5만]. <b>통원은 회당 20만 한도</b>에 잘려 중증·비중증이 같아진다.</div>
    </div>
   </div>
 
   <div class="ezsum">
-   <div class="ezst">💡 상담 한 줄</div>
+   <div class="ezst">★ 상담 한 줄</div>
    <div class="ezsl"><b>"산정특례 등록증이 나오는 병이면 5세대도 괜찮습니다. 아니면 절반만 나옵니다."</b></div>
    <div class="ezsn">암·뇌·심장은 오히려 <b>500만원 상한</b>이 생겨 강화됐다. 문제는 <b class="bad">도수·체외충격파·영양주사</b> — 비중증이면 한 푼도 안 나온다. 이 치료를 정기적으로 받는 분은 5세대 전환 금지.</div>
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 17</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / 17</span></div>
 </div>
 <!-- P5e: 5세대 도표 + 예시 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대는 <b>얼마나 불리해지나</b> — 한눈에</div>
-  <div class="pgn"><b>8</b>5세대 도표</div><div class="bar"></div></div>
+  <div class="pgn"><b>13</b>5세대 도표</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <table class="g4wrap">
@@ -1517,7 +2057,7 @@ body {{ color:{INK}; }}
       <div class="barcol"><div class="hbar q5"><span>300</span></div><div class="barlb vt">4세대</div></div>
       <div class="barcol"><div class="hbar q5"><span>300</span></div><div class="barlb vt bad">5세대</div></div>
      </div>
-     <div class="g4nt">4·5세대만 할증 — <b class="bad">비급여 보험료 최대 4배</b></div>
+     <div class="g4nt">1~3세대 <b>할증 없음</b> → 4·5세대 <b class="bad">최대 +300%</b></div>
     </td>
     <td class="g4cell">
      <div class="g4tt">④ 보장 한도 <span class="smn">비급여 연간</span></div>
@@ -1533,72 +2073,131 @@ body {{ color:{INK}; }}
    </tr>
   </table>
 
-  <div class="wscap n2 wsectcap gap2">💊 실제로 얼마나 받나 — <b>입원 vs 통원</b> (5세대)</div>
-  <table class="st extab">
-   <tr>
-    <th style="width:16%">치료</th>
-    <th class="hjung" style="width:21%">중증 · 통원</th>
-    <th class="hjung" style="width:21%">중증 · 입원</th>
-    <th class="hbi" style="width:21%">비중증 · 통원</th>
-    <th class="hbi" style="width:21%">비중증 · 입원</th>
-   </tr>
-   <tr><td class="g"><b>MRI</b><br><span class="smn">50만원</span></td>
-    <td>내 돈 15만<br><b class="good">20만 환급</b><br><span class="smn">회당 20만 한도</span></td>
-    <td>내 돈 15만<br><b class="good">35만 환급</b><br><span class="smn">한도 없음</span></td>
-    <td class="bad">내 돈 25만<br><b>20만 환급</b><br><span class="smn">일당 20만 한도</span></td>
-    <td class="bad">내 돈 25만<br><b>25만 환급</b><br><span class="smn">회당 300만 한도</span></td></tr>
-   <tr><td class="g"><b>도수치료</b><br><span class="smn">1회 43,850원</span></td>
-    <td colspan="2">관리급여 전환 <span class="smn">(2026.07.01~)</span><br>본인부담률 <b>95%</b> → 내 돈 <b>약 4만 2천원</b><br><span class="smn">연 15회 · 주 2회 제한</span></td>
-    <td colspan="2" class="bad"><b>보장 제외 — 0원</b><br>입원해도 <b>안 나온다</b><br><span class="smn">관리급여 전환 시 95% 본인부담</span></td></tr>
-   <tr><td class="g"><b>체외충격파</b><br><span class="smn">1회 10만원</span></td>
-    <td colspan="2">보장 <span class="smn">(산정특례 질환 치료 시)</span></td>
-    <td colspan="2" class="bad"><b>보장 제외 — 0원</b> (전액 본인부담)</td></tr>
-   <tr><td class="g"><b>비급여 주사</b><br><span class="smn">영양주사 등</span></td>
-    <td colspan="2">보장 <span class="smn">(산정특례 질환 치료 시)</span></td>
-    <td colspan="2" class="bad"><b>보장 제외 — 0원</b></td></tr>
+  <div class="wscap n2 wsectcap gap2">■ 비급여 보험료 할증 — <b>직전 1년 청구액에 따라 5단계</b></div>
+  <table class="hjtab">
+   <tr><th>1등급</th><th>2등급</th><th>3등급</th><th>4등급</th><th>5등급</th></tr>
+   <tr><td class="k">보험금 <b>0원</b></td><td class="k">100만 미만</td><td class="k">150만 미만</td><td class="k">300만 미만</td><td class="k">300만 이상</td></tr>
+   <tr><td class="v ok">-5% 할인</td><td class="v n">유지</td><td class="v w">+100%</td><td class="v w2">+200%</td><td class="v b">+300% (4배)</td></tr>
   </table>
-  <div class="exn">※ <b>중증</b> = 암·뇌혈관·심장·희귀난치(산정특례) 질환 <b>치료 목적</b>일 때만. 허리·어깨 통증으로 받는 도수치료는 <b class="bad">비중증 → 0원</b>이다.<br>※ MRI 자기부담 = 중증 Max[30%, 3만] / 비중증 Max[50%, 5만]. <b class="bad">통원은 20만 한도에 걸려 잘린다.</b></div>
-
+  <div class="exn">※ 할증은 <b>비중증(특약2) 비급여</b> 보험료에만 붙는다. <b class="good">급여·중증(특약1)은 아무리 써도 할증 없음.</b> 직전 2년 특약2 보험금 미수령 시 전체보험료 <b>10% 추가 할인</b>.</div>
+  <div class="wscap n2 wsectcap gap2">■ 실제로 얼마나 받나 (5세대) — <b>MRI 50만원 · 입원 vs 통원</b></div>
+  <table class="mrig">
+   <tr>
+    <td class="mrc"><div class="mrbw"><div class="mrbar g" style="width:57%">20만</div></div><div class="mrcap">중증 · 통원 <span class="mrcut">회당 20만 한도컷</span></div></td>
+    <td class="mrc"><div class="mrbw"><div class="mrbar g" style="width:100%">35만</div></div><div class="mrcap">중증 · 입원 <span class="mrsub">한도 없음</span></div></td>
+   </tr>
+   <tr>
+    <td class="mrc"><div class="mrbw"><div class="mrbar r" style="width:57%">20만</div></div><div class="mrcap">비중증 · 통원 <span class="mrcut">일당 20만 한도컷</span></div></td>
+    <td class="mrc"><div class="mrbw"><div class="mrbar r" style="width:71%">25만</div></div><div class="mrcap">비중증 · 입원 <span class="mrsub">회당 300만 한도</span></div></td>
+   </tr>
+  </table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / 17</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / 17</span></div>
 </div>
-<!-- P5: 담보별 보장범위 (최종본 260707 스펙) -->
-<div class="pg">
- <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
-  <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>9</b>담보별 보장범위</div><div class="bar"></div></div>
+<!-- P5g: 도수·체외충격파 (세대별 부담) -->
+<div class="pg ez5pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
+  <div class="nm">도수치료 · 체외충격파 <b>— 2026년 7월부터 달라집니다</b></div>
+  <div class="pgn"><b>14</b>도수·체외</div><div class="bar"></div></div>
  <div class="body sbody">
-  <div class="sect">담보별 보장범위 — 질병코드 커버 <span>DISEASE-CODE COVERAGE · 각 축=개별 담보·각각 보상 · 산정특례·순환계·외상성뇌출혈=단독</span></div>
-  {p5box}
-  <div class="scv2">
-   <div class="scvcol">
-    <div class="scvhd brain">뇌 — 질병코드별 커버</div>
-    {scv_brain}
-    <div class="scvleg"><span class="on">●</span> 보장 &nbsp;<span class="off">○</span> 미보장 &nbsp;<span class="hold">[확인]</span> 산정특례 HOLD &nbsp;<span class="own2">노란행=보유</span></div>
-    <div class="scvnote">· {cust} 보유 = <b>뇌출혈진단비(I60~62)</b> → <b class="r">뇌경색(I63)부터 공백</b>, 순환계·2대주요치료비로 확장 필요<br>· <b>외상성 뇌출혈(S06)</b> = 뇌혈관진단비 <b class="r">미보장</b>(산정특례 축only)<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 뇌혈관질환 전체 I60~69 + Q28 선천 + S06(개별 담보·각각 보상). 지급조건은 회사·약관별 [확인]</div>
-   </div>
-   <div class="scvcol">
-    <div class="scvhd heart">심장 — 질병코드별 커버</div>
-    {scv_heart}
-    <div class="scvleg"><span class="on">●</span> 보장 &nbsp;<span class="off">○</span> 미보장 &nbsp;<span class="hold">[확인]</span> 산정특례 HOLD &nbsp;<span class="own2">노란행=보유</span></div>
-    <div class="scvnote">· {cust} 보유 = <b>허혈성진단비 + 부정맥(I49)</b> → 허혈성(I20~25)·부정맥 커버, <b class="r">판막·염증·심부전은 심장특정/순환계 영역</b><br>· <b>빈맥(I47·48)</b> = 마스터 무행·전 묶음 <b class="r">제외</b> → 본 표 미기재<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 심혈관질환 전체 I20~50 + 판막(개별 담보·각각 보상). 지급조건 [확인]<br>· <b>순환계</b> = 가장 넓은 범위(2대 + 동맥류·정맥류 등 순환기 전반). 세부 대상코드 회사·약관별 상이 [확인]</div>
-   </div>
-  </div>
-  <div class="scvbot"><div class="h">산정특례 기준 (진단 기반 · 별개 담보축)</div>· 산정특례 = 위 4범위(허혈성·2대·순환계)와 <b>축이 다른 별개 담보</b> — 마스터 '산정특례심장'·'산정특례뇌혈관' 전용행에서 진단코드 기반으로 지급. &nbsp;· 외상성 뇌출혈(S06) = 뇌혈관진단비 미보장 → <b>산정특례 축only</b>로만 커버(고정사실). &nbsp;· 대상 코드범위(확정): <b>[뇌]</b> I60~69 전체 + I67.0·1·5·6 + Q28 선천 + S06 / <b>[심]</b> I20~25·I30~41·I42~45·I46·I47~50 + 판막. <b>각각 개별 담보로 각각 보상.</b> 지급조건·기간(30일·5% 등)만 회사·약관별 [확인].</div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / 17</span></div>
-</div>
 
+  <table class="dstab">
+   <tr>
+    <td class="dscell">
+     <div class="dsh">■ 도수치료 <span class="smn">1회 43,850원 기준(예시)</span></div>
+     <table class="dsg">
+      <tr><th>실손 세대</th><th>예상 본인부담</th><th>보험 적용</th></tr>
+      <tr><td class="g1">1세대</td><td class="a good">0원</td><td>보장 가능</td></tr>
+      <tr><td class="g2">2세대</td><td class="a">약 4천원</td><td>보장 가능</td></tr>
+      <tr><td class="g3">3세대</td><td class="a">약 4천~8천원</td><td>보장 가능</td></tr>
+      <tr><td class="g4">4세대</td><td class="a">약 8천원</td><td>보장 가능</td></tr>
+      <tr class="hl"><td class="g5">5세대</td><td class="a bad">약 4만 2천원</td><td class="bad">본인부담 95%</td></tr>
+     </table>
+    </td>
+    <td class="dscell">
+     <div class="dsh">■ 체외충격파 <span class="smn">1회 10만원 기준(예시)</span></div>
+     <table class="dsg">
+      <tr><th>실손 세대</th><th>예상 본인부담</th><th>보험 적용</th></tr>
+      <tr><td class="g1">1세대</td><td class="a good">0원</td><td>보장 가능</td></tr>
+      <tr><td class="g2">2세대</td><td class="a">약 2만원</td><td>보장 가능</td></tr>
+      <tr><td class="g3">3세대</td><td class="a">약 3만원</td><td>보장 가능</td></tr>
+      <tr><td class="g4">4세대</td><td class="a">약 3만원</td><td>보장 가능</td></tr>
+      <tr class="hl"><td class="g5">5세대</td><td class="a bad">10만원 전액</td><td class="bad">보장 제외</td></tr>
+     </table>
+    </td>
+   </tr>
+  </table>
+  <div class="dsn">※ 위 금액은 예시이며, 실제 지급액은 보험사·약관·질환·치료기록 등에 따라 달라질 수 있습니다. ※ 5세대는 <b>중증(특약1)이면 보장</b> — 위 표는 비중증(특약2) 기준.</div>
+
+  <table class="dstab">
+   <tr>
+    <td class="dscell">
+     <div class="dsh2">■ 도수치료 — 이용 제한</div>
+     <div class="dsl">✓ 정부 <b>관리급여 전환</b> (2026.07 시행)</div>
+     <div class="dsl">✓ <b>연 15회 제한</b> (주 2회 이내)</div>
+     <div class="dsl">✓ 전국 동일 수가 적용 (1회 43,850원)</div>
+     <div class="dsl">✓ 수술·골절 후 재활 시 최대 <b>연 24회</b> 인정</div>
+     <div class="dsl">✓ 선행 물리치료 2주·4회 후 호전 없어야 인정</div>
+    </td>
+    <td class="dscell">
+     <div class="dsh2">■ 체외충격파 — 이용 제한</div>
+     <div class="dsl">✓ 비급여 유지 (자율 가이드라인)</div>
+     <div class="dsl">✓ <b>연 12회 제한</b> · 부위당 최대 6회</div>
+     <div class="dsl">✓ 주 1회 권장, 1회 2,000타 이상 권장</div>
+     <div class="dsl">✓ 동일 회차 다부위 치료 제한</div>
+     <div class="dsl r">✓ 5세대 실손(비중증) = <b>보장 대상 제외</b></div>
+    </td>
+    <td class="dscell">
+     <div class="dsh2">■ 체외충격파 인정 부위 (7개)</div>
+     <div class="dsl">● <b>어깨</b> <span class="smn">석회성건염·회전근개</span></div>
+     <div class="dsl">● <b>팔꿈치</b> <span class="smn">테니스엘보·골프엘보</span></div>
+     <div class="dsl">● <b>고관절</b> <span class="smn">대전자통증증후군</span></div>
+     <div class="dsl">● <b>무릎</b> <span class="smn">슬개건염</span></div>
+     <div class="dsl">● <b>발목</b> <span class="smn">아킬레스건염</span></div>
+     <div class="dsl">● <b>발바닥</b> <span class="smn">족저근막염</span></div>
+     <div class="dsl">● <b>척추</b> <span class="smn">경추·요추 근막통증증후군</span></div>
+    </td>
+   </tr>
+  </table>
+
+  <table class="dx3">
+   <tr>
+    <td class="dxc"><div class="dxh">도수치료 <span class="smn">1회 43,850원</span></div>
+      <div class="dxg">중증 → <b>보장</b> (30%·최소3만)</div>
+      <div class="dxr">비중증 → <b>관리급여 95%</b> · 내 돈 약 4만 2천원</div>
+      <div class="dxs">2026.07.01 시행 · 연 15회 · 주 2회</div></td>
+    <td class="dxc"><div class="dxh">체외충격파 <span class="smn">1회 10만원</span></div>
+      <div class="dxg">중증 → <b>보장</b> (30%·최소3만)</div>
+      <div class="dxr">비중증 → <b>보장 제외 · 0원</b></div>
+      <div class="dxs">전액 본인부담 (10만원 그대로)</div></td>
+    <td class="dxc"><div class="dxh">비급여 주사 <span class="smn">영양주사 등</span></div>
+      <div class="dxg">중증 → <b>보장</b> (30%·최소3만)</div>
+      <div class="dxr">비중증 → <b>보장 제외 · 0원</b></div>
+      <div class="dxs">입원해도 안 나온다</div></td>
+   </tr>
+  </table>
+  <div class="exn">★ <b>같은 MRI 50만원인데 입원이냐 통원이냐로 돌려받는 돈이 달라진다.</b> 통원은 <b class="bad">회당 20만 한도</b>에 잘려 중증·비중증이 똑같이 20만. 입원이면 중증 35만 / 비중증 25만.<br>※ <b>중증</b> = 암·뇌혈관·심장·희귀난치(산정특례) 질환 <b>치료 목적</b>일 때만. 허리·어깨 통증으로 받는 도수치료는 <b class="bad">비중증 → 0원</b>이다.<br>※ MRI 자기부담 = 중증 Max[30%, 3만] / 비중증 Max[50%, 5만]. <b class="bad">통원은 20만 한도에 걸려 잘린다.</b></div>
+
+
+  <div class="ezsum">
+   <div class="ezst">★ 상담 첫 질문</div>
+   <div class="ezsl"><b>"고객님, 실손 몇 세대세요?"</b></div>
+   <div class="ezsn">실손 세대에 따라 보장 결과가 완전히 달라진다. ① 실손보험 몇 세대인가? ② 올해 치료를 몇 번 받았는가? ③ 인정 질환·인정 부위인가?</div>
+  </div>
+
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / 17</span></div>
+</div>
 <!-- P6: 주요치료비 변천사 (juyo_a4_v7 상세본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>10</b>주요치료비 변천사</div><div class="bar"></div></div>
+  <div class="pgn"><b>15</b>주요치료비 변천사</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">3대 주요치료비 담보의 변천사 <span>①비례형(구간) → ②정액형 → ③비급여 → 생활비 · 정액형 가입금액 100만원부터</span></div>
   <div class="jc">
    <div class="jcol">
-    <div class="jhd">🎗️ 암 주요치료비 <span class="sub">4세대 진화</span></div>
+    <div class="jhd">● 암 주요치료비 <span class="sub">4세대 진화</span></div>
     <div class="jsec"><span class="jn">1</span>비례형(구간형) — 치료비 발생 기준<span class="jdt">~24.11 단종</span></div>
     <table class="jt jt4">
      <tr><th>치료비 발생</th><th>지급</th><th>치료비 발생</th><th>지급</th></tr>
@@ -1615,11 +2214,11 @@ body {{ color:{INK}; }}
     <div class="jsec"><span class="jn">3</span>비급여(하이클래스)<span class="jdt">25.03~</span></div>
     <ul class="jul"><li>급여 전액본인부담금 + 비급여 치료비 정액 보장</li><li>산정특례가 안 주는 비급여(양성자·중입자·표적·면역) 커버</li><li>면책 90일, 연 1회 · 2천만×10년=2억(삼성 최초) · 25.08~ 생활비형(치료+소득보상) 추가</li></ul>
     <div class="jsec"><span class="jn">4</span>설명 — 왜 필요한가</div>
-    <div class="jwarn"><div class="h">⚠ 실손으론 부족 — 5세대 기준</div>· 비중증 비급여: 자기부담 50%·통원 회당 5만원·한도 <b>1,000만</b>(4세대 5천만→축소)<br>· 중증(암·산정특례): 자기부담 30%·연 5천만이나 표적·면역 고가 약값엔 부족<br>· 외래(통원) 주사 반복 → <b>주요치료비·하이클래스가 메움</b></div>
-    <div class="jtalk"><span class="h">🗣 상담 화법</span> &nbsp;"표적항암 한 달 수백만 원이 전액 본인부담이에요. 5세대 실손은 비급여가 1천만으로 줄었습니다. 구간형은 이제 못 드는 담보라 유지가 답이고, 없으면 정액형·하이클래스로 채워야 합니다."</div>
+    <div class="jwarn"><div class="h">※ 실손으론 부족 — 5세대 기준</div>· 비중증 비급여: 자기부담 50%·통원 회당 5만원·한도 <b>1,000만</b>(4세대 5천만→축소)<br>· 중증(암·산정특례): 자기부담 30%·연 5천만이나 표적·면역 고가 약값엔 부족<br>· 외래(통원) 주사 반복 → <b>주요치료비·하이클래스가 메움</b></div>
+    <div class="jtalk"><span class="h">■ 상담 화법</span> &nbsp;"표적항암 한 달 수백만 원이 전액 본인부담이에요. 5세대 실손은 비급여가 1천만으로 줄었습니다. 구간형은 이제 못 드는 담보라 유지가 답이고, 없으면 정액형·하이클래스로 채워야 합니다."</div>
    </div>
    <div class="jcol">
-    <div class="jhd">❤️ 뇌·심장 주요치료비 <span class="sub">암과 동일 진화</span></div>
+    <div class="jhd">● 뇌·심장 주요치료비 <span class="sub">암과 동일 진화</span></div>
     <div class="jsec"><span class="jn">1</span>비례형(병원비형) — 급여 본인부담 기준<span class="jdt">~24.11 단종</span></div>
     <table class="jt jtsm jt4">
      <tr><th>급여 본인부담</th><th>지급</th><th>급여 본인부담</th><th>지급</th></tr>
@@ -1633,7 +2232,7 @@ body {{ color:{INK}; }}
     <div class="jsec"><span class="jn">3</span>확대(순환계) · 생활비<span class="jdt">25.01~ / 25.06~</span></div>
     <ul class="jul"><li>부정맥·심부전·동맥류 확대(52질환·연 8천만·100세) · 생활비형: 치료 하나만 받아도 연 1회</li></ul>
     <div class="jsec"><span class="jn">4</span>재발률 · 실제 수술비용<span class="jdt">심평원·건보공단</span></div>
-    <div class="jwarn"><div class="h">🔁 한 번으로 안 끝난다</div>뇌경색 재발 1년 10%·<b>5년 20~30%</b> / 급성심근경색 <b>1년 30%·3년 50%</b> / 스텐트 5년 재협착 15%</div>
+    <div class="jwarn"><div class="h">▶ 한 번으로 안 끝난다</div>뇌경색 재발 1년 10%·<b>5년 20~30%</b> / 급성심근경색 <b>1년 30%·3년 50%</b> / 스텐트 5년 재협착 15%</div>
     <table class="jt"><tr><th>수술</th><th>건당 총진료비(평균)</th></tr>
      <tr><td>심장수술(개흉)</td><td class="p">2,832만원</td></tr>
      <tr><td>관상동맥우회술(CABG)</td><td class="p">2,690만원</td></tr>
@@ -1643,175 +2242,8 @@ body {{ color:{INK}; }}
     <div class="jnote2">총진료비 기준(심평원·건보공단 통계) · 재발 시 이 비용이 반복 — 주요치료비가 채운다</div>
    </div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / 17</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 15 / 17</span></div>
 </div>
-<!-- P7: 상담 워크시트 (FINAL版·3단 중앙이름+산정특례) -->
-<div class="pg">
- <div class="top"><div class="eb">BARUM 보장분석 · 상담 워크시트</div>
-  <div class="nm">지금 고객의 <b>3대 주요치료비</b>는?</div>
-  <div class="pgn"><b>11</b>상담 워크시트</div><div class="bar"></div></div>
- <div class="body sbody">
-  <div class="ws3">
-   <div class="wscol wsmain">
-    <div class="wscap c">🎗️ 암 주요치료비</div>
-    {_wcard(rep,'암 진단비','걸렸을 때 일시금 (기본)','diag:암','diag')}
-    {_wcard(rep,'암 주요치료비','수술·방사선·약물 정액 (100만~)','암주요치료비','main')}
-    {_wcard(rep,'하이클래스 (비급여)','표적·면역·중입자 전액본인 커버','비급여주요치료비','na')}
-    {_wcard(rep,'암 생활비','치료 중 소득보상','암생활비','na')}
-   </div>
-   <div class="wsmid">
-    <div class="lb">OUR CLIENT</div>
-    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
-    <div class="nmsub">고객님</div>
-    <div class="cnt">2/8<small>3대 치료비 보유</small></div>
-   </div>
-   <div class="wscol wsmain">
-    <div class="wscap h">❤️ 뇌·심장 주요치료비</div>
-    {_wcard(rep,'뇌·심 진단비','뇌혈관·허혈성 일시금','diag:뇌심','diag')}
-    {_wcard(rep,'2대 주요치료비','수술·혈전용해·중환자실 (100만~)','2대주요치료비','main')}
-    {_wcard(rep,'순환계 주요치료비','부정맥·심부전 확대','순환계주요치료비','na')}
-    {_wcard(rep,'순환계 생활비','치료 중 소득보상','순환계생활비','na')}
-   </div>
-  </div>
-  <div class="wssj">
-   <div class="cap">산정특례 — 뇌·심 각각 개별 담보 · 진단만으로 지급</div>
-   <div class="ws2">
-    {_wcard_sj(rep,'산정특례 (뇌)','뇌혈관질환 I60~69 전체 · Q28 · S06','산정특례(뇌혈관)')}
-    {_wcard_sj(rep,'산정특례 (심장)','심혈관질환 I20~50 · 판막 전체','산정특례(심장)')}
-   </div>
-  </div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / 17</span></div>
-</div>
-
-<!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
-<div class="pg">
- <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
-  <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
-  <div class="pgn"><b>12</b>비갱신 추천</div><div class="bar"></div></div>
- <div class="body sbody">
-  <div class="ws3">
-   <div class="wscol wsmain">
-    <div class="wscap n2">🩹 사망 · 진단비 · 수술</div>
-    {_wcard_fix_list('사망','평생 유지 · 종신형',['종신 사망','질병 사망','상해 사망'])}
-    {_wcard_fix_list('진단비','암·뇌·심 진단 일시금',['고액암','일반암','유사암','뇌혈관','뇌졸증','뇌출혈','허혈성','급성심근경색'])}
-    {_wcard_fix_list('수술','종별 · 부위별 세분화',['질병·상해 수술비','1~5종','1~7·9종','N대 수술비','뇌혈관 수술비','허혈성 수술비','심장 수술비'])}
-   </div>
-   <div class="wsmid">
-    <div class="lb">OUR CLIENT</div>
-    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
-    <div class="nmsub">고객님</div>
-    <div class="cnt">평생<small>비갱신 고정</small></div>
-   </div>
-   <div class="wscol wsmain">
-    <div class="wscap n2">🦴 후유장해 · 상해 · 일당</div>
-    {_wcard_fix_list('후유장해','상해·질병 각 3% · 80%',['상해 후유 3%','상해 후유 80%','질병 후유 3%','질병 후유 80%'])}
-    {_wcard_fix_list('상해','골절·화상·깁스·응급실',['골절','5대 골절','화상진단비','중대화상진단비','반깁스','깁스','응급실'])}
-    {_wcard_fix_list('일당','입원·수술·중환자실',['질병 입원일당','상해 입원일당','질병 수술일당','상해 수술일당','질병 중환자실','상해 중환자실','1인실(종합/상급)'])}
-   </div>
-  </div>
-  <div class="wscap n2 wsectcap gap2">💰 연금 · 종신 · 저축 — 은퇴 후 평생 소득</div>
-  <div class="ws2">
-   {_wcard_fix_list('연금','달러 · 노후 소득',['달러연금','달러종신'])}
-   {_wcard_fix_list('종신 · 저축','평생 보장 · 목돈 마련',['종신','저축보장'])}
-  </div>
-  <div class="wssj fixnote">
-   <div class="cap">비갱신 3대 이유</div>
-   <div class="fxrow"><b>① 평생 고정</b> 납입 끝나면 보험료 0원 · <b>② 납입면제</b> 중대질환 진단 시 이후 면제 · <b>③ 은퇴 전 확정</b> 나이 들수록 발생률↑, 미리 잠근다.</div>
-  </div>
-  <div class="note24">🔔 바뀌지 않는 담보는 <b>비갱신</b>으로 가입하셔서 <b>은퇴 후</b>를 준비해야 합니다.</div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / 17</span></div>
-</div>
-<!-- P10: 운전자 · 간병 (병합) -->
-<div class="pg">
- <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
-  <div class="nm">운전자 · 간병 <b>— 일상 리스크 대비</b></div>
-  <div class="pgn"><b>13</b>운전자·간병</div><div class="bar"></div></div>
- <div class="body sbody">
-  <div class="wscap n2 wsectcap">🚗 운전자보험 담보</div>
-  <div class="ws2">
-   {_wcard_fix_list('벌금 · 합의금','교통사고 형사·행정',['대인 벌금','대물 벌금','합의금','6주미만 합의금'])}
-   {_wcard_fix_list('변호사 · 위로금','기타 지원',['변호사비','자동차부상위로금','영업용 운전면허취소지원'])}
-  </div>
-  <table class="st cmp mini"><tr><th style="width:18%">구분</th><th>자동차보험 <span style="font-weight:400">(의무)</span></th><th>운전자보험 <span style="font-weight:400">(선택)</span></th></tr>
-   <tr><td class="g">보장 대상</td><td>타인의 피해</td><td class="bad">운전자 본인</td></tr>
-   <tr><td class="g">책임 종류</td><td>민사 배상</td><td class="bad">형사·행정</td></tr>
-   <tr><td class="g">주요 보장</td><td>대인 · 대물</td><td class="bad">벌금 · 형사합의금 · 변호사선임비</td></tr></table>
-  <div class="wscap n2 wsectcap gap2">🩺 간병비 담보</div>
-  <div class="ws2">
-   {_wcard_fix_list('간병인 지원','보험사 파견',['간병인지원일당','간호통합병동'])}
-   {_wcard_fix_list('간병인 사용','직접 고용',['간병인사용일당','간병인사용일당(체증형)','요양병원 간호통합병동'])}
-  </div>
-  <table class="st cmp"><tr><th style="width:20%">구분</th><th>간병인지원일당</th><th>간병인사용일당</th></tr>
-   <tr><td class="g">방식</td><td>보험사가 간병인 <b>직접 배정</b></td><td>내가 <b>직접 고용</b> 후 정액 지급</td></tr>
-   <tr><td class="g">간병인 선택</td><td>불가 (배정 · 교체 가능)</td><td class="ok"><b>간병인 or 지인</b> 가능</td></tr>
-   <tr><td class="g">갱신</td><td>5 · 10 · 15 · 20년 갱신</td><td class="ok">비갱신 선택 가능</td></tr>
-   <tr><td class="g">납입면제</td><td>갱신형이라 <b>갱신 끝나면 다시 납부</b></td><td class="ok"><b>납입면제 가능</b></td></tr>
-   <tr><td class="g">간호통합병동</td><td>가입금액 보장 (정액)</td><td>가입금액 보장 (정액)</td></tr>
-   <tr><td class="g">인건비 상승</td><td>간병인 배정 (교체 가능)</td><td>체증형 (5년 10%↑)</td></tr></table>
-  <div class="wscap n2 wsectcap gap2">📋 간병인사용일당 — 이렇게 하면 됩니다 (쉬운 6단계)</div>
-  <div class="steprow big">
-   <div class="stepc"><div class="stepn">1</div><b>간병인 부르기</b>입원하면 <b>바로</b> 간병협회·등록업체·앱(예: 케어네이션)에 연락해 간병인을 부른다. <b>늦으면 소급이 안 되니 입원 첫날에!</b></div>
-   <div class="stepc"><div class="stepn">2</div><b>간병 받기</b>입원 동안 간병인이 식사·세면·체위변경·이동을 돕는다. 가족·지인도 가능(단 <b>24시간 같이 생활</b>).</div>
-   <div class="stepc"><div class="stepn">3</div><b>서류 챙기기</b>퇴원 전에 병원서 <b>입퇴원확인서</b>, 업체서 <b>간병사용확인서</b>, 그리고 <b>간병비 영수증</b>을 받는다.</div>
-   <div class="stepc"><div class="stepn">4</div><b>간병비 내기</b>간병비를 <b>실제로 지급</b>하고 증빙을 남긴다. 계좌이체 메모에 "○○○ 간병비"라 적으면 깔끔.</div>
-   <div class="stepc"><div class="stepn">5</div><b>청구서류 모으기</b>입원확인서 + 간병사용확인서 + 지급내역(이체·카드) + <b>업체 사업자등록증</b>을 한 번에.</div>
-   <div class="stepc"><div class="stepn">6</div><b>보험사에 청구</b>모은 서류를 보험사에 내면 <b>심사 후 간병비가 지급</b>된다. 끝!</div>
-  </div>
-  <div class="note24">🔔 <b>간병인 사용일당</b> 사용 시 환자와 <b>24시간 동행</b>해야 인정됩니다.</div>
-  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / 17</span></div>
-</div>
-<!-- P12: 재가보험 -->
-<div class="pg jgbig">
- <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
-  <div class="nm">재가보험 <b>— 장기요양 · 노후 돌봄</b></div>
-  <div class="pgn"><b>14</b>재가보험</div><div class="bar"></div></div>
- <div class="body sbody">
-  <div class="wscap n2 wsectcap">🏠 재가보험 · 장기요양</div>
-  <div class="ws2">
-   {_wcard_fix_list('장기요양 등급','등급 판정 · 인지지원',['1등급','2등급','3등급','4등급','5등급','인지지원등급'])}
-   {_wcard_fix_list('복합재가 (통합재가)','한 기관·한 계약 · 5종 복합',['주야간보호 (노치원)','방문요양','방문목욕','방문간호','단기보호'])}
-  </div>
-  <div class="wscap n2 wsectcap gap2">🧰 복지용구 18품목 — 품목별 한도가 다릅니다 (연 160만원 · 본인부담 0~15%)</div>
-  <div class="ws2">
-   <div class="wscol">
-    <table class="st wg"><tr><th style="width:44%">구입품목 (10)</th><th>내구연한</th><th>개수 한도</th></tr>
-     <tr><td class="n">이동변기</td><td>5년</td><td>1개</td></tr>
-     <tr><td class="n">목욕의자</td><td>5년</td><td>1개</td></tr>
-     <tr><td class="n">성인용보행기</td><td>5년</td><td class="ok">2개</td></tr>
-     <tr><td class="n">욕창예방방석</td><td>3년</td><td>1개</td></tr>
-     <tr><td class="n">지팡이</td><td>2년</td><td>1개</td></tr>
-     <tr><td class="n">자세변환용구</td><td>-</td><td>연 5개</td></tr>
-     <tr><td class="n">간이변기</td><td>-</td><td>연 2개</td></tr>
-     <tr><td class="n">안전손잡이</td><td>-</td><td>연 10개</td></tr>
-     <tr><td class="n">미끄럼방지(양말)</td><td>-</td><td>연 6켤레</td></tr>
-     <tr><td class="n">요실금팬티</td><td>-</td><td>연 4개</td></tr></table>
-   </div>
-   <div class="wscol">
-    <table class="st wg"><tr><th style="width:52%">대여품목 (6)</th><th>내구연한</th></tr>
-     <tr><td class="n">수동휠체어</td><td>5년</td></tr>
-     <tr><td class="n">전동침대</td><td>10년</td></tr>
-     <tr><td class="n">수동침대</td><td>10년</td></tr>
-     <tr><td class="n">이동욕조</td><td>5년</td></tr>
-     <tr><td class="n">목욕리프트</td><td>3년</td></tr>
-     <tr><td class="n">배회감지기</td><td>5년</td></tr></table>
-    <table class="st wg" style="margin-top:2mm"><tr><th style="width:52%">구입 또는 대여 (2)</th><th>내구연한</th></tr>
-     <tr><td class="n">욕창예방매트리스</td><td>3년</td></tr>
-     <tr><td class="n">경사로</td><td>실내 2년(6개)/실외 8년</td></tr></table>
-   </div>
-  </div>
-  <div class="wssj fixnote">
-   <div class="cap">신인 설계사 · 이것만 기억하세요</div>
-   <div class="fxrow"><b>한도</b> 등급 무관 <b>연 160만원</b>(구입+대여 합산) · 본인부담 0~15%(기초수급 0%) · 초과분은 전액 본인부담 · 미사용 잔액 이월 안 됨(유효기간 1년).</div>
-   <div class="fxrow"><b>품목별 규칙</b> 내구연한 있는 품목은 그 기간 내 1개(성인용보행기 2·경사로 실내 6 예외) · 내구연한 없는 소모품은 연 개수 한도 · <b>시설 입소 시 전면 불가</b>, 의료기관 15일↑ 입원 중 침대·이동욕조·목욕리프트 대여 불가.</div>
-   <div class="fxrow"><b>상담 포인트</b> 재가등급(1~5·인지지원)만 받으면 누구나 이용 · "급여확인서"에 사용가능 품목이 찍혀 나옴 · 온·오프라인 복지용구 사업소에서 구입/대여. <b>시설급여</b>(요양원 입소)·<b>특별현금급여</b>(가족요양비)는 재가·복지용구와 별개 급여.</div>
-  </div>
-  <div class="wstalk2"><b>🏫 노치원(주야간보호)</b> — 어르신을 <b>낮 동안 시설에서 돌봄</b>(식사·목욕·재활·프로그램)하고 저녁엔 집으로 귀가. 가족은 낮에 생업·휴식이 가능하다. 복합재가 5종 중 하나로, 등급만 있으면 이용.</div>
-  <div class="wstalk2"><b>📌 장기요양등급, 언제 신청?</b> — <b>만 65세 이상</b>은 소득 무관 누구나 신청. <b>65세 미만이라도</b> 치매·뇌혈관질환·파킨슨병 등 <b>노인성 질병</b>이 있으면 <b>의사소견서(진단서)</b> 첨부해 <b>미리 신청 가능</b>. 건강보험공단(☎1577-1000)·앱·홈페이지 신청 → 방문조사 → 약 30일 내 등급 판정. 65세 전에 준비해 두면 은퇴 후 돌봄 공백을 막는다.</div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / 17</span></div>
 </div>
 </div>
 {heart_chart}

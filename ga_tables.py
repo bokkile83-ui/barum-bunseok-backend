@@ -155,13 +155,17 @@ GA_CSS="""
 .gap-cover .gd{font-size:11pt;color:#4A5A72;margin-top:8mm;line-height:1.7;}
 .gap-cover .gwarn{position:absolute;bottom:24mm;left:20mm;right:20mm;font-size:8.5pt;color:#9c7c2e;border-top:1.5pt solid #C9A24B;padding-top:4mm;line-height:1.5;}
 .gpg{padding:6mm 8mm 10mm;}
+.gpg3 .gtb{font-size:6.8pt;margin-bottom:1.8mm;}
+.gpg3 .gtb th{padding:1.2mm 0.6mm;font-size:6.4pt;}
+.gpg3 .gtb td{padding:1.2mm 0.6mm;}
+.gpg3 .gsec{font-size:9.6pt;margin-bottom:1.6mm;}
 .gblk{margin-bottom:2.6mm;}
 .gsec{font-size:9pt;font-weight:800;color:#1B2A4A;border-left:3pt solid #C9A24B;padding-left:2.2mm;margin-bottom:1mm;}
 .gsec .gn{background:#1B2A4A;color:#fff;font-size:8pt;padding:0.6mm 1.6mm;border-radius:2mm;margin-right:2mm;}
 .gsec .gsub{font-size:7.5pt;color:#6B7A90;font-weight:600;margin-left:2mm;}
-.gtb{width:100%;border-collapse:collapse;font-size:5.9pt;margin-bottom:0.8mm;}
-.gtb th{background:#1B2A4A;color:#fff;padding:0.7mm 0.5mm;text-align:center;font-weight:700;font-size:5.7pt;border:0.3pt solid #1B2A4A;}
-.gtb td{border:0.3pt solid #D8DEE8;padding:0.55mm 0.5mm;text-align:center;color:#2B3A52;}
+.gtb{width:100%;border-collapse:collapse;font-size:5.9pt;margin-bottom:1.6mm;}
+.gtb th{background:#1B2A4A;color:#fff;padding:0.8mm 0.5mm;text-align:center;font-weight:700;font-size:6.4pt;border:0.3pt solid #1B2A4A;}
+.gtb td{border:0.3pt solid #D8DEE8;padding:0.7mm 0.5mm;text-align:center;color:#2B3A52;}
 .gtb td.gh{background:#EEF1F6;font-weight:800;color:#1B2A4A;text-align:left;padding-left:1.4mm;}
 .gtb td.ghl{color:#9c7c2e;font-weight:800;}
 .gtb tr:nth-child(even) td{background:#FAFBFD;}
@@ -181,7 +185,7 @@ def ga_pages_html():
         out.append(f'<div class="pg"><div class="top"><div class="eb">BARUM · 회사별 비교표 (설계사 참고용)</div>'
           f'<div class="nm">회사별 비교표 <b>총정리</b></div>'
           f'<div class="pgn"><b>{i}</b>회사별 비교표</div><div class="bar"></div></div>'
-          f'<div class="body gpg">{inner}</div>'
+          f'<div class="body gpg gpg{i}">{inner}</div>'
           f'<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 {i}</span></div></div>')
     return "".join(out)
 

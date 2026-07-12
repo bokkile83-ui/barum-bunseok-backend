@@ -786,6 +786,8 @@ def resolve_kw(raw):
     if has('중대한') and has('뇌졸'): return '중대한 뇌졸증',0
     if has('뇌졸'): return '뇌졸증진단비',0
     if has('산정특례') and has('뇌'): return '산정특례뇌혈관',0
+    # ★2026.07.12 지점장 확정: '특정뇌혈관' = 뇌졸증
+    if has('특정') and has('뇌혈관') and has('진단') and no('수술','주요치료','산정특례','혈전'): return '뇌졸증진단비',0
     # ★v30o 고정(전 회사, 지점장 2026.07.03): 뇌혈관진단비Ⅰ→뇌혈관진단비 / 뇌혈관진단비Ⅱ→뇌졸증. Ⅲ은 뇌혈관진단비.
     if has('뇌혈관') and has('진단') and no('수술','주요치료','산정특례','혈전'):
         _n=_rmn(raw)
@@ -800,6 +802,8 @@ def resolve_kw(raw):
     if has('심근병증') or has('심근증'): return '심근병증',0
     if has('판막'): return '심장판막',0
     if has('급성심근'): return '급성심근경색',0
+    # ★2026.07.12 지점장 확정: '특정허혈성' = 협심증 (v28 '허혈심장질환진단비→허혈성 진단비' 규칙보다 우선)
+    if has('특정') and (has('허혈성') or has('허혈심장')) and has('진단') and not has('수술'): return '협심증',0
     if has('허혈성진단') or ((has('허혈성') or has('허혈심장')) and has('진단') and not has('수술')): return '허혈성 진단비',0   # ★v29t 허혈심장질환진단 포함
     # ★v40b KB '심장질환(특정)' 진단비: 특정Ⅱ=급성심근경색 / 특정Ⅰ=허혈성 진단비 (지침 §8.3.1 KB).
     #   OCR이 로마숫자를 Ⅱ/II/2 등으로 흘려 매칭 실패하던 버그 수정 → 세 표기 모두 인식.
@@ -1322,6 +1326,14 @@ def build_excel(data, out):
                 m = {}
             if std and _isci_prod(ct['product']):
                 std = {'일반암':'중대한 암','뇌졸증진단비':'중대한 뇌졸증','급성심근경색':'중대한 급성심근'}.get(std, std)
+            elif std and not _isci_prod(ct['product']):
+                # ★2026.07.12 지점장 확정: 상품명에 CI/GI/리빙케어가 없으면 진짜 CI가 아니다.
+                #   '중대한 암' → 일반암진단비로 산입 / 그 외 '중대한OO'는 가짜 → 전부 무시(기재 안 함).
+                if std == '중대한 암':
+                    std = '일반암'
+                elif std in ('중대한 뇌졸증', '중대한 급성심근', '중대한CI적용', '중대한 뇌출혈'):
+                    unmapped.append((col, ct['company'], raw, amt, 'CI/GI/리빙케어 상품 아님 → 중대한OO 무시'))
+                    continue
             if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
                 unmapped.append((col, ct['company'], raw, amt, '등급별 100만↑ 제외'))  # 등급별 → 합산·기재 안 함
                 continue

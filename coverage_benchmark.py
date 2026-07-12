@@ -322,12 +322,16 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
     # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
     _ci_prod=any(('CI' in str(h.get('nm','')) or '리빙케어' in str(h.get('nm','')) or 'GI보험' in str(h.get('nm',''))) for h in headers)
-    if _ci_pairs or _ci_apply>0:
-        ci['status']='ci'          # 담보값 있음 = 확실 CI
-    elif _ci_prod:
-        ci['status']='check'       # 상품명 CI인데 담보값 없음/애매 = 회색지대 [확인]
+    # ★2026.07.12 지점장 확정: 상품명에 CI/GI/리빙케어가 없으면 '중대한OO' 담보가 있어도 진짜 CI가 아니다(가짜).
+    #   → 상품명이 1순위. 상품명에 표기 없으면 무조건 none(Plan B).
+    if not _ci_prod:
+        ci['status']='none'        # 상품명에 CI/GI/리빙케어 없음 = 확실 비CI (중대한OO는 가짜)
+        ci['present']=False
+        ci['items']=[]
+    elif _ci_pairs or _ci_apply>0:
+        ci['status']='ci'          # 상품명 CI + 담보값 있음 = 확실 CI
     else:
-        ci['status']='none'        # 상품명·담보 둘 다 없음 = 확실 비CI
+        ci['status']='check'       # 상품명 CI인데 담보값 없음/애매 = 회색지대 [확인]
 
     # ── Plan B: 비CI 진단비 정액 지급 구조 (CI 미보유 시 P3 상단 CI블록 대체) ──
     def _sumnm(*names):
