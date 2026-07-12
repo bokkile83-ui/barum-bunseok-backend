@@ -121,10 +121,13 @@ def _pageset(rep):
             P.add(f"{int(b.get('amt', 0)):,}")
         except Exception:
             pass
-    # 편집 대상 페이지(0-based): 2=보험료막대 / 7=워크시트 / 8=비갱신 / 9=운전자 / 10=간병 / 11=재가 / 12=실손
+    # 편집 대상 페이지(0-based, 2026.07.12 중증·비중증 페이지 추가 반영):
+    #   2=AI진단(보험료막대) / 5=실손 세대 구분 /
+    #   11=워크시트 / 12=비갱신 / 13=운전자·간병 / 14=재가
+    #   ※6=5세대 쉽게, 7=중증vs비중증, 8=5세대 도표는 고정 설명자료(편집칸 없음)
     D = {'.'}
-    return {2: P, 7: set(_WS) | D, 8: set(_WS) | D, 9: set(_WS) | D,
-            10: set(_WS) | D, 11: set(_WS) | D, 12: set(_WS) | D}
+    return {2: P, 5: set(_WS) | D, 11: set(_WS) | D,
+            12: set(_WS) | D, 13: set(_WS) | D, 14: set(_WS) | D}
 
 
 def _value_boxes(xml_path, V, PG=None):

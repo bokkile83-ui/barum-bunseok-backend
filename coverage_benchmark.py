@@ -4,7 +4,7 @@
 BARUM 충족률 엔진 + map_excel_to_report
 - 입력: 완성된 보장진단 엑셀(.xlsx) 1개 (등식2: 리포트는 완성 엑셀만 읽음)
 - 출력: report_weasy.build_report_pdf 가 먹는 rep dict
-- 충족률 % = min(100, 보유합 / 연령밴드별 권장액 * 100)  (추측 아님: 아래 SOURCES 기반)
+- 충족률 % = 보유합 / 연령밴드별 권장액 * 100 (상한 없음·실제치, 2026.07.12 지점장 확정)
 나이/성별 미추출 시 기본밴드 '40s' 적용 + gap_count/배지에 [확인] 노출.
 """
 import re, openpyxl
@@ -153,17 +153,34 @@ def load_excel(path):
             grp_rows['일당']=[(b,v) for b,v in grp_rows['일당'] if '혈전용해' not in b]
             grp_rows.setdefault('심장',[]).extend(_mv)
     load_excel._disp=disp   # ★v30h caller에 표시맵 전달(반환 시그니처 불변 → 회귀 0)
+    # ★2026.07.11 실손 세대 자동판별용: '실손' 구분 그룹의 코어 담보(입원·통원·약값·의료비) 행
+    _sil_rows=[]
+    for _i in range(len(bounds)-1):
+        _r0,_nm=bounds[_i]; _r1=bounds[_i+1][0]
+        if '실손' in str(_nm):
+            _sil_rows=[r for r in range(_r0,_r1)
+                       if ws.cell(r,2).value
+                       and any(k in str(ws.cell(r,2).value) for k in ('입원','통원','약값','의료비'))
+                       and not any(x in str(ws.cell(r,2).value) for x in ('MRI','도수','비급여주사','일당'))]
+            break
     # 헤더(계약 메타)
     headers=[]
     for c in range(2,last):  # 마지막=합계 제외
         nm=ws.cell(1,c).value; pr=_man(ws.cell(2,c).value)
         if nm is None and pr==0: continue
+        _raw=str(nm or '')                                       # ★원본(회사\n상품\n[갱신])
+        _rl=[x.strip() for x in _raw.split('\n') if x.strip()]
+        _co_=(_rl[0] if _rl else '')
+        _pr_=(_rl[1] if len(_rl)>1 else '')
+        _pr_=re.sub(r'\s*\[[^\]]*\]','',_pr_).strip()
         nm=str(nm or '').replace('\n',' ').strip()
         renew = '[갱신]' in nm   # 헤더 형식 [갱신]/[비갱신(종신)] — 대괄호 정확매칭
         nm=re.sub(r'\s*\[[^\]]*\]','',nm)                       # [갱신]·[비갱신(종신)] 제거
         nm=re.sub(r'\((무|표준형|종신|표준형-종신|갱신|비갱신)\)','',nm)  # 괄호 수식 제거
         nm=re.sub(r'\s+',' ',nm).strip()
-        headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew})
+        _join=str(ws.cell(3,c).value or '').strip()             # 3행=가입년일
+        _hassil=any(_man(ws.cell(r,c).value)>0 for r in _sil_rows)  # 실손 담보 보유 계약?
+        headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,'co':_co_,'prod':_pr_})
     total_prem=int(_man(ws.cell(2,last).value))
     return grp_rows, headers, total_prem
 
@@ -180,12 +197,12 @@ def pct_for(cat, grp_rows, band):
     total,top,rows=cat_total(grp_rows,cat)
     if cat in BENCHMARK[band]:
         rec=BENCHMARK[band][cat]
-        return min(100, round(total/rec*100)) if rec else 0, total, top
+        return (round(total/rec*100) if rec else 0), total, top
     # presence 계열
     spec=PRESENCE.get(cat)
     if not spec: return 0,total,top
     have=sum(1 for b,v in rows if v>0 and any(k in b for k in spec['keys']))
-    return min(100, round(have/spec['need']*100)), total, top
+    return round(have/spec['need']*100), total, top
 
 def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=False):
     """완성 엑셀 → rep dict (report_weasy.build_report_pdf 입력)"""
@@ -200,7 +217,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         if cat in ('심장','뇌혈관') and _badj.get(cat):
             total=max(0,total-_badj[cat])
             rec=BENCHMARK[age_band].get(cat)
-            if rec: p=min(100, round(total/rec*100))
+            if rec: p=round(total/rec*100)
         donut_map[cat]=p
         if cat in BENCHMARK[age_band]:
             detail_map[cat]={'have':_fmt(total) or '0','rec':_fmt(BENCHMARK[age_band][cat]),'unit':'만'}
@@ -228,10 +245,22 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     bars=sorted([{'nm':_co(h['nm']),'amt':h['amt'],'renew':h['renew']} for h in headers],
                 key=lambda x:-x['amt'])
     donuts=[{'name':('심장' if c=='심장' else c.split('·')[0] if c in('실손·일배책','입원·일당','응급실·독감','골절·화상','사망·후유') else c),
-             'pct':donut_map[c]} for c in DONUT_ORDER]
+             'pct':min(100,donut_map[c])} for c in DONUT_ORDER]
     # 도넛 라벨 보정
     label={'실손·일배책':'실손·배상','입원·일당':'입원·일당','응급실·독감':'응급실·독감','골절·화상':'골절·화상','사망·후유':'사망·후유'}
-    donuts=[{'name':label.get(c,c),'pct':donut_map[c]} for c in DONUT_ORDER]
+    # ★버킷 방식(지점장 2026.07.12): 도넛은 100%까지만, 초과분은 '충분+' 배지
+    _raw={}
+    for c in DONUT_ORDER:
+        t,_tp,_rw=cat_total(grp_rows,c)
+        if c in ('심장','뇌혈관') and _badj.get(c): t=max(0,t-_badj[c])
+        if c in BENCHMARK[age_band] and BENCHMARK[age_band][c]:
+            _raw[c]=round(t/BENCHMARK[age_band][c]*100)
+        else:
+            _sp=PRESENCE.get(c,{'keys':[],'need':1})
+            _hv=sum(1 for b,v in _rw if v>0 and any(k in b for k in _sp['keys']))
+            _raw[c]=round(_hv/_sp['need']*100) if _sp['need'] else 0
+    donuts=[{'name':label.get(c,c),'pct':min(100,donut_map[c]),'raw':_raw.get(c,0),
+             'over':_raw.get(c,0)>100} for c in DONUT_ORDER]
 
     # ── 치료비 정리 5항목 (라벨 → 엑셀 정확 담보명) ──
     CHIRYO=[('암주요치료비','암주요치료비'),('비급여주요치료비','하이클래스(암)'),
@@ -326,7 +355,8 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'renew_list':renew_list,'nonrenew_list':nonren_list,
         'premium_bars':bars,'donuts':donuts,
         'donut_detail':[{'name':label.get(c,c),'have':detail_map[c]['have'],
-                         'rec':detail_map[c]['rec'],'pct':donut_map[c]} for c in DONUT_ORDER],
+                         'rec':detail_map[c]['rec'],'pct':min(100,donut_map[c]),
+                         'raw':_raw.get(c,0),'over':_raw.get(c,0)>100} for c in DONUT_ORDER],
         'band_label':{'20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대'}.get(age_band,age_band),
         'chiryo':chiryo,
         'ci':ci,
@@ -388,6 +418,78 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     rep['scope_brain']=scope_brain
     rep['scope_heart']=scope_heart
     rep['advice']=advice
+    # ★ 전체 담보→표시값 맵 (워크시트 자동주입용; coverage 상위3개 한계 보완, 2026.07.11)
+    import re as _re2
+    _disp2=getattr(load_excel,'_disp',{})
+    def _nrm(s): return _re2.sub(r'[\s·()\[\]/]','',str(s))
+    _dm={}
+    for _rows in grp_rows.values():
+        for _b,_v in _rows:
+            if not _b: continue
+            _dv=_disp2.get(_b) or _fmt(_v)
+            if _dv and _dv!='0':
+                _dm.setdefault(_nrm(_b), _dv)
+    # 골절 합산(치아파절 포함+제외, 5대·수술 제외) = PPT 골절 한 값
+    _gj=0
+    for _rows in grp_rows.values():
+        for _b,_v in _rows:
+            if _b and '골절' in _b and '5대' not in _b and '수술' not in _b and isinstance(_v,(int,float)):
+                _gj+=int(_v)
+    if _gj>0: _dm['골절합산']=_fmt(_gj)
+    rep['dambo']=_dm
+    # ★2026.07.11 실손 세대 자동판별(CI식 3상태): 실손 계약 가입일 → 세대
+    def _gen_of(js, comp=''):
+        import re as _r
+        m=_r.search(r'(\d{4})\D+(\d{1,2})(?:\D+(\d{1,2}))?', str(js))
+        if not m: return None
+        from datetime import date
+        y=int(m.group(1)); mo=int(m.group(2)); d=int(m.group(3) or 1)
+        try: dt=date(y,mo,d)
+        except Exception: return None
+        # ★2026.07.11 지점장 확정: 1세대=~2009.09 / 2세대=2009.10~ (2009.07~09은 회사별 상이 → 주석)
+        #   2세대 3분할(2-1 ~2012.12 / 2-2 2013.01~2015.12 / 2-3 2016.01~2017.03)
+        #   1세대는 생보·손보 구분(자기부담 손보0%·생보20%, 상해의료비 별도)
+        _LIFE=('생명','AIA','ABL','푸본','교보','동양','미래에셋','신한','KDB','메트라이프','처브','라이나','KB라이프','라이프플래닛','하나생명','IBK연금')
+        _NONLIFE=('손보','손해','화재','해상','손해보험')
+        sub=''
+        if dt<=date(2009,9,30):
+            g=1
+            _c1=str(comp).split('\n')[0].strip()   # ★회사명 줄만(상품명의 '라이프' 오매칭 차단)
+            if any(k in _c1 for k in _NONLIFE): sub='손보'
+            elif any(k in _c1 for k in _LIFE): sub='생보'
+            else: sub='손보'
+        elif dt<=date(2017,3,31):
+            g=2
+            if dt<=date(2012,12,31): sub='2-1'
+            elif dt<=date(2015,12,31): sub='2-2'
+            else: sub='2-3'
+        elif dt<=date(2021,6,30): g=3
+        elif dt<=date(2026,5,5): g=4
+        else: g=5
+        dstr=f'{y}.{mo:02d}.{d:02d}' if m.group(3) else f'{y}.{mo:02d}'
+        return {'gen':g,'sub':sub,'date':dstr}
+    _sil=[h for h in headers if h.get('sil')]
+    if not _sil:
+        rep['silson_gen']={'status':'none'}
+    else:
+        _sh=min(_sil, key=lambda h:str(h.get('join','')))  # 가장 오래된 실손 계약(세대 판별 기준)
+        _cnm=_sh.get('nm','')
+        _g=_gen_of(_sh.get('join'), _cnm)
+        # 실손 계약 전체 목록(회사·상품명·가입일·보험료)
+        _sillist=[]
+        for _h in sorted(_sil, key=lambda x:str(x.get('join',''))):
+            _sillist.append({'co':str(_h.get('co',''))[:14],
+                             'prod':str(_h.get('prod',''))[:34],
+                             'join':str(_h.get('join','')),
+                             'amt':_h.get('amt',0),
+                             'renew':_h.get('renew',False)})
+        rep['silson_list']=_sillist
+        if _g:
+            rep['silson_gen']={'status':'auto','gen':_g['gen'],'sub':_g['sub'],'date':_g['date'],
+                               'company':str(_sh.get('co',''))[:14],
+                               'product':str(_sh.get('prod',''))[:34]}
+        else:
+            rep['silson_gen']={'status':'check','company':_cnm[:12]}
     return rep
 
 if __name__=='__main__':

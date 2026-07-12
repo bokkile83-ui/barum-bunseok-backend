@@ -16,13 +16,15 @@ NAVY="#0B2340"; NAVY2="#16365C"; GOLD="#C5A052"; GOLDL="#E6C878"; GOLDD="#9C7C32
 INK="#1C2430"; MUT="#6B7686"; LINE="#D9DEE6"; GOOD="#1F7A4D"; PART="#9C7C32"; GAP="#C0444C"
 BLUE="#1456B0"
 
-def _donut(pct, color, size=92, sw=11):
-    r=(size-sw)/2; c=size/2; C=2*math.pi*r; off=C*(1-pct/100)
+def _donut(pct, color, size=92, sw=12, over=False):
+    r=(size-sw)/2; c=size/2; C=2*math.pi*r; off=C*(1-min(100,pct)/100)
+    _lbl=f'{pct}%'
+    _fs=21 if len(_lbl)<=3 else (19 if len(_lbl)==4 else 16)
     return f'''<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">
-<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="#EAEEF4" stroke-width="{sw}"/>
+<circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="#E3E8EF" stroke-width="{sw}"/>
 <circle cx="{c}" cy="{c}" r="{r}" fill="none" stroke="{color}" stroke-width="{sw}" stroke-linecap="round"
  stroke-dasharray="{C:.1f}" stroke-dashoffset="{off:.1f}" transform="rotate(-90 {c} {c})"/>
-<text x="{c}" y="{c}" text-anchor="middle" dy="0.36em" font-size="21" font-weight="700" fill="{NAVY}" font-family="NanumSquareRound">{pct}%</text>
+<text x="{c}" y="{c}" text-anchor="middle" dominant-baseline="central" dy="0.02em" font-size="{_fs}" font-weight="800" fill="{NAVY}" font-family="NanumSquareRound">{_lbl}</text>
 </svg>'''
 
 _SCOPE_HEART = [
@@ -177,9 +179,10 @@ def _wcard(rep, title, desc, lookup, mode):
     if st=='list':
         _any=any(v for l,v in val)
         chip=('<span class="wchip g">가입</span>' if _any else '<span class="wchip r">미가입</span>')
+        _dgcls=' dgcancer' if '암' in str(lookup) else (' dgheart' if any(k in str(lookup) for k in ('뇌','심')) else '')
         _rows=''.join(f'<div class="dgrow"><span class="dglab">{_html.escape(l)}</span>'
                       f'<span class="mb">{_html.escape(v)}</span><span class="dgu">만</span></div>' for l,v in val)
-        return (f'<div class="wcard {variant} dgcard"><div class="wct">{check} {_html.escape(title)}</div>'
+        return (f'<div class="wcard {variant} dgcard{_dgcls}"><div class="wct">{check} {_html.escape(title)}</div>'
                 f'<div class="wcd">{_html.escape(desc)}</div>'
                 f'<div class="wcf">{chip}<div class="dglist">{_rows}</div></div></div>')
     chip=('<span class="wchip g">가입</span>' if st=='on' else '<span class="wchip r">미가입</span>')
@@ -205,7 +208,8 @@ _CURREP=None   # build_report_pdf에서 세팅 → _wcard_fix_list 자동주입�
 _PPT_MODE=False  # report_pptx가 True로 세팅 → 빈 흰칸 전체에 '.' 주입(편집칸화)
 
 def _ac(label):
-    """엑셀(rep) 담보값 자동주입: 라벨→값. 확실한 것만 채우고, 없으면 '' (빈칸=편집가능 유지)."""
+    """엑셀(rep) 담보값 자동주입: 라벨→값. 확실한 것만 채우고, 없으면 '' (빈칸=편집가능 유지).
+       2026.07.11 재작성: 명시적 별칭표+정확매칭. 느슨한 부분일치 제거(골절←5대·일당←실손입원 오매칭 차단)."""
     rep=_CURREP
     if not rep: return ''
     L=str(label).strip()
@@ -214,27 +218,47 @@ def _ac(label):
         s=str(v).strip()
         if s in ('','-','0','미가입','없음','X','x'): return ''
         return s
+    import re as _re
+    def _nrm(s): return _re.sub(r'[\s·()\[\]/]','',str(s))
+    dmap=rep.get('dambo',{})
+    # 워크시트 라벨 → 담보명 후보(정확, 앞이 우선). 여기 있는 라벨은 이 후보로만 매칭(오매칭 방지).
+    _ALIAS={
+        '종신 사망':['일반사망'], '질병 사망':['질병사망(80세)','질병사망'], '상해 사망':['상해사망'],
+        '종신':['일반사망'],
+        '일반암':['일반암'], '유사암':['유사암(갑.기.경.제)','유사암'], '고액암':['고액암'],
+        '뇌혈관 수술비':['뇌혈관수술비'], '허혈성 수술비':['허혈성수술비'], '심장 수술비':['심장수술비'],
+        '상해 후유 3%':['상해후유3%'], '상해 후유 80%':['상해후유80%'],
+        '질병 후유 3%':['질병후유3%'], '질병 후유 80%':['질병후유80%'],
+        '골절':['골절합산'], '5대 골절':['5대골절진단비'],
+        '화상진단비':['화상진단비'], '중대화상진단비':['중증화상진단비'],
+        '깁스':['깁스진단비'], '응급실':['응급실(응급)','응급실'],
+        '질병 입원일당':['질병일당','질병입원일당'], '상해 입원일당':['상해일당','상해입원일당'],
+        '질병 중환자실':['질병중환자실'], '상해 중환자실':['상해중환자실'],
+        '대인 벌금':['대인'], '대물 벌금':['대물'], '합의금':['합의금'], '6주미만 합의금':['6주미만'],
+        '변호사비':['변호사'], '자동차부상위로금':['자부상'],
+        '간병인지원일당':['간병인'], '간호통합병동':['간호통합병동'],
+    }
     # 1) 뇌·심 진단비 (p5_own, 담보명 확정)
     _P={'뇌혈관':'뇌혈관진단비','뇌졸증':'뇌졸증진단비','뇌출혈':'뇌출혈진단비',
         '허혈성':'허혈성 진단비','급성심근경색':'급성심근경색'}
     if L in _P:
         pv={i.get('t'):i.get('v') for i in rep.get('p5_own',[])}
         r=_clean(pv.get(_P[L]))
-        if r: return r
-    # 2) chiryo(치료비 등) 정확 일치
+        return r
+    # 2) 별칭표: 지정 후보로만 매칭 (있으면 그 후보 외엔 채우지 않음)
+    if L in _ALIAS:
+        for cand in _ALIAS[L]:
+            r=_clean(dmap.get(_nrm(cand)))
+            if r: return r
+        return ''
+    # 3) chiryo(치료비 등) 정확 일치
     for c in rep.get('chiryo',[]):
         if str(c.get('name','')).replace(' ','')==L.replace(' ',''):
             r=_clean(c.get('value'))
             if r: return r
-    # 3) coverage 항목 부분일치 (실데이터에서 담보명 매칭 시 채움, 불일치면 빈칸)
-    key=L.replace(' ','')
-    for c in rep.get('coverage',[]):
-        for i in c.get('items',[]):
-            t=str(i.get('t','')).replace(' ','')
-            if t and (key in t or t in key) and '없음' not in t:
-                r=_clean(i.get('v'))
-                if r: return r
-    return ''
+    # 4) 전체 담보맵 정확(정규화) 일치
+    r=_clean(dmap.get(_nrm(L)))
+    return r
 
 def _wcard_fix_list(title, desc, rows):
     """세분화 카드: 항목별 라벨 + 개별 흰칸. 엑셀에 값 있으면 자동주입, 없으면 빈칸(현장 기입)."""
@@ -293,23 +317,27 @@ def build_report_pdf(rep, out):
     def prem_rows(arr,blue):
         col=BLUE if blue else INK
         return ''.join(f'<div class="pr"><span>{_html.escape(c["nm"])}</span><b style="color:{col}">{c["v"]}</b></div>' for c in arr)
-    # ── 보험료 막대 ──
+    # ── 보험료 막대 (★10만원 초과 = 빨강 경고) ──
     mx=max((c['amt'] for c in rep['premium_bars']),default=1)
+    def _bcol(c):
+        if c['amt']>=100000: return GAP          # 10만원 이상 → 빨강
+        return BLUE if c['renew'] else NAVY2
+    def _vcol(c):
+        if c['amt']>=100000: return GAP
+        return BLUE if c['renew'] else NAVY
     bars=''.join(
         f'''<tr><td class="bl">{_html.escape(c["nm"])}</td>
-<td class="track-td"><div class="track"><div class="fill" style="width:{c["amt"]/mx*100:.1f}%;background:{(BLUE if c["renew"] else NAVY2)}"></div></div></td>
-<td class="bv" style="color:{(BLUE if c["renew"] else NAVY)}">{c["amt"]:,}</td></tr>'''
+<td class="track-td"><div class="track"><div class="fill" style="width:{c["amt"]/mx*100:.1f}%;background:{_bcol(c)}"></div></div></td>
+<td class="bv" style="color:{_vcol(c)}">{c["amt"]:,}{'<span class="warn10">▲</span>' if c['amt']>=100000 else ''}</td></tr>'''
         for c in rep['premium_bars'])
     # ── 도넛 ──
-    def dcolor(p): return GOOD if p>=70 else (GOLDD if p>=40 else GAP)
-    donuts=''.join(
-        f'<td class="dcell"><div>{_donut(d["pct"],dcolor(d["pct"]))}</div><div class="dn">{_html.escape(d["name"])}</div></td>'
-        for d in rep['donuts'])
+    def dcolor(p): return '#1F7A4D' if p>=70 else ('#D08B1F' if p>=40 else '#C0242E')
+    donuts=''
     drows=''
     per=5
     for i in range(0,len(rep['donuts']),per):
         cells=''.join(
-            f'<td class="dcell"><div>{_donut(d["pct"],dcolor(d["pct"]))}</div><div class="dn">{_html.escape(d["name"])}</div></td>'
+            f'<td class="dcell"><div>{_donut(d["pct"],dcolor(d["pct"]),over=d.get("over",False))}</div><div class="dn">{_html.escape(d["name"])}</div></td>'
             for d in rep['donuts'][i:i+per])
         # pad
         cells+='<td></td>'*(per-len(rep['donuts'][i:i+per]))
@@ -370,14 +398,27 @@ def build_report_pdf(rep, out):
     else:
         noci_html=''
 
-    # ── 보장 진단 코멘트 (P3 하단 채움 + 설명서 성격) ──
+    # ── 보장 진단 코멘트 (숫자 카드형 · 60대 가독) ──
     _sh=[_html.escape(s['h']) for s in rep.get('strength',[])][:4]
-    _cm=f'{cust} 고객님은 보유 <b>{n_contract}건</b> · 월 <b>{premium:,}원</b>의 보장을 운용하고 있습니다. '
-    if _sh: _cm+='특히 <b>'+' · '.join(_sh)+'</b> 영역의 핵심담보를 충실히 보유했습니다. '
+    _ok = '충실' if gap_cnt==0 else '보완 필요'
+    _okc = 'ok' if gap_cnt==0 else 'ng'
+    _cards=(f'<div class="sumcard"><div class="sv">{n_contract}<small>건</small></div><div class="sk">보유 계약</div></div>'
+            f'<div class="sumcard"><div class="sv">{premium:,}<small>원</small></div><div class="sk">월 납입보험료</div></div>'
+            f'<div class="sumcard {_okc}"><div class="sv">{gap_cnt}<small>개</small></div><div class="sk">보장 공백</div></div>'
+            f'<div class="sumcard {_okc}"><div class="sv sm">{_ok}</div><div class="sk">종합 판정</div></div>')
+    _strong=''
+    if _sh:
+        _chips=''.join(f'<span class="stchip">{h}</span>' for h in _sh)
+        _strong=f'<div class="sumrow"><span class="sumlb ok">✔ 강점</span><span class="sumtx">{_chips}</span></div>'
+    _cirow=''
     if ci.get('present'):
-        _cm+=f'CI 선지급형 보유로 암·뇌졸증·급성심근 등 중대질병 진단 시 진단자금이 즉시 지급되며, 진단 후에도 잔여 사망보장 <b>{_html.escape(ci.get("residual","-"))}</b>이 유지됩니다. '
-    _cm+='보강이 필요한 공백 영역은 <b>'+f'{gap_cnt}개</b>로 '+('전반적으로 보장 균형이 양호합니다.' if gap_cnt==0 else '상담을 통한 보완을 권장합니다.')
-    comment_html=f'<div class="sect" style="margin-top:5mm">보장 진단 코멘트 <span>SUMMARY</span></div><div class="cmt">{_cm}</div>'
+        _cirow=(f'<div class="sumrow"><span class="sumlb ci">CI 선지급</span>'
+                f'<span class="sumtx">중대질병 진단 시 <b>즉시 지급</b> · 진단 후에도 사망보장 '
+                f'<b>{_html.escape(ci.get("residual","-"))}</b> 유지</span></div>')
+    _gaprow=(f'<div class="sumrow"><span class="sumlb {_okc}">{"✔ 결론" if gap_cnt==0 else "! 결론"}</span>'
+             f'<span class="sumtx">{"핵심담보 균형이 <b>양호</b>합니다. 지금 보장을 <b>유지</b>하십시오." if gap_cnt==0 else f"공백 <b>{gap_cnt}개</b> — 상담을 통한 <b>보완</b>이 필요합니다."}</span></div>')
+    comment_html=(f'<div class="sect" style="margin-top:5mm">보장 진단 코멘트 <span>SUMMARY</span></div>'
+                  f'<div class="sumwrap">{_cards}</div>{_strong}{_cirow}{_gaprow}')
 
     css=f'''
 @page {{ size:A4; margin:0; }}
@@ -398,22 +439,22 @@ body {{ color:{INK}; }}
 .scvcol {{ flex:1; }}
 .scvhd {{ font-size:9.5pt; font-weight:800; padding-bottom:1mm; border-bottom:2pt solid {GOLD}; margin-bottom:1.4mm; }}
 .scvhd.brain {{ color:#1F5FA8; }} .scvhd.heart {{ color:{GAP}; }}
-.scvt {{ width:100%; border-collapse:collapse; font-size:6.4pt; }}
-.scvt th {{ background:{NAVY}; color:#fff; padding:0.9mm 0.8mm; font-size:6pt; text-align:center; font-weight:700; }}
+.scvt {{ width:100%; border-collapse:collapse; font-size:8.4pt; }}
+.scvt th {{ background:{NAVY}; color:#fff; padding:1.6mm 1mm; font-size:7.6pt; text-align:center; font-weight:800; }}
 .scvt th.dl {{ text-align:left; }}
 .scvt th:last-child {{ background:{GOLDD}; }}
-.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.75mm 1.1mm; text-align:center; }}
+.scvt td {{ border-top:0.4pt solid {LINE}; padding:1.85mm 1.2mm; text-align:center; }}
 .scvt td.dl {{ text-align:left; }}
-.scvt td.dl .cd {{ font-size:5.4pt; color:{MUT}; }}
-.scvt tr.grp td {{ background:#EEF1F6; font-size:6pt; font-weight:800; color:{NAVY}; text-align:left; padding:0.7mm 1.1mm; }}
+.scvt td.dl .cd {{ font-size:6.8pt; color:{MUT}; }}
+.scvt tr.grp td {{ background:#EEF1F6; font-size:7.6pt; font-weight:800; color:{NAVY}; text-align:left; padding:1.3mm 1.2mm; }}
 .scvt tr.own td {{ background:#FBF6E6; }}
 .scvt td:last-child {{ background:#F2F6F1; }}
 .scvt tr.own td:last-child {{ background:#F0EFD8; }}
 .on {{ color:#1F7A4D; font-weight:800; }} .off {{ color:#B9C2CE; }}
 .hold {{ color:{GOLDD}; font-weight:700; font-size:6pt; }}
 .chip {{ background:{GOLD}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1mm; border-radius:2mm; }}
-.scvt .amt {{ color:{NAVY}; font-weight:800; font-size:6.6pt; margin-left:0.6mm; }}
-.scvt .amtbox {{ display:inline-block; min-width:8mm; height:3.4mm; line-height:3.4mm; border:0.5pt solid {NAVY}; border-radius:0.8mm; padding:0 1mm; margin-left:0.8mm; background:#fff; color:{NAVY}; font-weight:800; font-size:6.2pt; text-align:right; vertical-align:middle; }}
+.scvt .amt {{ color:{NAVY}; font-weight:800; font-size:8.6pt; margin-left:0.8mm; }}
+.scvt .amtbox {{ display:inline-block; min-width:15mm; height:4.6mm; line-height:4.6mm; border:0.7pt solid {NAVY}; border-radius:1mm; padding:0 1.4mm; margin-left:1mm; background:#FFF9E8; color:{NAVY}; font-weight:800; font-size:8.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
 .scvleg {{ font-size:6.2pt; color:{MUT}; margin:1.5mm 0; }} .own2 {{ color:{GOLDD}; font-weight:700; }}
 .scvnote {{ font-size:6pt; line-height:1.4; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
 .scvnote b {{ color:{NAVY}; }} .scvnote b.r {{ color:{GAP}; }}
@@ -450,16 +491,19 @@ body {{ color:{INK}; }}
 .cvbody {{ padding:16mm 16mm 12mm; height:271mm; display:flex; flex-direction:column; }}
 .cvbrand {{ font-size:14pt; font-weight:800; color:{NAVY}; letter-spacing:5px; }}
 .cvbrand .ln {{ width:24mm; height:1.6mm; background:{GOLD}; margin-top:2.5mm; }}
-.cvtitle {{ font-size:31pt; font-weight:800; color:{NAVY}; line-height:1.28; margin-top:44mm; }}
-.cvtitle .g {{ color:{GOLD}; }}
-.cvsub {{ font-size:11.5pt; font-weight:700; color:{NAVY}; margin-top:5mm; }}
-.cvhr {{ border-top:1.6pt solid {GOLD}; margin:6mm 0 5mm; }}
+.cvtitle {{ font-size:64pt; font-weight:900; color:{NAVY}; line-height:1.1; margin-top:14mm; letter-spacing:-2px; }}
+.cvname {{ font-size:30pt; font-weight:800; color:{NAVY}; line-height:1.1; margin-top:12mm; text-align:right; }}
+.cvname .g {{ color:#C9A15A; font-size:72pt; letter-spacing:-1px; }}
+.cvsub {{ font-size:13pt; font-weight:700; color:{NAVY}; margin-top:6mm; }}
+.cvhr {{ border-top:1.6pt solid {GOLD}; margin:3mm 0 5mm; }}
 .cvstats {{ display:flex; gap:6mm; }}
 .cvst {{ flex:1; }}
 .cvst .k {{ font-size:9pt; color:{MUT}; font-weight:700; }}
 .cvst .v {{ font-size:17pt; font-weight:800; color:{NAVY}; margin-top:2mm; }}
 .cvst .v small {{ font-size:9pt; color:{MUT}; font-weight:600; }}
 .cvspacer {{ flex:1; }}
+.cvname2 {{ font-size:34pt; font-weight:900; color:{NAVY}; line-height:1.05; text-align:right; margin-top:14mm; margin-bottom:2mm; }}
+.cvname2 .g {{ color:#C9A15A; font-size:100pt; font-weight:900; letter-spacing:-3px; }}
 .cvhr2 {{ border-top:0.5pt solid {LINE}; margin-bottom:4mm; }}
 .cvfoot {{ text-align:center; font-size:9.5pt; font-weight:700; color:{NAVY}; }}
 
@@ -532,29 +576,29 @@ body {{ color:{INK}; }}
 .wslack .lackbox {{ height:30mm; }}
 .wstalk {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2mm 3mm; font-size:7.6pt; line-height:1.5; color:{NAVY}; font-style:italic; }}
 .wstalk .h {{ font-style:normal; font-weight:800; color:{BLUE}; }}
-.ws3 {{ display:flex; gap:2.5mm; align-items:stretch; }}
+.ws3 {{ display:flex; gap:1.8mm; align-items:stretch; }}
 .wscol.wsmain {{ display:flex; flex-direction:column; }}
 .wsmain .wscap {{ flex:0 0 auto; }}
 .wsmain .wsr {{ min-height:39mm; display:flex; flex-direction:column; justify-content:center; }}
 .wsr .box {{ display:block; margin-top:1.6mm; border:0.6pt solid {LINE}; border-radius:1mm; height:6mm; background:#FCFDFE; }}
-.wsmid {{ flex:0 0 22mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
+.wsmid {{ flex:0 0 14mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
 .wsmid .lb {{ font-size:6.5pt; color:{MUT}; letter-spacing:1px; font-weight:700; }}
-.wsmid .nm {{ font-size:32pt; font-weight:800; color:{NAVY}; line-height:1.02; letter-spacing:0; margin:2mm 0 0; }}
-.wsmid .nmsub {{ font-size:12pt; font-weight:800; color:{GOLDD}; margin:1.5mm 0 2mm; }}
-.wsmid .cnt {{ font-size:13pt; font-weight:800; color:{NAVY}; }}
+.wsmid .nm {{ font-size:22pt; font-weight:800; color:{NAVY}; line-height:1.02; letter-spacing:0; margin:2mm 0 0; }}
+.wsmid .nmsub {{ font-size:9pt; font-weight:800; color:{GOLDD}; margin:1.5mm 0 2mm; }}
+.wsmid .cnt {{ font-size:10pt; font-weight:800; color:{NAVY}; }}
 .wsmid .cnt small {{ display:block; font-size:6.2pt; color:{MUT}; font-weight:600; }}
 .wssj {{ margin-top:1mm; border:1pt solid #D8B65A; border-radius:2mm; background:#FDFAF0; padding:2mm 3mm 2.4mm; }}
-.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:3.2mm 3mm; margin-bottom:3.2mm; min-height:47mm; display:flex; flex-direction:column; }}
-.wcard.half {{ min-height:33mm; padding:2.8mm 3mm; }}
+.wcard {{ border:0.9pt solid {LINE}; border-radius:2mm; padding:1.8mm 2.2mm; margin-bottom:1.4mm; min-height:34mm; display:flex; flex-direction:column; }}
+.wcard.half {{ min-height:26mm; padding:1.8mm 2.2mm; }}
 .wcard.half .wcd {{ margin:0.8mm 0 auto; }}
-.wcard.half .wbox {{ height:14mm; line-height:14mm; }}
+.wcard.half .wbox {{ height:11mm; line-height:11mm; }}
 .wcard.green {{ border-color:#3E9A63; background:#F4FBF7; }}
 .wcard.red {{ border-color:#DE9A9A; background:#FDF4F3; }}
 .wcard.plain {{ border-color:{LINE}; background:#FCFDFE; }}
-.wcard .wct {{ font-size:11pt; font-weight:800; color:{NAVY}; }}
+.wcard .wct {{ font-size:10pt; font-weight:800; color:{NAVY}; }}
 .wcard.green .wct {{ color:#1F7A4D; }}
 .wcard.red .wct {{ color:#C0444C; }}
-.wcard .wcd {{ font-size:8.6pt; color:{MUT}; margin:1.4mm 0 auto; }}
+.wcard .wcd {{ font-size:7.8pt; color:{MUT}; margin:0.9mm 0 auto; }}
 .wcard .wdn {{ font-size:8pt; font-weight:700; color:#2B3A52; margin:1.2mm 0 0.6mm; line-height:1.25; word-break:break-all; }}
 .wcard .wcf {{ display:flex; align-items:center; gap:2mm; margin-top:1.2mm; }}
 .wchip {{ font-size:9pt; font-weight:800; color:#fff; padding:1.1mm 3.2mm; border-radius:1.5mm; white-space:nowrap; }}
@@ -566,9 +610,9 @@ body {{ color:{INK}; }}
 .wcard.fx {{ min-height:46mm; }}
 .wcard.fx.tall {{ min-height:auto; }}
 .fxlist {{ margin-top:1.6mm; }}
-.fxsub {{ display:flex; align-items:center; gap:2mm; margin:0.6mm 0; font-size:8.2pt; }}
+.fxsub {{ display:flex; align-items:center; gap:2mm; margin:0.7mm 0; font-size:8.2pt; }}
 .fxsub .lbl {{ flex:0 0 30mm; font-weight:700; color:#2B3A52; font-size:8pt; white-space:normal; word-break:keep-all; line-height:1.15; }}
-.fxsub .mb {{ flex:1; border:0.6pt solid {LINE}; border-radius:1mm; height:4.1mm; line-height:4.1mm; padding:0 2mm; background:#fff; text-align:right; font-size:7.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; overflow:hidden; }}
+.fxsub .mb {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:4.8mm; line-height:4.8mm; padding:0 2mm; background:#fff; text-align:right; font-size:8.2pt; font-weight:800; color:{NAVY}; white-space:nowrap; overflow:hidden; }}
 .wsectcap {{ margin-bottom:2.6mm; border-radius:1.4mm; }}
 .wsectcap.gap2 {{ margin-top:0.9mm; }}
 .wstalk2 {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2.2mm 3.2mm; font-size:8pt; line-height:1.5; color:{NAVY}; margin-top:2.6mm; }}
@@ -582,6 +626,239 @@ body {{ color:{INK}; }}
 .note24 {{ text-align:center; font-size:7.8pt; font-weight:700; color:{NAVY}; background:#FBF3E6; border:0.7pt solid {GOLD}; border-radius:1.4mm; padding:1mm; margin-top:0.7mm; }}
 .note24 b {{ color:{GOLDD}; }}
 .memobox {{ border:0.8pt solid {LINE}; border-radius:2mm; height:46mm; margin-top:1.5mm; background:repeating-linear-gradient(#fff, #fff 7mm, #EDF1F6 7mm, #EDF1F6 7.4mm); }}
+.gentab td:last-child, .gentab th:last-child {{ text-align:left; }}
+.silgenpg .st td, .silgenpg .st th {{ font-size:7pt; padding:0.5mm 1.3mm; }}
+.silgenpg .note {{ font-size:10pt; padding:2.2mm 3mm; line-height:1.45; }}
+.silgenpg .silverd {{ padding:4mm 4.5mm; margin:4mm 0; }}
+.silgenpg .silverd .svhead {{ font-size:18pt; }}
+.silgenpg .silverd .svbody {{ font-size:12.5pt; line-height:1.5; margin-top:2mm; }}
+.silgenpg .wssj .fxrow {{ font-size:8.4pt; line-height:1.42; }}
+.g5tab td, .g5tab th {{ font-size:8.2pt; padding:1.05mm 1.6mm; }}
+.g5tab td:last-child, .g5tab th:last-child, .g5tab td:nth-child(2), .g5tab th:nth-child(2) {{ text-align:left; }}
+.silgenpg .memobox {{ height:10mm; }}
+.silverd .svtx {{ display:inline-block; margin-top:1.2mm; font-size:10pt; font-weight:700; color:{NAVY}; }}
+.silverd.g5 .svtx {{ color:{GAP}; }}
+.genhit td {{ background:#FFF3D6 !important; font-weight:800; color:{NAVY} !important;
+   border-top:2.4pt solid {GAP} !important; border-bottom:2.4pt solid {GAP} !important; }}
+.genhit td:first-child {{ border-left:2.4pt solid {GAP} !important; }}
+.genhit td:last-child {{ border-right:2.4pt solid {GAP} !important; }}
+.g5tab .gyeo td {{ background:#EAF2FB; }}
+.g5tab .jung td {{ background:#FBF7EE; }}
+.g5tab td, .g5tab th {{ font-size:10.6pt; line-height:1.45; padding:2.0mm 2.2mm; }}
+.silgenpg .fixnote .fxrow {{ font-size:10.6pt; line-height:1.5; margin:1.5mm 0; }}
+.silgenpg .fixnote .cap {{ font-size:11.5pt; }}
+.silgenpg .note.bigfact {{ font-size:10.4pt; line-height:1.5; }}
+.gentab .smn, .g5tab .smn {{ font-size:10pt; color:#6B7686; font-weight:700; }}
+.gentab .smn {{ color:#C0444C; font-size:10pt; }}
+.gentab .disc {{ display:inline-block; margin-top:0.5mm; font-size:7.4pt; font-weight:800; color:#1456B0; background:#EAF2FB; border-radius:1mm; padding:0.4mm 1.2mm; }}
+.barttl {{ font-size:11pt; font-weight:800; color:{NAVY}; margin-top:2mm; }}
+.barttl span {{ font-size:8.5pt; color:{MUT}; font-weight:700; }}
+.g5wrap {{ display:table; width:100%; border-spacing:2mm 0; margin:2mm 0; }}
+.g5card {{ display:table-cell; width:50%; border-radius:2.5mm; padding:2.2mm 3mm; border:1.2pt solid; vertical-align:top; }}
+.g5card.jungc {{ border-color:#9C7C32; background:#FBF7EE; }}
+.g5card.bic {{ border-color:#C0444C; background:#FCF3F3; }}
+.g5h {{ font-size:14pt; font-weight:800; color:{NAVY}; }}
+.g5h span {{ font-size:10pt; color:{MUT}; font-weight:700; margin-left:1.5mm; }}
+.g5sub {{ font-size:9pt; color:{MUT}; font-weight:700; margin-bottom:1.5mm; }}
+.g5big {{ font-size:13pt; font-weight:800; color:#9C7C32; margin:0.8mm 0 1.4mm; }}
+.g5big.bad {{ color:{GAP}; }}
+.g5big b {{ font-size:21pt; }}
+.g5line {{ font-size:10.5pt; font-weight:700; color:{INK}; margin-top:0.8mm; }}
+.g5line b {{ color:{NAVY}; font-size:13.5pt; }}
+.g5line b.bad {{ color:{GAP}; }}
+.g5nt {{ font-size:8.5pt; color:{MUT}; font-weight:700; }}
+.g5nt {{ font-size:8.5pt; color:{MUT}; font-weight:700; }}
+.barwrap {{ display:table; width:100%; border-spacing:2mm 0; margin:1.2mm 0 0.6mm; }}
+.barcol {{ display:table-cell; width:20%; vertical-align:bottom; text-align:center; }}
+.barlb.vt {{ writing-mode:vertical-rl; text-orientation:upright; letter-spacing:0.2pt; margin:0.8mm auto 0; font-size:6.6pt; line-height:1; white-space:nowrap; }}
+.barlb.vt.bad {{ color:{GAP}; }}
+.hbar {{ border-radius:1.5mm 1.5mm 0 0; padding:0.8mm 0; text-align:center; }}
+.hbar span {{ font-size:8pt; font-weight:800; color:#fff; }}
+.b30 {{ height:6mm; background:#8FA8C8; }}
+.b40 {{ height:8mm; background:#C9A15A; }}
+.b50 {{ height:10mm; background:#D08B4A; }}
+.b60 {{ height:12mm; background:#C0444C; }}
+.b90 {{ height:18mm; background:#8B1A1A; }}
+.barlb {{ font-size:6.6pt; font-weight:800; color:{NAVY}; margin-top:0.4mm; line-height:1.15; }}
+.g5warn {{ margin-top:0.5mm; padding:0.9mm 2mm; border-radius:2mm; background:#FCF3F3; border-left:3.5pt solid {GAP}; font-size:7.6pt; font-weight:700; color:{INK}; line-height:1.3; }}
+.g5warn b {{ color:{GAP}; }}
+.myeon {{ margin-top:2mm; border:1.2pt solid {GAP}; border-radius:2mm; background:#FCF3F3; padding:2mm 2.5mm; }}
+.mytt {{ font-size:9.4pt; font-weight:800; color:{GAP}; margin-bottom:1mm; }}
+.mytab {{ display:table; width:100%; border-spacing:1.5mm 0; }}
+.myc {{ display:table-cell; width:20%; vertical-align:top; background:#fff; border:0.8pt solid #E8B4B4; border-radius:1.6mm; padding:1.8mm 1.6mm; text-align:center; }}
+.myh {{ font-size:8.6pt; font-weight:800; color:{GAP}; margin-bottom:1mm; line-height:1.25; }}
+.myd {{ font-size:7pt; font-weight:700; color:{INK}; line-height:1.28; }}
+.mynt {{ font-size:8pt; font-weight:600; color:{INK}; margin-top:1.5mm; }}
+.myeon {{ border:1.2pt solid {GAP}; border-radius:2mm; padding:1.6mm 2.2mm; margin-top:1.2mm; background:#FCF3F3; }}
+.mytt {{ font-size:9.4pt; font-weight:800; color:{GAP}; margin-bottom:1mm; }}
+.mytab {{ display:table; width:100%; border-spacing:1.5mm 0; }}
+.myc {{ display:table-cell; width:20%; background:#fff; border:0.8pt solid #E8B4B4; border-radius:1.6mm; padding:1.3mm 1.2mm; vertical-align:top; text-align:center; }}
+.myh {{ font-size:7.6pt; font-weight:800; color:{GAP}; margin-bottom:0.6mm; }}
+.myd {{ font-size:7pt; font-weight:700; color:{INK}; line-height:1.28; }}
+.mynt {{ font-size:7pt; color:{MUT}; font-weight:600; margin-top:1mm; }}
+.renote {{ border:1pt solid {LINE}; border-left:3.5pt solid {BLUE}; border-radius:2mm; padding:1.5mm 2.4mm; margin-top:1.2mm; background:#EAF2FB; }}
+.rentt {{ font-size:9pt; font-weight:800; color:{NAVY}; margin-bottom:0.8mm; }}
+.renrow {{ font-size:8.6pt; font-weight:700; color:{INK}; margin:2.2mm 0; }}
+.renrow b {{ color:{BLUE}; }}
+.rennt {{ font-size:7.4pt; color:{MUT}; font-weight:600; margin-top:2mm; }}
+.sumwrap {{ display:table; width:100%; border-spacing:3mm 0; margin:2.5mm 0; }}
+.sumcard {{ display:table-cell; width:25%; border:1pt solid {LINE}; border-radius:2.5mm; padding:4mm 3mm; text-align:center; background:#F7F9FC; }}
+.sumcard.ok {{ border-color:{GOOD}; background:#F1F8F4; }}
+.sumcard.ng {{ border-color:{GAP}; background:#FCF3F3; }}
+.sumcard .sv {{ font-size:26pt; font-weight:800; color:{NAVY}; line-height:1.1; }}
+.sumcard .sv small {{ font-size:12pt; font-weight:700; color:{MUT}; margin-left:1mm; }}
+.sumcard .sv.sm {{ font-size:20pt; }}
+.sumcard.ok .sv {{ color:{GOOD}; }}
+.sumcard.ng .sv {{ color:{GAP}; }}
+.sumcard .sk {{ font-size:11pt; font-weight:700; color:{MUT}; margin-top:2mm; }}
+.sumrow {{ display:table; width:100%; margin-top:3mm; }}
+.sumlb {{ display:table-cell; width:24mm; font-size:12pt; font-weight:800; color:#fff; background:{NAVY}; border-radius:2mm; padding:2.5mm 2mm; text-align:center; vertical-align:middle; }}
+.sumlb.ok {{ background:{GOOD}; }}
+.sumlb.ng {{ background:{GAP}; }}
+.sumlb.ci {{ background:{GOLDD}; }}
+.sumtx {{ display:table-cell; padding-left:4mm; font-size:13pt; font-weight:600; color:{INK}; vertical-align:middle; line-height:1.5; }}
+.sumtx b {{ color:{NAVY}; font-weight:800; }}
+.stchip {{ display:inline-block; font-size:13pt; font-weight:800; color:{NAVY}; background:#EAF6EF; border:0.8pt solid {GOOD}; border-radius:2mm; padding:1.2mm 3mm; margin-right:2mm; }}
+.ghwrap {{ display:table; width:100%; border-spacing:3mm 0; margin-top:1.2mm; }}
+.ghcell {{ display:table-cell; width:50%; vertical-align:top; border:1pt solid {LINE}; border-radius:2mm; padding:1.6mm 2.2mm; }}
+.ghttl {{ font-size:8pt; font-weight:800; color:{NAVY}; margin-bottom:0.6mm; }}
+.ghnt {{ font-size:6.6pt; font-weight:700; color:{INK}; margin-top:0.6mm; text-align:center; }}
+.hz1 {{ height:5mm; background:#1F7A4D; }}
+.hz2 {{ height:7mm; background:#8FA8C8; }}
+.hz3 {{ height:11mm; background:#C9A15A; }}
+.hz4 {{ height:13mm; background:#C0444C; }}
+.hz5 {{ height:17mm; background:#8B1A1A; }}
+.gen1b {{ height:5mm; background:#2E7D4F; }}
+.gen2b {{ height:5mm; background:#8FA8C8; }}
+.gen3b {{ height:5mm; background:#8FA8C8; }}
+.gen4b {{ height:6mm; background:#C9A15A; }}
+.gen5b {{ height:16mm; background:#8B1A1A; }}
+.gen2c {{ height:5mm; background:#8FA8C8; }}
+.gen3c {{ height:6mm; background:#A9A0C0; }}
+.gen4c {{ height:7mm; background:#C9A15A; }}
+.gen5c {{ height:11mm; background:{GAP}; }}
+.g4b {{ height:6mm; background:#B8C0CC; }}
+.gjb {{ height:6mm; background:#C9A15A; }}
+.gbb {{ height:10mm; background:{GAP}; }}
+.gxb {{ height:18mm; background:#8B1A1A; }}
+.gzb {{ height:19mm; background:#5A0F0F; }}
+.g4wrap {{ display:table; width:100%; border-spacing:2mm 2mm; }}
+.g4cell {{ display:table-cell; width:50%; border:1pt solid {LINE}; border-radius:2mm; padding:2mm 2.5mm; vertical-align:top; background:#FBFCFD; }}
+.g4tt {{ font-size:10.5pt; font-weight:800; color:{NAVY}; margin-bottom:1mm; }}
+.g4nt {{ font-size:9pt; font-weight:700; color:{INK}; margin-top:1mm; text-align:center; }}
+.q1 {{ height:3mm; background:#9CB8A0; }}
+.q2 {{ height:5mm; background:#8FA8C8; }}
+.q3 {{ height:7mm; background:#6E90BC; }}
+.q4 {{ height:9mm; background:#C9A15A; }}
+.q5 {{ height:22mm; background:#8B1A1A; }}
+.q5b {{ height:14mm; background:{GAP}; }}
+.w1 {{ height:22mm; background:#9CB8A0; }}
+.w2 {{ height:12mm; background:#8FA8C8; }}
+.w5 {{ height:4mm; background:{GAP}; }}
+.extab td, .extab th {{ font-size:7.8pt; line-height:1.3; padding:1.2mm 1.4mm; }}
+.extab td.good, .extab .good {{ color:{GOOD}; }}
+.exn {{ font-size:7.8pt; font-weight:700; color:{INK}; margin-top:1.5mm; padding:1.5mm 2mm; background:#F1F4F8; border-radius:1.5mm; line-height:1.45; }}
+.silbox {{ border:1.2pt solid {GOLD}; border-radius:2mm; padding:2mm 2.5mm; margin-top:1.6mm; background:#FBF7EE; }}
+.silbox.none {{ border-color:{GAP}; background:#FCF3F3; }}
+.sbt {{ font-size:10.5pt; font-weight:800; color:{NAVY}; margin-bottom:1.2mm; }}
+.sbt b {{ color:{GOLDD}; }}
+.sltab {{ width:100%; border-collapse:collapse; }}
+.sltab th {{ background:{NAVY}; color:#fff; font-size:7.6pt; font-weight:800; padding:0.8mm 1.5mm; text-align:center; }}
+.sltab td {{ border:0.6pt solid {LINE}; background:#fff; font-size:8.4pt; font-weight:700; color:{INK}; padding:1mm 1.5mm; text-align:center; }}
+.sltab td.slp {{ text-align:left; font-size:7.8pt; }}
+.sltab td.slc {{ font-weight:800; color:{NAVY}; }}
+.sltab td.sla {{ font-weight:800; }}
+.sbn {{ font-size:7.6pt; color:{MUT}; font-weight:600; margin-top:1mm; }}
+.ezbox {{ border:1.2pt solid {LINE}; border-radius:2.5mm; padding:2.5mm 3mm; margin-bottom:2.5mm; background:#FBFCFD; }}
+.eztt {{ font-size:13pt; font-weight:800; color:{NAVY}; margin-bottom:2mm; }}
+.eznum {{ display:inline-block; width:6mm; height:6mm; line-height:6mm; text-align:center; border-radius:50%; background:{NAVY}; color:#fff; font-size:10pt; margin-right:1.5mm; }}
+.eztab {{ display:table; width:100%; border-spacing:2.5mm 0; }}
+.ezc {{ display:table-cell; width:50%; border-radius:2mm; padding:2.5mm 3mm; vertical-align:top; border:1pt solid; }}
+.ezblue {{ background:#EAF2FB; border-color:#8FA8C8; }}
+.ezred {{ background:#FCF3F3; border-color:#E8B4B4; }}
+.ezgold {{ background:#FBF7EE; border-color:#C9A15A; }}
+.ezpink {{ background:#FCF3F3; border-color:{GAP}; }}
+.ezh {{ font-size:15pt; font-weight:800; color:{NAVY}; margin-bottom:1.2mm; }}
+.ezsub {{ font-size:8.5pt; color:{MUT}; font-weight:700; }}
+.ezbig {{ font-size:13pt; font-weight:800; color:#9C7C32; margin:1mm 0 1.5mm; }}
+.ezbig b {{ font-size:22pt; }}
+.ezbig.bad {{ color:{GAP}; }}
+.ezd {{ font-size:10pt; font-weight:700; color:{INK}; line-height:1.5; }}
+.ezd .good {{ color:{GOOD}; }}
+.ezd .bad {{ color:{GAP}; }}
+.ezn {{ font-size:9.6pt; font-weight:700; color:{INK}; margin-top:2mm; padding:1.8mm 2.5mm; background:#F1F4F8; border-radius:1.6mm; line-height:1.45; }}
+.ezhtab {{ display:table; width:100%; }}
+.ezhc {{ display:table-cell; text-align:center; vertical-align:middle; }}
+.ezarrow {{ display:table-cell; text-align:center; vertical-align:middle; font-size:12pt; font-weight:800; color:{MUT}; width:4mm; }}
+.ezhb {{ font-size:15pt; font-weight:800; color:#fff; border-radius:2mm; padding:2.5mm 0; }}
+.ezhb.h1 {{ background:#8FA8C8; }}
+.ezhb.h2 {{ background:#6E90BC; }}
+.ezhb.h3 {{ background:#C9A15A; }}
+.ezhb.h4 {{ background:#D08B4A; }}
+.ezhb.h5 {{ background:{GAP}; }}
+.ezhl {{ font-size:9.5pt; font-weight:800; color:{NAVY}; margin-top:1.2mm; line-height:1.25; }}
+.ezsum {{ border:1.5pt solid {NAVY}; border-radius:2.5mm; padding:3mm 3.5mm; background:#F4F7FB; }}
+.ezst {{ font-size:12pt; font-weight:800; color:{NAVY}; }}
+.ezsl {{ font-size:14pt; font-weight:800; color:{GAP}; margin:1.5mm 0; line-height:1.4; }}
+.ezsn {{ font-size:9.8pt; font-weight:700; color:{INK}; line-height:1.5; }}
+/* ── 중증 vs 비중증 (그림형) ── */
+.svdef {{ border:1.5pt solid {NAVY}; border-radius:2.5mm; background:#F4F7FB; padding:2.4mm 3mm; margin-bottom:2.6mm; }}
+.svdt {{ font-size:12.5pt; font-weight:800; color:{NAVY}; margin-bottom:1mm; }}
+.svdt b {{ color:{GOLDD}; }}
+.svdd {{ font-size:9.8pt; font-weight:700; color:{INK}; line-height:1.5; }}
+.svdd .bad {{ color:{GAP}; }}
+.svtab {{ display:table; width:100%; border-spacing:2.6mm 0; margin-bottom:2.6mm; }}
+.svc {{ display:table-cell; width:50%; vertical-align:top; border-radius:2.5mm; border:1.6pt solid; overflow:hidden; }}
+.svc.g {{ border-color:#C9A15A; }}
+.svc.r {{ border-color:{GAP}; }}
+.svhd {{ color:#fff; padding:2.2mm 3mm; }}
+.svc.g .svhd {{ background:#B98C33; }}
+.svc.r .svhd {{ background:{GAP}; }}
+.svh1 {{ font-size:15pt; font-weight:800; line-height:1.2; }}
+.svh2 {{ font-size:8.8pt; font-weight:700; opacity:0.92; }}
+.svbd {{ padding:2.8mm 3mm 3.2mm; }}
+.svc.g .svbd {{ background:#FBF7EE; }}
+.svc.r .svbd {{ background:#FCF3F3; }}
+.svpct {{ font-size:10.5pt; font-weight:800; color:{INK}; margin-bottom:1.6mm; }}
+.svpct b {{ font-size:26pt; }}
+.svc.g .svpct b {{ color:#9C7C32; }}
+.svc.r .svpct b {{ color:{GAP}; }}
+.svchips {{ margin-bottom:1.8mm; }}
+.svchip {{ display:inline-block; font-size:8.6pt; font-weight:800; padding:0.9mm 2mm; border-radius:1.4mm; margin:0 1mm 1mm 0; border:0.8pt solid; }}
+.svc.g .svchip {{ background:#fff; color:#8A6A1E; border-color:#C9A15A; }}
+.svc.r .svchip {{ background:#fff; color:{GAP}; border-color:#E8B4B4; }}
+.svrow {{ display:table; width:100%; border-top:0.7pt solid #DCD3C2; padding:1.9mm 0; }}
+.svc.r .svrow {{ border-top-color:#E8CACA; }}
+.svk {{ display:table-cell; width:30%; font-size:8.8pt; font-weight:800; color:{MUT}; vertical-align:middle; }}
+.svv {{ display:table-cell; font-size:9.6pt; font-weight:800; color:{INK}; line-height:1.4; vertical-align:middle; }}
+.svv .ok {{ color:{GOOD}; }}
+.svv .no {{ color:{GAP}; }}
+.svex {{ display:table; width:100%; border-spacing:2.2mm 0; margin-bottom:2.4mm; }}
+.svec {{ display:table-cell; width:33.33%; border:1pt solid {LINE}; border-radius:2mm; background:#fff; padding:2.8mm 2.6mm; vertical-align:top; }}
+.svet {{ font-size:9.6pt; font-weight:800; color:{NAVY}; margin-bottom:1.4mm; }}
+.sveg {{ font-size:11pt; font-weight:800; color:#9C7C32; line-height:1.5; }}
+.sver {{ font-size:11pt; font-weight:800; color:{GAP}; line-height:1.5; }}
+.svesm {{ font-size:8.2pt; font-weight:700; color:{MUT}; margin-top:1mm; line-height:1.35; }}
+.cmptab td, .cmptab th {{ font-size:7.2pt; line-height:1.25; padding:0.6mm 1.4mm; }}
+.cmptab th.h4g {{ background:{MUT} !important; }}
+.cmptab th.h5g {{ background:{NAVY} !important; }}
+.cmptab .secrow td {{ background:{NAVY} !important; color:#fff; font-weight:800; font-size:7.8pt; text-align:left; padding:0.8mm 1.8mm; }}
+.cmptab .secrow .smn {{ color:#C9D4E2; }}
+.cmptab .same {{ display:inline-block; font-size:7.6pt; font-weight:800; color:{GOOD}; background:#EAF6EF; border-radius:1mm; padding:0.3mm 1.2mm; margin-left:1mm; }}
+.cmptab td.good, .cmptab .good {{ color:{GOOD}; font-weight:700; }}
+.cmppg .memobox {{ height:16mm; }}
+.g5tab th.hjung {{ background:#9C7C32 !important; }}
+.g5tab th.hbi {{ background:#C0444C !important; }}
+.g5tab .hosp {{ display:inline-block; margin-top:0.8mm; font-size:8.4pt; font-weight:800; color:#C0444C; background:#FFF0F0; border:0.6pt solid #E8B4B4; border-radius:1.2mm; padding:0.8mm 1.4mm; line-height:1.35; }}
+.hitmk {{ display:inline-block; color:#fff; background:{GAP}; font-weight:800; font-size:8.5pt; margin-left:1.5mm; padding:0.4mm 1.6mm; border-radius:1.2mm; }}
+.silverd {{ border:1pt solid {NAVY}; border-left:3.5pt solid {NAVY}; border-radius:2mm; padding:3mm 3.5mm; margin:2.6mm 0; background:#F4F7FB; }}
+.silverd .svhead {{ font-size:13pt; font-weight:800; color:{NAVY}; }}
+.silverd .svhead b {{ color:{GAP}; font-size:15pt; }}
+.silverd .svmeta {{ font-size:9pt; font-weight:600; color:{MUT}; margin-left:2mm; }}
+.silverd .svbody {{ font-size:10.5pt; line-height:1.55; color:{INK}; margin-top:1.8mm; }}
+.silverd.g1 {{ border-color:{GOOD}; border-left-color:{GOOD}; background:#F1F8F4; }}
+.silverd.g5 {{ border-color:{GAP}; border-left-color:{GAP}; background:#FCF3F3; }}
+.silverd.chk {{ border-color:{GOLDD}; border-left-color:{GOLDD}; background:#FBF7EE; }}
 .stepc .stepn {{ width:5mm; height:5mm; border-radius:50%; background:{NAVY}; color:#fff; font-size:7.5pt; font-weight:800; text-align:center; line-height:5mm; }}
 .stepc b {{ display:block; font-size:7.8pt; color:{NAVY}; margin:1mm 0 0.8mm; }}
 .wgcols {{ display:flex; gap:3mm; margin-top:1.6mm; }}
@@ -610,16 +887,22 @@ body {{ color:{INK}; }}
 .fixnote .cap {{ color:#2E5A88; }}
 .fxrow {{ font-size:9pt; line-height:1.5; margin:1.5mm 0; color:#2B3A52; }}
 .fxrow b {{ color:#2E5A88; }}
-.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:15mm; line-height:15mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
+.wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:12mm; line-height:12mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
 .wbox.wrap {{ white-space:normal; word-break:keep-all; line-height:1.3; height:auto; min-height:15mm; display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; padding:1.4mm 2.6mm; font-size:8pt; }}
 .dglist {{ flex:1; }}
-.wcard.dgcard {{ min-height:80mm; display:flex; flex-direction:column; }}
+.wcard.dgcard {{ min-height:auto; display:flex; flex-direction:column; }}
 .wcard.dgcard .wcf {{ flex:1; align-items:flex-start; }}
 .wcard.dgcard .dglist {{ flex:1; align-self:stretch; display:flex; flex-direction:column; justify-content:space-around; }}
-.dgrow {{ display:flex; align-items:center; gap:1.5mm; margin:0.4mm 0; }}
-.dgrow .dglab {{ flex:0 0 16mm; font-size:7.4pt; font-weight:700; color:{NAVY}; }}
-.dgrow .mb {{ flex:1; border:0.6pt solid {LINE}; border-radius:1mm; height:4.2mm; line-height:4.2mm; padding:0 2mm; background:#fff; text-align:right; font-size:7.6pt; font-weight:800; color:{NAVY}; }}
-.dgrow .dgu {{ flex:0 0 auto; font-size:6.6pt; color:{MUT}; }}
+.dgrow {{ display:flex; align-items:center; gap:1mm; margin:0.4mm 0; }}
+.dgcancer .dgrow .mb {{ height:4.8mm; line-height:4.8mm; font-size:8.2pt; }}
+.dgcancer .dglab {{ flex:0 0 24mm; font-size:6.8pt; line-height:1.1; white-space:nowrap; }}
+.dgcancer .dgrow {{ margin:0.7mm 0; }}
+.dgheart .dgrow .mb {{ height:4.8mm; line-height:4.8mm; font-size:8.2pt; }}
+.dgheart .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
+.dgheart .dgrow {{ margin:0.7mm 0; }}
+.dgrow .dglab {{ flex:0 0 11.5mm; font-size:6.6pt; font-weight:700; color:{NAVY}; }}
+.dgrow .mb {{ flex:1; min-width:0; border:0.6pt solid {LINE}; border-radius:1mm; height:4.4mm; line-height:4.4mm; padding:0 1mm; background:#fff; text-align:right; font-size:6.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; }}
+.dgrow .dgu {{ flex:0 0 auto; font-size:6pt; color:{MUT}; }}
 .wunit {{ font-size:8.6pt; color:{MUT}; }}
 .wcard.sj {{ min-height:34mm; margin-bottom:0; background:#fff; }}
 .wcard.sj .wct {{ font-size:11pt; }}
@@ -654,11 +937,11 @@ body {{ color:{INK}; }}
 .meta .v {{ font-size:15pt; font-weight:800; color:{NAVY}; margin-top:1mm; }}
 .meta .v small {{ font-size:9pt; color:{MUT}; font-weight:400; }}
 .cov {{ width:100%; border-collapse:collapse; }}
-.cov-cell {{ width:50%; vertical-align:top; padding:3mm 4mm 3mm 0; border-bottom:0.5pt solid {LINE}; }}
-.cov-h {{ margin-bottom:2mm; }}
-.cov-h .cn {{ font-size:11pt; font-weight:700; color:{NAVY}; }}
-.cov-h .bd {{ font-size:8pt; font-weight:700; padding:0.5mm 2.5mm; border-radius:8pt; float:right; }}
-.items .it {{ display:inline-block; font-size:8.5pt; padding:0.8mm 2mm; margin:0.6mm 1mm 0.6mm 0; border-radius:2pt; background:#EEF1F5; color:{INK}; }}
+.cov-cell {{ width:50%; vertical-align:top; padding:4.2mm 5mm 4.2mm 0; border-bottom:0.5pt solid {LINE}; }}
+.cov-h {{ margin-bottom:3mm; }}
+.cov-h .cn {{ font-size:14pt; font-weight:800; color:{NAVY}; }}
+.cov-h .bd {{ font-size:10pt; font-weight:800; padding:0.8mm 3mm; border-radius:8pt; float:right; }}
+.items .it {{ display:inline-block; font-size:10.8pt; font-weight:600; padding:1.2mm 2.6mm; margin:0.9mm 1.2mm 0.9mm 0; border-radius:2.5pt; background:#EEF1F5; color:{INK}; }}
 .items .it b {{ color:{NAVY}; }}
 .items .it.bl b {{ color:{BLUE}; }}
 .items .it.r {{ color:{MUT}; background:transparent; border:0.5pt dashed {LINE}; }}
@@ -666,16 +949,16 @@ body {{ color:{INK}; }}
 .diag td {{ width:50%; vertical-align:top; padding-right:5mm; }}
 .diag td:last-child {{ padding-right:0; padding-left:5mm; }}
 .dc {{ border:0.5pt solid {LINE}; border-radius:4pt; overflow:hidden; }}
-.dc .h {{ padding:3mm 4mm; color:#fff; font-weight:700; font-size:11pt; }}
+.dc .h {{ padding:3.5mm 4.5mm; color:#fff; font-weight:800; font-size:12.5pt; }}
 .dc.g .h {{ background:{GOOD}; }} .dc.w .h {{ background:{GAP}; }}
-.dc ul {{ list-style:none; padding:3.5mm 4mm; }}
-.dc li {{ font-size:9.5pt; line-height:1.5; margin-bottom:2mm; padding-left:3mm; position:relative; }}
+.dc ul {{ list-style:none; padding:3.5mm 4.5mm; }}
+.dc li {{ font-size:10pt; line-height:1.45; margin-bottom:2mm; padding-left:3.5mm; position:relative; }}
 .dc li b {{ color:{NAVY}; }}
 .ren {{ width:100%; border-collapse:collapse; margin-top:2mm; }}
 .ren td {{ width:50%; vertical-align:top; padding-right:5mm; }}
 .ren td:last-child {{ padding-right:0; padding-left:5mm; }}
 .rbox {{ border:0.5pt solid {LINE}; border-radius:4pt; overflow:hidden; }}
-.rbox .rh {{ padding:2mm 4mm; color:#fff; font-weight:700; font-size:10.5pt; }}
+.rbox .rh {{ padding:2.6mm 4.5mm; color:#fff; font-weight:800; font-size:11.5pt; }}
 .rbox.b .rh {{ background:{BLUE}; }} .rbox.k .rh {{ background:#2A3340; }}
 .rbox .rh small {{ float:right; font-weight:400; font-size:8.5pt; }}
 .rbox .pr {{ padding:1mm 4mm; font-size:9.5pt; overflow:hidden; }}
@@ -689,21 +972,32 @@ body {{ color:{INK}; }}
 .smxh {{ font-size:8.5pt; font-weight:800; color:{NAVY}; margin:1.5mm 0 1mm; }}
 .smxcap {{ margin-top:1.5mm; font-size:6.5pt; color:{MUT}; line-height:1.35; }}
 .note b {{ color:{GOLDD}; }}
+.warn10 {{ font-size:7pt; margin-left:0.8mm; }}
+.gdcrit {{ border:1pt solid {GOLD}; border-left:4pt solid {GOLD}; border-radius:2mm; padding:3mm 4.5mm; margin-top:4.5mm; background:#FBF8F1; }}
+.gdtt {{ font-size:12pt; font-weight:800; color:{NAVY}; margin-bottom:1.5mm; }}
+.gdrow {{ font-size:11pt; font-weight:700; color:{INK}; margin:1.3mm 0; }}
+.gdrow b {{ color:{NAVY}; }}
+.gdn {{ display:inline-block; width:5mm; height:5mm; line-height:5mm; text-align:center; border-radius:50%; background:{GOLD}; color:#fff; font-size:8.5pt; font-weight:800; margin-right:1.5mm; }}
+.gdnt2 {{ font-size:8.6pt; font-weight:600; color:{MUT}; margin-left:3mm; }}
+.gdtab {{ width:100%; border-collapse:collapse; margin-top:1.5mm; }}
+.gdtab td {{ width:33.33%; vertical-align:top; font-size:10.2pt; font-weight:700; color:{INK}; line-height:1.45; padding-right:3mm; }}
+.gdtab td b {{ color:{NAVY}; }}
+.gdnt {{ font-size:8.6pt; font-weight:600; color:{MUT}; margin-top:1.6mm; }}
 .pbar {{ margin-top:3mm; width:100%; border-collapse:collapse; }}
 .pbar td {{ padding:1.2mm 0; vertical-align:middle; }}
-.pbar td {{ padding:0.6mm 0; }}
-.pbar .bl {{ width:26mm; text-align:right; font-size:9pt; font-weight:600; padding-right:3mm; }}
+.pbar td {{ padding:0.95mm 0; }}
+.pbar .bl {{ width:28mm; text-align:right; font-size:10.5pt; font-weight:700; padding-right:3mm; }}
 .pbar .track-td {{ width:130mm; }}
-.pbar .track {{ height:5mm; background:#EEF1F5; border-radius:3mm; }}
-.pbar .fill {{ height:5mm; border-radius:3mm; }}
+.pbar .track {{ height:6mm; background:#EEF1F5; border-radius:3mm; }}
+.pbar .fill {{ height:6mm; border-radius:3mm; }}
 .pbar .bv {{ width:24mm; text-align:right; font-size:9pt; font-weight:700; padding-left:3mm; }}
 .dtab {{ width:100%; border-collapse:collapse; }}
 .dcell {{ text-align:center; padding:1.5mm 0; }}
 
 .dcell .dn {{ font-size:9pt; font-weight:700; color:{NAVY}; margin-top:1mm; }}
-.legend {{ display:flex; justify-content:center; gap:7mm; margin:1.5mm 0 1mm; font-size:9pt; color:{INK}; }}
-.legend span {{ display:flex; align-items:center; gap:2mm; }}
-.legend i {{ width:4mm; height:4mm; border-radius:1mm; display:inline-block; }}
+.legend {{ display:flex; justify-content:center; gap:12mm; margin:3mm 0 2mm; font-size:11pt; font-weight:700; color:{INK}; }}
+.legend span {{ display:flex; align-items:center; gap:2.5mm; white-space:nowrap; padding:1.2mm 3mm; border-radius:3mm; background:#F4F6F9; }}
+.legend i {{ width:4.5mm; height:4.5mm; border-radius:1.2mm; display:inline-block; flex:0 0 auto; }}
 .sect2 {{ font-size:11.5pt; font-weight:800; color:{NAVY}; margin:3.5mm 0 1.5mm; border-bottom:1.5pt solid {GOLD}; padding-bottom:1.5mm; }}
 .sect2 span {{ font-size:8.5pt; font-weight:600; color:{MUT}; letter-spacing:.5px; margin-left:2mm; }}
 .btab {{ width:100%; border-collapse:collapse; font-size:9.5pt; }}
@@ -819,15 +1113,15 @@ body {{ color:{INK}; }}
   {note}
   {body}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · {pgno} / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · {pgno} / 17</span></div>
 </div>'''
     _n8='<div class="hcnote">★ <b>"특정Ⅰ·Ⅱ"는 회사마다 뜻이 다릅니다 — 라벨 말고 질병코드로 확인.</b> 흥국·롯데 특정Ⅰ=급성심근경색 / 한화·NH 특정Ⅰ=협심증·허혈·빈맥·부정맥·심부전 / DB 특정Ⅰ=협심증·허혈·염증 / KB 특정Ⅰ=협심증·허혈·빈맥·심부전 / 현대 특정Ⅰ=빈맥·심부전. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     _n9='<div class="hcnote">★ 삼성·메리츠는 허혈성심장질환을 6가지로 세분(급성기·후속·합병증·협심증·기타급성·만성). 롯데 특정심장Ⅰ=급성심근경색 / 흥국은 특정심혈관질환(기타부정맥제외)=협심·허혈·빈맥·심부전(급성심근 아님). 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>.</div>'
     _n8b='<div class="hcnote">★ 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
-    heart_chart = _fullpage(12,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
-                  _fullpage(13,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
-                  _fullpage(14,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
-                  _fullpage(15,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
+    heart_chart = _fullpage(14,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
+                  _fullpage(15,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
+                  _fullpage(16,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
+                  _fullpage(17,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
     _amt_brain={}; _amt_heart={}
@@ -840,14 +1134,80 @@ body {{ color:{INK}; }}
         (_amt_brain if _m[0]=='b' else _amt_heart)[_m[1]]=_v
     scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain)
     scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart)
+    # ★2026.07.11 실손 세대 자동판별(CI식) → 검출 세대 강조 표 + 세대별 맞춤 화법
+    _sg=rep.get('silson_gen',{'status':'none'})
+    # ★2026.07.11 지점장 확정 세분화: 2세대 3분할 / 1세대 생보·손보 구분(상해의료비)
+    _GENROWS=[('1','1세대 (손보)','~ 2009.09','갱신 3·5년<br>재가입 없음','자기부담금 없음 · 상해의료비 별도 담보<br><span class="smn">※ 2009.07~09월 가입은 회사별로 1·2세대가 다를 수 있음</span>','손보'),
+              ('1','1세대 (생보)','~ 2009.09','갱신 3·5년<br>재가입 없음','자기부담 20% · 상해의료비 포함형<br><span class="smn">※ 2009.07~09월 가입은 회사별로 1·2세대가 다를 수 있음</span>','생보'),
+              ('2','2-1세대','2009.10 ~ 2012.12','갱신 3년<br>재가입 없음','자기부담 10% · 급여90/비급여80~90%','2-1'),
+              ('2','2-2세대','2013.01 ~ 2015.12','갱신 1년<br><b>재가입 15년</b>','자기부담 10~20% 선택','2-2'),
+              ('2','2-3세대','2016.01 ~ 2017.03','갱신 1년<br>재가입 15년','정신질환 급여 보상 · 응급실 비응급 면책','2-3'),
+              ('3','3세대 (착한실손)','2017.04 ~ 2021.06','갱신 1년<br>재가입 15년','급여90/비급여80% · 3대 비급여 70%<br><span class="smn">도수 350만 · 주사 250만 · MRI 300만</span>','' ),
+              ('4','4세대','2021.07 ~ 2026.05.05','갱신 1년<br><b>재가입 5년</b>','급여80/비급여70% · 비급여 할증<br><span class="smn">자기부담금 한도 연 200만(급여·입원만)</span>','' ),
+              ('5','5세대','2026.05.06 ~','갱신 1년<br>재가입 5년','급여 통원 건보율 연동 · 비급여 중증/비중증 분리<br><span class="smn">도수·체외·주사제는 <b>비중증(특약2)만</b> 보장 제외</span>','' )]
+    _hg=_sg.get('gen') if _sg.get('status')=='auto' else None
+    _hs=_sg.get('sub','') if _sg.get('status')=='auto' else ''
+    _rws=[]
+    for gk,lbl,per,ren,feat,sub in _GENROWS:
+        base='gen1' if gk=='1' else ('gen5' if gk=='5' else '')
+        hit = (_hg is not None and str(_hg)==gk and (sub=='' or sub==_hs))
+        cls=(base+' genhit').strip() if hit else base
+        pcls=' class="bad"' if gk=='5' else ' class="g"'
+        fcls=' class="bad"' if gk=='5' else ''
+        star='<span class="hitmk">✔ 가입</span>' if hit else ''
+        _rws.append(f'<tr class="{cls}"><td class="g">{lbl}{star}</td><td{pcls}>{per}</td><td class="rencol">{ren}</td><td{fcls}>{feat}</td></tr>')
+    _gentab=('<table class="st gentab"><tr><th style="width:18%">세대</th><th style="width:18%">판매시기 (가입일)</th>'
+             '<th style="width:14%">갱신 · 재가입</th><th style="width:52%">핵심 특징</th></tr>'+''.join(_rws)+'</table>')
+    _GEN_TALK={
+     '1손보':('1세대 손보 실손 — 가장 두터운 조건입니다. 자기부담금 없음.','★절대 해지 금지 — 재가입 불가. 상해의료비가 별도 담보로 붙어 있는지 증권 확인.','도수·체외충격파 본인부담 거의 없음'),
+     '1생보':('1세대 생보 실손 — 자기부담 20%, 상해의료비 포함형입니다.','손보 1세대(0%)와 부담률이 다릅니다. 유지가 유리하나 자기부담 20% 안내 필요.','도수·체외충격파 본인부담 소액'),
+     '2-1':('2-1세대(~2012.12) — 표준화 초기, 자기부담 10%.','재가입 주기가 없습니다. 유지가 유리합니다.','도수 약 4천원 · 체외충격파 약 2만원 — 보장 가능'),
+     '2-2':('2-2세대(2013.01~2015.12) — 자기부담 10~20% 선택형.','★재가입 15년 주기가 시작된 구간입니다. 재가입 시점 확인 필요.','도수 약 4천원 · 체외충격파 약 2만원 — 보장 가능'),
+     '2-3':('2-3세대(2016.01~2017.03) — 정신질환 급여 보상 개시.','응급실 비응급 내원은 면책입니다. 재가입 15년 유지.','도수 약 4천원 · 체외충격파 약 2만원 — 보장 가능'),
+     '3':('3세대 착한실손 — 급여 10%/비급여 20%.','도수·비급여주사·MRI가 특약으로 분리됐습니다. 특약 가입 여부 확인.','도수 4~8천원 · 체외충격파 약 3만원 — 연 50회 한도'),
+     '4':('4세대 — 급여 20%/비급여 30%, 비급여 할증 구조.','비급여를 많이 쓰면 보험료가 할증됩니다.','도수 약 8천원 · 체외충격파 약 3만원 — 보장 가능'),
+     '5':('★5세대 — 비급여 대폭 축소.','기존 세대(특히 1·2세대) 보유 중이면 유지가 훨씬 유리합니다.','★도수 본인부담 약 4.2만원(95%) · 체외충격파 보장 제외')}
+    def _talkkey(g,sub):
+        if g==1: return '1생보' if sub=='생보' else '1손보'
+        if g==2: return sub if sub in ('2-1','2-2','2-3') else '2-2'
+        return str(g)
+    # ★실손 계약 결론 박스 (어느 계약에 실손이 있는지)
+    _sl=rep.get('silson_list',[])
+    if _sl:
+        _rows=''.join(
+            f'<tr><td class="slc">{_html.escape(x["co"])}</td>'
+            f'<td class="slp">{_html.escape(x["prod"])}</td>'
+            f'<td class="sld">{_html.escape(x["join"])}</td>'
+            f'<td class="sla">{x["amt"]:,}원</td></tr>' for x in _sl)
+        _silbox=('<div class="silbox"><div class="sbt">📌 고객님의 <b>실손보험은 여기</b> 들어 있습니다</div>'
+                 '<table class="sltab"><tr><th>보험사</th><th>상품명</th><th>가입일</th><th>월 보험료</th></tr>'
+                 f'{_rows}</table>'
+                 f'<div class="sbn">위 계약의 <b>가입일 기준</b>으로 세대를 판별했습니다. 실손이 여러 개면 <b>가장 오래된 계약</b>이 기준입니다.</div></div>')
+    else:
+        _silbox=('<div class="silbox none"><div class="sbt">📌 실손보험 <b>미보유</b></div>'
+                 '<div class="sbn">보유 계약에서 실손 담보(입원·통원·약값)가 확인되지 않습니다. 실손 가입 검토가 필요합니다.</div></div>')
+    if _sg.get('status')=='auto':
+        _g=_sg['gen']; _sub=_sg.get('sub',''); _t=_GEN_TALK[_talkkey(_g,_sub)]
+        _lbl=(f"{_g}세대 ({_sub})" if (_g==1 and _sub) else (_sub+'세대' if _g==2 and _sub else f'{_g}세대'))
+        _silverd=(f'<div class="silverd g{_g}"><div class="svhead">🎯 고객님 실손 = <b>{_html.escape(_lbl)}</b>'
+                  f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} · 가입 {_html.escape(str(_sg.get("date","")))} (자동 판별)</span></div>'
+                  f'<div class="svbody"><b>{_t[0]}</b><br>{_t[1]}<br><span class="svtx">🖐 {_t[2]}</span></div></div>')
+    elif _sg.get('status')=='check':
+        _silverd=('<div class="silverd chk"><div class="svhead">🔎 실손 세대 — 확인 필요'
+                  f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} 실손 보유 · 가입일 미확정</span></div>'
+                  '<div class="svbody">증권에서 <b>실손 가입일</b>을 확인하면 세대가 자동 결정됩니다. 아래 칸에 가입일을 기입하세요.</div></div>')
+    else:
+        _silverd=('<div class="silverd none"><div class="svhead">ℹ️ 실손보험 미보유</div>'
+                  '<div class="svbody">현재 실손 담보가 확인되지 않습니다. 실손 가입 검토를 권유드립니다.</div></div>')
     doc=f'''<!DOCTYPE html><html><head><meta charset="utf-8"><style>{css}</style></head><body>
 <!-- P0: 표지 (최종본 260707 스펙) -->
 <div class="pg">
  <div class="cvbar"></div>
  <div class="cvbody">
   <div class="cvbrand">MAKEONE<div class="ln"></div></div>
-  <div class="cvtitle">보장 진단서<br><span class="g">{cust}</span> 고객님</div>
+  <div class="cvtitle">보장 진단서</div>
   <div class="cvsub">{rep.get('meta','')}</div>
+  <div class="cvname2"><span class="g">{cust}</span> 고객님</div>
   <div class="cvhr"></div>
   <div class="cvstats">
    <div class="cvst"><div class="k">보유 계약</div><div class="v">{rep.get('n_contract',0)} <small>건</small></div></div>
@@ -874,7 +1234,7 @@ body {{ color:{INK}; }}
   <div class="sect">보장 현황 <span>CATEGORY COVERAGE</span></div>
   <table class="cov">{rows}</table>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 1 / 17</span></div>
 </div>
 <!-- P2 -->
 <div class="pg">
@@ -887,15 +1247,23 @@ body {{ color:{INK}; }}
    <td><div class="dc g"><div class="h">✓ 보유 강점</div><ul>{li(rep["strength"])}</ul></div></td>
    <td><div class="dc w"><div class="h">! 보장 공백</div><ul>{li(rep["weak"]) if rep["weak"] else '<li style="color:#1F7A4D"><b>주요 공백 없음</b> — 핵심담보 균형이 양호합니다.</li>'}</ul></div></td>
   </tr></table>
-  <div class="sect" style="margin-top:4mm">갱신 / 비갱신 구조 <span>RENEWAL</span></div>
+  <div class="sect" style="margin-top:4.5mm">갱신 / 비갱신 구조 <span>RENEWAL</span></div>
   <table class="ren"><tr>
    <td><div class="rbox b"><div class="rh">갱신형 {renew}건<small>보험료 인상 가능</small></div>{prem_rows(rep["renew_list"],True)}</div></td>
    <td><div class="rbox k"><div class="rh">비갱신형 {nonrenew}건<small>만기까지 고정</small></div>{prem_rows(rep["nonrenew_list"],False)}</div></td>
   </tr></table>
-  <div class="sect" style="margin-top:4mm">월 보험료 구성 <span>PREMIUM</span></div>
+  <div class="sect" style="margin-top:4.5mm">월 보험료 구성 <span>PREMIUM</span></div>
   <table class="pbar">{bars}</table>
+  <div class="gdcrit">
+   <div class="gdtt">✅ 좋은 보험 가입 기준 <span class="gdnt2">※ 월 보험료 <b style="color:{GAP}">10만원 이상</b> = <b style="color:{GAP}">빨간색 ▲</b></span></div>
+   <table class="gdtab"><tr>
+    <td><span class="gdn">1</span> 보험료 대비<br><b>담보의 다양성</b></td>
+    <td><span class="gdn">2</span> <b>보상이 잘 되는 담보</b>로<br>가입되어 있는지 체크</td>
+    <td><span class="gdn">3</span> <b>은퇴 · 노후</b>가<br>준비되어 있는지 체크</td>
+   </tr></table>
+  </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 2 / 17</span></div>
 </div>
 <!-- P3: 핵심 보장 분석 (CI 선지급 + 주요 치료비) -->
 <div class="pg">
@@ -908,7 +1276,7 @@ body {{ color:{INK}; }}
   <table class="ctab">{crows}</table>
   {comment_html}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 3 / 17</span></div>
 </div>
 <!-- P4 -->
 <div class="pg">
@@ -919,9 +1287,9 @@ body {{ color:{INK}; }}
   <div class="sect">부위별 충족률 <span>COVERAGE LEVEL</span></div>
   <table class="dtab">{drows}</table>
   <div class="legend">
-    <span><i style="background:{GOOD}"></i>충실 70%↑</span>
-    <span><i style="background:{GOLDD}"></i>보강권장 40–69%</span>
-    <span><i style="background:{GAP}"></i>취약 40%↓</span>
+    <span><i style="background:#1F7A4D"></i>충실 70%↑</span>
+    <span><i style="background:#D08B1F"></i>보강권장 40–69%</span>
+    <span><i style="background:#C0242E"></i>취약 40%↓</span>
   </div>
   <div class="sect2">충족률 산정 근거 <span>보유 ÷ {band} 권장</span></div>
   <table class="btab">
@@ -931,13 +1299,274 @@ body {{ color:{INK}; }}
   <div class="note">※ <b>충족률 = 보유 ÷ 연령밴드 권장액 × 100</b> (상한 100%). 권장액은 업계 적정 가입금액 가이드(암 진단비 5천만~1억·뇌혈관 3천만~5천만·허혈성 심장 3천만 등) 기준이며 {band} 표준밴드를 적용했습니다. 운전자·실손·일당·응급실은 핵심담보 보유개수 기준입니다. 개인 소득·가족력에 따라 권장액은 상담을 통해 조정됩니다.{age_warn}</div>
   {advice_html}
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 4 / 17</span></div>
+</div>
+<!-- P12b: 실손 세대 구분 (단독) -->
+<div class="pg silgenpg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 실손 세대 확인</div>
+  <div class="nm">실손보험 <b>세대 구분</b> — 고객님은 몇 세대이신가요?</div>
+  <div class="pgn"><b>5</b>실손 세대 구분</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="wscap n2 wsectcap gap2">📅 실손 세대 구분 — 판매시기(가입일) 기준</div>
+  {_gentab}
+  <div class="note">※ 세대 판별은 <b>가입일</b> 기준입니다. 표준화 실손은 2009.10월부터 판매되어, 본 진단서는 <b>2009.09월까지 1세대 / 2009.10월부터 2세대</b>로 적용합니다.</div>
+  {_silverd}
+  {_silbox}
+  <div class="renote">
+   <div class="rentt">🔄 재가입 주기 — 약관이 바뀌는 시점</div>
+   <div class="renrow"><b>2013.01 ~</b> &nbsp;재가입 <b>15년</b></div>
+   <div class="renrow"><b>2021.07 ~</b> &nbsp;재가입 <b>5년</b> <span class="smn">(4세대)</span></div>
+   <div class="renrow"><b>2026.05.06 ~</b> &nbsp;재가입 <b>5년</b> <span class="smn">(5세대)</span></div>
+   <div class="rennt">재가입 시점이 오면 <b>그때 팔고 있는 상품 약관으로 바뀐다.</b> 2013.01 이전 가입은 재가입 조건이 없어 기존 약관 그대로 유지된다.</div>
+  </div>
+
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 17</span></div>
+</div>
+<!-- P5d: 5세대 쉽게 이해하기 -->
+<div class="pg ez5pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
+  <div class="nm">5세대 실손 <b>— 쉽게 딱 3가지만</b></div>
+  <div class="pgn"><b>6</b>5세대 쉽게</div><div class="bar"></div></div>
+ <div class="body sbody">
+
+  <div class="ezbox ez1">
+   <div class="eztt"><span class="eznum">1</span> 병원비는 <b>두 종류</b>다</div>
+   <table class="eztab">
+    <tr>
+     <td class="ezc ezblue">
+      <div class="ezh">급여</div>
+      <div class="ezd">건강보험이 <b>도와주는</b> 치료<br><span class="smn">감기 · 수술 · 입원 등 대부분</span></div>
+     </td>
+     <td class="ezc ezred">
+      <div class="ezh">비급여</div>
+      <div class="ezd">건강보험이 <b>안 도와주는</b> 치료<br><span class="smn">도수치료 · MRI · 영양주사 등</span></div>
+     </td>
+    </tr>
+   </table>
+   <div class="ezn">5세대는 이 둘을 <b>따로따로</b> 계산한다. 예전엔 뭉뚱그렸다.</div>
+  </div>
+
+  <div class="ezbox ez2">
+   <div class="eztt"><span class="eznum">2</span> 급여 — <b>큰 병원 갈수록 내 돈이 커진다</b></div>
+   <div class="ezhosp">
+    <table class="ezhtab">
+     <tr>
+      <td class="ezhc"><div class="ezhb h1">30%</div><div class="ezhl">의원<br><span class="smn">동네병원</span></div></td>
+      <td class="ezarrow">→</td>
+      <td class="ezhc"><div class="ezhb h2">40%</div><div class="ezhl">병원</div></td>
+      <td class="ezarrow">→</td>
+      <td class="ezhc"><div class="ezhb h3">50%</div><div class="ezhl">종합병원</div></td>
+      <td class="ezarrow">→</td>
+      <td class="ezhc"><div class="ezhb h4">60%</div><div class="ezhl">대학병원</div></td>
+      <td class="ezarrow">→</td>
+      <td class="ezhc"><div class="ezhb h5">90%</div><div class="ezhl">응급실<br><span class="smn">경증</span></div></td>
+     </tr>
+    </table>
+   </div>
+   <div class="ezn"><b>통원(외래)만</b> 해당. <b>입원은 어느 병원이든 20%</b>로 똑같다.<br>※ 4세대는 병원 상관없이 20%였다 → 5세대는 <b class="bad">대학병원 가면 60%를 내가 낸다.</b></div>
+  </div>
+
+  <div class="ezbox ez3">
+   <div class="eztt"><span class="eznum">3</span> 비급여 — <b>큰 병이냐 아니냐</b>로 갈린다</div>
+   <table class="eztab">
+    <tr>
+     <td class="ezc ezgold">
+      <div class="ezh">중증 <span class="ezsub">특약1</span></div>
+      <div class="ezbig">내 돈 <b>30%</b></div>
+      <div class="ezd"><b>산정특례 = 암 · 뇌 · 심장 · 희귀난치</b><br>4세대와 <b>똑같다</b> ✔<br>연 5,000만 · 통원 회당 20만<br><span class="good">★1년에 500만 넘게 내면 그 뒤론 <b>보험이 다 낸다</b></span></div>
+     </td>
+     <td class="ezc ezpink">
+      <div class="ezh">비중증 <span class="ezsub">특약2</span></div>
+      <div class="ezbig bad">내 돈 <b>50%</b></div>
+      <div class="ezd"><b>그 외 전부</b> (허리·두통·감기)<br>4세대 30% → <b class="bad">50%로 올랐다</b><br>한도 5,000만 → <b class="bad">1,000만</b><br><span class="bad">★도수·체외충격파·영양주사는 <b>아예 안 나온다</b></span></div>
+     </td>
+    </tr>
+   </table>
+  </div>
+
+  <div class="ezsum">
+   <div class="ezst">💡 한 줄로 외우세요</div>
+   <div class="ezsl"><b>"큰 병은 그대로, 작은 병은 반만. 큰 병원 갈수록 내 돈이 커진다."</b></div>
+   <div class="ezsn">암·뇌·심장 같은 <b>큰 병은 4세대와 똑같이</b> 보장받고 오히려 500만원 상한까지 생겼다.<br>대신 <b class="bad">허리·어깨 도수치료, 영양주사는 5세대에서 아예 못 받는다.</b> 자주 받는 분은 지금 실손을 <b>유지</b>하는 게 낫다.</div>
+  </div>
+
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 17</span></div>
+</div>
+<!-- P5f: 중증 vs 비중증 (그림형) -->
+<div class="pg ez5pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
+  <div class="nm">중증 vs 비중증 <b>— 기준은 '산정특례'다</b></div>
+  <div class="pgn"><b>7</b>중증·비중증</div><div class="bar"></div></div>
+ <div class="body sbody">
+
+  <div class="svdef">
+   <div class="svdt">🏥 중증의 기준 = <b>건강보험 산정특례 대상자</b></div>
+   <div class="svdd">보험사가 정하는 게 아니다. <b>국민건강보험공단에 산정특례로 등록된 질환이면 '중증(특약1)'</b>, 아니면 전부 '비중증(특약2)'이다.<br>
+   산정특례 = 암·뇌혈관·심장·희귀난치질환 등 큰 병에 대해 <b>건보 본인부담을 5~10%로 낮춰주는 제도</b>. 진단 후 공단에 등록하면 산정특례 등록증이 나온다.<br>
+   <span class="bad">※ 같은 도수치료라도 — 암 치료 목적이면 중증(보장), 허리 통증이면 비중증(0원). 병명이 아니라 <b>산정특례 등록 여부</b>가 갈림길이다.</span></div>
+  </div>
+
+  <div class="svtab">
+   <div class="svc g">
+    <div class="svhd">
+     <div class="svh1">특약1 · 중증 비급여</div>
+     <div class="svh2">산정특례 등록 질환 + 인과관계 분명한 합병증</div>
+    </div>
+    <div class="svbd">
+     <div class="svpct">내 돈 <b>30%</b> &nbsp;<span class="smn">입원 기준</span></div>
+     <div class="svchips">
+      <span class="svchip">암</span><span class="svchip">뇌혈관</span><span class="svchip">심장</span><span class="svchip">희귀·중증난치</span><span class="svchip">중증화상</span><span class="svchip">중증외상</span><span class="svchip">결핵</span><span class="svchip">중증치매</span>
+     </div>
+     <div class="svrow"><div class="svk">자기부담</div><div class="svv">입원 30% / 통원 Max[30%, 3만]</div></div>
+     <div class="svrow"><div class="svk">한도</div><div class="svv">연 <b>5,000만</b> · 통원 회당 20만<br><span class="smn">입원 한도 없음</span></div></div>
+     <div class="svrow"><div class="svk">상한</div><div class="svv"><span class="ok">★ 상급종합·종합 입원 시<br>연 자기부담 500만 초과분 <b>전액 보장</b></span></div></div>
+     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="ok">모두 보장 ✔</span> <span class="smn">면책 없음</span></div></div>
+     <div class="svrow"><div class="svk">보험료 할증</div><div class="svv"><span class="ok">없음</span> <span class="smn">아무리 써도 그대로</span></div></div>
+    </div>
+   </div>
+   <div class="svc r">
+    <div class="svhd">
+     <div class="svh1">특약2 · 비중증 비급여</div>
+     <div class="svh2">그 외 전부 — 허리·어깨·감기·미용 아닌 일반 비급여</div>
+    </div>
+    <div class="svbd">
+     <div class="svpct">내 돈 <b>50%</b> &nbsp;<span class="smn">입원 기준</span></div>
+     <div class="svchips">
+      <span class="svchip">디스크·요통</span><span class="svchip">어깨·관절</span><span class="svchip">일반 수술</span><span class="svchip">비중증 MRI</span><span class="svchip">영양·주사</span><span class="svchip">도수·체외</span>
+     </div>
+     <div class="svrow"><div class="svk">자기부담</div><div class="svv">입원 50% / 통원 Max[50%, 5만]</div></div>
+     <div class="svrow"><div class="svk">한도</div><div class="svv">연 <span class="no">1,000만</span> · 입원 회당 300만<br><span class="smn">통원 1일 20만</span></div></div>
+     <div class="svrow"><div class="svk">상한</div><div class="svv"><span class="no">없음</span> <span class="smn">초과분은 전부 본인 부담</span></div></div>
+     <div class="svrow"><div class="svk">도수·체외<br>비급여주사</div><div class="svv"><span class="no">보장 제외 ✘</span> <span class="smn">+ 미등재 신의료기술</span></div></div>
+     <div class="svrow"><div class="svk">보험료 할증</div><div class="svv"><span class="no">최대 +300%</span> <span class="smn">비급여 보험료 4배</span></div></div>
+    </div>
+   </div>
+  </div>
+
+  <div class="svex">
+   <div class="svec">
+    <div class="svet">💰 비급여 <b>100만원</b> 냈다면</div>
+    <div class="sveg">중증 → <b>70만원</b> 환급</div>
+    <div class="sver">비중증 → <b>50만원</b> 환급</div>
+    <div class="svesm">같은 100만원인데 20만원 차이. 비중증은 소액일수록 더 불리하다(4만원 청구 = 0원).</div>
+   </div>
+   <div class="svec">
+    <div class="svet">💉 <b>도수치료</b> 100만원</div>
+    <div class="sveg">중증(암 치료) → <b>70만원</b></div>
+    <div class="sver">비중증(요통) → <b>0원</b></div>
+    <div class="svesm">2026.07.01부터 도수는 관리급여(1회 43,850원·본인 95%). 체외충격파·비급여주사는 비중증이면 그대로 0원.</div>
+   </div>
+   <div class="svec">
+    <div class="svet">🧲 <b>MRI</b> 50만원 (통원)</div>
+    <div class="sveg">중증 → <b>35만원</b> 환급</div>
+    <div class="sver">비중증 → <b>25만원</b> 환급</div>
+    <div class="svesm">MRI 별도 한도는 없다. 각 특약 규칙대로 — 중증 Max[30%,3만] / 비중증 Max[50%,5만].</div>
+   </div>
+  </div>
+
+  <div class="ezsum">
+   <div class="ezst">💡 상담 한 줄</div>
+   <div class="ezsl"><b>"산정특례 등록증이 나오는 병이면 5세대도 괜찮습니다. 아니면 절반만 나옵니다."</b></div>
+   <div class="ezsn">암·뇌·심장은 오히려 <b>500만원 상한</b>이 생겨 강화됐다. 문제는 <b class="bad">도수·체외충격파·영양주사</b> — 비중증이면 한 푼도 안 나온다. 이 치료를 정기적으로 받는 분은 5세대 전환 금지.</div>
+  </div>
+
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 17</span></div>
+</div>
+<!-- P5e: 5세대 도표 + 예시 -->
+<div class="pg ez5pg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
+  <div class="nm">5세대는 <b>얼마나 불리해지나</b> — 한눈에</div>
+  <div class="pgn"><b>8</b>5세대 도표</div><div class="bar"></div></div>
+ <div class="body sbody">
+
+  <table class="g4wrap">
+   <tr>
+    <td class="g4cell">
+     <div class="g4tt">① 급여 <span class="smn">통원 자기부담률</span></div>
+     <div class="barwrap">
+      <div class="barcol"><div class="hbar q1"><span>0</span></div><div class="barlb vt">1세대</div></div>
+      <div class="barcol"><div class="hbar q2"><span>10</span></div><div class="barlb vt">2세대</div></div>
+      <div class="barcol"><div class="hbar q2"><span>10</span></div><div class="barlb vt">3세대</div></div>
+      <div class="barcol"><div class="hbar q3"><span>20</span></div><div class="barlb vt">4세대</div></div>
+      <div class="barcol"><div class="hbar q5"><span>90</span></div><div class="barlb vt bad">5세대</div></div>
+     </div>
+     <div class="g4nt">4세대까지 <b>20%</b> → 5세대 <b class="bad">최대 90%</b><span class="smn">(응급실)</span></div>
+    </td>
+    <td class="g4cell">
+     <div class="g4tt">② 비급여 <span class="smn">자기부담률</span></div>
+     <div class="barwrap">
+      <div class="barcol"><div class="hbar q1"><span>0</span></div><div class="barlb vt">1세대</div></div>
+      <div class="barcol"><div class="hbar q3"><span>20</span></div><div class="barlb vt">2세대</div></div>
+      <div class="barcol"><div class="hbar q4"><span>30</span></div><div class="barlb vt">3세대</div></div>
+      <div class="barcol"><div class="hbar q4"><span>30</span></div><div class="barlb vt">4세대</div></div>
+      <div class="barcol"><div class="hbar q5b"><span>50</span></div><div class="barlb vt bad">5세대</div></div>
+     </div>
+     <div class="g4nt">비중증 <b class="bad">50%</b> · 도수 <b class="bad">0원</b><span class="smn">(면책)</span></div>
+    </td>
+   </tr>
+   <tr>
+    <td class="g4cell">
+     <div class="g4tt">③ 할증 제도 <span class="smn">비급여 보험료</span></div>
+     <div class="barwrap">
+      <div class="barcol"><div class="hbar q1"><span>無</span></div><div class="barlb vt">1세대</div></div>
+      <div class="barcol"><div class="hbar q1"><span>無</span></div><div class="barlb vt">2세대</div></div>
+      <div class="barcol"><div class="hbar q1"><span>無</span></div><div class="barlb vt">3세대</div></div>
+      <div class="barcol"><div class="hbar q5"><span>300</span></div><div class="barlb vt">4세대</div></div>
+      <div class="barcol"><div class="hbar q5"><span>300</span></div><div class="barlb vt bad">5세대</div></div>
+     </div>
+     <div class="g4nt">4·5세대만 할증 — <b class="bad">비급여 보험료 최대 4배</b></div>
+    </td>
+    <td class="g4cell">
+     <div class="g4tt">④ 보장 한도 <span class="smn">비급여 연간</span></div>
+     <div class="barwrap">
+      <div class="barcol"><div class="hbar w1"><span>1억</span></div><div class="barlb vt">1세대</div></div>
+      <div class="barcol"><div class="hbar w2"><span>5천</span></div><div class="barlb vt">2세대</div></div>
+      <div class="barcol"><div class="hbar w2"><span>5천</span></div><div class="barlb vt">3세대</div></div>
+      <div class="barcol"><div class="hbar w2"><span>5천</span></div><div class="barlb vt">4세대</div></div>
+      <div class="barcol"><div class="hbar w5"><span>1천</span></div><div class="barlb vt bad">5세대</div></div>
+     </div>
+     <div class="g4nt">비중증 한도 <b class="bad">5천만 → 1천만</b> (1/5)</div>
+    </td>
+   </tr>
+  </table>
+
+  <div class="wscap n2 wsectcap gap2">💊 실제로 얼마나 받나 — <b>입원 vs 통원</b> (5세대)</div>
+  <table class="st extab">
+   <tr>
+    <th style="width:16%">치료</th>
+    <th class="hjung" style="width:21%">중증 · 통원</th>
+    <th class="hjung" style="width:21%">중증 · 입원</th>
+    <th class="hbi" style="width:21%">비중증 · 통원</th>
+    <th class="hbi" style="width:21%">비중증 · 입원</th>
+   </tr>
+   <tr><td class="g"><b>MRI</b><br><span class="smn">50만원</span></td>
+    <td>내 돈 15만<br><b class="good">20만 환급</b><br><span class="smn">회당 20만 한도</span></td>
+    <td>내 돈 15만<br><b class="good">35만 환급</b><br><span class="smn">한도 없음</span></td>
+    <td class="bad">내 돈 25만<br><b>20만 환급</b><br><span class="smn">일당 20만 한도</span></td>
+    <td class="bad">내 돈 25만<br><b>25만 환급</b><br><span class="smn">회당 300만 한도</span></td></tr>
+   <tr><td class="g"><b>도수치료</b><br><span class="smn">1회 43,850원</span></td>
+    <td colspan="2">관리급여 전환 <span class="smn">(2026.07.01~)</span><br>본인부담률 <b>95%</b> → 내 돈 <b>약 4만 2천원</b><br><span class="smn">연 15회 · 주 2회 제한</span></td>
+    <td colspan="2" class="bad"><b>보장 제외 — 0원</b><br>입원해도 <b>안 나온다</b><br><span class="smn">관리급여 전환 시 95% 본인부담</span></td></tr>
+   <tr><td class="g"><b>체외충격파</b><br><span class="smn">1회 10만원</span></td>
+    <td colspan="2">보장 <span class="smn">(산정특례 질환 치료 시)</span></td>
+    <td colspan="2" class="bad"><b>보장 제외 — 0원</b> (전액 본인부담)</td></tr>
+   <tr><td class="g"><b>비급여 주사</b><br><span class="smn">영양주사 등</span></td>
+    <td colspan="2">보장 <span class="smn">(산정특례 질환 치료 시)</span></td>
+    <td colspan="2" class="bad"><b>보장 제외 — 0원</b></td></tr>
+  </table>
+  <div class="exn">※ <b>중증</b> = 암·뇌혈관·심장·희귀난치(산정특례) 질환 <b>치료 목적</b>일 때만. 허리·어깨 통증으로 받는 도수치료는 <b class="bad">비중증 → 0원</b>이다.<br>※ MRI 자기부담 = 중증 Max[30%, 3만] / 비중증 Max[50%, 5만]. <b class="bad">통원은 20만 한도에 걸려 잘린다.</b></div>
+
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / 17</span></div>
 </div>
 <!-- P5: 담보별 보장범위 (최종본 260707 스펙) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>5</b>담보별 보장범위</div><div class="bar"></div></div>
+  <div class="pgn"><b>9</b>담보별 보장범위</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">담보별 보장범위 — 질병코드 커버 <span>DISEASE-CODE COVERAGE · 각 축=개별 담보·각각 보상 · 산정특례·순환계·외상성뇌출혈=단독</span></div>
   {p5box}
@@ -957,14 +1586,14 @@ body {{ color:{INK}; }}
   </div>
   <div class="scvbot"><div class="h">산정특례 기준 (진단 기반 · 별개 담보축)</div>· 산정특례 = 위 4범위(허혈성·2대·순환계)와 <b>축이 다른 별개 담보</b> — 마스터 '산정특례심장'·'산정특례뇌혈관' 전용행에서 진단코드 기반으로 지급. &nbsp;· 외상성 뇌출혈(S06) = 뇌혈관진단비 미보장 → <b>산정특례 축only</b>로만 커버(고정사실). &nbsp;· 대상 코드범위(확정): <b>[뇌]</b> I60~69 전체 + I67.0·1·5·6 + Q28 선천 + S06 / <b>[심]</b> I20~25·I30~41·I42~45·I46·I47~50 + 판막. <b>각각 개별 담보로 각각 보상.</b> 지급조건·기간(30일·5% 등)만 회사·약관별 [확인].</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 5 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / 17</span></div>
 </div>
 
 <!-- P6: 주요치료비 변천사 (juyo_a4_v7 상세본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>6</b>주요치료비 변천사</div><div class="bar"></div></div>
+  <div class="pgn"><b>10</b>주요치료비 변천사</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">3대 주요치료비 담보의 변천사 <span>①비례형(구간) → ②정액형 → ③비급여 → 생활비 · 정액형 가입금액 100만원부터</span></div>
   <div class="jc">
@@ -1014,13 +1643,13 @@ body {{ color:{INK}; }}
     <div class="jnote2">총진료비 기준(심평원·건보공단 통계) · 재발 시 이 비용이 반복 — 주요치료비가 채운다</div>
    </div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / 17</span></div>
 </div>
 <!-- P7: 상담 워크시트 (FINAL版·3단 중앙이름+산정특례) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 상담 워크시트</div>
   <div class="nm">지금 고객의 <b>3대 주요치료비</b>는?</div>
-  <div class="pgn"><b>7</b>상담 워크시트</div><div class="bar"></div></div>
+  <div class="pgn"><b>11</b>상담 워크시트</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="ws3">
    <div class="wscol wsmain">
@@ -1052,14 +1681,14 @@ body {{ color:{INK}; }}
    </div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / 17</span></div>
 </div>
 
 <!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
-  <div class="pgn"><b>8</b>비갱신 추천</div><div class="bar"></div></div>
+  <div class="pgn"><b>12</b>비갱신 추천</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="ws3">
    <div class="wscol wsmain">
@@ -1092,13 +1721,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">🔔 바뀌지 않는 담보는 <b>비갱신</b>으로 가입하셔서 <b>은퇴 후</b>를 준비해야 합니다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / 17</span></div>
 </div>
 <!-- P10: 운전자 · 간병 (병합) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">운전자 · 간병 <b>— 일상 리스크 대비</b></div>
-  <div class="pgn"><b>9</b>운전자·간병</div><div class="bar"></div></div>
+  <div class="pgn"><b>13</b>운전자·간병</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">🚗 운전자보험 담보</div>
   <div class="ws2">
@@ -1132,13 +1761,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">🔔 <b>간병인 사용일당</b> 사용 시 환자와 <b>24시간 동행</b>해야 인정됩니다.</div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / 17</span></div>
 </div>
 <!-- P12: 재가보험 -->
 <div class="pg jgbig">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">재가보험 <b>— 장기요양 · 노후 돌봄</b></div>
-  <div class="pgn"><b>10</b>재가보험</div><div class="bar"></div></div>
+  <div class="pgn"><b>14</b>재가보험</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">🏠 재가보험 · 장기요양</div>
   <div class="ws2">
@@ -1182,58 +1811,8 @@ body {{ color:{INK}; }}
   <div class="wstalk2"><b>🏫 노치원(주야간보호)</b> — 어르신을 <b>낮 동안 시설에서 돌봄</b>(식사·목욕·재활·프로그램)하고 저녁엔 집으로 귀가. 가족은 낮에 생업·휴식이 가능하다. 복합재가 5종 중 하나로, 등급만 있으면 이용.</div>
   <div class="wstalk2"><b>📌 장기요양등급, 언제 신청?</b> — <b>만 65세 이상</b>은 소득 무관 누구나 신청. <b>65세 미만이라도</b> 치매·뇌혈관질환·파킨슨병 등 <b>노인성 질병</b>이 있으면 <b>의사소견서(진단서)</b> 첨부해 <b>미리 신청 가능</b>. 건강보험공단(☎1577-1000)·앱·홈페이지 신청 → 방문조사 → 약 30일 내 등급 판정. 65세 전에 준비해 두면 은퇴 후 돌봄 공백을 막는다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / 15</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / 17</span></div>
 </div>
-<!-- P13: 실손보험 세대별 부담 비교 -->
-<div class="pg">
- <div class="top"><div class="eb">BARUM 보장분석 · 실손 세대 점검</div>
-  <div class="nm">실손보험 <b>세대별 부담 비교</b> — 2026.07~ 달라집니다</div>
-  <div class="pgn"><b>11</b>실손 세대</div><div class="bar"></div></div>
- <div class="body sbody">
-  <div class="ws2">
-   <div class="wscol">
-    <div class="stt">🖐 도수치료 <small>1회 43,850원 기준(예시)</small></div>
-    <table class="st"><tr><th>세대</th><th>예상 본인부담</th><th>보험 적용</th></tr>
-     <tr class="gen1"><td class="g">1세대</td><td class="g">0원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">2세대</td><td>약 4천원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">3세대</td><td>약 4천~8천원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">4세대</td><td>약 8천원</td><td class="ok">보장 가능</td></tr>
-     <tr class="gen5"><td class="g">5세대</td><td class="bad">약 4만 2천원</td><td class="bad">본인부담 95%</td></tr></table>
-   </div>
-   <div class="wscol">
-    <div class="stt">💥 체외충격파 <small>1회 10만원 기준(예시)</small></div>
-    <table class="st"><tr><th>세대</th><th>예상 본인부담</th><th>보험 적용</th></tr>
-     <tr class="gen1"><td class="g">1세대</td><td class="g">0원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">2세대</td><td>약 2만원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">3세대</td><td>약 3만원</td><td class="ok">보장 가능</td></tr>
-     <tr><td class="g">4세대</td><td>약 3만원</td><td class="ok">보장 가능</td></tr>
-     <tr class="gen5"><td class="g">5세대</td><td class="bad">10만원 전액</td><td class="bad">보장 제외</td></tr></table>
-   </div>
-  </div>
-  <div class="ws2">
-   {_wcard_fix_list('도수치료 특징','2026.07 관리급여 전환',['연 15회 (주 2회 이내)','전국 동일 수가','재활 시 최대 24회','초과 시 이용 제한'])}
-   {_wcard_fix_list('체외충격파 특징','비급여 유지',['연 12회 (부위당 6회)','주 1회 · 2,000타↑','동일 회차 다부위 제한','5세대 실손 제외'])}
-  </div>
-  <div class="wscap n2 wsectcap gap2">📍 체외충격파 인정 부위 (7개)</div>
-  <div class="wgcols">
-   <div class="wgcol"><div class="wgi">어깨 (석회성건염·회전근개)</div><div class="wgi">팔꿈치 (테니스·골프엘보)</div><div class="wgi">고관절 (대전자통증증후군)</div></div>
-   <div class="wgcol"><div class="wgi">무릎 (슬개건염)</div><div class="wgi">발목 (아킬레스건염)</div><div class="wgi">발바닥 (족저근막염)</div></div>
-   <div class="wgcol"><div class="wgi">척추 (경추·요추 근막통증)</div></div>
-  </div>
-  <div class="wscap n2 wsectcap gap2">✅ 치료 전 꼭 확인하세요 (3가지)</div>
-  <div class="steprow">
-   <div class="stepc"><div class="stepn">1</div><b>실손 세대</b>내 실손보험이 몇 세대인가</div>
-   <div class="stepc"><div class="stepn">2</div><b>치료 횟수</b>올해 도수·체외충격파를 몇 번 받았는가</div>
-   <div class="stepc"><div class="stepn">3</div><b>인정 질환·부위</b>인정 질환·인정 부위에 해당하는가</div>
-  </div>
-  <div class="wssj fixnote">
-   <div class="cap">핵심 요약 — 상담 첫 질문 "고객님, 실손 몇 세대세요?"</div>
-   <div class="fxrow"><b>도수치료</b> 연 15회 제한 · <b>체외충격파</b> 부위당 6회·연 12회 · <b>5세대 실손</b>은 도수치료 부담 급증(본인부담 95%)·체외충격파 보장 제외. 세대에 따라 보장 결과가 완전히 달라진다.</div>
-  </div>
-  <div class="wscap n2 wsectcap gap2">📝 상담 메모</div>
-  <div class="memobox"></div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / 15</span></div>
 </div>
 {heart_chart}
 {_ga_html}
