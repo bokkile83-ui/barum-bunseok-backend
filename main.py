@@ -320,19 +320,161 @@ def parse_sebu(lines):
             k+=1
     return out
 
+# ══════════════════════════════════════════════════════════════════════════
+# ★★v44 신정원 3열 포맷 파서 (KB '상품별 가입담보상세' / 메리츠 '별첨 상품별 보험가입현황')
+#   지점장 확정 2026.07.13: (1) 3열 포맷을 입력 정본에 추가 (앵커 자동감지, 기존 2열과 병행)
+#                          (2) 담보명 정본 = 회사담보명
+#                          (3) 갱신판정 = 상품명/담보명 '갱신' 표기 단독 기준 (3열엔 총회차 없음)
+#   담보행: NO | 구분(정액/실손) | 회사담보명 | 신정원담보명 | 가입금액
+# ══════════════════════════════════════════════════════════════════════════
+_SJ_HEAD = re.compile(r'^\s*(\d{1,2})\s+(정액|실손)\s+(.+?)\s*$')
+_SJ_AMT  = re.compile(r'\s{2,}((?:\d[\d,]*\s*[억만천]\s*)+)$')          # 행 끝 금액(1억 5,000만 등 공백 허용)
+_SJ_CONT = re.compile(r'^\s+\S.*?\s{2,}((?:\d[\d,]*\s*[억만천]\s*)+)$')  # 신정원담보명 줄바꿈 wrap → 다음 줄 금액
+_SJ_KB   = re.compile(r'^[\s\f]*(\S.*?)\s{2,}\|\s*가입일자\s*:\s*(\d{4})[-.](\d{2})[-.](\d{2})\s*\|')
+_SJ_MZ   = re.compile(r'^[\s\f]*별첨\s+상품별\s*보험가입현황')
+
+def _amt_kr(s):
+    """한글 금액('1억 5,000만','2,000만','1억','1천') → 만원 단위 정수. 미해석=None(추측 금지)."""
+    t = re.sub(r'[\s,]', '', str(s or ''))
+    m = re.fullmatch(r'(?:(\d+)억)?(?:(\d+)만)?(?:(\d+)천)?', t)
+    if not m or not any(m.groups()): return None
+    v = int(m.group(1) or 0) * 10000 + int(m.group(2) or 0) + int(m.group(3) or 0) * 1000
+    return v if 0 < v <= 200000 else None
+
+def sinjeong_detect(lines):
+    """3열 신정원 포맷 감지. 계약 헤더 앵커가 2개 이상이면 3열로 확정."""
+    kb = sum(1 for l in lines if _SJ_KB.match(l))
+    mz = sum(1 for l in lines if _SJ_MZ.match(l))
+    return (kb + mz) >= 2
+
+def _sj_rows(block):
+    """담보행 → [(회사담보명, 만원정수)]. 금액 미해석 담보는 0 + [확인] 프리픽스(누락 금지)."""
+    out = []; i = 0
+    while i < len(block):
+        h = _SJ_HEAD.match(block[i])
+        if not h: i += 1; continue
+        rest = h.group(3); amt_s = None
+        m = _SJ_AMT.search(rest)
+        if m:
+            amt_s = m.group(1); rest = rest[:m.start()]
+        else:                                            # 신정원담보명 wrap → 다음 1~2줄에서 금액 회수
+            for k in (1, 2):
+                if i + k < len(block):
+                    c = _SJ_CONT.match(block[i + k])
+                    if c: amt_s = c.group(1); break
+        parts = [p for p in re.split(r'\s{2,}', rest.strip()) if p]
+        i += 1
+        if not parts: continue
+        name = re.sub(r'\s+', ' ', parts[0].strip())     # ★정본: 담보명 = 회사담보명(parts[0])
+        sj   = re.sub(r'\s+', ' ', parts[1].strip()) if len(parts) > 1 else ''
+        if len(name) < 2: continue
+        v = _amt_kr(amt_s) if amt_s else None
+        if v is None:
+            out.append(('[확인] 금액판독불가 ' + name, 0)); continue
+        out.append((name, sj, v))
+    # ★v44 실측보정: DB 실손처럼 회사담보명이 '질병(전체질병을 의미)' 하나로 3행(입원·통원·약값)이 겹치는 경우
+    #    회사담보명만 쓰면 dict 키 충돌 → 합산 사고. 계약 내 중복 회사담보명은 신정원담보명으로 분리한다.
+    cnt = {}
+    for nm, sj, v in out: cnt[nm] = cnt.get(nm, 0) + 1
+    fixed = []
+    for nm, sj, v in out:
+        if cnt.get(nm, 0) > 1 and sj and sj != nm:
+            fixed.append((sj, v))                        # 중복 → 신정원담보명 채택(더 구체적)
+        else:
+            fixed.append((nm, v))
+    return fixed
+
+def parse_sinjeong(lines):
+    """KB·메리츠 3열 리포트 → contracts[]. 표 구조 동일 → 파서 1개로 두 채널 커버."""
+    n = len(lines)
+    heads = []                                            # (idx, company, product, 가입일)
+    for i, l in enumerate(lines):
+        m = _SJ_KB.match(l)
+        if m:                                             # ── KB: '회사명 ... | 가입일자 : YYYY-MM-DD |'
+            comp = re.sub(r'\s+', '', m.group(1).strip())
+            prod = ''
+            for j in range(i + 1, min(i + 6, n)):
+                s = lines[j].strip()
+                if s and not re.search(r'가입일자|계약자|보험기간', s):
+                    prod = s; break
+            heads.append((i, comp, prod, f'{m.group(2)}.{m.group(3)}.{m.group(4)}'))
+            continue
+        if _SJ_MZ.match(l):                               # ── 메리츠: '별첨 상품별 보험가입현황' → 다음 2줄=회사·상품
+            got = []
+            for j in range(i + 1, min(i + 8, n)):
+                s = lines[j].strip()
+                if not s: continue
+                if re.search(r'계약자|보험기간|가입담보명', s): break
+                got.append(s)
+                if len(got) == 2: break
+            if len(got) >= 1:
+                heads.append((i, re.sub(r'\s+', '', got[0]), (got[1] if len(got) > 1 else ''), ''))
+    if not heads: return []
+
+    contracts = []
+    for hi, (idx, company, product, join_d) in enumerate(heads):
+        end = heads[hi + 1][0] if hi + 1 < len(heads) else n
+        block = lines[idx:end]
+        ht = ' '.join(block[:12])
+        contract_date = expiry_date = pay_period = ''; premium = 0
+        md = re.search(r'(\d{4})[-.](\d{2})[-.](\d{2})\s*~\s*(\d{4})[-.](\d{2})[-.](\d{2})', ht)
+        if md:
+            contract_date = f'{md.group(1)}.{md.group(2)}.{md.group(3)}'
+            expiry_date   = f'{md.group(4)}.{md.group(5)}.{md.group(6)}'
+        if not contract_date and join_d: contract_date = join_d
+        mp = re.search(r'([\d,]{4,})\s*원', ht)
+        if mp:
+            try:
+                pv = int(mp.group(1).replace(',', ''))
+                if 1000 < pv < 5000000: premium = pv
+            except: pass
+        mper = re.search(r'(?:월납|매월납)\s*/\s*(\d+)\s*년', ht)
+        if mper: pay_period = f'{mper.group(1)}년납'
+        if not expiry_date and re.search(r'종신', ht): expiry_date = '9999.12.31'
+        if is_excluded(company, product): continue        # 제외 4종(§4)
+
+        dambo = {}
+        for nm, v in _sj_rows(block):
+            if re.search(r'납입면제|납입지원', nm): continue
+            dambo[nm] = dambo.get(nm, 0) + v
+        if not dambo: continue
+
+        # ★확정(3) 갱신판정: 만기 9999(종신)=비갱신 / 상품명 '갱신' 표기=갱신 / 그 외는 후처리 담보절반 규칙
+        if str(expiry_date).startswith('9999'): renewal = '비갱신(종신)'
+        elif '갱신' in str(product) and '비갱신' not in str(product): renewal = '갱신'
+        else: renewal = '비갱신'
+
+        ci_jugye = []
+        if _isci_prod(product):
+            for bl in block:
+                for m2 in re.finditer(r'(?<![_가-힣])주계약\s+([\d,]{3,})', bl):
+                    try:
+                        v2 = int(m2.group(1).replace(',', ''))
+                        if 0 < v2 <= 200000: ci_jugye.append(v2)
+                    except: pass
+        contracts.append({'company': company, 'product': product, 'contract_date': contract_date,
+                          'expiry_date': expiry_date, 'premium': premium, 'pay_period': pay_period,
+                          'pay_count': '', 'renewal': renewal, 'dambo': dambo,
+                          'ci_jugye': ci_jugye, 'ci_extra': [], 'ipwon': [], '_sj': True})
+    print(f'[SINJEONG] 3열 포맷 감지 → 계약 {len(contracts)}건 / 담보 {sum(len(c["dambo"]) for c in contracts)}개')
+    return contracts
+
+
 def parse_txt(txt, filename=''):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     client = ''
     # ★ 정본 §2: 고객명 = 파일명 우선
     if filename:
-        base = re.sub(r'\.[Tt][Xx][Tt]$', '', filename).strip()
+        base = re.sub(r'\.(?:[Tt][Xx][Tt]|[Pp][Dd][Ff])$', '', filename).strip()
         fm = re.match(r'^([가-힣]{2,4})', base)
-        if fm: client = fm.group(1)
+        # ★v44: '20260713_백O화님_보장분석' 처럼 날짜·숫자 접두 파일명 대응(구 정규식은 '고객'으로 낙하)
+        if not fm: fm = re.search(r'([가-힣][가-힣A-Za-z*O]{1,3})님', base)
+        if fm: client = re.sub(r'님$', '', fm.group(1))
     # 폴백: 내용에서 (마스킹 '박*은' 형태도 허용)
     if not client:
         for l in lines[:30]:
             l = l.strip()
-            m2 = re.search(r'([가-힣]{2,4})\s+고객님', l)
+            m2 = re.search(r'([가-힣*]{2,4})\s*고객님', l) or re.search(r'([가-힣*]{2,4})\s*님의', l)
             if m2: client = m2.group(1); break
             m = re.match(r'^([가-힣]{2,5})\s*$', l)
             if m and len(m.group(1)) <= 4: client = m.group(1); break
@@ -349,6 +491,11 @@ def parse_txt(txt, filename=''):
             paycount_map[(m.group(2), m.group(3))] = m.group(4)  # 회사 표기 흔들림 대비 보조키
 
     contracts = []; i = 0; n = len(lines)
+    # ★★v44 분기: 신정원 3열 포맷(KB·메리츠) 감지 시 parse_sinjeong 사용, 아니면 기존 2열 별첨 엔진.
+    _IS_SJ = sinjeong_detect(lines)
+    if _IS_SJ:
+        contracts = parse_sinjeong(lines)
+        i = n                      # 기존 2열 루프 스킵('정상계약 리스트' 문자열 부재로 어차피 0건)
     while i < n:
         l = lines[i].strip()
         if '실효계약 리스트' in l or '미납해지' in l: break
@@ -401,7 +548,8 @@ def parse_txt(txt, filename=''):
                 _parts=_ct.split(' ',1); company=_parts[0] if _parts else lines[i].strip(); product=_parts[1].strip() if len(_parts)>1 else ''
         else:
             # ── 정상형 (기존, '가입금액' 헤더 없이 회사→상품→계약자줄→담보) ──
-            company = lines[i].strip(); i += 1
+            _head = lines[i].strip()          # ★v44 롯데: 이 줄에 '회사명 상품명'이 한 줄로 붙어 온다
+            company = _head; i += 1
             contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
             for _j in range(i, min(i+5, n)):
                 _l = lines[_j]
@@ -419,11 +567,21 @@ def parse_txt(txt, filename=''):
                 if _m5 and not pay_period: pay_period = f"{_m5.group(1)}년납"
             while i < n and not lines[i].strip(): i += 1
             product = ''
-            for _j in range(i, min(i+6, n)):
-                _l = lines[_j].strip()
-                if _l and not re.search(r'계약자|납입주기|보험료|보장기간', _l):
-                    if len(_l) > 5 and not re.search(r'^[\d,]+$', _l) and not re.search(r'^\d{4}\.\d{2}', _l):
-                        product = _l; i = _j + 1; break
+            # ★★v44 롯데 결함B 수정: 헤더 줄을 보험사 키워드로 회사/상품 분리.
+            #    구버전은 company에 상품명이 통째로 남고, product 칸엔 '담보 첫 줄'이 들어가
+            #    (1) 상품명 오염 (2) 담보 1개 유실 (3) 병합키(회사·보험료·상품[:12]) 불일치로
+            #    같은 계약이 2건으로 쪼개지는 결함A까지 유발했다. 회사/상품만 바로잡으면 셋 다 해소.
+            _mc = re.match(r'^(.*?(?:화재|손해보험|손보|해상|생명|라이프|증권|공제))\s+(\S.*)$', _head)
+            if _mc:
+                company = re.sub(r'\s', '', _mc.group(1))
+                product = re.sub(r'\s+', ' ', _mc.group(2).strip())
+            else:
+                # 폴백(기존): 회사명만 있는 헤더 → 다음 줄들에서 상품명 탐색
+                for _j in range(i, min(i+6, n)):
+                    _l = lines[_j].strip()
+                    if _l and not re.search(r'계약자|납입주기|보험료|보장기간', _l):
+                        if len(_l) > 5 and not re.search(r'^[\d,]+$', _l) and not re.search(r'^\d{4}\.\d{2}', _l):
+                            product = _l; i = _j + 1; break
         if is_excluded(company, product):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
@@ -504,6 +662,28 @@ def parse_txt(txt, filename=''):
             if not m['pay_count'] and c['pay_count']: m['pay_count'] = c['pay_count']
             if not m['pay_period'] and c['pay_period']: m['pay_period'] = c['pay_period']
     deduped = [merged[k] for k in order]
+    # ══════════════════════════════════════════════════════════════════
+    # ★★v46 결합담보 분해 (지점장 확정 2026.07.13 / 지침 §8.3.1 묶음담보 공통원칙 적용)
+    #   "묶음(결합) 담보는 보장 구성담보의 마스터 행에 동일 금액을 각각 기재한다."
+    #   예) 롯데 DB '상해사망80%이상후유장해 18,000'
+    #       → 상해사망 18,000  +  상해80%이상후유장해 18,000  (두 행 각각)
+    #   끝열은 행별 가로 SUM이라 세로 중복합산 없음. 원천(dambo)에서 쪼개므로 4대 산출물 자동 연동.
+    # ══════════════════════════════════════════════════════════════════
+    for _c in deduped:
+        for _k in list(_c['dambo'].keys()):
+            _kk = re.sub(r'\s', '', str(_k))
+            if '[확인]' in _kk: continue
+            if not ('사망' in _kk and '후유장해' in _kk): continue      # 결합담보만
+            _v = _c['dambo'][_k]
+            _ax = '질병' if '질병' in _kk else '상해'                    # 축: 질병 / 상해
+            # 등급: '80%이상' 또는 '고도' 명시 → 80% 행 / 명시 없으면 3% 행 (담보명 문자 그대로, 추측 금지)
+            _hi = ('80%이상' in _kk) or ('고도' in _kk)
+            _dead = f'{_ax}사망[결합]'
+            _dis  = f'{_ax}{"80%이상" if _hi else ""}후유장해[결합]'
+            _c['dambo'].pop(_k)
+            _c['dambo'][_dead] = _c['dambo'].get(_dead, 0) + _v
+            _c['dambo'][_dis]  = _c['dambo'].get(_dis, 0) + _v
+            print(f"[v46 결합담보 분해] {_c.get('company','')} '{_k}' {_v} → {_dead} + {_dis} (각각)")
     # 한장보장표 회차 주입 (별첨에 없던 pay_count 보정)
     for c in deduped:
         if not c['pay_count']:
@@ -512,7 +692,10 @@ def parse_txt(txt, filename=''):
             if pc: c['pay_count'] = pc
     # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
     for c in deduped:
-        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
+        # ★v44: 3열 신정원 포맷은 총회차가 없다 → judge_renewal ④(납입==보장) 적용 금지.
+        #        parse_sinjeong이 이미 확정(3) 기준(9999=비갱신 / 상품명 '갱신'=갱신)으로 판정 완료.
+        if not c.get('_sj'):
+            c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
         # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
         if not c['expiry_date'].startswith('9999') and c['dambo']:
             _dk=list(c['dambo'].keys())
@@ -954,7 +1137,9 @@ def resolve2(raw):
     if '방사선' in raw and '소액암' in raw and '제외' not in raw: return (None, 0)
     # ★v29t 부정어 처리: '(소액암제외)'·'(유사암제외)' 등 제외 문구를 지우고 키워드 매칭
     #   (예 '암치료자금_암(소액암제외)진단비특약' → 소액암 오탐으로 유사암행 오매핑되던 버그 차단)
-    raw_kw = re.sub(r'[\(\[][^\)\]]*제외[\)\]]', '', raw)
+    # ★v44 버그수정: '(치아파절제외)'까지 통째로 지워 골절 제외행→포함행으로 오배치되던 문제(정본 §8.7 위반).
+    #    치아·파절이 들어간 제외 괄호는 보존한다. (유사암제외·소액암제외 등은 종전대로 제거)
+    raw_kw = re.sub(r'[\(\[](?![^\)\]]*(?:치아|파절))[^\)\]]*제외[\)\]]', '', raw)
     _r = resolve_kw(raw_kw)
     if _r[0] is None and '재해' in raw_kw:
         _r = resolve_kw(raw_kw.replace('재해','상해'))   # ★v29v (지점장 2026.07.02): 재해=상해 동일 적용
@@ -2168,14 +2353,15 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </div>
 <div class="app" id="app">
   <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장설명서</b></h1>
-    <div class="sub">TXT 또는 OCR PDF 1개 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
+    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
   <div class="chat" id="chat">
-    <div class="msg bot">보장분석지 <b>OCR PDF</b> 또는 <b>TXT</b> 1개를 올려주세요(둘 다 가능). 엑셀·PPT를 각각 드려요.<br><br>
-      <span style="font-size:11px;color:var(--mute)">💡 OCR PDF는 그대로 업로드 · TXT는 Adobe에서 텍스트 저장 후 업로드</span></div>
+    <div class="msg bot">채널에서 받은 <b>보장분석 리포트 PDF 원본</b> 1개를 올려주세요. 엑셀·PPT를 각각 드려요.<br><br>
+      <span style="font-size:11px;color:var(--mute)">※ 받은 PDF를 <b>그대로</b> 올리세요. 인쇄·재스캔·OCR 변환하면 금액이 깨져 분석이 틀어집니다.<br>
+      ※ 롯데(let:) · KB · 메리츠 리포트 모두 원본 PDF 그대로 인식합니다.</span></div>
   </div>
   <div class="bar">
-    <label class="up" id="upp">📑 <span id="upplabel">OCR PDF 선택</span></label>
-    <label class="up" id="up">📄 <span id="uplabel">TXT 선택</span></label>
+    <label class="up" id="upp">📑 <span id="upplabel">보장분석 PDF 선택</span></label>
+    <label class="up" id="up">📄 <span id="uplabel">TXT (구방식)</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
   <div class="qlbl" id="qlbl">📋 분석된 보장분석지에 대해 질문하세요</div>
@@ -2199,8 +2385,8 @@ const chat=$("#chat");let file=null;let pdfFile=null;
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
 $("#up").onclick=()=>$("#fi").click();
 $("#upp").onclick=()=>$("#fp").click();
-$("#fi").onchange=e=>{file=e.target.files[0]||null;$("#uplabel").textContent=file?file.name:"TXT 선택";_syncSend();};
-$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"OCR PDF 선택";_syncSend();};
+$("#fi").onchange=e=>{file=e.target.files[0]||null;$("#uplabel").textContent=file?file.name:"TXT (구방식)";_syncSend();};
+$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"보장분석 PDF 선택";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
@@ -2256,7 +2442,7 @@ $("#send").onclick=async()=>{
         `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
-  file=null;$("#uplabel").textContent="TXT(선택)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  file=null;$("#uplabel").textContent="TXT (구방식)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
   if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
   if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 TXT를 올리면 이어서 분석합니다.',"bot");}
@@ -2284,7 +2470,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v43-sebu-spec-20260713'}
+def health(): return {'ok':True,'version':'v46b-ui-pdf-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
