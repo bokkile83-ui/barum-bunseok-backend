@@ -2095,6 +2095,20 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
                     try: _rr.font.size=Pt(18)
                     except: pass
 
+    # ★v48(지점장 2026.07.13): 제목(고객명)+날짜를 한 덩어리로 슬라이드 가운데 배치
+    try:
+        _t, _d = by.get('TextBox 21'), by.get('TextBox 36')
+        if _t is not None and _d is not None:
+            _SW = prs.slide_width
+            _GAP = 100000
+            _tot = _t.width + _GAP + _d.width
+            _lf = int((_SW - _tot) / 2)
+            _t.left = _lf
+            _d.left = _lf + _t.width + _GAP
+            _d.top = _t.top
+    except Exception:
+        pass
+
     if g('질병사망(80세)'): pv('TextBox 10',2,2,'질병사망(80세)',prefix=': ',suffix='')
     if g('상해사망'): pv('TextBox 11',0,1,'상해사망',prefix=': ',suffix='')
     종신_d=0
@@ -2301,21 +2315,14 @@ def _autofit_ppt(by):
             continue
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
         if not runs_all: continue
-        base = max((r.font.size.pt for r in runs_all if r.font.size), default=9)
-        longest = max((sum(len(r.text) for r in p.runs) for p in tf.paragraphs), default=0)
-        if longest <= 0: continue
-        cap = max(4, int(w_in * 72 / (base * 0.62)))
-        # ★v41 정본(지점장 2026.07.12): 축소 하한 = 9pt. 뇌·심 진단명+금액이 들어가도 9pt 고정.
-        #   6pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
-        if longest > cap:
-            newpt = max(9.0, round(base * cap / longest, 1))
-            if newpt < base:
-                for r in runs_all:
-                    try: r.font.size = Pt(newpt)
-                    except: pass
+        # ★v48 정본(지점장 2026.07.13): 값 폰트는 전부 9pt 고정.
+        #   - 라벨(14pt 이상: 뇌·심·암·수술비·사망 등 폼 뼈대)과 헤더(18pt)는 손대지 않는다.
+        #   - 6pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
         for r in runs_all:
             try:
-                if r.font.size and r.font.size.pt < 9.0: r.font.size = Pt(9)
+                cur = r.font.size.pt if r.font.size else 9.0
+                if cur < 14.0 and cur != 9.0:
+                    r.font.size = Pt(9)
             except: pass
 
 
@@ -2553,7 +2560,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v47-heart-bundle-20260713'}
+def health(): return {'ok':True,'version':'v49-ppt9pt-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

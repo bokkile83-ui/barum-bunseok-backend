@@ -126,6 +126,16 @@ def _cov_val(rep, cat, *names):
             for it in c.get('items',[]):
                 if any(n in it.get('t','') for n in names):
                     return it.get('v')
+    # ★v49(2026.07.13): coverage 그룹 items는 상위 몇 개만 실려 있어 심장 묶음 분해분
+    #   (협심증·심부전·빈맥·염증·부정맥)이 누락된다 → dambo(표준담보명→금액) 폴백.
+    #   엑셀=워크시트=진단서 PPT 연동(4대 산출물 등식) 복구.
+    _d = rep.get('dambo') or {}
+    for n in names:
+        v = _d.get(n)
+        if v: return v
+    for k, v in _d.items():
+        if v and any(n in str(k) for n in names):
+            return v
     return None
 
 def _ws_amt(rep, kind):
