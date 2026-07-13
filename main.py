@@ -662,6 +662,89 @@ def parse_txt(txt, filename=''):
             if not m['pay_count'] and c['pay_count']: m['pay_count'] = c['pay_count']
             if not m['pay_period'] and c['pay_period']: m['pay_period'] = c['pay_period']
     deduped = [merged[k] for k in order]
+    # ══════════════════════════════════════════════════════════════════════════
+    # ★★★v47 심장 묶음담보 분해 (지침 §8.3.1 + 보험인포메이션 p16~19 회사별 정본표)
+    #   "묶음 진단비는 보장 구성질환의 마스터 행에 동일 금액을 각각 기재한다."
+    #   회사마다 '특정Ⅰ/Ⅱ'의 뜻이 다르다 → 라벨 말고 회사별 질병코드 기준으로 분해.
+    #   ★2026.07.13 지점장 확정 3건:
+    #     (1) KB 특정Ⅰ = 협심증+허혈성+빈맥+심부전 <b>+염증</b> (구 정본 '염증X' 폐기)
+    #     (2) KB 심장판막질환에서 염증(심내막염 I33) 삭제 → 판막만
+    #     (3) 현대 특정Ⅰ = <b>협심증</b>+빈맥+심부전 (구 빈맥+심부전)
+    #   끝열은 행별 가로 SUM이라 세로 중복합산 없음. 원천 분해 → 4대 산출물 자동 연동.
+    # ══════════════════════════════════════════════════════════════════════════
+    _HB = {   # 회사키: [(담보명 판정, [구성 마스터행 ...]), ...]  ※ 순서 = 구체 우선
+      # ★★KB 전용 정본(지점장 확정 2026.07.13): '허혈성 진단비' 행은 회사담보명이
+      #   '허혈성심장질환진단비'인 <b>단독 담보 전용</b>이다. 특정Ⅰ·Ⅱ·Ⅲ 묶음은 허혈성 행에 넣지 않는다.
+      #   판정 기준은 반드시 <b>회사담보명</b>(신정원담보명 '허혈성심장질환진단'은 무시).
+      'KB': [
+        (lambda t: '특정1' in t and '심장' in t,   ['협심증','빈맥','심부전','주요심장염증']),  # ★허혈성 제외·염증 포함
+        (lambda t: '특정2' in t and '심장' in t,   ['급성심근경색']),
+      ],
+      '한화': [
+        (lambda t: ('기타부정맥제외' in t or 'I49제외' in t) and ('심혈관' in t or '특정1' in t),
+                                                   ['협심증','허혈성 진단비','빈맥','심부전']),
+        (lambda t: '심혈관1' in t or '특정1' in t,  ['협심증','허혈성 진단비','빈맥','부정맥','심부전']),
+        (lambda t: '심혈관2' in t or '특정2' in t,  ['급성심근경색']),
+      ],
+      'NH': [
+        (lambda t: ('기타부정맥제외' in t or 'I49제외' in t) and ('심혈관' in t or '특정1' in t),
+                                                   ['협심증','허혈성 진단비','빈맥','심부전']),
+        (lambda t: '심혈관' in t and '특정1' in t,  ['협심증','허혈성 진단비','빈맥','부정맥','심부전']),
+        (lambda t: '주요심장염증' in t,             ['주요심장염증']),
+      ],
+      'DB': [
+        (lambda t: '특정1' in t and '심장' in t,   ['협심증','허혈성 진단비','주요심장염증']),
+        (lambda t: '특정2' in t and '심장' in t,   ['급성심근경색']),
+        (lambda t: '특정3' in t and '심장' in t,   ['심장판막','빈맥','심부전']),
+        (lambda t: '순환계3대' in t,               ['부정맥','심부전']),
+      ],
+      '현대': [
+        (lambda t: '특정허혈' in t,                 ['급성심근경색']),
+        (lambda t: '허혈성심장질환' in t and '특정' not in t, ['협심증','허혈성 진단비']),
+        (lambda t: '특정1' in t and '심' in t,      ['협심증','빈맥','심부전']),   # ★협심증 포함(확정)
+        (lambda t: '특정2' in t and '심' in t,      ['급성심근경색']),
+        (lambda t: '주요심장염증' in t,             ['주요심장염증']),
+        (lambda t: '특정2대' in t,                  ['부정맥']),
+      ],
+      '흥국': [
+        (lambda t: '특정심혈관' in t and ('기타부정맥제외' in t or 'I49제외' in t),
+                                                   ['협심증','허혈성 진단비','빈맥','심부전']),
+        (lambda t: '특정심혈관' in t and '기타부정맥' in t, ['부정맥']),
+        (lambda t: '주요심장염증' in t,             ['주요심장염증']),
+      ],
+      '롯데': [
+        (lambda t: '특정심장' in t and '2' in t,    ['협심증','허혈성 진단비','주요심장염증']),
+        (lambda t: '특정심장' in t and '1' in t,    ['급성심근경색']),
+        (lambda t: '특정15대' in t,                 ['심장판막','심근병증','빈맥','심부전']),
+      ],
+      '삼성':   [(lambda t: '허혈성심장질환' in t,  ['협심증','허혈성 진단비','급성심근경색'])],
+      '메리츠': [(lambda t: '허혈성심장질환' in t,  ['협심증','허혈성 진단비','급성심근경색'])],
+    }
+    def _hbkey(comp):
+        c = re.sub(r'[\s（）()]', '', str(comp or ''))
+        for k in ('KB','한화','농협','NH','DB','현대','흥국','롯데','삼성','메리츠'):
+            if k in c: return 'NH' if k == '농협' else k
+        return None
+    for _c in deduped:
+        _hk = _hbkey(_c.get('company'))
+        if not _hk or _hk not in _HB: continue
+        for _k in list(_c['dambo'].keys()):
+            _t = re.sub(r'\s', '', str(_k))
+            if any(x in _t for x in ('[확인]','수술','주요치료','산정특례','혈전')): continue
+            _t2 = _t.replace('Ⅰ','1').replace('Ⅱ','2').replace('Ⅲ','3')
+            _t2 = re.sub(r'[IiⅠ]49', 'I49', _t2)
+            for _pred, _rows in _HB[_hk]:
+                try:
+                    if not _pred(_t2): continue
+                except Exception:
+                    continue
+                if len(_rows) <= 1: break          # 단일행은 기존 resolve에 위임(변경 없음)
+                _v = _c['dambo'].pop(_k)
+                for _r in _rows:
+                    _nk = f'{_r}[심장묶음]'
+                    _c['dambo'][_nk] = _c['dambo'].get(_nk, 0) + _v
+                print(f"[v47 심장묶음] {_hk} '{_k}' {_v} → {' + '.join(_rows)} (각각)")
+                break
     # ══════════════════════════════════════════════════════════════════
     # ★★v46 결합담보 분해 (지점장 확정 2026.07.13 / 지침 §8.3.1 묶음담보 공통원칙 적용)
     #   "묶음(결합) 담보는 보장 구성담보의 마스터 행에 동일 금액을 각각 기재한다."
@@ -2470,7 +2553,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v46b-ui-pdf-20260713'}
+def health(): return {'ok':True,'version':'v47-heart-bundle-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
