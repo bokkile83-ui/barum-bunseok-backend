@@ -1459,6 +1459,15 @@ body {{ color:{INK}; }}
         _m=_AMTKEY.get(_it.get('t',''))
         if not _m: continue
         (_amt_brain if _m[0]=='b' else _amt_heart)[_m[1]]=_v
+    # ★v50(2026.07.13): 6p 심장 표 — 묶음 분해분(협심증·심부전·염증·부정맥·심근병증·판막)을
+    #   dambo에서 직접 채운다. 기존엔 p5_own(급성심근·허혈성)만 실려 표가 2행만 표시됐다.
+    _HD={'협심증':'angina','심부전':'hf','염증':'inflam','부정맥':'arrhy',
+         '심근병증':'cardiomyo','심장판막':'valve'}
+    _dmb = rep.get('dambo') or {}
+    for _k,_slot in _HD.items():
+        _dv=_dmb.get(_k)
+        if _dv and str(_dv) not in ('0','미가입') and _slot not in _amt_heart:
+            _amt_heart[_slot]=_dv
     # ★CI 계약(ci status=='ci')일 때만 CI 금액 맵 구성 → 없으면 6p에 CI칸 미표시(유동)
     _cimap = rep.get('ci_amounts') or {}
     if str(rep.get('ci',{}).get('status'))!='ci': _cimap={}

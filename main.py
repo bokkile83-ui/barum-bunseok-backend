@@ -2199,7 +2199,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
     by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
     by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
-    for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(8)
+    for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(10)  # ★v50 '다10'
     if g('입원'): pv('TextBox 6',0,1,'입원',prefix=': ',suffix='')
     if g('통원'): pv('TextBox 6',1,1,'통원',prefix=': ',suffix=' / ')
     if g('약값'): pv('TextBox 6',1,3,'약값',prefix=': ',suffix='')   # ★v29t 등식1: 약값 PPT 누락 수리
@@ -2291,7 +2291,8 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
     prs.save(out); return True
 
 
-_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29','TextBox 59'}
+# ★v50(지점장 '다10'): 제목·날짜만 예외(18pt). 실손박스(59)도 10pt 대상으로 편입.
+_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
 _SURGERY_BOXES={'TextBox 17','TextBox 19'}   # ★v29t: 질병수술·상해수술 9.0pt 고정(지점장 2026.07.02), 1~5종 줄만 축소 허용
 def _autofit_ppt(by):
     """겹침·단락내림 방지(§11): 값박스 word_wrap off + 최장 단락 기준 박스 단위 축소.
@@ -2307,7 +2308,7 @@ def _autofit_ppt(by):
             # ★수술비 폰트(지점장 규정 2026.07.07): 1-5종 슬래시 줄만 6pt, 나머지 수술 줄은 9pt 고정(축소 금지)
             for p in tf.paragraphs:
                 ptxt=''.join(r.text for r in p.runs)
-                _sz = 6.0 if ('/' in ptxt) else 9.0   # 슬래시(1-5종 종별)만 6pt, 그 외 9pt
+                _sz = 6.0 if ('/' in ptxt) else 10.0  # ★v50: 슬래시(1-5종)만 6pt, 그 외 10pt
                 for r in p.runs:
                     if r.text:
                         try: r.font.size = Pt(_sz)
@@ -2315,14 +2316,14 @@ def _autofit_ppt(by):
             continue
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
         if not runs_all: continue
-        # ★v48 정본(지점장 2026.07.13): 값 폰트는 전부 9pt 고정.
-        #   - 라벨(14pt 이상: 뇌·심·암·수술비·사망 등 폼 뼈대)과 헤더(18pt)는 손대지 않는다.
+        # ★v50 정본(지점장 2026.07.13): 값 폰트는 전부 10pt 고정.
+        #   - v50(2026.07.13): 값·라벨 전부 10pt(지점장 '다10'). 예외=제목·날짜(18pt)·수술 1~5종(6pt).
         #   - 6pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
         for r in runs_all:
             try:
                 cur = r.font.size.pt if r.font.size else 9.0
-                if cur < 14.0 and cur != 9.0:
-                    r.font.size = Pt(9)
+                if cur < 18.0 and cur != 10.0:
+                    r.font.size = Pt(10)
             except: pass
 
 
@@ -2560,7 +2561,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v49-ppt9pt-20260713'}
+def health(): return {'ok':True,'version':'v50-heart6p-10pt-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

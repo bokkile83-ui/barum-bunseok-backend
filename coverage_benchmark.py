@@ -420,13 +420,15 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     scope_heart=[]
     if _any('급성심근','중대한 급성심근'): scope_heart.append('ami')
     if _any('허혈성 진단비','허혈심장','허혈성진단'): scope_heart+=['angina','chronic']
+    if _any('협심증'): scope_heart.append('angina')      # ★v50 심장 묶음 분해분(단독 보유)
     if _any('부정맥'): scope_heart.append('arrhy')
     if _any('심부전'): scope_heart.append('hf')
     if _any('심장판막','판막'): scope_heart.append('valve')
-    if _any('심장염증','심근염','심내막','심장막'): scope_heart.append('inflam')
+    if _any('심장염증','심근염','심내막','심장막','염증'): scope_heart.append('inflam')
     if _any('심근병증'): scope_heart.append('cardiomyo')
     if _any('산정특례심장','산정특례(심'): scope_heart.append('heart_snjt')
     rep['scope_brain']=scope_brain
+    scope_heart=list(dict.fromkeys(scope_heart))   # ★v50 중복 제거
     rep['scope_heart']=scope_heart
     rep['advice']=advice
     # ★ 전체 담보→표시값 맵 (워크시트 자동주입용; coverage 상위3개 한계 보완, 2026.07.11)
