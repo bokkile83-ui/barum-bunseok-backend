@@ -306,6 +306,11 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
          ('뇌혈관진단비',_gv('뇌혈관진단비')),
          ('허혈성 진단비',_gv('허혈성 진단비') or _gv('허혈성심장질환'))]
     p5_own=[{'t':n,'v':_fv(v)} for n,v in _p5]
+    # ★v43 산정특례 금액 맵(6p 보장나무 유동 표시) — 보유 시에만 값 존재
+    spec_amounts={}
+    _sb=_gv('산정특례뇌혈관'); _sh=_gv('산정특례심장')
+    if _sb>0: spec_amounts['brain']=_fv(_sb)
+    if _sh>0: spec_amounts['heart']=_fv(_sh)
     _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근')]
     _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
     _ci_apply=_gv('중대한CI적용')
@@ -367,6 +372,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'ci':ci,
         'noci':noci,
         'p5_own':p5_own,
+        'spec_amounts':spec_amounts,
         'age_band':age_band,'age_known':age_known,
     }
     # ── 리모델링 제안: 1-5종 권유 · 운전자 재가입 권유 (지침 §7·§8.6) ──

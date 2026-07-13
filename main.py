@@ -519,6 +519,42 @@ def parse_txt(txt, filename=''):
             _gc=sum(1 for k in _dk if '갱신' in k and '비갱신' not in k)
             if _dk and _gc>=len(_dk)*0.5: c['renewal']='갱신'
     # ★신버전 보충: 세부가입현황에서 뇌·심 담보 파싱해 별첨서 0인 항목만 보충(첫 계약에 귀속)
+    # ★★v43 뇌혈관 유동 재배치 (지점장 2026.07.13 확정)
+    #   [정본] AIA생명·라이나생명·AIG손보·우체국 = 별첨에 '뇌혈관'이라 적혀 있어도 그대로 믿지 말 것.
+    #          반드시 세부가입현황 표를 100% 대조해서, 실제로 잡힌 행(뇌혈관진단비/뇌졸증/뇌출혈)으로 배치한다.
+    #          엑셀·PPT·보장진단서 모두 이 결과를 따른다. 회사별 하드코딩(구 '라이나=뇌출혈') 폐기.
+    _SEBU_FORCE = ('AIA', '라이나', 'AIG', '우체국')
+    try:
+        _sb = parse_sebu(lines)
+        _nh  = float(_sb.get('뇌혈관진단비', 0) or 0)
+        _jol = float(_sb.get('뇌졸증진단비', 0) or 0) or float(_sb.get('뇌졸중진단비', 0) or 0)
+        _chu = float(_sb.get('뇌출혈진단비', 0) or 0)
+        for _c in deduped:
+            _co = re.sub(r'[\s（）()]', '', str(_c.get('company', '')))
+            if not any(_f in _co for _f in _SEBU_FORCE):
+                continue                                   # 대상 4개사만
+            for _k in list(_c['dambo'].keys()):
+                _kk = str(_k).replace(' ', '')
+                if not (('뇌혈관' in _kk) and ('진단' in _kk)):            continue
+                if any(x in _kk for x in ('수술','주요치료','산정특례','혈전','특정')): continue
+                if any(x in _kk for x in ('Ⅰ','Ⅱ','Ⅲ','II','III')):        continue
+                if not _sb:                                # ★세부가입현황 파싱 실패 → 추측 금지
+                    _c['dambo']['[확인] 뇌혈관 축 판별불가(세부가입현황 미파싱) ' + str(_k)] = _c['dambo'].get(_k, 0)
+                    print(f"[v43 확인큐] {_co} '{_k}' 세부가입현황 미파싱 → 수기확인")
+                    continue
+                if   _nh  > 0: _tgt = None                 # 세부가입현황이 뇌혈관진단비로 잡음 → 유지
+                elif _jol > 0: _tgt = '뇌졸중'
+                elif _chu > 0: _tgt = '뇌출혈'
+                else:          _tgt = None
+                if not _tgt:
+                    continue
+                _v = _c['dambo'].pop(_k)
+                _nk = _tgt + '진단비[세부가입정본]'
+                _c['dambo'][_nk] = float(_c['dambo'].get(_nk, 0) or 0) + float(_v or 0)
+                print(f"[v43 뇌혈관 유동재배치] {_co} '{_k}' → {_nk} (세부가입현황 정본)")
+    except Exception as _e:
+        print(f"[v43 뇌혈관 재배치 스킵] {_e}")
+
     try:
         _sebu=parse_sebu(lines)
         if _sebu and deduped:
@@ -1031,7 +1067,7 @@ def llm_resolve(raw_names, std_list):
         "- '상해 1~5종/1-5종 수술비'(_N종·(N종)·N종)=상해 종수술비(1-5종), jong=종번호. 질병도 동일=질병 종수술비(1-5종)\n"
         "- 허혈심장/협심증=협심증, 급성심근경색=급성심근경색, 부정맥=부정맥, 심장질환수술=심장수술비\n"
         "- 유사암(갑상선/기타피부/제자리/경계성)=유사암(갑.기.경.제). 특수치료 아닌 일반 암진단=일반암\n"
-        "- 라이나(라이나생명) '뇌혈관진단비'는 실제 뇌출혈 보장 → 뇌출혈진단비\n"
+        "- '뇌혈관진단'(로마숫자 없음) 담보는 세부가입현황 표를 정본으로 재배치한다(AIA·라이나·AIG·우체국 등). 임의 하드코딩 금지.\n"
         "- 하이클래스=하이클래스(암), 표적항암약물허가=표적항암치료비(여러 건이면 가장 큰 1건만)\n"
         "- 유사암 진단금액은 가입연도 2020년 이하면 일반암의 1/10, 2021년 이상이면 1/5로 환산 기재\n"
         "- 뇌혈관수술=뇌혈관수술비, 항암방사선/약물치료비=항암방사선약물, 암수술=암수술\n"
@@ -2248,7 +2284,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v41-fix12-20260712'}
+def health(): return {'ok':True,'version':'v43-sebu-spec-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

@@ -66,7 +66,7 @@ _BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), 
 
 _BRAIN_TBL=[('grp','출혈성 뇌혈관 (I60~62)',None,None,None),('row','뇌출혈','I60~62','hem',[1,1,1]),('grp','허혈성 뇌혈관 (I63~66)',None,None,None),('row','뇌졸증·뇌경색','I63·65·66','infarct',[1,1,1]),('grp','기타 뇌혈관 (I64·67~69)',None,None,None),('row','기타 뇌혈관질환','I64·67·68·69','other',[1,1,1]),('grp','순환계 확장·선천',None,None,None),('row','뇌동맥류·정맥류','I71·72','aneur',[0,1,0]),('row','선천 뇌혈관기형','Q28.0~28.3','congen',[0,0,1]),('row','외상성 뇌출혈','S06','trauma',[0,0,1])]
 _HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','기타·만성 허혈','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
-def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None):
+def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None):
     held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; ncol=len(headers)+1
     th=''.join('<th>'+h+'</th>' for h in headers)
     out=['<table class="scvt"><tr><th class="dl">질병 (코드)</th>'+th+'</tr>']
@@ -76,7 +76,13 @@ def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None):
         own = key in held
         amt = amounts.get(key)
         rowcls=' class="own"' if own else ''
-        def cell(c): return '<td><span class="on">●</span></td>' if c else '<td><span class="off">○</span></td>'
+        # ★v43 산정특례(마지막 열) 보유 시 금액박스 유동 표시
+        _last=len(cells)-1
+        def cell(c, idx=None):
+            if c and spec_amt and idx==_last:
+                return ('<td><span class="on">●</span> <span class="mb amtbox specbox">'
+                        + _html.escape(spec_amt) + '</span></td>')
+            return '<td><span class="on">●</span></td>' if c else '<td><span class="off">○</span></td>'
         _amtbox=' <span class="mb amtbox">'+(_html.escape(amt) if amt else '')+'</span>'
         # ★CI 계약일 때만 유동 노출: 'CI' 미니칩 + 진단금액
         _ci = ci_amounts.get(key)
@@ -85,7 +91,7 @@ def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None):
             first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+' <span class="chip">보유</span>'+_amtbox+_cibox
         else:
             first=('<span class="on">●</span>' if cells[0] else '<span class="off">○</span>')+_amtbox+_cibox
-        tds='<td>'+first+'</td>'+''.join(cell(c) for c in cells[1:])
+        tds='<td>'+first+'</td>'+''.join(cell(c,_i) for _i,c in enumerate(cells[1:],start=1))
         out.append('<tr'+rowcls+'><td class="dl"><b>'+_html.escape(label)+'</b><br><span class="cd">'+_html.escape(code)+'</span></td>'+tds+'</tr>')
     out.append('</table>'); return ''.join(out)
 
@@ -356,6 +362,35 @@ def _wcard_sj(rep, title, desc, lookup):
             f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
             f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
 
+# ★v41b 하단 여백 자동 채움 (지점장 2026.07.12: 여백 5% 미만).
+#   페이지별 세로 늘림 계수(mm). 0=원본 유지. 값이 크면 다음 장으로 넘어가니 반드시 25p 유지 확인.
+_PGFILL = {}
+
+def _fill_css():
+    """페이지별 하단 여백 채움(지점장 2026.07.12, 목표 <5%).
+       단조 증가만 사용: 본문 직계 블록의 최소높이 + 표 셀 최소높이 (줄어들 일 없음).
+       ※ padding·line-height를 !important로 덮어쓰면 오히려 줄어드는 사고 발생 → 금지."""
+    out=[]
+    for k,v in sorted(_PGFILL.items()):
+        if not v: continue
+        out.append(
+          f'#pg{k} .body > * {{ min-height:{v}mm; }}'
+          f'#pg{k} table td, #pg{k} table th {{ height:{round(v*0.45,2)}mm; }}'
+        )
+    return ''.join(out)
+
+def _apply_fill(doc):
+    import re as _re
+    _n=[0]
+    def _id(m):
+        _n[0]+=1
+        return m.group(0)[:-1] + ' id="pg%d">' % _n[0]
+    doc=_re.sub(r'<div class="pg(?=["\s])[^"]*">', _id, doc)
+    css=_fill_css()
+    if css: doc=doc.replace('</body>', '<style>'+css+'</style></body>')
+    return doc
+
+
 def build_report_pdf(rep, out):
     """rep: 리포트 데이터 dict (아래 sample_rep 구조). out: 저장 경로(.pdf)"""
     global _CURREP; _CURREP=rep
@@ -542,11 +577,14 @@ body {{ color:{INK}; }}
 .scvcol {{ flex:1; }}
 .scvhd {{ font-size:9.5pt; font-weight:800; padding-bottom:1mm; border-bottom:2pt solid {GOLD}; margin-bottom:1.4mm; }}
 .scvhd.brain {{ color:#1F5FA8; }} .scvhd.heart {{ color:{GAP}; }}
-.scvt {{ width:100%; border-collapse:collapse; font-size:7.8pt; }}
+.scvt {{ width:100%; border-collapse:collapse; font-size:7.4pt; table-layout:fixed; }}
 .scvt th {{ background:{NAVY}; color:#fff; padding:1.1mm 0.7mm; font-size:7.6pt; text-align:center; font-weight:800; }}
 .scvt th.dl {{ text-align:left; }}
 .scvt th:last-child {{ background:{GOLDD}; }}
-.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.55mm 0.6mm; text-align:center; }}
+.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.55mm 0.5mm; text-align:center; }}
+.scvt th.dl, .scvt td.dl {{ width:23%; font-size:6.9pt; }}
+.scvt td.dl b {{ white-space:nowrap; }}
+.scvt th:nth-child(2), .scvt td:nth-child(2) {{ width:45%; white-space:nowrap; }}   /* ★보유+금액+CI 한 줄 고정(넘침 방지) */
 .scvt td.dl {{ text-align:left; }}
 .scvt td.dl .cd {{ font-size:6.8pt; color:{MUT}; }}
 .scvt tr.grp td {{ background:#EEF1F6; font-size:7pt; font-weight:800; color:{NAVY}; text-align:left; padding:0.8mm 0.7mm; }}
@@ -558,10 +596,12 @@ body {{ color:{INK}; }}
 .on {{ color:#1F7A4D; font-weight:800; }} .off {{ color:#B9C2CE; }}
 .hold {{ color:{GOLDD}; font-weight:700; font-size:6pt; }}
 .chip {{ background:{GOLD}; color:#fff; font-size:5.4pt; font-weight:800; padding:0.2mm 1mm; border-radius:2mm; }}
-.cichip {{ background:{NAVY}; color:#fff; font-size:5pt; font-weight:800; padding:0.2mm 1.2mm; border-radius:2mm; margin-left:1.2mm; }}
-.scvt .amtbox.cibox {{ background:#F4F7FB; border-color:{NAVY}; min-width:13mm; }}
+.cichip {{ background:{NAVY}; color:#fff; font-size:4.6pt; font-weight:800; padding:0.2mm 1.2mm; border-radius:2mm; margin-left:1.2mm; }}
+.scvt .amtbox.cibox {{ background:#F4F7FB; border-color:{NAVY}; min-width:10mm; }}
+.scvt .amtbox.specbox {{ background:#FBF1D8; border-color:{GOLDD}; color:{GOLDD}; min-width:9mm; font-size:6.2pt; margin-left:0.2mm; }}
+.scvt td:last-child {{ white-space:nowrap; }}
 .scvt .amt {{ color:{NAVY}; font-weight:800; font-size:8.6pt; margin-left:0.8mm; }}
-.scvt .amtbox {{ display:inline-block; min-width:13mm; height:4.4mm; line-height:4.4mm; border:0.6pt solid #C9CFD8; border-radius:1mm; padding:0 0.9mm; margin-left:0.6mm; background:#fff; color:{NAVY}; font-weight:800; font-size:7.4pt; text-align:right; vertical-align:middle; white-space:nowrap; }}
+.scvt .amtbox {{ display:inline-block; min-width:10mm; height:4.1mm; line-height:4.1mm; border:0.6pt solid #C9CFD8; border-radius:1mm; padding:0 0.6mm; margin-left:0.3mm; background:#fff; color:{NAVY}; font-weight:800; font-size:6.6pt; white-space:nowrap; text-align:right; vertical-align:middle; white-space:nowrap; }}
 .scvleg {{ font-size:6.2pt; color:{MUT}; margin:1.5mm 0; }} .own2 {{ color:{GOLDD}; font-weight:700; }}
 .scvnote {{ font-size:5.6pt; line-height:1.35; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
 .scvnote b {{ color:{NAVY}; }} .scvnote b.r {{ color:{GAP}; }}
@@ -1412,8 +1452,9 @@ body {{ color:{INK}; }}
     # ★CI 계약(ci status=='ci')일 때만 CI 금액 맵 구성 → 없으면 6p에 CI칸 미표시(유동)
     _cimap = rep.get('ci_amounts') or {}
     if str(rep.get('ci',{}).get('status'))!='ci': _cimap={}
-    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap)
-    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap)
+    _spec = rep.get('spec_amounts') or {}
+    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap,_spec.get('brain'))
+    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap,_spec.get('heart'))
     # ★2026.07.11 실손 세대 자동판별(CI식) → 검출 세대 강조 표 + 세대별 맞춤 화법
     _sg=rep.get('silson_gen',{'status':'none'})
     # ★2026.07.11 지점장 확정 세분화: 2세대 3분할 / 1세대 생보·손보 구분(상해의료비)
@@ -1911,7 +1952,7 @@ body {{ color:{INK}; }}
       <td class="ezarrow">→</td>
       <td class="ezhc"><div class="ezhb h4">60%</div><div class="ezhl">대학병원</div></td>
       <td class="ezarrow">→</td>
-      <td class="ezhc"><div class="ezhb h5">90%</div><div class="ezhl">응급실<br><span class="smn">경증</span></div></td>
+      <td class="ezhc"><div class="ezhb h5">90%</div><div class="ezhl">권역응급<br><span class="smn">경증</span></div></td>
      </tr>
     </table>
    </div>
@@ -1940,7 +1981,7 @@ body {{ color:{INK}; }}
        <div class="gvk">내 부담</div><div class="gvm">6만원</div>
        <div class="gvk">돌려받는 돈</div><div class="gvr">4만원</div>
        <div class="gvtag wn">※ 주의</div></div></td>
-     <td class="gvc c5"><div class="gvh">권역응급 <span class="gvsm">(경증)</span></div><div class="gvb">
+     <td class="gvc c5"><div class="gvh">권역응급 <span class="gvsm">(경증 KTAS4·5)</span></div><div class="gvb">
        <div class="gvk">건보 부담률</div><div class="gvp">90%</div><div class="gvhr"></div>
        <div class="gvk">내 부담</div><div class="gvm">9만원</div>
        <div class="gvk">돌려받는 돈</div><div class="gvr">1만원</div>
@@ -1948,12 +1989,20 @@ body {{ color:{INK}; }}
     </tr>
    </table>
    <div class="gvfoot"><b>4세대였다면?</b> 어느 병원이든 내 부담 <b>2만원</b> → 돌려받는 돈 <b>8만원</b> &nbsp;|&nbsp; <span class="bad">× 권역응급 경증: 청구해도 1만원만!</span></div>
+   <div class="ezsn" style="margin-top:2mm">※ <b>90%는 응급실 아무 데나가 아니다.</b> <b>권역응급의료센터급 대형병원 응급실</b>(권역응급·전문응급·권역외상센터)에 <b>경증(KTAS 4)·비응급(KTAS 5)</b>으로 갔을 때만. 지역응급의료센터는 비응급(KTAS 5)만. <b>중증(KTAS 1~3)이면 90% 아님</b> — 그 병원 등급 요율(종합 50·상급종합 60) 적용. 동네 병·의원 응급실은 해당 없음.</div>
   </div>
 
   <div class="ezsum">
    <div class="ezst">★ 한 줄로 외우세요</div>
    <div class="ezsl"><b>"급여는 큰 병원 갈수록 내 돈이 커진다. 비급여는 큰 병이냐 아니냐로 갈린다."</b></div>
-   <div class="ezsn">급여(건보 적용) = <b>병원 규모로 갈린다</b> — 동네의원 30%, 대학병원 60%, 응급실 경증 90%.<br>비급여 = <b>중증(30%) vs 비중증(50%)</b>으로 갈린다 → <b>다음 장에서 상세히 본다.</b></div>
+   <div class="ezsn">급여(건보 적용) = <b>병원 규모로 갈린다</b> — 동네의원 30%, 대학병원 60%, <b>권역응급의료센터급 대형병원 응급실</b> 경증 90%.<br>비급여 = <b>중증(30%) vs 비중증(50%)</b>으로 갈린다 → <b>다음 장에서 상세히 본다.</b></div>
+  <div class="svdef" style="margin-top:1.4mm;padding:1.2mm 2.2mm;background:#F1F7F2;border-color:#2E7D4F">
+   <div style="font-size:8.2pt;font-weight:800;color:#1E7A46;margin-bottom:0.6mm">★ 5세대가 좋아진 것 — 신규 보장 3가지 <span class="smn" style="font-weight:600">(1~4세대에는 없던 것)</span></div>
+   <div class="ezsn" style="font-size:7.4pt;line-height:1.5">
+    ① <b>임신·출산 급여의료비 = 신규 보장</b> (1~4세대 전부 미보장) &nbsp;·&nbsp; ② <b>발달장애 급여의료비 = 신규 보장</b> (18세까지) &nbsp;·&nbsp; ③ <b>중증 입원 자기부담 상한 연 500만원 신설</b> (암·뇌·심장 산정특례, 상급종합·종합 입원 시 500만 초과분 전액 보장 — 4세대는 상한 없이 30% 무한 부담)<br>
+    ※ <b>습관성유산·불임·인공수정 합병증</b> = 1~3세대 면책 → <b>4세대부터 급여 보상</b>(가입 2년 이후) → 5세대 급여 보상. <b>난임 상담 시 세대 확인 필수.</b>
+   </div>
+  </div>
   </div>
 
  </div>
@@ -2058,7 +2107,7 @@ body {{ color:{INK}; }}
       <div class="barcol"><div class="hbar q3"><span>20</span></div><div class="barlb vt">4세대</div></div>
       <div class="barcol"><div class="hbar q5"><span>90</span></div><div class="barlb vt bad">5세대</div></div>
      </div>
-     <div class="g4nt">4세대까지 <b>20%</b> → 5세대 <b class="bad">최대 90%</b><span class="smn">(응급실)</span></div>
+     <div class="g4nt">4세대까지 <b>20%</b> → 5세대 <b class="bad">최대 90%</b><span class="smn">(권역응급의료센터급 응급실·경증)</span></div>
     </td>
     <td class="g4cell">
      <div class="g4tt">② 비급여 <span class="smn">자기부담률</span></div>
@@ -2117,6 +2166,17 @@ body {{ color:{INK}; }}
    </tr>
   </table>
  </div>
+ <div class="svdef" style="margin-top:2mm;padding:1.4mm 2.2mm">
+   <div style="font-size:8pt;font-weight:800;color:{NAVY};margin-bottom:0.6mm">★ 놓치기 쉬운 보장 — 세대별로 갈린다</div>
+   <table class="st" style="width:100%;font-size:6.2pt">
+    <tr><th style="width:30%">항목</th><th style="width:22%">1·2·3세대</th><th style="width:24%">4세대</th><th style="width:24%">5세대</th></tr>
+    <tr><td class="g"><b>습관성유산·불임·인공수정 합병증</b></td><td class="bad">면책</td><td class="ok"><b>급여 보상</b> <span class="smn">(가입 2년 이후)</span></td><td class="ok"><b>급여 보상</b></td></tr>
+    <tr><td class="g">임신·출산 급여의료비</td><td class="bad">미보장</td><td class="bad">미보장</td><td class="ok"><b>신규 보장</b></td></tr>
+    <tr><td class="g">발달장애 급여의료비</td><td class="bad">미보장</td><td class="bad">미보장</td><td class="ok"><b>신규 보장</b> <span class="smn">(18세까지)</span></td></tr>
+    <tr><td class="g">비만(E66) · 선천성 뇌질환</td><td class="bad">면책</td><td class="ok"><b>급여 보상</b> <span class="smn">(뇌질환=태아 가입분)</span></td><td class="ok"><b>급여 보상</b></td></tr>
+   </table>
+   <div class="ezsn" style="margin-top:0.8mm;font-size:7pt">※ <b>난임 치료</b> 계획이 있으면 4세대 이상이어야 급여 본인부담금이 보상됩니다(4세대는 가입 2년 이후). 1~3세대는 면책. <b>납입중지</b>는 3세대 단체실손 / 4세대는 해외 장기체류자까지 확대.</div>
+  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / 17</span></div>
 </div>
 <!-- P5g: 도수·체외충격파 (세대별 부담) -->
@@ -2278,6 +2338,7 @@ body {{ color:{INK}; }}
         import re as _re
         doc = _re.sub(r'<span class="mb([^"]*)"></span>', r'<span class="mb\1">.</span>', doc)
         doc = _re.sub(r'<span class="wbox([^"]*)"></span>', r'<span class="wbox\1">.</span>', doc)
+    doc = _apply_fill(doc)     # ★v41b 하단 여백 <5% 채우기(페이지별 세로 늘림)
     HTML(string=doc).write_pdf(out)
     return True
 
