@@ -746,6 +746,24 @@ def parse_txt(txt, filename=''):
                 print(f"[v47 심장묶음] {_hk} '{_k}' {_v} → {' + '.join(_rows)} (각각)")
                 break
     # ══════════════════════════════════════════════════════════════════
+    # ★★v51 심뇌혈관수술비 분해 (지점장 확정 2026.07.13 · 현대해상 수술비)
+    #   "심뇌혈관수술비 3,000 = 심장수술비 3,000 + 뇌혈관수술비 3,000 (각각 기재)"
+    #   묶음담보 공통원칙(§8.3.1)과 동일 — 절반 분할 아님, 두 행에 동일 금액 각 100%.
+    #   기존 매핑은 '심뇌혈관' → 뇌혈관수술비 하나로만 넣어 심장수술비가 누락됐다.
+    #   원천(dambo)에서 쪼개므로 4대 산출물(엑셀·보장나무·PPT·설명서) 자동 연동.
+    # ══════════════════════════════════════════════════════════════════
+    for _c in deduped:
+        for _k in list(_c['dambo'].keys()):
+            _kk = re.sub(r'\s', '', str(_k))
+            if '[확인]' in _kk: continue
+            if '심뇌혈관' not in _kk or '수술' not in _kk: continue
+            _v = _c['dambo'].pop(_k)
+            for _r in ('심장수술비', '뇌혈관수술비'):
+                _nk = f'{_r}[묶음]'   # ★태그에 '뇌혈관' 금지(resolve 오인 방지)
+                _c['dambo'][_nk] = _c['dambo'].get(_nk, 0) + _v
+            print(f"[v51 심뇌혈관수술] {_c.get('company')} '{_k}' {_v} → 심장수술비 + 뇌혈관수술비 (각각 {_v})")
+
+    # ══════════════════════════════════════════════════════════════════
     # ★★v46 결합담보 분해 (지점장 확정 2026.07.13 / 지침 §8.3.1 묶음담보 공통원칙 적용)
     #   "묶음(결합) 담보는 보장 구성담보의 마스터 행에 동일 금액을 각각 기재한다."
     #   예) 롯데 DB '상해사망80%이상후유장해 18,000'
@@ -1000,7 +1018,9 @@ def resolve_kw(raw):
         if has('5대골절'): return '5대골절수술비',0
         if has('골절') and no('후유','장해','진단','일당','입원'): return '골절수술비',0
         if has('화상'): return '화상수술비',0
-        if has('다빈치') or has('로봇'): return '다빈치로봇수술비',0
+        # ★v51(지점장 확정 2026.07.13): 현대해상 '레보아이로봇수술비' = 다빈치로봇수술비(마스터 26행).
+        #   '로봇' 키워드로 이미 잡힌다 — 이 조건을 좁히면 레보아이가 조용히 누락되므로 건드리지 말 것.
+        if has('다빈치') or has('로봇') or has('레보아이'): return '다빈치로봇수술비',0
         if has('암') and no('양성종양','유사암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인]
         if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
         if has('상해') or has('재해'):   # ★v30h 재해수술비=상해수술비 동일 취급
@@ -1269,6 +1289,16 @@ def recalc_xlsx(path):
 
 # ★v29u: LibreOffice 없는 환경(Railway)용 캐시 주입 — 합계 수식은 유지(§5)하고,
 #   계산값을 파이썬으로 구해 시트 XML <v>에 직접 기록 → 폰·미리보기·보장설명지 모두 값 표시.
+def _no_fullcalc(wb):
+    """★v51(2026.07.13): 산출 엑셀에서 fullCalcOnLoad 플래그 제거.
+    master.xlsx가 이 플래그를 물려주면 Excel이 파일을 열 때마다 전 수식을 강제 재계산한다
+    (편집모드 진입 시 폰 Excel이 1분 이상 로딩). 끝열 =SUM 캐시값은 inject_sum_cache가 이미
+    채워두므로 강제 재계산은 불필요한 부하일 뿐이다. 수식(§5)은 그대로 유지한다."""
+    try:
+        wb.calculation.fullCalcOnLoad = False
+    except Exception:
+        pass
+
 def inject_sum_cache(path):
     import zipfile, shutil, tempfile
     try:
@@ -1918,6 +1948,7 @@ def build_excel(data, out):
             _rs.cell(_i,1,_std); _rs.cell(_i,2,_rw); _rs.cell(_i,3,_am)
     except Exception:
         pass
+    _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
     wb.save(out)
     return unmapped
 
@@ -2561,7 +2592,7 @@ document.addEventListener("DOMContentLoaded",function(){
 </script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v50-heart6p-10pt-20260713'}
+def health(): return {'ok':True,'version':'v52-nofullcalc-20260713'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
