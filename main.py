@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -2589,10 +2589,11 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("qinput").addEventListener("keydown",function(e){if(e.key==="Enter")askAI();});
   document.getElementById("qbtn").onclick=askAI;
 });
-</script></body></html>'''
+</script>
+<script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v52-nofullcalc-20260713'}
+def health(): return {'ok':True,'version':'v54-simnoi-20260714'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
