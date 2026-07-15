@@ -2608,7 +2608,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v55-heart-canon-20260714'}
+def health(): return {'ok':True,'version':'v58-3page-final-20260714'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

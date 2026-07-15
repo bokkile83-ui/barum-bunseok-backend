@@ -548,24 +548,24 @@ def build_report_pdf(rep, out):
                 f'<b>{_html.escape(ci.get("residual","-"))}</b> 유지</span></div>')
     _gaprow=(f'<div class="sumrow"><span class="sumlb {_okc}">{"✓ 결론" if gap_cnt==0 else "! 결론"}</span>'
              f'<span class="sumtx">{"핵심담보 균형이 <b>양호</b>합니다. 지금 보장을 <b>유지</b>하십시오." if gap_cnt==0 else f"공백 <b>{gap_cnt}개</b> — 상담을 통한 <b>보완</b>이 필요합니다."}</span></div>')
-    _citab=('<div class="sect" style="margin-top:4.5mm">CI보험 — 장점 vs 단점 <span>CRITICAL ILLNESS</span></div>'
-            '<table class="citab">'
-            '<tr><th class="cig">■ 장점</th><th class="cir">■ 단점 — 이것 때문에 못 받는다</th></tr>'
-            '<tr><td class="cig">'
-            '<div class="cil"><b>주계약 = 중대한 담보가 종신보장</b> — 만기 없이 평생 유지</div>'
-            '<div class="cil"><b>원스톱</b> — 사망 + 중대질병 한 상품</div>'
-            '<div class="cil"><b>선지급</b> — 진단 즉시 사망보험금 50~80% 지급</div>'
-            '<div class="cil"><b>잔여 사망보장 유지</b> — 선지급 후에도 남은 사망금 지급</div>'
-            '<div class="cil"><b>주계약 중대한 담보가 종신보장</b> — 만기 없이 평생 유지</div>'
-            '<div class="cil"><b>납입면제</b> 특약 결합 용이</div>'
-            '</td><td class="cir">'
-            '<div class="cil r"><b>암·뇌·심 중 딱 1가지만</b> — 먼저 발생한 1회만 선지급, 이후 다른 중증질환은 <b>중복 보장 불가</b></div>'
-            '<div class="cil r"><b>[뇌] 25% 후유장해가 영구적</b>이어야 지급 — 재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태. 일과성 허혈발작(TIA)·외상성 출혈 제외</div>'
-            '<div class="cil r"><b>[심장] 효소검사 3가지 전부 충족</b> — ①전형적 흉통 ②새 심전도 변화(ST상승·Q파·T파역전) ③심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증 제외</b></div>'
-            '<div class="cil r"><b>[암] 침윤·파괴적 증식만</b> — 상피내암·경계성·초기전립선암·피부암 제외</div>'
-            '<div class="cil r"><b>선지급 = 사망보험금 감소</b> · 보험료 비쌈 · 분쟁 다발</div>'
-            '</td></tr></table>'
-            '<div class="cint">※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드(기초약관·장점·단점). 가입 시기·보험사별 약관 상이 → 원문 확인 필수.</div>')
+    _citab=('<div class="sect" style="margin-top:4mm">CI보험 — 장점 vs 단점 <span>CRITICAL ILLNESS</span></div>'
+            '<div class="cibox cig">'
+            '<div class="cihd cig">■ 장점</div>'
+            '<div class="cil"><b>주계약이 종신보장</b><span class="cis">중대한 담보가 만기 없이 평생 유지된다.</span></div>'
+            '<div class="cil"><b>원스톱 보장</b><span class="cis">사망 + 중대질병을 한 상품으로 대비한다.</span></div>'
+            '<div class="cil"><b>진단 즉시 선지급</b><span class="cis">사망보험금의 50~80%를 살아 있을 때 먼저 받는다. 치료비·생활비·소득공백에 쓸 수 있다.</span></div>'
+            '<div class="cil"><b>잔여 사망보장 유지</b><span class="cis">선지급을 받아도 남은 사망보험금은 그대로 지급된다.</span></div>'
+            '<div class="cil"><b>납입면제 결합 용이</b><span class="cis">중대질환 진단 이후 보험료 납입 부담이 사라진다.</span></div>'
+            '</div>'
+            '<div class="cibox cir">'
+            '<div class="cihd cir">■ 단점 — 이것 때문에 못 받는다</div>'
+            '<div class="cil"><b class="r">암·뇌·심 중 딱 1가지만</b><span class="cis">먼저 발생한 <b>1회만</b> 선지급된다. 이후 다른 중증질환이 와도 <b class="r">중복 보장 불가</b>.</span></div>'
+            '<div class="cil"><b class="r">[뇌] 25% 후유장해가 영구적이어야 한다</b><span class="cis">재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태여야 지급. 일과성 허혈발작(TIA)·외상성 출혈은 제외.</span></div>'
+            '<div class="cil"><b class="r">[심장] 3가지를 전부 충족해야 한다</b><span class="cis">① 전형적 흉통 ② 새 심전도 변화(ST상승·Q파·T파역전) ③ 심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증은 제외</b> — 심근 괴사가 없기 때문이다.</span></div>'
+            '<div class="cil"><b class="r">[암] 침윤·파괴적 증식만 인정</b><span class="cis">상피내암·경계성종양·초기 전립선암·피부암은 전부 제외.</span></div>'
+            '<div class="cil"><b class="r">선지급 = 사망보험금 감소</b><span class="cis">받은 만큼 유족에게 갈 돈이 줄어든다. 보험료도 비싸고 지급 분쟁이 잦다.</span></div>'
+            '</div>'
+            '<div class="cint">※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드. 가입 시기·보험사별 약관이 다르므로 <b>원문 확인 필수</b>.</div>')
     comment_html=_citab
 
     css=f'''
@@ -615,6 +615,34 @@ body {{ color:{INK}; }}
 .scvleg {{ font-size:6.2pt; color:{MUT}; margin:1.5mm 0; }} .own2 {{ color:{GOLDD}; font-weight:700; }}
 .scvnote {{ font-size:5.6pt; line-height:1.35; color:{INK}; background:#F6F8FB; border-left:2.2pt solid {NAVY}; padding:1.5mm 2mm; border-radius:1.4mm; }}
 .scvnote b {{ color:{NAVY}; }} .scvnote b.r {{ color:{GAP}; }}
+.sg2 {{ width:100%; overflow:hidden; }}
+.sgcol {{ float:left; width:47.5%; }}
+.sgcol:first-child {{ margin-right:5%; }}
+.sghd {{ background:{NAVY}; color:#fff; font-size:6.8pt; font-weight:800; padding:0.6mm 2mm; border-radius:1.3mm; margin-bottom:0.7mm; }}
+.sghd.r {{ background:#8E3B2F; }}
+.sgbox {{ border:0.8pt solid {LINE}; border-radius:1.2mm; overflow:hidden; margin-bottom:0.7mm; }}
+.sgt {{ background:#EEF3F9; color:{NAVY}; font-size:6.5pt; font-weight:800; padding:0.5mm 1.8mm; border-bottom:0.6pt solid {LINE}; }}
+.sgtab {{ width:100%; border-collapse:collapse; font-size:5.3pt; }}
+.sgtab td {{ border-bottom:0.4pt solid #EDF1F6; padding:0.25mm 1.2mm; line-height:1.1; vertical-align:top; }}
+.sgtab tr:last-child td {{ border-bottom:none; }}
+.sgtab .k {{ width:26%; color:{NAVY}; font-weight:800; background:#FAFCFE; }}
+.sgtab.vs td {{ text-align:center; font-size:6.2pt; }}
+.sgtab.vs td.k {{ text-align:left; }}
+.sgtab.vs tr.hd td {{ background:{NAVY}; color:#fff; font-weight:800; }}
+.sgtab .a {{ background:#F7FAFD; }} .sgtab .b {{ background:#FDF6F4; }}
+.sgno {{ background:#FBF7EE; border:0.6pt solid {GOLD}; border-radius:1.3mm; padding:0.8mm 1.6mm; font-size:5.6pt; line-height:1.3; color:{INK}; margin-bottom:1mm; }}
+.sgno.r {{ background:#FDF2F0; border-color:#D9A79C; }}
+.spcbox {{ border:0.8pt solid {LINE}; border-radius:1.6mm; overflow:hidden; margin-top:2mm; }}
+.spct {{ background:{NAVY}; color:#fff; font-size:7.2pt; font-weight:800; padding:1mm 2mm; }}
+.spct.h {{ background:#8E3B2F; }}
+.smn2 {{ font-size:5.8pt; font-weight:400; opacity:0.85; }}
+.spctab {{ width:100%; border-collapse:collapse; font-size:6.1pt; }}
+.spctab td {{ border-bottom:0.4pt solid #E4EAF2; padding:0.5mm 1.4mm; line-height:1.25; vertical-align:top; }}
+.spctab tr:last-child td {{ border-bottom:none; }}
+.spctab .cd {{ width:23%; color:{NAVY}; font-weight:800; }}
+.spctab .ok {{ width:9%; text-align:center; color:#1F7A4D; font-weight:800; }}
+.spcn {{ background:#FBF7EE; border-top:0.6pt solid {GOLD}; padding:0.8mm 1.8mm; font-size:5.9pt; line-height:1.35; color:{INK}; }}
+.g2 {{ color:#1F7A4D; }}
 .rngbox {{ border:0.8pt solid {LINE}; border-radius:1.8mm; background:#FBFCFD; padding:2mm 2.4mm; margin-top:2mm; }}
 .rngt {{ font-size:7.4pt; font-weight:800; color:{NAVY}; margin-bottom:1.4mm; }}
 .rngtab {{ width:100%; border-collapse:collapse; }}
@@ -1703,6 +1731,16 @@ body {{ color:{INK}; }}
       </td>
      </tr></table>
     </div>
+    <div class="spcbox">
+     <div class="spct">★ 산정특례 <b>적용기준</b> — 뇌 <span class="smn2">(복지부 고시 · V191)</span></div>
+     <table class="spctab">
+      <tr><td class="cd">① 수술</td><td>고시 [별첨1] 수술 <span class="smn">(개두술·뇌동맥류·뇌동정맥기형적출·경피적 혈전제거·천두술·뇌정위방사선수술)</span></td><td class="ok">30일</td></tr>
+      <tr><td class="cd">② 약제</td><td><b>혈전용해제 투여</b> <span class="smn">(응급실 외래 투여도 인정)</span></td><td class="ok">30일</td></tr>
+      <tr><td class="cd">③ 수술없는 뇌출혈</td><td><b>I60~62</b> 중증 뇌출혈 <b>급성기 입원</b> <span class="smn">(V268)</span></td><td class="ok">30일</td></tr>
+      <tr><td class="cd">④ 수술없는 뇌경색</td><td><b>I63</b> 발생 <b>24h 내 도착</b> + <b>NIHSS 5점↑</b> <span class="smn">(V275)</span></td><td class="ok">30일</td></tr>
+     </table>
+     <div class="spcn">★ 대상 <b>I60~67·I72.0·Q28.0~28.3·S06</b> → <b class="g2">상해(S06)·질병·선천성(Q28) 전부 보상</b>.<br>★ 급여 5% · 최대 30일 → 장기치료는 <b>혈전용해·수술비</b>로 보완. 뇌혈관진단비는 <b class="r">S06 미보장</b>.</div>
+    </div>
    </div>
    <div class="scvcol">
     <div class="scvhd heart">심장 — 질병코드별 커버</div>
@@ -1726,10 +1764,19 @@ body {{ color:{INK}; }}
       </td>
      </tr></table>
     </div>
+    <div class="spcbox">
+     <div class="spct h">★ 산정특례 <b>적용기준</b> — 심장 <span class="smn2">(V192)</span></div>
+     <table class="spctab">
+      <tr><td class="cd">① 수술</td><td>고시 [별첨2] 수술 <span class="smn">(카테터·심장이식·판막·부정맥수술(전극도자·냉각·인공심박기)·개흉/내시경)</span></td><td class="ok">30일</td></tr>
+      <tr><td class="cd">② 약제</td><td>고시 약제 투여 <span class="smn">(외래 인정)</span></td><td class="ok">30일</td></tr>
+      <tr><td class="cd">③ 심장이식술</td><td>심장이식술을 받은 경우</td><td class="ok">60일</td></tr>
+      <tr><td class="cd">④ 복잡선천성 심기형</td><td>복잡 선천성 심기형질환자 수술·약제투여</td><td class="ok">60일</td></tr>
+     </table>
+     <div class="spcn">★ <b class="r">수술·약제투여가 없으면 대상 아님</b> — 뇌와 달리 '진단만'으로는 등록 불가.<br>★ 급여 5% · 1회 수술당 30일 (심장이식·복잡선천성 60일). 산정특례보장특약=<b>연 1회</b> 반복.</div>
+    </div>
 
    </div>
   </div>
-  <div class="scvbot"><div class="h">산정특례 기준 (진단 기반 · 별개 담보축)</div>· 산정특례 = 위 4범위(허혈성·2대·순환계)와 <b>축이 다른 별개 담보</b> — 마스터 '산정특례심장'·'산정특례뇌혈관' 전용행에서 진단코드 기반으로 지급. &nbsp;· 외상성 뇌출혈(S06) = 뇌혈관진단비 미보장 → <b>산정특례 축only</b>로만 커버(고정사실). &nbsp;· 대상 코드범위(확정): <b>[뇌]</b> I60~69 전체 + I67.0·1·5·6 + Q28 선천 + S06 / <b>[심]</b> I20~25·I30~41·I42~45·I46·I47~50 + 판막. <b>각각 개별 담보로 각각 보상.</b> 지급조건·기간(30일·5% 등)만 회사·약관별 [확인].</div>
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 6 / 17</span></div>
 </div>
@@ -2198,6 +2245,57 @@ body {{ color:{INK}; }}
   </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / 17</span></div>
 </div>
+<!-- P-SURG: 수술비 보상기준 + 1~5종 vs 1~7종 (신설) -->
+<div class="pg surgpg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 수술비</div>
+  <div class="nm">수술비 <b>— 보상기준과 1~5종의 진실</b></div>
+  <div class="pgn"><b>18</b>수술비</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="sg2">
+   <div class="sgcol">
+    <div class="sghd">■ 창상봉합 · 골절 · 상해수술비 — 보상기준</div>
+    <div class="sgbox">
+     <div class="sgt">창상봉합술 <span class="smn">— 피부만</span></div>
+     <table class="sgtab">
+      <tr><td class="k">보상</td><td><b>피부만 꿰맨 경우</b>. <b class="r">창상봉합술 담보에서만</b> 나온다(상해수술비 ×)</td></tr>
+      <tr><td class="k">주의</td><td>더마본드·스테이플러는 회사별 인정 상이 <span class="hold">[확인]</span></td></tr>
+     </table>
+    </div>
+    <div class="sgbox">
+     <div class="sgt">골절수술비 <span class="smn">— 뼈 수술</span></div>
+     <table class="sgtab">
+      <tr><td class="k">보상</td><td><b>뼈 골절 + 수술</b>. 골절진단비와 <b>별개 → 동시 수령</b></td></tr>
+      <tr><td class="k">주의</td><td><b class="r">깁스·반깁스만은 수술 아님</b> → 골절진단비·깁스치료비로만</td></tr>
+     </table>
+    </div>
+    <div class="sgbox">
+     <div class="sgt">상해수술비 <span class="smn">— 근봉합술 이상</span></div>
+     <table class="sgtab">
+      <tr><td class="k">보상</td><td class="r"><b>근봉합술이 되어야 보상.</b> <span style="color:inherit"><b class="r">피부만은 지급 안 됨</b></span></td></tr>
+      <tr><td class="k">범위</td><td><b>포괄주의</b> — 근봉합술 이상 상해수술 중 <b>가장 넓다</b></td></tr>
+     </table>
+    </div>
+   </div>
+   <div class="sgcol">
+    <div class="sghd r">■ 1~5종 vs 1~7종 — 완벽 비교</div>
+    <div class="sgbox">
+     <div class="sgt">한눈에 — 무엇이 다른가</div>
+     <table class="sgtab vs">
+      <tr class="hd"><td class="k">구분</td><td class="a">1~5종</td><td class="b">1~7종</td></tr>
+      <tr><td class="k">지급 기준</td><td class="a">질병코드+수술방법<br>1~5종 분류표</td><td class="b"><b>ADRG 수술코드</b></td></tr>
+      <tr><td class="k">수술 정의</td><td class="a"><b>충족 필요</b></td><td class="b"><b class="g2">해당 안 돼도 코드 맞으면 OK</b></td></tr>
+      <tr><td class="k">급여/비급여</td><td class="a"><b class="g2">모두 보장</b></td><td class="b"><b class="r">비급여 불가</b></td></tr>
+      <tr><td class="k">흡인·천자·핀제거</td><td class="a"><b class="r">불가</b></td><td class="b"><b class="g2">가능</b></td></tr>
+      <tr><td class="k">지급 방법</td><td class="a"><b>수술 1회당</b></td><td class="b"><b>코드당 연 3회</b></td></tr>
+     </table>
+    </div>
+    <div class="sgno r"><b>★ 상담 한 줄</b> "1~5종=비급여까지 나오나 <b>수술이어야</b> / 1~7종=수술 아니어도 코드 맞으면 되나 <b class="r">비급여 ×</b>"</div>
+   </div>
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 수술비</span></div>
+</div>
+
 <!-- P5g: 도수·체외충격파 (세대별 부담) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
