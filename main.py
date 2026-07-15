@@ -241,6 +241,11 @@ def pdf_to_txt(pdf_bytes):
     out=[]
     for idx, img in enumerate(pages):
         try:
+            # ★v60 회전 보정: let: 리포트는 가로형인데 '인쇄→PDF' 이미지본은 세로 A4에
+            #   가로 내용이 90° 눕는다. 세로(높이>너비) 페이지면 시계방향(-90°)으로 세워
+            #   비전 OCR 정확도를 높인다(정방향 검증 완료). 이미 정방향(가로)이면 무동작.
+            if img.height > img.width:
+                img = img.rotate(-90, expand=True)
             buf=io.BytesIO(); img.save(buf, format='PNG')
             b=base64.b64encode(buf.getvalue()).decode()
             r=httpx.post('https://api.anthropic.com/v1/messages',
@@ -510,10 +515,18 @@ def parse_txt(txt, filename=''):
             # ★v30p 다중 별첨 헤더 형태 대응(A:계약자줄먼저→회사·상품 다음줄 / B:회사·상품+계약자 한줄 / C:계약자이름+회사+상품 한줄).
             #   담보표 헤더('가입금액'·'담보명'·'Chtd') 전까지를 헤더영역으로 모아 회사·상품·보험료·날짜를 통째 추출.
             _hdr=[]; _k=i
-            while _k < n and _k < i+6:
+            while _k < n and _k < i+8:
                 _lk = lines[_k]
                 if '가입금액' in _lk or 'Chtd' in _lk or '담보명' in _lk: break
                 if '정상계약 리스트' in _lk or '실효계약 리스트' in _lk: break
+                # ★v59 첫 담보 유실 방지: '한글…+끝자리 숫자'=담보값 줄을 만나면 헤더수집 중단.
+                #   (계약자·보험료·보장기간·납입·날짜 줄은 담보로 오인 안 되게 제외.)
+                #   이전 고정 6줄창은 블랭크패딩 때문에 첫 담보(예 한화생명 암수술 50)를
+                #   상품명에 흡수 → 담보 1~3개 유실. 생보 암보험(첫 담보=암진단)이 가장 큰 피해.
+                _lks=_lk.strip()
+                if _lks and re.search(r'[가-힣]', _lks) and re.search(r'\s[\d][\d,]*\s*$', _lks) \
+                   and not re.search(r'계약자|보험료|보장기간|납입|월납|\d{4}\.\d{2}', _lks):
+                    break
                 _hdr.append(_lk); _k += 1
             _ht = ' '.join(_hdr).replace('\t',' ')
             i = _k+1 if (_k<n and ('가입금액' in lines[_k] or 'Chtd' in lines[_k] or '담보명' in lines[_k])) else _k
@@ -2608,7 +2621,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v58-3page-final-20260714'}
+def health(): return {'ok':True,'version':'v60-imagepdf-rotate-20260715'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -2640,9 +2653,22 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         _txt_data = parse_txt(txt, fname) if txt.strip() else None
     except Exception:
         _txt_data=None
-    _pdf_data=None
+    _pdf_data=None; pdf_txt=''; _img_pdf_nokey=False
     if _pdf_f:
         pdf_bytes=await _pdf_f.read()
+        # ★v60 이미지 PDF 진단: 텍스트레이어 직독이 0글자면 = 이미지 전용 PDF(글자 없음).
+        #   'Microsoft Print To PDF'로 다시 저장하면 글자층이 통째 이미지가 돼 직독 불가.
+        #   이때 유일한 경로는 비전 OCR(API키 필요) — 키 없으면 명확히 알린다.
+        try:
+            import subprocess as _sp, tempfile as _tf
+            with _tf.NamedTemporaryFile(suffix='.pdf', delete=False) as _tfp:
+                _tfp.write(pdf_bytes); _tpp=_tfp.name
+            _rawtl=_sp.run(['pdftotext','-layout',_tpp,'-'],capture_output=True,text=True,timeout=60).stdout
+            try: os.unlink(_tpp)
+            except: pass
+            if (not _rawtl or len(_rawtl.strip())<30) and not os.environ.get('ANTHROPIC_API_KEY',''):
+                _img_pdf_nokey=True
+        except Exception: pass
         pdf_txt=pdf_to_txt(pdf_bytes)
         if pdf_txt.strip():
             try:
@@ -2660,6 +2686,11 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
 
     try:
         if not data or not data.get('contracts'):
+            if _img_pdf_nokey:
+                return JSONResponse({'ok':False,'source':'이미지PDF',
+                    'error':'이미지 PDF입니다(글자층 없음). let: 원본 PDF를 그대로 올려 주세요. '
+                            '이 파일은 원본을 "인쇄→PDF"로 저장해 글자가 이미지가 된 것이라 직독이 불가합니다. '
+                            '원본이 없으면 관리자에게 서버 API키 설정을 요청하면 OCR로 읽을 수 있습니다(금액 검수 필요).'})
             return JSONResponse({'ok':False,'error':'계약을 찾지 못했습니다.','source':src_note})
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
