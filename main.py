@@ -55,9 +55,8 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     if '갱신' in product and '비갱신' not in product: return '갱신'
     # 2) 만기 9999(종신) -> 비갱신
     if expiry.startswith('9999'): return '비갱신(종신)'
-    # 3) ★삼성화재 예외: 납입기간을 갱신기간으로 잡는 특수 회사 → 기간동일이어도 주계약 비갱신
-    #    (담보명에 '갱신' 표시된 특약만 색에서 파랑 처리, judge_renewal은 주계약 판정)
-    if '삼성' in str(company): return '비갱신'
+    # 3) ★삼성화재 예외 삭제(지점장 2026.07.15 확정): 운전자 특례가 아니라 '납입기간==보장기간이면 갱신'이
+    #    보편 규칙이다 → 삼성도 예외 없이 ④로 판정(20년납/20년만기=갱신). 종신(9999)은 위 ②에서 이미 비갱신.
     # 4) 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
     pay_y = 0; cov_y = 0
     m = re.search(r'(\d+)\s*년', pay_period or '')
@@ -134,6 +133,17 @@ def rule_extract(block_lines):
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
     dambo={}; names=[]; amts=[]; pend=None
+    def _add(_nm, _amt):
+        # ★v61 심뇌혈관수술비 라인단위 분해(지침 §8.3.1 · 지점장 2026.07.15 재확정):
+        #   '심뇌혈관…수술' = 심장수술비 + 뇌혈관수술비 각 100% 동일액.
+        #   ★중복줄(상해·질병 등 같은 3,000이 2줄) = 합산 아니라 대표(max) — 6,000 오합산 방지.
+        #   라인 단위로 쪼개므로 dambo 합산(6,000) 이전에 처리된다.
+        _n=re.sub(r'\s','',str(_nm))
+        if '심뇌혈관' in _n and '수술' in _n and '[확인]' not in _n:
+            for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
+                dambo[_r]=max(dambo.get(_r,0), _amt)
+        else:
+            dambo[_nm]=dambo.get(_nm,0)+_amt
     UNIT = r'(?:\s*(원|만원|만))?'
     NOISE = re.compile(r'지점|LP|☎|^\d{4}\.\d{2}\.\d{2}$|^\d+/\d+$|계약자|납입주기|보장기간|정상계약|상기 ?내용은|기준으로 ?분석|향후 ?계약사항|본 ?리포트|참조하시|제안서는|유의 ?사항')
     def _flush():
@@ -159,7 +169,7 @@ def rule_extract(block_lines):
                         k=2
                         while f'{name}~{k}' in dambo: k+=1
                         name=f'{name}~{k}'
-                    dambo[name] = dambo.get(name,0) + amt
+                    _add(name, amt)
             except: pass
             continue
         m2 = re.match(r'^([\d,]+)'+UNIT+r'\s*$', l)
@@ -179,7 +189,7 @@ def rule_extract(block_lines):
             pend = l
     _flush()
     for i, nm in enumerate(names):
-        dambo[nm] = dambo.get(nm,0) + (amts[i] if i < len(amts) else 0)   # 금액 미확보=0 → [확인] 경유, 증발 금지
+        _add(nm, (amts[i] if i < len(amts) else 0))   # 금액 미확보=0 → [확인] 경유, 증발 금지
     return dambo
 
 def llm_extract(block_text):
@@ -1057,7 +1067,7 @@ def resolve_kw(raw):
             _core_s = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)
             _core_s2 = _core_s.strip().replace(' ','')
             _core_s2 = re.sub(r'^재해상해', '상해', _core_s2)   # 재해상해=상해(중복 정리)
-            _core_s2 = re.sub(r'^재해수술', '상해수술', _core_s2)  # 재해수술비=상해수술비
+            _core_s2 = re.sub(r'^재해(입원)?수술', r'상해\1수술', _core_s2)  # ★v65 재해수술비·재해입원수술비=상해수술비(지점장 2026.07.15, '입원' 낀 변형도 포함)
             _is_pure_s = _core_s2.startswith('상해수술비') or _core_s2.startswith('상해입원수술비')
             if _is_pure_s and no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','통원','외래','자궁','자녀','자가','교통'):
                 return '상해수술비',0
@@ -1094,8 +1104,8 @@ def resolve_kw(raw):
     #   구간밴드(연간1천~1억) 다줄·부위별 = 대표 1개(max, §8.2). 뇌·심·순환계·비급여·재활·통원·검사는 제외(각 전용행).
     if has('암') and (has('주요치료') or has('특정치료') or (has('진단후') and has('치료') and (has('종합병원') or has('특정'))))         and no('순환계','2대','뇌','허혈','심장','심근','비급여','하이클래스','재활','통원','입원일당','MRI','PET','초음파','검사','수술'):
         return '암주요치료비',0
-    # 뇌혈관·허혈성심장 특정치료비 = 2대주요치료비(뇌·심 두 칸)
-    if (has('뇌혈관') or has('허혈') or has('심장') or has('순환계')) and (has('특정치료') or has('주요치료')) and no('암','수술'):
+    # 뇌혈관·허혈성심장 특정치료비 = 2대주요치료비(뇌·심 두 칸). ★v65 '뇌심주요치료비특약' 누락 수정(지점장 2026.07.15)
+    if (has('뇌혈관') or has('허혈') or has('심장') or has('순환계') or has('뇌심') or (has('뇌') and has('심'))) and (has('특정치료') or has('주요치료')) and no('암','수술'):
         return '2대 주요치료비',0
     if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 잔여 진단후 치료지원금(암·뇌·심 아닌) = 진단비 아님 → [확인]
     if has('유사암') and has('주요치료'): return None,0   # ★v30 유사암 주요치료비 = 전용행 없음 → [확인]
@@ -1108,7 +1118,7 @@ def resolve_kw(raw):
     if has('중입자'): return '중입자치료비',0
     if has('양성자'): return '양성자치료',0
     if has('세기조절'): return '세기조절치료',0
-    if has('항암') and (has('방사선') or has('약물')):
+    if has('항암') and (has('방사선') or has('약물')) and no('표적','호르몬'):   # ★v65 표적·호르몬 제외(지점장 2026.07.15): 표적항암약물허가/특정항암호르몬약물이 여기 흡수돼 항암방사선약물에 표적값(2천) 오입력되던 것 차단
         # ★v30: 특정부위·특정암 한정 변형(예 남성생식기관련암 3,000)은 기본 항암방사선과 별개 → [확인]
         if has('생식기') or has('전립선') or has('음경') or has('고환') or has('유방') or has('자궁') or has('갑상선'): return None,0
         return '항암방사선약물',0
@@ -1190,6 +1200,12 @@ def resolve_kw(raw):
         return f'{body}후유{sev}%',0
 
     # ── 일당/입원 ──
+    # ★v62 간호간병통합서비스(지점장 2026.07.15): 담보명에 '간호'+'간병'+'통합' 동시 존재 →
+    #   간호통합병동 행. '간병인사용…일당비(간호간병통합서비스)' 형태가 아래 has('간병인')에
+    #   먼저 걸려 간병인으로 오분류·누락되던 것을 차단(간호통합병동을 간병인보다 우선 판정).
+    if has('간호') and has('간병') and has('통합'):
+        if has('181'): return None,0        # 1-180일 기준만(181일이상 제외, v41 유지)
+        return '간호통합병동',0
     if has('간병인') and has('요양병원') and no('제외'): return None,0  # ★요양병원 포함형 미기재(지점장)
     if has('간병인') and has('지원'): return '간병인지원일당',0   # ★v29w (지점장 2026.07.02) 간병인지원일당 전용행
     if has('간병인'): return '간병인',0
@@ -1226,12 +1242,17 @@ def resolve_kw(raw):
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
     if has('자부상') or (has('자동차') and (has('부상') or has('자부상'))):
-        # ★자부상=자동차 한정. 급수밴드 있으면 14급 포함 밴드만(1~3/1~7 제외). 밴드 없으면 단독 자부상.
+        # ★자부상=자동차 한정. 급수밴드 있으면 14급 포함 밴드만(1~3/1~7 제외).
         _band=re.search(r'(\d+)\s*~\s*(\d+)\s*급', r)
         if _band:
             if int(_band.group(2))>=14: return '자부상',0
             return None,0
-        return '자부상',0
+        # ★v65 단일 급수(예 '(1급)'·'(14급)') = 14급만 자부상, 그 외 제외(지점장 2026.07.15).
+        #   이전엔 밴드 없으면 무조건 자부상이라 급별 여러 줄(1~14급)이 전부 자부상→합산 수천원 오류였다.
+        _single=re.search(r'(?<![\d~])(\d+)\s*급', r)
+        if _single:
+            return ('자부상',0) if int(_single.group(1))>=14 else (None,0)
+        return '자부상',0        # 급 표기 자체가 없는 순수 자동차부상위로금 → 자부상
 
     # ── 골절/응급/독감/화상/깁스 ──
     if has('5대골절') and has('진단'): return '5대골절진단비',0
@@ -2621,7 +2642,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v60-imagepdf-rotate-20260715'}
+def health(): return {'ok':True,'version':'v65-mapfix5-20260715'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
@@ -2688,9 +2709,7 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         if not data or not data.get('contracts'):
             if _img_pdf_nokey:
                 return JSONResponse({'ok':False,'source':'이미지PDF',
-                    'error':'이미지 PDF입니다(글자층 없음). let: 원본 PDF를 그대로 올려 주세요. '
-                            '이 파일은 원본을 "인쇄→PDF"로 저장해 글자가 이미지가 된 것이라 직독이 불가합니다. '
-                            '원본이 없으면 관리자에게 서버 API키 설정을 요청하면 OCR로 읽을 수 있습니다(금액 검수 필요).'})
+                    'error':'이미지 PDF입니다 — OCR.PDF로 변환해서 올리세요'})
             return JSONResponse({'ok':False,'error':'계약을 찾지 못했습니다.','source':src_note})
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
