@@ -2642,7 +2642,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v65-mapfix5-20260715'}
+def health(): return {'ok':True,'version':'v75-slim-20260718'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

@@ -176,10 +176,15 @@ GA_CSS="""
 def ga_pages_html():
     out=[GA_CSS.join(['<style>','</style>'])]
     # 표지
-    out.append('<div class="pg"><div class="gap-cover"><div class="gt">회사별 비교표<br><b>총정리</b></div>'
+    out.append('<div class="pg gacover">'
+      '<div class="top itop"><div class="eb">BARUM · 회사별 비교표</div>'
+      '<div class="nm">회사별 <b>비교표 총정리</b></div>'
+      '<div class="pgn"><b>·</b>부록</div><div class="bar"></div></div>'
+      '<div class="gap-cover"><div class="gt">회사별 비교표<br><b>총정리</b></div>'
       '<div class="gd">유병자 · 비급여 통합치료비 · 항암 · 순환계 · 치매/간병 · 생·손보 수술비<br>11개 비교표 · 회사별 담보·한도·보험료<br>자료기준일 2026.06.30 · 정리 BARUM지점 최은혜</div>'
       '<div class="gwarn">⚠ 본 자료는 사내교육 정리본이며 보험안내자료로 사용할 수 없습니다. 수치는 원본(폰 캡처) 판독 기반이므로, 청약·비교설명 전 반드시 최신 상품설명서로 대조 확인 요망. ? 표시 셀은 원본 화면 잘림으로 미확정.</div>'
-      '</div></div>')
+      '</div>'
+      '<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 · 표지</span></div></div>')
     for i,grp in enumerate(PAGES,1):
         inner="".join(grp)
         out.append(f'<div class="pg"><div class="top"><div class="eb">BARUM · 회사별 비교표 (설계사 참고용)</div>'

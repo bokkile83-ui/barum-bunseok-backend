@@ -123,17 +123,39 @@ def _pageset(rep):
             P.add(f"{int(b.get('amt', 0)):,}")
         except Exception:
             pass
-    # 편집 대상 페이지(0-based, 2026.07.12 페이지 재배치 반영):
-    #   2=AI진단 / 5=실손세대 / 7=워크시트 / 8=비갱신 / 9=운전자·간병 / 10=재가
-    #   ※11~15(5세대 쉽게·중증vs비중증·도표·도수체외·변천사)는 고정 설명자료
+    # ★v69 하드코딩 인덱스 폐기(2026.07.18): 페이지가 늘거나 순서가 바뀌면
+    #   0-based 고정 인덱스(2·5·7·8·9·10)가 통째로 밀려 편집칸이 엉뚱한 페이지에 붙었다.
+    #   → _detect_pages()가 PDF 본문에서 표식을 찾아 실제 물리 인덱스를 동적으로 잡는다.
     D = {'.'}
-    return {2: P, 5: set(_WS) | D, 7: set(_WS) | D, 8: set(_WS) | D,
-            9: set(_WS) | D, 10: set(_WS) | D}
+    return {'__bars__': P, '__ws__': set(_WS) | D}
+
+
+# 편집 대상 페이지를 본문 표식으로 식별(순서·페이지수 변동에 자동 대응)
+_PAGE_MARKS = {
+    '__bars__': ('AI 진단 요약', '보유 강점', '갱신 / 비갱신 구조'),
+    '__ws__':   ('실손보험 세대 구분', '상담 워크시트', '바뀌지 않는 담보',
+                 '운전자 · 간병', '재가보험'),
+}
+
+
+def _detect_pages(root, PGSPEC):
+    """pdftotext -bbox-layout XML에서 페이지별 텍스트를 읽어 편집대상 물리 인덱스를 찾는다."""
+    res = {}
+    for pi, pg in enumerate(root.findall('.//x:page', NS)):
+        txt = ''.join((w.text or '') for w in pg.findall('.//x:word', NS))
+        flat = txt.replace(' ', '')
+        for key, marks in _PAGE_MARKS.items():
+            if key not in PGSPEC:
+                continue
+            if any(m.replace(' ', '') in flat for m in marks):
+                res.setdefault(pi, set())
+                res[pi] |= PGSPEC[key]
+    return res
 
 
 def _value_boxes(xml_path, V, PG=None):
     root = ET.parse(xml_path).getroot()
-    PG = PG or {}
+    PG = _detect_pages(root, PG or {})
     out = []
     for pi, pg in enumerate(root.findall('.//x:page', NS)):
         VV = V | PG.get(pi, set()) | {'.'}
