@@ -164,6 +164,14 @@ def load_excel(path):
                        and any(k in str(ws.cell(r,2).value) for k in ('입원','통원','약값','의료비'))
                        and not any(x in str(ws.cell(r,2).value) for x in ('MRI','도수','비급여주사','일당'))]
             break
+    # ★v80 실손 다건 정본(지점장 확정 2026.07.18): 실손은 최대 3건 —
+    #   '상해의료비 + 실손 + 상해실손' 조합. 상해의료비 행은 '실손' 구분 밖에 있어
+    #   기존 _sil_rows(=실손 그룹 내부만)로는 잡히지 않아 1건으로 뭉개졌다.
+    #   → 시트 전체에서 '상해의료비'/'상해실손' 행을 찾아 실손 판정행에 추가한다.
+    for _r in range(1, ws.max_row + 1):
+        _b = str(ws.cell(_r, 2).value or '')
+        if ('상해의료비' in _b or '상해실손' in _b) and _r not in _sil_rows:
+            _sil_rows.append(_r)
     # 헤더(계약 메타)
     headers=[]
     for c in range(2,last):  # 마지막=합계 제외

@@ -2661,7 +2661,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v79-groupins-20260718'}
+def health(): return {'ok':True,'version':'v80-restore-20260719'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

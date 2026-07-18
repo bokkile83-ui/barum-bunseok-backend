@@ -2572,7 +2572,7 @@ body {{ color:{INK}; }}
             # 이 페이지 세그먼트의 끝(다음 페이지 태그 전)까지가 대상
             # ★v72 표지형 페이지는 상단 폼 예외(지점장 지시 2026.07.18):
             #    표지(cvpg) · 보험 인포메이션(infopg) · GA 표지(gap-cover)
-            if 'cvpg' in tag:
+            if ('cvpg' in tag) or ('infopg' in tag) or ('gacover' in tag):
                 out.append(tag); out.append(seg); continue
             if 'class="top' not in seg:
                 seg = ('<div class="top topauto"><div class="eb">MAKEONE · 보장분석 리포트</div>'
@@ -2592,8 +2592,11 @@ body {{ color:{INK}; }}
     #   균등 배분(세로 패딩 증가) → 2차 렌더. 계약 수가 변해도 자동으로 가득 찬다.
     #   (구 _PGFILL은 값이 비어 있어 실제로 동작한 적이 없었다.)
     doc = _apply_fill(doc)          # 먼저 #pgN id 부여
+    # ★v80 복구(2026.07.18): v79에서 이 호출이 'DIAG: autofill off' 스텁으로 꺼져 있었다.
+    #   → 전 페이지 하단 여백이 그대로 남는 회귀. 다시 켜되, 2패스 후 페이지 수가
+    #   늘어나면(=표가 쪼개져 빈 장 발생) 자동으로 원복한다.
     try:
-        pass  # DIAG: autofill off
+        doc = _autofill_pages(doc, out)
     except Exception:
         pass
     HTML(string=doc).write_pdf(out)
@@ -2601,54 +2604,92 @@ body {{ color:{INK}; }}
 
 
 def _autofill_pages(doc, out_path):
-    """1차 렌더로 페이지별 하단 여백을 재고, 표 행 세로패딩을 늘려 여백을 없앤다."""
+    """1차 렌더로 페이지별 하단 여백을 재고, 표 행 세로패딩을 늘려 여백을 없앤다.
+       ★v80: (1) 페이지 수가 변하면 원복 (2) 패딩 때문에 오히려 여백이 커진 페이지는
+       그 페이지만 개별 원복 — overflow:hidden에 내용이 잘려 더 나빠지는 사고 차단."""
     import re as _r, os as _os, subprocess as _sp, tempfile as _tf
     import xml.etree.ElementTree as _ET
 
     tmpd = _tf.mkdtemp()
-    tpdf = _os.path.join(tmpd, 'probe.pdf')
-    HTML(string=doc).write_pdf(tpdf)
-    txml = _os.path.join(tmpd, 'probe.xml')
-    _sp.run(['pdftotext', '-bbox', tpdf, txml], check=True,
-            stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
-
     ns = {'x': 'http://www.w3.org/1999/xhtml'}
-    root = _ET.parse(txml).getroot()
     FOOT_PT = 34.0        # 꼬리말 밴드 높이(pt) — 이 위까지가 본문
-    gaps = []
-    for pg in root.findall('.//x:page', ns):
-        ph = float(pg.get('height'))
-        limit = ph - FOOT_PT
-        ymax = 0.0
-        for w in pg.findall('.//x:word', ns):
-            y = float(w.get('yMax'))
-            if y < limit and y > ymax:
-                ymax = y
-        gaps.append(max(0.0, limit - ymax) * 0.3528)   # pt → mm
+
+    # ★v80 속도: 측정용 렌더는 재무 3장의 대용량 base64 이미지를 제거한다.
+    #   (.finimg 는 height:229mm 고정 → 페이지 수·페이지 높이에 영향 없음)
+    _PX = ('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk'
+           'YAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
+
+    def _light(_doc):
+        return _r.sub(r'(?<=base64,)[A-Za-z0-9+/=]{5000,}', _PX, _doc)
+
+    def _measure(_doc, tag):
+        pdfp = _os.path.join(tmpd, tag + '.pdf')
+        HTML(string=_light(_doc)).write_pdf(pdfp)
+        xmlp = _os.path.join(tmpd, tag + '.xml')
+        _sp.run(['pdftotext', '-bbox', pdfp, xmlp], check=True,
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+        root = _ET.parse(xmlp).getroot()
+        g = []
+        for pg in root.findall('.//x:page', ns):
+            ph = float(pg.get('height')); limit = ph - FOOT_PT
+            ymax = 0.0
+            for w in pg.findall('.//x:word', ns):
+                y = float(w.get('yMax'))
+                if y < limit and y > ymax:
+                    ymax = y
+            g.append(max(0.0, limit - ymax) * 0.3528)   # pt → mm
+        return g
+
+    gaps0 = _measure(doc, 'probe')
 
     # 페이지별 표 행 수 세기(HTML 기준, 물리 페이지와 1:1인 경우에만 적용)
     parts = _r.split(r'(<div class="pg(?=["\s])[^>]*>)', doc)
     blocks = [parts[i + 1] for i in range(1, len(parts), 2)]
-    if len(blocks) != len(gaps):
+    if len(blocks) != len(gaps0):
         return doc                                    # 페이지가 쪼개졌으면 안전하게 건너뜀
 
-    css = []
-    for i, (blk, gap) in enumerate(zip(blocks, gaps), start=1):
-        if gap < 6.0:                                 # 이미 가득
+    def _css_for(pages):
+        out = []
+        for i in pages:
+            out.append('#pg%d table td { padding-top:%.2fmm; padding-bottom:%.2fmm; }'
+                       % (i, pages[i], pages[i]))
+        return '<style>' + ''.join(out) + '</style>'
+
+    cand = {}
+    for i, (blk, gap) in enumerate(zip(blocks, gaps0), start=1):
+        if gap < 6.0:
             continue
         nrows = blk.count('<tr')
-        if nrows >= 2:
-            add = gap / (2.0 * nrows)                 # 행당 위·아래로 나눠 배분
-            add = min(add, 6.0)                       # 과도한 늘어남 방지
-            if add >= 0.15:
-                css.append('#pg%d table td {{ padding-top:{a}mm; padding-bottom:{a}mm; }}'
-                           .replace('{a}', '%.2f' % add) % i)
-                continue
-        # 표 행이 적은 페이지는 건드리지 않는다(늘리면 페이지가 쪼개져 빈 장이 생긴다)
-        continue
-    if not css:
+        if nrows < 2:
+            continue                                  # 표 행이 적은 페이지는 손대지 않는다
+        add = min((gap * 0.90) / (2.0 * nrows), 6.0)
+        if add >= 0.15:
+            cand[i] = add
+    if not cand:
         return doc
-    return doc.replace('</body>', '<style>' + ''.join(css) + '</style></body>')
+
+    doc2 = doc.replace('</body>', _css_for(cand) + '</body>')
+    try:
+        gaps1 = _measure(doc2, 'fill1')
+    except Exception:
+        return doc
+    if len(gaps1) != len(gaps0):
+        return doc                                    # 장 수가 변했으면 통째 원복
+
+    keep = {i: v for i, v in cand.items() if gaps1[i - 1] <= gaps0[i - 1] - 1.0}
+    if len(keep) == len(cand):
+        return doc2
+    if not keep:
+        return doc
+    doc3 = doc.replace('</body>', _css_for(keep) + '</body>')
+    try:
+        gaps2 = _measure(doc3, 'fill2')
+        if len(gaps2) != len(gaps0):
+            return doc
+    except Exception:
+        return doc
+    return doc3
+
 
 # ── 정기철 샘플 데이터 (실제는 build_excel 결과에서 매핑) ──
 if __name__=='__main__':
