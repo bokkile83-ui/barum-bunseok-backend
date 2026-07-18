@@ -608,8 +608,14 @@ def build_report_pdf(rep, out):
 @page {{ size:A4; margin:0; }}   /* ★v76 @page 여백상자 제거 — .ft와 꼬리말이 이중으로 찍히던 문제 해소 */
 * {{ margin:0; padding:0; box-sizing:border-box; font-family:'NanumSquareRound','Noto Sans CJK KR',sans-serif; }}
 body {{ color:{INK}; }}
-.pg {{ width:210mm; height:297mm; position:relative; page-break-after:always; background:#fff; overflow:hidden; }}   /* ★v67 overflow:hidden — 내용이 넘쳐 폼 없는 물리 페이지가 생기는 것 봉쇄 */
+.pg {{ width:210mm; height:296.8mm; box-sizing:border-box; position:relative; page-break-after:always; break-after:page; background:#fff; overflow:hidden; }}
+.vstamp {{ position:absolute; right:2.5mm; bottom:0.8mm; font-size:4.5pt; color:#9AA3AE; letter-spacing:.5px; }}   /* ★v67 overflow:hidden — 내용이 넘쳐 폼 없는 물리 페이지가 생기는 것 봉쇄 */
 .pg:last-child {{ page-break-after:auto; }}
+/* ★v84: 모든 페이지는 '앞에서도' 반드시 새 장에서 시작한다(양쪽 잠금).
+   앞 페이지가 어떤 이유로 덜 채워져도 다음 .pg가 그 밑에 딸려 붙지 못한다.
+   — 보험 인포메이션 간지가 재가보험 페이지 하단에 붙던 증상 차단 */
+.pg {{ page-break-before:always; break-before:page; }}
+.pg:first-child {{ page-break-before:avoid; break-before:avoid; }}
 .top {{ background:#fff; color:{NAVY}; padding:9mm 11mm 8mm; position:relative; }}
 .top .bar {{ position:absolute; left:0; bottom:0; width:100%; height:1.4mm; background:linear-gradient(90deg,{GOLD},{GOLDD} 55%,transparent); }}
 .top .eb {{ font-size:9pt; letter-spacing:2px; color:{GOLDD}; font-weight:700; }}
@@ -2563,6 +2569,8 @@ body {{ color:{INK}; }}
         _tot = len(_re2.findall(r'<div class="pg(?=["\s])', doc))
     doc = doc.replace('@@TPG@@', str(_tot))
     # ★v67 폼 강제(지점장 지시): 어떤 페이지든 상단 top / 하단 ft 폼이 빠지면 자동 주입한다.
+    _VSTAMP = '<div class="vstamp">v86-silson3-20260719</div>'
+
     def _force_forms(_d, _cust):
         import re as _r3
         parts = _r3.split(r'(<div class="pg(?=["\s])[^"]*">)', _d)
@@ -2572,6 +2580,7 @@ body {{ color:{INK}; }}
             # 이 페이지 세그먼트의 끝(다음 페이지 태그 전)까지가 대상
             # ★v72 표지형 페이지는 상단 폼 예외(지점장 지시 2026.07.18):
             #    표지(cvpg) · 보험 인포메이션(infopg) · GA 표지(gap-cover)
+            seg = _VSTAMP + seg
             if ('cvpg' in tag) or ('infopg' in tag) or ('gacover' in tag):
                 out.append(tag); out.append(seg); continue
             if 'class="top' not in seg:
@@ -2599,8 +2608,48 @@ body {{ color:{INK}; }}
         doc = _autofill_pages(doc, out)
     except Exception:
         pass
-    HTML(string=doc).write_pdf(out)
+    _render_exact(doc, out)
     return True
+
+
+def _render_exact(doc, out):
+    """★v82 페이지 유실 방지(지점장 지시 2026.07.19).
+       한 번에 렌더한 결과의 물리 페이지 수가 HTML의 .pg 개수와 다르면
+       (= 어떤 장이 통째로 사라지거나 두 장이 한 장에 겹쳐 찍힌 것)
+       페이지를 한 장씩 따로 렌더해 이어 붙인다. 정적 페이지(운전자·간병,
+       보험 인포메이션 간지, 5세대 도표, 심혈관 4장 등)는 고객 데이터와
+       무관하므로 이 방식으로 100% 보장된다."""
+    import re as _r
+    expect = len(_r.findall(r'<div class="pg(?=["\s])', doc))
+    try:
+        d = HTML(string=doc).render()
+        if len(d.pages) == expect:
+            d.write_pdf(out)
+            return
+    except Exception:
+        pass
+    # ── 폴백: 페이지 단위 개별 렌더 후 병합(추가 라이브러리 불필요)
+    i0 = doc.index('<div class="pg')
+    head = doc[:i0]
+    parts = _r.split(r'(<div class="pg(?=["\s])[^"]*">)', doc)
+    segs = []
+    for k in range(1, len(parts), 2):
+        body = parts[k + 1]
+        body = body.replace('</body>', '').replace('</html>', '')
+        segs.append(parts[k] + body)
+    base = None
+    for sg in segs:
+        dd = HTML(string=head + sg + '</body></html>').render()
+        pg = dd.pages[:1] if dd.pages else []
+        if base is None:
+            base = dd
+            base.pages[:] = list(pg)
+        else:
+            base.pages.extend(pg)
+    if base is None:
+        HTML(string=doc).write_pdf(out)
+    else:
+        base.write_pdf(out)
 
 
 def _autofill_pages(doc, out_path):
@@ -2640,6 +2689,10 @@ def _autofill_pages(doc, out_path):
             g.append(max(0.0, limit - ymax) * 0.3528)   # pt → mm
         return g
 
+    # ★v83 여백지침 개정(지점장 지시 2026.07.19): '여백 0%' 폐기 → '여백 10% 유지'.
+    #   A4 297mm의 10% = 29.7mm 까지는 정상으로 본다. 그 이하로는 억지로 채우지 않는다.
+    TARGET = 297.0 * 0.10
+
     gaps0 = _measure(doc, 'probe')
 
     # 페이지별 표 행 수 세기(HTML 기준, 물리 페이지와 1:1인 경우에만 적용)
@@ -2655,14 +2708,28 @@ def _autofill_pages(doc, out_path):
                        % (i, pages[i], pages[i]))
         return '<style>' + ''.join(out) + '</style>'
 
+    # ★★v85 영구지침(지점장 확정 2026.07.19): <b>보험 인포메이션 간지부터 끝까지는 한 세트</b>.
+    #   (간지 → 5세대 4장 → 수술비 → 변천사 → 심혈관 4장 → 재무 3장 → GA 4장)
+    #   고객 데이터와 무관한 고정 자료이므로 여백채움·레이아웃 조정을 일절 하지 않는다.
+    LOCK_FROM = None
+    for _i, _b in enumerate(blocks, start=1):
+        if 'infopg' in (parts[_i * 2 - 1] if _i * 2 - 1 < len(parts) else ''):
+            LOCK_FROM = _i
+            break
+    if LOCK_FROM is None:
+        LOCK_FROM = len(blocks) + 1
+
     cand = {}
     for i, (blk, gap) in enumerate(zip(blocks, gaps0), start=1):
-        if gap < 6.0:
-            continue
+        if i >= LOCK_FROM:
+            continue                                  # 인포메이션 세트 = 손대지 않음
+        if gap <= TARGET:
+            continue                                  # 10% 이내 여백은 정상 — 손대지 않는다
         nrows = blk.count('<tr')
         if nrows < 2:
             continue                                  # 표 행이 적은 페이지는 손대지 않는다
-        add = min((gap * 0.90) / (2.0 * nrows), 6.0)
+        need = (gap - TARGET) * 0.90                  # 10% 여백은 남겨둔다
+        add = min(need / (2.0 * nrows), 6.0)
         if add >= 0.15:
             cand[i] = add
     if not cand:
