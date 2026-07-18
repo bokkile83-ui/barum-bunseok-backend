@@ -181,6 +181,16 @@ def load_excel(path):
         nm=re.sub(r'\s+',' ',nm).strip()
         _join=str(ws.cell(3,c).value or '').strip()             # 3행=가입년일
         _hassil=any(_man(ws.cell(r,c).value)>0 for r in _sil_rows)  # 실손 담보 보유 계약?
+        # ★v79 단체보험 제외(지점장 확정 2026.07.18): ①가입~만기 1년 ②상품명에 '단체' — 2조건 동시 충족만 제외
+        try:
+            _pp = str(_pr_ or '').replace(' ', '')
+            if '단체' in _pp:
+                _cy = re.match(r'(\d{4})', str(_join or ''))
+                _ey = re.match(r'(\d{4})', str(ws.cell(4, c).value or ''))
+                if _cy and _ey and (int(_ey.group(1)) - int(_cy.group(1))) <= 1:
+                    continue      # 단체보험 → 계약열 자체를 제외
+        except Exception:
+            pass
         headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,'co':_co_,'prod':_pr_})
     total_prem=int(_man(ws.cell(2,last).value))
     return grp_rows, headers, total_prem
@@ -497,13 +507,20 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         _cnm=_sh.get('nm','')
         _g=_gen_of(_sh.get('join'), _cnm)
         # 실손 계약 전체 목록(회사·상품명·가입일·보험료)
+        # ★v79 실손은 2개 이상일 수 있다(지점장 확정 2026.07.18).
+        #   예) 상해의료비 가입 후 실손을 추가로 드는 경우 / DB손보 2006년형 특수 실손 등.
+        #   → 계약을 합치지 말고 <b>각각</b> 표기하고, 세대도 <b>계약별로 각각</b> 판정한다.
         _sillist=[]
         for _h in sorted(_sil, key=lambda x:str(x.get('join',''))):
+            _gh=_gen_of(_h.get('join'), _h.get('nm',''))
             _sillist.append({'co':str(_h.get('co',''))[:14],
                              'prod':str(_h.get('prod',''))[:34],
                              'join':str(_h.get('join','')),
                              'amt':_h.get('amt',0),
-                             'renew':_h.get('renew',False)})
+                             'renew':_h.get('renew',False),
+                             'gen':(_gh['gen'] if _gh else ''),
+                             'sub':(_gh['sub'] if _gh else '')})
+        rep['silson_count']=len(_sillist)
         rep['silson_list']=_sillist
         if _g:
             rep['silson_gen']={'status':'auto','gen':_g['gen'],'sub':_g['sub'],'date':_g['date'],

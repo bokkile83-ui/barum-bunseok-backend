@@ -38,10 +38,29 @@ def _isci_prod(p):
     return any(k in t for k in ('CI보험', '리빙케어', 'GI보험'))
 
 
-def is_excluded(company, product=''):
+def _is_group_ins(product='', contract_date='', expiry_date=''):
+    # ★단체보험 판정(지점장 확정 2026.07.18) — 2조건 동시 충족만 단체보험
+    #   ① 가입기간이 1년마다 정해진다(가입~만기 = 1년)
+    #   ② 상품명이 '○○단체보험'(상품명에 '단체' 표기)
+    #   둘 중 하나만 맞으면 단체보험 아님 → 제외하지 않고 개인계약으로 포함
+    p = str(product or '').replace(' ', '')
+    if '단체' not in p:
+        return False
+    cy = re.match(r'(\d{4})', str(contract_date or ''))
+    ey = re.match(r'(\d{4})', str(expiry_date or ''))
+    if not cy or not ey:
+        return False          # 날짜 불명 → 단정 금지(포함)
+    try:
+        span = int(ey.group(1)) - int(cy.group(1))
+    except Exception:
+        return False
+    return span <= 1          # 1년 단위 가입기간
+
+def is_excluded(company, product='', contract_date='', expiry_date=''):
     t = re.sub(r'[\s（）()_·]|TM', '', str(company)+str(product))
     for kw in EXCLUDE:
         if kw in t: return True
+    if _is_group_ins(product, contract_date, expiry_date): return True   # ★제외 5종: 단체보험
     if '운전자' in t: return False   # ★운전자·운전자상해보험은 포함(§4)
     # ★자동차보험(다이렉트/애니카/하이카 + 개인용/업무용/영업용/개인소유) = 제외
     if any(b in t for b in ('다이렉트','애니카','하이카','개인용자동차','업무용자동차')) and any(x in t for x in ('개인용','업무용','영업용','개인소유')):
@@ -446,7 +465,7 @@ def parse_sinjeong(lines):
         mper = re.search(r'(?:월납|매월납)\s*/\s*(\d+)\s*년', ht)
         if mper: pay_period = f'{mper.group(1)}년납'
         if not expiry_date and re.search(r'종신', ht): expiry_date = '9999.12.31'
-        if is_excluded(company, product): continue        # 제외 4종(§4)
+        if is_excluded(company, product, contract_date, expiry_date): continue   # 제외 5종(단체보험 포함)
 
         dambo = {}
         for nm, v in _sj_rows(block):
@@ -605,7 +624,7 @@ def parse_txt(txt, filename=''):
                     if _l and not re.search(r'계약자|납입주기|보험료|보장기간', _l):
                         if len(_l) > 5 and not re.search(r'^[\d,]+$', _l) and not re.search(r'^\d{4}\.\d{2}', _l):
                             product = _l; i = _j + 1; break
-        if is_excluded(company, product):
+        if is_excluded(company, product, contract_date, expiry_date):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
         renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period, company)
@@ -702,7 +721,7 @@ def parse_txt(txt, filename=''):
     #      묶음(특정Ⅰ·Ⅱ·Ⅲ 등)은 허혈성 행에 절대 넣지 않는다. I20·I24·I25는 '협심증' 행으로 표현.
     #   ★빈맥(I47·I48)과 부정맥(I49)은 별개 코드.
     # ══════════════════════════════════════════════════════════════════
-    _HB = {   # ★★★심장 묶음담보 회사별 정본표(지점장 확정 2026.07.14 · 자료실 심장정리)
+    _HB = {   # ★★★심장 묶음담보 회사별 정본표(지점장 최종본 2026.07.18 · 이전 표 폐기)
       #  ★'허혈성 진단비' 행 = 회사담보명 '허혈성심장질환진단비' 단독 담보 전용.
       #   묶음은 이 행에 절대 안 넣는다. I20·I24·I25는 '협심증' 행으로 표현.
       #  ★빈맥(I47·I48)과 부정맥(I49)은 별개 코드.
@@ -732,10 +751,10 @@ def parse_txt(txt, filename=''):
         (lambda t: '특정1' in t and '심장' in t,   ['협심증','주요심장염증']),
         (lambda t: '특정2' in t and '심장' in t,   ['급성심근경색']),
         (lambda t: '특정3' in t and '심장' in t,   ['심장판막','빈맥','심부전']),
-        (lambda t: '순환계3대' in t,               ['부정맥','심부전']),
+        (lambda t: '순환계3대' in t,               ['빈맥','부정맥','심부전']),
       ],
       '현대': [
-        (lambda t: '특정허혈' in t,                 ['협심증','급성심근경색']),
+        (lambda t: '특정허혈' in t,                 ['급성심근경색']),
         # ★'허혈성심장질환진단비' = 무조건 단독(허혈성 행). 분해 금지.
         (lambda t: '특정2대' in t,                  ['부정맥']),
         (lambda t: '특정1' in t and '심' in t,      ['협심증','빈맥','심부전']),
@@ -2642,7 +2661,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v75-slim-20260718'}
+def health(): return {'ok':True,'version':'v79-groupins-20260718'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

@@ -71,7 +71,7 @@ _HCOLS = [('급성심근경색','#C0392B','#F7E0DC'), ('허혈성','#B9540B','#F
 _BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), ('뇌혈관·순환계','#1F5FA8','#E6F1FB'), ('산정특례','#9A7A12','#FBF1D8')]
 
 _BRAIN_TBL=[('grp','출혈성 뇌혈관 (I60~62)',None,None,None),('row','뇌출혈','I60~62','hem',[1,1,1]),('grp','허혈성 뇌혈관 (I63~66)',None,None,None),('row','뇌졸증·뇌경색','I63·65·66','infarct',[1,1,1]),('grp','기타 뇌혈관 (I64·67~69)',None,None,None),('row','기타 뇌혈관질환','I64·67·68·69','other',[1,1,1]),('grp','순환계 확장·선천',None,None,None),('row','뇌동맥류·정맥류','I71·72','aneur',[0,1,0]),('row','선천 뇌혈관기형','Q28.0~28.3','congen',[0,0,1]),('row','외상성 뇌출혈','S06','trauma',[0,0,1])]
-_HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','기타·만성 허혈','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
+_HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','기타·만성 허혈','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','빈맥','I47·48','tachy',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
 def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None):
     held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; ncol=len(headers)+1
     th=''.join('<th>'+h+'</th>' for h in headers)
@@ -605,13 +605,7 @@ def build_report_pdf(rep, out):
     comment_html=_citab
 
     css=f'''
-@page {{ size:A4; margin:0;
-  @top-center {{ content:"MAKEONE · 보장분석 리포트"; font-family:'NanumSquareRound','Noto Sans CJK KR',sans-serif;
-                 font-size:7pt; font-weight:700; color:{GOLDD}; letter-spacing:1.6px; margin-top:4.5mm; }}
-  @bottom-center {{ content:"MAKEONE 보장분석 자동화  ·  " counter(page) " / " counter(pages);
-                 font-family:'NanumSquareRound','Noto Sans CJK KR',sans-serif;
-                 font-size:7pt; font-weight:700; color:{MUT}; margin-bottom:4.5mm; }}
-}}
+@page {{ size:A4; margin:0; }}   /* ★v76 @page 여백상자 제거 — .ft와 꼬리말이 이중으로 찍히던 문제 해소 */
 * {{ margin:0; padding:0; box-sizing:border-box; font-family:'NanumSquareRound','Noto Sans CJK KR',sans-serif; }}
 body {{ color:{INK}; }}
 .pg {{ width:210mm; height:297mm; position:relative; page-break-after:always; background:#fff; overflow:hidden; }}   /* ★v67 overflow:hidden — 내용이 넘쳐 폼 없는 물리 페이지가 생기는 것 봉쇄 */
@@ -633,7 +627,7 @@ body {{ color:{INK}; }}
 .scvt th {{ background:{NAVY}; color:#fff; padding:1.1mm 0.7mm; font-size:7.6pt; text-align:center; font-weight:800; }}
 .scvt th.dl {{ text-align:left; }}
 .scvt th:last-child {{ background:{GOLDD}; }}
-.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.55mm 0.5mm; text-align:center; }}
+.scvt td {{ border-top:0.4pt solid {LINE}; padding:0.32mm 0.5mm; text-align:center; }}
 .scvt th.dl, .scvt td.dl {{ width:23%; font-size:6.9pt; }}
 .scvt td.dl b {{ white-space:nowrap; }}
 .scvt th:nth-child(2), .scvt td:nth-child(2) {{ width:45%; white-space:nowrap; }}   /* ★보유+금액+CI 한 줄 고정(넘침 방지) */
@@ -694,7 +688,7 @@ body {{ color:{INK}; }}
 .finpg {{ padding:0 !important; }}
 .finimg {{ display:block; height:229mm; width:auto; max-width:100%; margin:14mm auto 0; }}   /* ★v74 비율 보존: 높이 고정·폭 자동·가운데 */
 .spcone {{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:5.5pt; margin-top:1.2mm; }}
-.spcone td {{ border:0.4pt solid {LINE}; padding:0.7mm 1.4mm; line-height:1.25; vertical-align:middle; }}
+.spcone td {{ border:0.4pt solid {LINE}; padding:0.45mm 1.4mm; line-height:1.18; vertical-align:middle; }}
 .spcone tr.hd td {{ background:{NAVY}; color:#fff; font-weight:800; text-align:center; font-size:5.8pt; }}
 .spcone td.ax {{ width:9%; text-align:center; font-weight:800; color:#fff; background:#4A6B8A; }}
 .spcone tr.hrt td.ax {{ background:#8E3B2F; }}
@@ -931,9 +925,9 @@ body {{ color:{INK}; }}
 .gentab td:last-child, .gentab th:last-child {{ text-align:left; }}
 .silgenpg .st td, .silgenpg .st th {{ font-size:7pt; padding:0.5mm 1.3mm; }}
 .silgenpg .note {{ font-size:10pt; padding:2.2mm 3mm; line-height:1.45; }}
-.silgenpg .silverd {{ padding:4mm 4.5mm; margin:4mm 0; }}
+.silgenpg .silverd {{ padding:2.6mm 4.5mm; margin:2.4mm 0; }}
 .silgenpg .silverd .svhead {{ font-size:18pt; }}
-.silgenpg .silverd .svbody {{ font-size:12.5pt; line-height:1.5; margin-top:2mm; }}
+.silgenpg .silverd .svbody {{ font-size:11.4pt; line-height:1.38; margin-top:1.4mm; }}
 .silgenpg .wssj .fxrow {{ font-size:8.4pt; line-height:1.42; }}
 .g5tab td, .g5tab th {{ font-size:8.2pt; padding:1.05mm 1.6mm; }}
 .g5tab td:last-child, .g5tab th:last-child, .g5tab td:nth-child(2), .g5tab th:nth-child(2) {{ text-align:left; }}
@@ -1132,8 +1126,8 @@ body {{ color:{INK}; }}
 .sbt {{ font-size:10.5pt; font-weight:800; color:{NAVY}; margin-bottom:1.2mm; }}
 .sbt b {{ color:{GOLDD}; }}
 .sltab {{ width:100%; border-collapse:collapse; }}
-.sltab th {{ background:{NAVY}; color:#fff; font-size:9.4pt; font-weight:800; padding:2.4mm 1.5mm; text-align:center; }}
-.sltab td {{ border:0.6pt solid {LINE}; background:#fff; font-size:10pt; font-weight:800; color:{INK}; padding:6.4mm 1.5mm; text-align:center; }}
+.sltab th {{ background:{NAVY}; color:#fff; font-size:8.6pt; font-weight:800; padding:1.6mm 1.2mm; text-align:center; }}
+.sltab td {{ border:0.6pt solid {LINE}; background:#fff; font-size:9pt; font-weight:800; color:{INK}; padding:2.6mm 1.2mm; text-align:center; }}
 .sltab td.slp {{ text-align:left; font-size:8.4pt; }}
 .sltab td.slc {{ font-weight:800; color:{NAVY}; }}
 .sltab td.sla {{ font-weight:800; }}
@@ -1483,10 +1477,10 @@ body {{ color:{INK}; }}
        ('특정Ⅰ','isch',['협심증 I20','기타 급성 허혈심장질환 I24','만성 허혈성심장병 I25','발작성 빈맥 I47','심방세동 및 조동 I48','심부전 I50','심장막염 I30~I32','심내막염 I33·I38.9','심근염 I40·I41']),
        ('특정Ⅱ','ami',['급성 심근경색증 I21','후속 심근경색증 I22','급성 심근경색 후 특정 현존 합병증 I23','인공소생에 성공한 심장정지 I46.0']),
        ('심근병증','myo',['심근병증 I42','확장성 심근병증 I42.0','비후성 심근병증 I42.1','제한성 심근병증 I42.2','기타 심근병증 I42.8','상세불명의 심근병증 I42.9']),
-       ('심장판막질환','val',['판막질환 —','상세불명의 판막질환 I38','※ 심내막염 I33 미포함','※ 세부 범위는 약관 참조']),
+       ('심장판막질환','val',['판막질환 —','상세불명의 판막질환 I38','※ KB 별도 가입 담보','※ 세부 범위는 약관 참조']),
        ('기타심장부정맥(I49)','arr',['기타 심장부정맥 I49','※ I47·I48은 해당 담보 대상 아님']),
      ]),
-     ('현대해상','6가지',[
+     ('현대해상','6가지 ※심근병증 담보 없음',[
        ('허혈성 심장질환','isch',['협심증 I20','기타 급성 허혈심장질환 I24','만성 허혈성심장병 I25']),
        ('특정허혈 심장질환','ami',['급성 심근경색증 I21','후속 심근경색증 I22','급성 심근경색 후 특정 현존 합병증 I23']),
        ('특정Ⅰ','arr',['협심증 I20','발작성 빈맥 I47','심방세동 및 조동 I48','심부전 I50']),
@@ -1544,7 +1538,7 @@ body {{ color:{INK}; }}
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · {pgno} / {tpg}</span></div>
 </div>'''
-    _n8='<div class="hcnote">★ <b>"특정Ⅰ·Ⅱ"는 회사마다 뜻이 다릅니다 — 라벨 말고 질병코드로 확인.</b> 흥국·롯데 특정Ⅰ=급성심근경색 / 한화·NH 특정Ⅰ=협심증·허혈·빈맥·부정맥·심부전 / DB 특정Ⅰ=협심증·허혈·염증 / KB 특정Ⅰ=협심증·허혈·빈맥·심부전·염증(단 심장판막=판막만, 심내막염 제외) / 현대 특정Ⅰ=협심증·빈맥·심부전. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
+    _n8='<div class="hcnote">★ <b>"특정Ⅰ·Ⅱ"는 회사마다 뜻이 다릅니다 — 라벨 말고 질병코드로 확인.</b> 롯데 특정Ⅰ=급성심근경색 / 흥국 특정심혈관=협심증·허혈·빈맥·심부전(급성심근 아님) / 한화·NH 특정Ⅰ=협심증·허혈·빈맥·부정맥·심부전 / DB 특정Ⅰ=협심증·허혈·염증 / KB 특정Ⅰ=협심증·허혈·빈맥·심부전·염증(심장판막은 별도 가입 담보) / 현대 특정Ⅰ=협심증·빈맥·심부전(허혈 I24·25는 별도 허혈성 담보). 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     _n9='<div class="hcnote">★ 삼성·메리츠는 허혈성심장질환을 6가지로 세분(급성기·후속·합병증·협심증·기타급성·만성). 롯데 특정심장Ⅰ=급성심근경색 / 흥국은 특정심혈관질환(기타부정맥제외)=협심·허혈·빈맥·심부전(급성심근 아님). 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>.</div>'
     _n8b='<div class="hcnote">★ 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     heart_chart = _fullpage(16,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
@@ -1615,20 +1609,34 @@ body {{ color:{INK}; }}
         return str(g)
     # ★실손 계약 결론 박스 (어느 계약에 실손이 있는지)
     _sl=rep.get('silson_list',[])
-    # ★v67 실손 계약이 많으면 페이지가 쪼개져 꼬리말이 사라진다 → 표시 상한 + 잔여 건수 안내
-    _sl_more = max(0, len(_sl) - 5)
-    _sl = _sl[:5]   # ★v67 5건 상한: 실손표가 길면 페이지가 쪼개져 꼬리말이 사라진다
+    # ★v79 실손은 2개 이상일 수 있다(지점장 확정 2026.07.18) — 합치지 말고 전부 각각 표기.
+    #   예) 상해의료비 가입 후 실손 추가 / DB손보 2006년형 특수 실손 등.
+    #   세대도 계약별로 각각 표기한다(계약마다 세대가 다를 수 있다).
+    # ★v79 실손 최대 3건(지점장 확정 2026.07.18): 상해의료비 + 실손 + 상해실손 조합까지 가능.
+    _sl_more = max(0, len(_sl) - 3)
+    _sl = _sl[:3]
     if _sl:
+        def _glbl(x):
+            g=x.get('gen',''); sb=x.get('sub','')
+            if not g: return '[확인]'
+            if g==1 and sb: return f'1세대({sb})'
+            if g==2 and sb: return f'{sb}세대'
+            return f'{g}세대'
         _rows=''.join(
             f'<tr><td class="slc">{_html.escape(x["co"])}</td>'
             f'<td class="slp">{_html.escape(x["prod"])}</td>'
             f'<td class="sld">{_html.escape(x["join"])}</td>'
+            f'<td class="slg">{_html.escape(_glbl(x))}</td>'
             f'<td class="sla">{x["amt"]:,}원</td></tr>' for x in _sl)
+        _cnt=len(rep.get('silson_list',[]))
+        _multi=(f'<div class="sbn"><b>※ 실손이 {_cnt}건입니다</b> — 실손은 <b>최대 3건</b>까지 보유할 수 있습니다'
+                '(상해의료비 + 실손 + 상해실손 조합. 2006년 이전 특수 실손 포함). '
+                '<b>계약별로 세대·보장이 다르므로 각각 확인</b>하세요.</div>') if _cnt>=2 else ''
         _silbox=('<div class="silbox"><div class="sbt">■ 고객님의 <b>실손보험은 여기</b> 들어 있습니다</div>'
-                 '<table class="sltab"><tr><th>보험사</th><th>상품명</th><th>가입일</th><th>월 보험료</th></tr>'
-                 f'{_rows}</table>'
-                 + (f'<div class="sbn">※ 실손 관련 계약이 많아 <b>상위 5건</b>만 표시했습니다(나머지 {_sl_more}건은 엑셀·보장진단서에서 전체 확인).</div>' if _sl_more else '')
-                 + f'<div class="sbn">위 계약의 <b>가입일 기준</b>으로 세대를 판별했습니다. 실손이 여러 개면 <b>가장 오래된 계약</b>이 기준입니다.</div></div>')
+                 '<table class="sltab"><tr><th>보험사</th><th>상품명</th><th>가입일</th><th>세대</th><th>월 보험료</th></tr>'
+                 f'{_rows}</table>' + _multi
+                 + (f'<div class="sbn">※ 실손 관련 계약이 많아 <b>상위 3건</b>만 표시했습니다(나머지 {_sl_more}건은 엑셀·보장진단서에서 전체 확인).</div>' if _sl_more else '')
+                 + f'<div class="sbn">아래 세대 해설은 <b>가장 오래된 계약</b> 기준입니다. 계약별 세대는 위 표를 보세요.</div></div>')
     else:
         _silbox=('<div class="silbox none"><div class="sbt">■ 실손보험 <b>미보유</b></div>'
                  '<div class="sbn">보유 계약에서 실손 담보(입원·통원·약값)가 확인되지 않습니다. 실손 가입 검토가 필요합니다.</div></div>')
@@ -1814,7 +1822,7 @@ body {{ color:{INK}; }}
     <div class="scvhd heart">심장 — 질병코드별 커버</div>
     {scv_heart}
     <div class="scvleg"><span class="on">●</span> 보장 &nbsp;<span class="off">○</span> 미보장 &nbsp;<span class="hold">[확인]</span> 산정특례 HOLD &nbsp;<span class="own2">노란행=보유</span></div>
-    <div class="scvnote">· {cust} 보유 = <b>허혈성진단비 + 부정맥(I49)</b> → 허혈성(I20~25)·부정맥 커버, <b class="r">판막·염증·심부전은 심장특정/순환계 영역</b><br>· <b>빈맥(I47·48)</b> = 마스터 무행·전 묶음 <b class="r">제외</b> → 본 표 미기재<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 심혈관질환 전체 I20~50 + 판막(개별 담보·각각 보상). 지급조건 [확인]<br>· <b>순환계</b> = 가장 넓은 범위(2대 + 동맥류·정맥류 등 순환기 전반). 세부 대상코드 회사·약관별 상이 [확인]</div>
+    <div class="scvnote">· {cust} 보유 = <b>허혈성진단비 + 부정맥(I49)</b> → 허혈성(I20~25)·부정맥 커버, <b class="r">판막·염증·심부전은 심장특정/순환계 영역</b><br>· <b>빈맥(I47·48)</b> = 마스터 <b>40행 전용행</b> 존재 · 부정맥(I49)과 <b>별개 코드</b> → 묶음에 포함되면 빈맥 행에 기재<br>· <b>산정특례</b> = 진단 기반 별개 담보축. 대상 코드범위 = 심혈관질환 전체 I20~50 + 판막(개별 담보·각각 보상). 지급조건 [확인]<br>· <b>순환계</b> = 가장 넓은 범위(2대 + 동맥류·정맥류 등 순환기 전반). 세부 대상코드 회사·약관별 상이 [확인]</div>
     <div class="rngbox">
      <div class="rngt">■ 심장 보장범위 <span class="smn">(발병률 · 심평원)</span></div>
      <table class="rngtab"><tr>
