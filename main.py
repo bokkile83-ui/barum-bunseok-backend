@@ -1748,8 +1748,13 @@ def build_excel(data, out):
             if std=='합의금' and amt>25000:   # 합의금 최대 2.5억, 초과는 불가 → [확인]
                 unmapped.append((col, ct['company'], raw, amt, '합의금 2.5억 초과(불가)'))
                 continue
-            if std=='입원':                    # ② 입원한도 3,000=구형실손→3,000 유지 / 그 외 일반실손→5,000 고정
-                if amt != 3000: amt=5000
+            if std=='입원':
+                # ★★v91 수정(지점장 확정 2026.07.19 · 장혜경 실데이터로 확인):
+                #   구 규칙 '입원은 무조건 5,000 고정'이 <b>구실손의 실제 한도를 뭉갰다</b>.
+                #   실측: DB 0604_TM(2006년형 1세대) 질병입원의료비 <b>500</b> → 5,000으로 부풀려짐.
+                #   한장보장표(실손입원 상해 5,100 / 질병 5,500)와 불일치 = 등식1 위반.
+                #   → <b>별첨 명시값을 그대로 쓴다.</b> 금액을 못 읽었을 때만 5,000을 기본값으로 넣는다.
+                if not amt: amt=5000
             # ★v34 암주요치료비 10,000 강제 폐기(지점장 2026.07.09): 실제 가입금액 사용. 하이클래스는 별도행 합산.
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
             # 수술비 1~5종 -> 종별 슬래시 누적
@@ -1918,7 +1923,9 @@ def build_excel(data, out):
             #   저장 후 recalc_xlsx가 캐시값 주입 → 폰·미리보기에서도 숫자 표시(수식 유지).
             _rng = f'C{r}:{last_ct_L}{r}'
             _bnm=str(ws.cell(r,2).value).strip()
-            if _bnm=='입원': sc.value = f'=MIN(SUM({_rng}),5000)'          # §8.8 입원 5,000 캡
+            # ★v91: 구 '입원 5,000 캡' 폐기(지점장 2026.07.19). 실손 다건이면 합이 5,000을 넘는다.
+            #   실측 장혜경 = 현대 5,000 + DB 500 = 5,500 (한장보장표 질병 5,500과 일치).
+            if _bnm=='입원': sc.value = f'=SUM({_rng})'
             elif _bnm=='자부상': sc.value = f'=MIN(SUM({_rng}),80)'          # ★지점장 2026.07.02: 자부상 최대 80만 캡
             elif _bnm=='120대수술비':                                       # ★v30k n대수술비=계약별 값 가로 슬래시(합산·최댓값 금지, 지점장 2026.07.03)
                 _nd=[ws.cell(r,c).value for c in range(3,last_col)]
@@ -2661,7 +2668,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v86-silson3-20260719'}
+def health(): return {'ok':True,'version':'v91-silson-real-20260719'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML

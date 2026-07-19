@@ -11,7 +11,7 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 
 NS = {'x': 'http://www.w3.org/1999/xhtml'}
 EMU_PER_PT = 12700
-DPI = 200
+DPI = 150   # ★v89 속도: 200→150dpi (A4 1240x1754, 화면·인쇄 충분). 변환시간 약 45% 감소
 FONT = "맑은 고딕"
 
 

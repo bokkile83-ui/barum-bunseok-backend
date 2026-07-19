@@ -189,6 +189,12 @@ def load_excel(path):
         nm=re.sub(r'\s+',' ',nm).strip()
         _join=str(ws.cell(3,c).value or '').strip()             # 3행=가입년일
         _hassil=any(_man(ws.cell(r,c).value)>0 for r in _sil_rows)  # 실손 담보 보유 계약?
+        # ★v89 실손 체크 보강(지점장 2026.07.19): 담보값이 비어 있어도 회사·상품명에
+        #   '실손'·'의료비'가 적혀 있으면 실손 계약으로 체크한다(1+1=2 — 2건이면 2건).
+        if not _hassil:
+            _tag=(str(_co_ or '')+' '+str(_pr_ or ''))
+            if ('실손' in _tag) or ('의료비' in _tag):
+                _hassil=True
         # ★v79 단체보험 제외(지점장 확정 2026.07.18): ①가입~만기 1년 ②상품명에 '단체' — 2조건 동시 충족만 제외
         try:
             _pp = str(_pr_ or '').replace(' ', '')
@@ -199,7 +205,10 @@ def load_excel(path):
                     continue      # 단체보험 → 계약열 자체를 제외
         except Exception:
             pass
-        headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,'co':_co_,'prod':_pr_})
+        # ★v89: 헤더에 '(3세대 실손)'처럼 세대가 적혀 있으면 힌트로 보관(가입일이 비었을 때 사용)
+        _gh=re.search(r'\((\d)\s*세대', _raw)
+        headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,
+                        'co':_co_,'prod':_pr_,'genhint':(int(_gh.group(1)) if _gh else None)})
     total_prem=int(_man(ws.cell(2,last).value))
     return grp_rows, headers, total_prem
 
@@ -511,7 +520,11 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     if not _sil:
         rep['silson_gen']={'status':'none'}
     else:
-        _sh=min(_sil, key=lambda h:str(h.get('join','')))  # 가장 오래된 실손 계약(세대 판별 기준)
+        # ★v89 수정(장혜경 실데이터): 가입일이 빈 계약이 있으면 ''가 최솟값이 되어
+        #   그 계약이 '가장 오래된 계약'으로 뽑혀 세대 판별이 통째로 실패했다.
+        #   → 가입일이 있는 계약 중에서 고르고, 전부 비었을 때만 첫 계약을 쓴다.
+        _dated=[h for h in _sil if str(h.get('join','')).strip()]
+        _sh=min(_dated, key=lambda h:str(h.get('join',''))) if _dated else _sil[0]
         _cnm=_sh.get('nm','')
         _g=_gen_of(_sh.get('join'), _cnm)
         # 실손 계약 전체 목록(회사·상품명·가입일·보험료)
@@ -521,6 +534,8 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         _sillist=[]
         for _h in sorted(_sil, key=lambda x:str(x.get('join',''))):
             _gh=_gen_of(_h.get('join'), _h.get('nm',''))
+            if not _gh and _h.get('genhint'):
+                _gh={'gen':_h['genhint'],'sub':'','date':''}   # ★가입일이 비면 헤더 표기 세대 사용
             _sillist.append({'co':str(_h.get('co',''))[:14],
                              'prod':str(_h.get('prod',''))[:34],
                              'join':str(_h.get('join','')),
