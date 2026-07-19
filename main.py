@@ -161,11 +161,6 @@ def rule_extract(block_lines):
         if '심뇌혈관' in _n and '수술' in _n and '[확인]' not in _n:
             for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
                 dambo[_r]=max(dambo.get(_r,0), _amt)
-        elif ('사망' in _n) and ('후유장해' in _n):
-            # ★★v92 (장혜경 실측): 결합담보 '상해사망후유장해 1,000'이 별첨에 <b>두 줄</b> 인쇄돼
-            #   합산 2,000 → 분해 후 상해사망 2,000·상해후유 2,000이 되어 한장보장표(1,100/1,000)와 어긋났다.
-            #   심뇌혈관수술(v61)과 같은 원칙 — <b>중복 줄은 합산 금지·대표(max)</b>.
-            dambo[_nm]=max(dambo.get(_nm,0), _amt)
         else:
             dambo[_nm]=dambo.get(_nm,0)+_amt
     UNIT = r'(?:\s*(원|만원|만))?'
@@ -1219,10 +1214,7 @@ def resolve_kw(raw):
     # ── 후유장애 ──
     if has('화재') and (has('후유') or has('장해')): return None,0   # ★v29q-9 화재상해후유(3~100%)≠상해후유3%, 담보행 미기재→[확인] 큐
     if has('후유') or has('장해') or has('장애'):
-        # ★★v92 (장혜경 실측): '질병후유장해(80%미만)Ⅱ'가 '80' 글자 때문에 80%행으로 잘못 갔다.
-        #   → '80%미만'/'80% 미만'이면 3% 행. (한장보장표 질병3% 100과 일치)
-        _u80 = ('80%미만' in n.replace(' ','')) or has('미만')
-        sev = '3' if _u80 else ('80' if ('80' in n or has('고도')) else '3')
+        sev = '80' if ('80' in n or has('고도')) else '3'   # ★v29w (지점장 2026.07.02) 고도후유장해=80%후유장해
         body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
         return f'{body}후유{sev}%',0
 
@@ -2676,7 +2668,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v93-selfcheck-20260719'}
+def health(): return {'ok':True,'version':'v91-silson-real-20260719'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
