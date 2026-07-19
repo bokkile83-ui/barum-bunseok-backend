@@ -1590,14 +1590,36 @@ body {{ color:{INK}; }}
               ('5','5세대','2026.05.06 ~','갱신 1년<br>재가입 5년','급여 통원 건보율 연동 · 비급여 중증/비중증 분리<br><span class="smn">도수·체외·주사제는 <b>비중증(특약2)만</b> 보장 제외</span>','' )]
     _hg=_sg.get('gen') if _sg.get('status')=='auto' else None
     _hs=_sg.get('sub','') if _sg.get('status')=='auto' else ''
+    # ★★v92 (지점장 확정 2026.07.19): 실손이 여러 건이면 <b>보유한 세대를 전부 체크</b>한다.
+    #   예) DB 2006년형 = 1세대(손보) + 현대 Hi1901 = 3세대 → 두 줄 모두 '✓ 가입'.
+    #   기존에는 대표(가장 오래된) 계약 1건만 체크돼 3세대가 누락됐다.
+    _hitset=set()
+    for _x in rep.get('silson_list', []):
+        _g=str(_x.get('gen','') or '')
+        if _g:
+            _hitset.add((_g, str(_x.get('sub','') or '')))
+    if _hg is not None:
+        _hitset.add((str(_hg), str(_hs or '')))
+    _cmap={}
+    for _x in rep.get('silson_list', []):
+        _g=str(_x.get('gen','') or '')
+        if _g:
+            _cmap.setdefault((_g, str(_x.get('sub','') or '')), []).append(str(_x.get('co','')))
     _rws=[]
     for gk,lbl,per,ren,feat,sub in _GENROWS:
         base='gen1' if gk=='1' else ('gen5' if gk=='5' else '')
-        hit = (_hg is not None and str(_hg)==gk and (sub=='' or sub==_hs))
+        hit = any(g==gk and (sub=='' or sub==sb or sb=='') for g,sb in _hitset) if _hitset \
+              else (_hg is not None and str(_hg)==gk and (sub=='' or sub==_hs))
+        if hit and sub:
+            hit = any(g==gk and sb==sub for g,sb in _hitset)
         cls=(base+' genhit').strip() if hit else base
         pcls=' class="bad"' if gk=='5' else ' class="g"'
         fcls=' class="bad"' if gk=='5' else ''
-        star='<span class="hitmk">✓ 가입</span>' if hit else ''
+        _who=''
+        for (g,sb),cos in _cmap.items():
+            if g==gk and (sub=='' or sb==sub or sb==''):
+                _who=' · '+_html.escape(cos[0]); break
+        star=('<span class="hitmk">✓ 가입%s</span>' % _who) if hit else ''
         _rws.append(f'<tr class="{cls}"><td class="g">{lbl}{star}</td><td{pcls}>{per}</td><td class="rencol">{ren}</td><td{fcls}>{feat}</td></tr>')
     _gentab=('<table class="st gentab"><tr><th style="width:18%">세대</th><th style="width:18%">판매시기 (가입일)</th>'
              '<th style="width:14%">갱신 · 재가입</th><th style="width:52%">핵심 특징</th></tr>'+''.join(_rws)+'</table>')
@@ -2570,7 +2592,7 @@ body {{ color:{INK}; }}
         _tot = len(_re2.findall(r'<div class="pg(?=["\s])', doc))
     doc = doc.replace('@@TPG@@', str(_tot))
     # ★v67 폼 강제(지점장 지시): 어떤 페이지든 상단 top / 하단 ft 폼이 빠지면 자동 주입한다.
-    _VSTAMP = '<div class="vstamp">v91-silson-real-20260719</div>'
+    _VSTAMP = '<div class="vstamp">v93-selfcheck-20260719</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
