@@ -219,6 +219,11 @@ def cat_total(grp_rows, cat):
         rows+=grp_rows.get(g,[])
     total=sum(v for _,v in rows)
     top=sorted([(b,v) for b,v in rows if v>0], key=lambda x:-x[1])[:3]
+    # ★★v95 (지점장 지시 2026.07.19): <b>상해의료비는 보장진단서에 반드시 표기</b>한다.
+    #   금액이 작아 top3에서 잘려 사라지던 것을 고정 노출로 바꾼다(실손과 별개 담보).
+    _pin=[(b,v) for b,v in rows if v>0 and '상해의료비' in str(b)]
+    if _pin and not any('상해의료비' in str(b) for b,_ in top):
+        top=(top[:2] if len(top)>2 else top)+_pin[:1]
     return total, top, rows
 
 def pct_for(cat, grp_rows, band):

@@ -161,6 +161,11 @@ def rule_extract(block_lines):
         if '심뇌혈관' in _n and '수술' in _n and '[확인]' not in _n:
             for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
                 dambo[_r]=max(dambo.get(_r,0), _amt)
+        elif ('사망' in _n) and ('후유장해' in _n):
+            # ★★v92 (장혜경 실측): 결합담보 '상해사망후유장해 1,000'이 별첨에 <b>두 줄</b> 인쇄돼
+            #   합산 2,000 → 분해 후 상해사망 2,000·상해후유 2,000이 되어 한장보장표(1,100/1,000)와 어긋났다.
+            #   심뇌혈관수술(v61)과 같은 원칙 — <b>중복 줄은 합산 금지·대표(max)</b>.
+            dambo[_nm]=max(dambo.get(_nm,0), _amt)
         else:
             dambo[_nm]=dambo.get(_nm,0)+_amt
     UNIT = r'(?:\s*(원|만원|만))?'
@@ -375,11 +380,39 @@ def _amt_kr(s):
     v = int(m.group(1) or 0) * 10000 + int(m.group(2) or 0) + int(m.group(3) or 0) * 1000
     return v if 0 < v <= 200000 else None
 
+def sinjeong_count(lines):
+    """3열 신정원 계약 헤더 앵커 개수(KB '| 가입일자 : |' + 메리츠 '별첨 상품별 보험가입현황')."""
+    return sum(1 for l in lines if _SJ_KB.match(l)) + sum(1 for l in lines if _SJ_MZ.match(l))
+
 def sinjeong_detect(lines):
     """3열 신정원 포맷 감지. 계약 헤더 앵커가 2개 이상이면 3열로 확정."""
-    kb = sum(1 for l in lines if _SJ_KB.match(l))
-    mz = sum(1 for l in lines if _SJ_MZ.match(l))
-    return (kb + mz) >= 2
+    return sinjeong_count(lines) >= 2
+
+_SJC = {}
+
+def _sj_fixname(name, sj, comp, prod):
+    """★v98 3열(KB·메리츠) 전용 담보명 정규화. 롯데 2열 경로는 이 함수를 타지 않는다.
+       한장보장표(등식1)와 어긋나던 실측 6건을 회사담보명 표기 보정으로만 해결."""
+    r = re.sub(r'\s', '', str(name)); s2 = re.sub(r'\s', '', str(sj))
+    c = re.sub(r'\s', '', str(comp)); pr = re.sub(r'\s', '', str(prod))
+    # F4 생보 종신 주계약: 일사=일반사망 / 재사=재해(상해)사망
+    if '일사보험금' in r: return '일반사망_주계약'
+    if '재사보험금' in r: return '재해사망_주계약'
+    # F2 타인'사망'교통사고처리지원금 → 교통상해사망 오분류 차단(처리지원금=합의금)
+    if '처리지원금' in r and '사망' in r: return re.sub('사망', '', name)
+    # F3 질병 입원 수술비Ⅱ/Ⅲ/Ⅳ = 질병수술비 합산군(한장보장표 기준)
+    if re.match(r'^질병입원수술비[ⅡⅢⅣⅤ]', r): return '질병입원수술비' + r[8:]
+    # F6 생보 암/CI의 '뇌혈관진단' = 실제 뇌출혈(지침 §8.3)
+    if r == '뇌혈관진단' and ('생명' in c or 'AIA' in c.upper()): return '뇌출혈진단비'
+    # F8 자동차사고 부상치료지원금Ⅱ 등 변형 → 자부상(신정원담보명 근거)
+    if '부상위로금' in s2 or '부상치료' in s2: return '자동차사고부상위로금'
+    # F9 1-5종 재해수술 = 상해 종수술(질병 종수술 행 중복산입 차단)
+    if '종재해수술' in r: return name.replace('재해수술', '상해수술', 1)
+    # F7 실손 '의료비(입원+통원)' 통합형 → 실손 입원 행 (F5b보다 먼저 판정)
+    if '의료비' in r and '입원' in r and '통원' in r: return '실손입원의료비'
+    # F5b 암 통원 담보는 진단비 행에 산입 금지
+    if '암통원' in r or '암통원' in s2 or (('통원' in s2) and ('암' in r)): return '[확인] 통원 ' + name
+    return name
 
 def _sj_rows(block):
     """담보행 → [(회사담보명, 만원정수)]. 금액 미해석 담보는 0 + [확인] 프리픽스(누락 금지)."""
@@ -404,7 +437,10 @@ def _sj_rows(block):
         if len(name) < 2: continue
         v = _amt_kr(amt_s) if amt_s else None
         if v is None:
-            out.append(('[확인] 금액판독불가 ' + name, 0)); continue
+            out.append(('[확인] 금액판독불가 ' + name, sj, 0)); continue
+        name = _sj_fixname(name, sj, _SJC.get('c',''), _SJC.get('p',''))
+        if '특정암진단' in re.sub(r'\\s','',sj) and '유사암' not in sj:
+            name = '[확인] 특정암 ' + name       # ★v98 F5: 특정암=일반암 산입 금지(등식1)
         out.append((name, sj, v))
     # ★v44 실측보정: DB 실손처럼 회사담보명이 '질병(전체질병을 의미)' 하나로 3행(입원·통원·약값)이 겹치는 경우
     #    회사담보명만 쓰면 dict 키 충돌 → 합산 사고. 계약 내 중복 회사담보명은 신정원담보명으로 분리한다.
@@ -413,13 +449,32 @@ def _sj_rows(block):
     fixed = []
     for nm, sj, v in out:
         if cnt.get(nm, 0) > 1 and sj and sj != nm:
-            fixed.append((sj, v))                        # 중복 → 신정원담보명 채택(더 구체적)
+            fixed.append((_sj_fixname(sj, sj, _SJC.get('c',''), _SJC.get('p','')), v))  # ★v98 채택 후 재정규화
         else:
             fixed.append((nm, v))
     return fixed
 
+def _sj_unwrap(block):
+    """★v98: pdftotext가 가운뎃점(·)에서 줄을 끊는다.
+       '항암방사선·' / '질병 입원 간호·' 처럼 ·로 끝나는 줄은 다음 줄 첫 필드를 붙여 복원한다.
+       (2~3줄 연속 랩도 while로 처리. 담보명 통째 유실 방지.)"""
+    out = []; i = 0; n = len(block)
+    while i < n:
+        cur = block[i].rstrip()
+        guard = 0
+        while cur.endswith('\u00b7') and i + 1 < n and guard < 4:
+            nxt = block[i + 1].strip()
+            if not nxt: break
+            mm = re.match(r'^(\S+(?:\s\S+)*?)(\s{2,}.*)?$', nxt)
+            if not mm: break
+            cur = cur + mm.group(1) + (mm.group(2) or '')
+            i += 1; guard += 1
+        out.append(cur); i += 1
+    return out
+
 def parse_sinjeong(lines):
     """KB·메리츠 3열 리포트 → contracts[]. 표 구조 동일 → 파서 1개로 두 채널 커버."""
+    lines = _sj_unwrap(lines)          # ★v98 F1: 가운뎃점 줄바꿈 복원
     n = len(lines)
     heads = []                                            # (idx, company, product, 가입일)
     for i, l in enumerate(lines):
@@ -449,6 +504,7 @@ def parse_sinjeong(lines):
     for hi, (idx, company, product, join_d) in enumerate(heads):
         end = heads[hi + 1][0] if hi + 1 < len(heads) else n
         block = lines[idx:end]
+        _SJC['c'] = company; _SJC['p'] = product     # ★v98 _sj_fixname 컨텍스트
         ht = ' '.join(block[:12])
         contract_date = expiry_date = pay_period = ''; premium = 0
         md = re.search(r'(\d{4})[-.](\d{2})[-.](\d{2})\s*~\s*(\d{4})[-.](\d{2})[-.](\d{2})', ht)
@@ -526,7 +582,8 @@ def parse_txt(txt, filename=''):
 
     contracts = []; i = 0; n = len(lines)
     # ★★v44 분기: 신정원 3열 포맷(KB·메리츠) 감지 시 parse_sinjeong 사용, 아니면 기존 2열 별첨 엔진.
-    _IS_SJ = sinjeong_detect(lines)
+    _SJN   = sinjeong_count(lines)
+    _IS_SJ = _SJN >= 2
     if _IS_SJ:
         contracts = parse_sinjeong(lines)
         i = n                      # 기존 2열 루프 스킵('정상계약 리스트' 문자열 부재로 어차피 0건)
@@ -685,6 +742,12 @@ def parse_txt(txt, filename=''):
             contracts.append({'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye})
+    # ★★v100 단계약 사각지대: KB·메리츠 3열이 '계약 1건'이면 앵커가 1개뿐이라
+    #   sinjeong_detect(>=2)를 못 넘겨 2열 파서로 가고 계약 0건이 된다(양예서형 단계약 고객).
+    #   → 2열이 0건일 때만 3열을 재시도한다. 2열이 1건이라도 잡으면 손대지 않으므로 회귀 없음.
+    if (not contracts) and _SJN >= 1:
+        contracts = parse_sinjeong(lines)
+        print(f'[SINJEONG-FALLBACK] 2열 0건 + 3열 앵커 {_SJN}개 → 3열 재시도 = {len(contracts)}건')
     # ★ 페이지 분할 중복 제거 (정본 체크리스트 ①②): 동일 계약키 병합
     merged = {}
     order = []
@@ -1024,6 +1087,7 @@ def _rmn(s):
     return 0
 
 def resolve_kw(raw):
+    if str(raw).startswith('[확인]'): return None, 0   # ★v98 확인큐 항목은 표준행 매핑 금지(중복합산 차단)
     """raw 담보명 -> (std표준명 or None, jong 0~5). API 불필요."""
     raw = re.sub(r"^\[세부보충\]","",str(raw))  # ★세부보충 접두 제거
     # ★Adobe OCR 깨짐: '상하!'·'상하 !'·'상하）' = '상해' (지점장 2026.07.05)
@@ -1051,6 +1115,12 @@ def resolve_kw(raw):
 
     # ★ 상해의료비 = 별개 정액 담보 단독 행(실손 입원/통원/약값과 합치지 말 것) — 지점장 2026.06.28
     if has('상해의료비') and no('입원','통원','외래','실손','처방','약제','도수','비급여'): return '상해의료비',0
+    # ★★v95 (지점장 지시 2026.07.19): 1세대 구실손의 <b>'상해 의료비(입원+통원)'</b>은
+    #   입원·통원으로 쪼개 넣을 수 없는 <b>상해의료비 단독 담보</b>다. 실손 행(입원/통원)에
+    #   섞으면 한장보장표와 어긋난다. → 마스터 99행 '상해의료비'로 직행.
+    #   실측: DB 0604_TM '상해(일반상해, 전체상해를 의미) 의료비(입원+통원) 100' → 상해의료비 100
+    if has('상해') and has('의료비') and ('입원+통원' in n.replace(' ','') or '입원/통원' in n.replace(' ','')):
+        return '상해의료비',0
     if has('외래') and has('의료비') and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0   # ★v29x '외래의료비'(통원 표기 없음)=통원. 상해·질병 각각 와도 대표 최댓값 1건이라 중복합산 없음
 
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
@@ -1214,7 +1284,10 @@ def resolve_kw(raw):
     # ── 후유장애 ──
     if has('화재') and (has('후유') or has('장해')): return None,0   # ★v29q-9 화재상해후유(3~100%)≠상해후유3%, 담보행 미기재→[확인] 큐
     if has('후유') or has('장해') or has('장애'):
-        sev = '80' if ('80' in n or has('고도')) else '3'   # ★v29w (지점장 2026.07.02) 고도후유장해=80%후유장해
+        # ★★v92 (장혜경 실측): '질병후유장해(80%미만)Ⅱ'가 '80' 글자 때문에 80%행으로 잘못 갔다.
+        #   → '80%미만'/'80% 미만'이면 3% 행. (한장보장표 질병3% 100과 일치)
+        _u80 = ('80%미만' in n.replace(' ','')) or has('미만')
+        sev = '3' if _u80 else ('80' if ('80' in n or has('고도')) else '3')
         body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
         return f'{body}후유{sev}%',0
 
@@ -1707,7 +1780,11 @@ def build_excel(data, out):
                         elif _t==1 or '심혈관' in _rn: _heart_bundle=['빈맥','심부전']
                     # 삼성·메리츠: 허혈성심장질환 6가지 → 급성심근+협심증+허혈성 (메리츠는 기존 심장질환진단Ⅰ/Ⅱ와 병존)
                     elif ('삼성' in _co) or ('메리츠' in _co):
-                        if ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['급성심근경색','협심증','허혈성 진단비']
+                        # ★★단독담보 원칙(지점장 확정 2026.07.14, 최상위): 회사담보명이 '허혈성심장질환진단비'
+                        #   단독이면 어느 회사든 분해 금지 → '허혈성 진단비' 행 단독. 묶음 수식어가 붙은 것만 분해.
+                        _solo = bool(re.match(r'^허혈(성)?심장질환진단(비)?$', _rmn0 if False else re.sub(r'\s','',_rn)))
+                        if _solo: pass
+                        elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['급성심근경색','협심증','허혈성 진단비']
             if _heart_bundle:
                 for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
@@ -2608,7 +2685,14 @@ $("#send").onclick=async()=>{
   try{
     const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
     j=await r.json();
-    if(!j.ok){add('<span class="err">⚠ '+esc(j.error||"실패")+'</span>',"bot");}
+    if(!j.ok){
+      /* ★v94: '⚠ 실패'만 뜨고 원인을 알 수 없던 문제 — 서버가 보내주는 trace를 화면에 같이 찍는다. */
+      var _m = esc(j.error||"실패(서버가 오류 문구를 못 보냄)");
+      var _t = j.trace ? String(j.trace) : "";
+      if(_t){ var _tail=_t.split("\n").slice(-8).join("\n");
+              _m += '<br><span style="font-size:11px;opacity:.85;white-space:pre-wrap">'+esc(_tail)+'</span>'; }
+      add('<span class="err">⚠ '+_m+'</span>',"bot");
+    }
     else{
       savedFiles={};
       const xlBlob=b64toBlob(j.xlsx_b64,XLMIME);
@@ -2668,7 +2752,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v91-silson-real-20260719'}
+def health(): return {'ok':True,'version':'v100-sjsolo-20260720'}
 
 @app.get('/',response_class=HTMLResponse)
 def home(): return INDEX_HTML
