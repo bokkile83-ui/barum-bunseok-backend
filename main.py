@@ -2786,7 +2786,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v112-8k-20260720'}
+def health(): return {'ok':True,'version':'v118-fincut-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -2794,7 +2794,7 @@ def health(): return {'ok':True,'version':'v112-8k-20260720'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v112-8k-20260720'}
+    out = {'version': 'v118-fincut-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
