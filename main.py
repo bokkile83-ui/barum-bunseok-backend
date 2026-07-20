@@ -89,6 +89,26 @@ def is_excluded(company, product='', contract_date='', expiry_date=''):
         return True
     return False
 
+def _no_period(contract_date, expiry_date):
+    """계약일·만기일 중 하나라도 8자리 날짜로 읽히지 않으면 True (보험기간 판정 불가). v125"""
+    def _ok(x):
+        return len(re.sub(r'[^0-9]', '', str(x or ''))) == 8
+    return not (_ok(contract_date) and _ok(expiry_date))
+
+
+def _is_silson_like(company='', product='', dambo=None):
+    """실손 계약 판정(확장) — 상품명/회사명에 '실손'이 없어도 담보에 실손·의료비가 있으면 실손으로 본다.
+       장문순 실측: 삼성생명 퍼펙트통합보험 줄이지만 담보는 실손 처방조제료·외래의료비뿐이었다. v125"""
+    if _is_silson_prod(company, product): return True
+    try:
+        for k in (dambo or {}):
+            kk = re.sub(r'\s', '', str(k))
+            if ('실손' in kk) or ('의료비' in kk): return True
+    except Exception:
+        pass
+    return False
+
+
 def _is_silson_prod(company='', product=''):
     """실손 계약 판정 = 상품명/회사명에 '실손' 표기. (v103)"""
     return '실손' in re.sub(r'\s', '', str(company) + str(product))
@@ -745,6 +765,23 @@ def parse_txt(txt, filename=''):
                             _v=int(_mm.group(1).replace(',','').replace('.',''))
                             if 100<=_v<=200000: ci_jugye.append(_v)
                         except: pass
+            # ★★★v122(2026.07.21 장문순 실측): 삼성생명 CI는 주계약이 '주계약'이라는 글자로
+            #   안 나오고 <상품명 자체>로 라벨된다.
+            #   예) '퍼펙트통합보험프리미엄,無표준월납  3,000 / ... 1,500'
+            #   → 상품명 앞 6자를 키로 삼아 그 라벨이 붙은 금액을 주계약 후보로 수집한다.
+            #   (리빙케어 전용 분기 v30z2의 일반화 — 퍼펙트플러스·퍼펙트통합 등 전 CI 상품 적용)
+            if not ci_jugye:
+                _pk = re.sub(r'[^가-힣A-Za-z0-9]', '', str(product or ''))[:6]
+                if len(_pk) >= 4:
+                    for _bl in block_lines:
+                        for _mm in re.finditer(r'([가-힣A-Za-z0-9,\.\(\)（）Ⅰ-Ⅹ無·]{4,}?)\s{2,}([\d][\d,]{2,})', _bl):
+                            _lab = re.sub(r'[^가-힣A-Za-z0-9]', '', _mm.group(1))
+                            if _lab.startswith(_pk):
+                                try:
+                                    _v = int(_mm.group(2).replace(',', ''))
+                                    if 100 <= _v <= 200000: ci_jugye.append(_v)
+                                except Exception:
+                                    pass
         # ★v29t CI추가보장특약: 줄별 값 수집(병합 전 원값 보존)
         ci_extra=[]
         for _bl in block_lines:
@@ -798,6 +835,18 @@ def parse_txt(txt, filename=''):
             if not m['pay_count'] and c['pay_count']: m['pay_count'] = c['pay_count']
             if not m['pay_period'] and c['pay_period']: m['pay_period'] = c['pay_period']
     deduped = [merged[k] for k in order]
+    # ★★★제외 7종(v125, 지점장 확정 2026.07.21): 실손이 아닌데 <계약일 또는 만기일이 없는> 계약은
+    #   보험기간(1년 여부)을 판정할 수 없다 → 엑셀·보장나무·보장진단서·보장설명서 전부 미포함.
+    #   ★실손은 예외 — 롯데 리포트가 실손 계약의 계약일·보험료를 공란으로 주는 사례가 있다(v90·장문순 실측).
+    #   ★담보를 봐야 실손인지 알 수 있으므로 파싱이 끝난 이 시점에서 판정한다.
+    _kept = []
+    for _c in deduped:
+        if _no_period(_c.get('contract_date'), _c.get('expiry_date')) and \
+           not _is_silson_like(_c.get('company'), _c.get('product'), _c.get('dambo')):
+            print(f"[제외7·기간불명] {_c.get('company')} {str(_c.get('product'))[:28]} — 계약일/만기일 없음(실손 아님)")
+            continue
+        _kept.append(_c)
+    deduped = _kept
     # ══════════════════════════════════════════════════════════════════════════
     # ★★★v47 심장 묶음담보 분해 (지침 §8.3.1 + 보험인포메이션 p16~19 회사별 정본표)
     #   "묶음 진단비는 보장 구성질환의 마스터 행에 동일 금액을 각각 기재한다."
@@ -2136,7 +2185,41 @@ def build_excel(data, out):
         pass
     _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
     wb.save(out)
+    _force_nocalc_xml(out)    # ★v124 저장 후 XML에 직접 못박음(3중 방어)
     return unmapped
+
+
+def _force_nocalc_xml(path):
+    """★★★v124(2026.07.21) 편집모드 속도 — 3중 방어의 마지막 단계.
+       세 번 재발한 이유: 원천 master.xlsx가 fullCalcOnLoad="1"이라 코드가 매번 덮는 구조였다.
+       v124에서 ①master.xlsx 자체를 "0"으로 교정 ②_no_fullcalc 유지 ③저장된 XML에 직접 못박음.
+       셋 중 둘이 사라져도 폰 Excel '편집 사용'이 느려지지 않는다. 절대 제거 금지."""
+    import zipfile, shutil, tempfile, os as _os
+    try:
+        zin = zipfile.ZipFile(path, 'r')
+        tmp = path + '.nc'
+        zout = zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED)
+        for it in zin.infolist():
+            data = zin.read(it.filename)
+            if it.filename == 'xl/workbook.xml':
+                x = data.decode('utf-8')
+                if 'fullCalcOnLoad' in x:
+                    x = re.sub(r'fullCalcOnLoad="[^"]*"', 'fullCalcOnLoad="0"', x)
+                elif '<calcPr' in x:
+                    x = re.sub(r'(<calcPr\b)', r'\1 fullCalcOnLoad="0"', x, count=1)
+                else:
+                    x = x.replace('</workbook>', '<calcPr fullCalcOnLoad="0"/></workbook>')
+                data = x.encode('utf-8')
+            zout.writestr(it, data)
+        zin.close(); zout.close()
+        shutil.move(tmp, path)
+        return True
+    except Exception:
+        try:
+            if _os.path.exists(path + '.nc'): _os.unlink(path + '.nc')
+        except Exception:
+            pass
+        return False
 
 def read_excel_totals(path):
     """완성 엑셀에서 담보명->합계 읽음. 등식2: PPT는 이것만 본다.
@@ -2786,7 +2869,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v118-fincut-20260721'}
+def health(): return {'ok':True,'version':'v125-noperiod-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -2794,7 +2877,7 @@ def health(): return {'ok':True,'version':'v118-fincut-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v118-fincut-20260721'}
+    out = {'version': 'v125-noperiod-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
