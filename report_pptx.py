@@ -11,7 +11,9 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 
 NS = {'x': 'http://www.w3.org/1999/xhtml'}
 EMU_PER_PT = 12700
-DPI = 150   # ★v89 속도: 200→150dpi (A4 1240x1754, 화면·인쇄 충분). 변환시간 약 45% 감소
+DPI = 300   # ★v106 초고화질(지점장 지시 2026.07.20): 150→300dpi (A4 2480x3509).
+            #   구 v89 '150dpi로 낮춰 속도 확보'는 폐기 — 인쇄 시 글자가 뭉개졌다.
+            #   래스터 시간은 늘지만 인쇄 품질이 우선. 용량은 아래 적응형 저장으로 방어.
 FONT = "맑은 고딕"
 
 
@@ -247,7 +249,63 @@ def _txt_w(txt, fs):
     return w
 
 
-def build_report_pptx(rep, out, dpi=DPI):
+
+# ══════════════════════════════════════════════════════════════════════════
+# ★★★v108 산출물 분할(지점장 확정 2026.07.20, 영구지침)
+#   보험 인포메이션 간지 ~ 문서 끝(참고자료 세트) = <PDF·벡터>  → 인쇄해도 선명
+#   표지 ~ 재가보험(고객 데이터 페이지)          = <PPT·편집>  → 값 수정용
+#   경계는 하드코딩하지 않는다. 계약 7건 이상이면 월보험료 전용 페이지가 끼어
+#   간지 위치가 한 장 밀리기 때문(_pageset 고정인덱스 폐기 원칙과 동일).
+#   판정 = 간지 고유 문구 '공통 참고 자료'가 있는 물리 페이지.
+#   ★v109 지점장 확정: 경계는 <'보험 인포메이션' 글자가 걸리는 페이지>다.
+#   앞부분(월보험료 도표 등)이 유동적으로 늘어나면 페이지 번호가 바뀌므로
+#   번호가 아니라 <글자>로 잡는다. 숫자 하드코딩 영구 금지.
+_INFO_MARK  = '보험인포메이션'      # 1순위: 지점장 지정 문구
+_INFO_MARK2 = '참고자료'            # 동반 확인용(간지에만 함께 존재)
+_INFO_MARK3 = '공통참고자료'        # 2순위 폴백
+
+def _find_info_page(pdf_path):
+    """간지(보험 인포메이션)의 1-based 물리 페이지 번호. 못 찾으면 None.
+       판정 = '보험인포메이션' + '참고자료' 동시 → 없으면 '보험인포메이션' 단독 → 없으면 '공통참고자료'."""
+    try:
+        n = 0
+        info = subprocess.run(['pdfinfo', pdf_path], capture_output=True, text=True, timeout=60).stdout
+        for ln in info.split('\n'):
+            if ln.startswith('Pages:'):
+                n = int(ln.split(':')[1].strip()); break
+        both = solo = fallback = None
+        for i in range(1, n + 1):
+            t = subprocess.run(['pdftotext', '-f', str(i), '-l', str(i), pdf_path, '-'],
+                               capture_output=True, text=True, timeout=60).stdout
+            k = re.sub(r'\s', '', t or '')
+            if both is None and (_INFO_MARK in k) and (_INFO_MARK2 in k): both = i
+            if solo is None and (_INFO_MARK in k): solo = i
+            if fallback is None and (_INFO_MARK3 in k): fallback = i
+            if both is not None: break
+        return both or solo or fallback
+    except Exception:
+        pass
+    return None
+
+
+def _pdf_slice(src, dst, first, last):
+    """poppler pdfseparate+pdfunite로 first~last 페이지만 잘라 dst에 저장."""
+    d = tempfile.mkdtemp()
+    pat = os.path.join(d, 'p%d.pdf')
+    subprocess.run(['pdfseparate', '-f', str(first), '-l', str(last), src, pat],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    parts = [os.path.join(d, f'p{i}.pdf') for i in range(first, last + 1)]
+    parts = [x for x in parts if os.path.exists(x)]
+    if not parts:
+        return False
+    subprocess.run(['pdfunite'] + parts + [dst], check=True,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return os.path.exists(dst)
+
+def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
+    """★v107: pdf_out을 주면 내부에서 이미 렌더한 벡터 PDF(보장설명서)를 그 경로로 복사한다.
+       렌더 추가 0회 — PPT를 만들 때 어차피 PDF를 한 번 굽기 때문이다.
+       PPT는 구조상 'PDF를 사진 찍은 것'이라 확대하면 글자가 뭉갠다. 인쇄용 선명본은 이 PDF다."""
     import report_weasy
     from report_weasy import build_report_pdf
     report_weasy._PPT_MODE = True
@@ -261,6 +319,29 @@ def build_report_pptx(rep, out, dpi=DPI):
     tmp = tempfile.mkdtemp()
     pdf = os.path.join(tmp, 'rep.pdf')
     build_report_pdf(rep, pdf)
+    # ★v108 분할: 간지 페이지를 찾아 PPT(앞)·PDF(뒤)로 나눈다. 추가 렌더 0회.
+    _info = _find_info_page(pdf)
+    _npg = 0
+    try:
+        _pi = subprocess.run(['pdfinfo', pdf], capture_output=True, text=True, timeout=60).stdout
+        for _ln in _pi.split('\n'):
+            if _ln.startswith('Pages:'):
+                _npg = int(_ln.split(':')[1].strip()); break
+    except Exception:
+        pass
+    if pdf_out:
+        try:
+            import shutil as _sh
+            if _info and _npg and _info <= _npg:
+                if not _pdf_slice(pdf, pdf_out, _info, _npg):
+                    _sh.copyfile(pdf, pdf_out)      # 분할 실패 → 통본 폴백(누락 금지)
+            else:
+                _sh.copyfile(pdf, pdf_out)          # 간지 미검출 → 통본 폴백
+        except Exception:
+            try:
+                import shutil as _sh2; _sh2.copyfile(pdf, pdf_out)
+            except Exception:
+                pass
 
     try:
         xml = os.path.join(tmp, 'bb.xml')
@@ -270,7 +351,13 @@ def build_report_pptx(rep, out, dpi=DPI):
     except Exception:
         pages = []
 
-    imgs = convert_from_path(pdf, dpi=dpi)
+    # ★v108: PPT는 간지 <앞>까지만 굽는다(고객 데이터 페이지). 뒤는 PDF가 담당.
+    #   래스터 장수가 29→11로 줄어 300dpi로 올려도 오히려 기존보다 빠르다.
+    _last = (_info - 1) if (_info and _info > 1) else None
+    if _last:
+        imgs = convert_from_path(pdf, dpi=dpi, first_page=1, last_page=_last)
+    else:
+        imgs = convert_from_path(pdf, dpi=dpi)
 
     prs = Presentation()
     pw_pt, ph_pt = (pages[0][0], pages[0][1]) if pages else (595.276, 841.890)
@@ -291,8 +378,18 @@ def build_report_pptx(rep, out, dpi=DPI):
         for *_, bx in meta:
             _erase(im, bx)
 
+        # ★v106 적응형 저장: 문서형 페이지는 PNG가 더 작고 선명하다.
+        #   사진·이미지형 페이지(재무 3장 등)는 PNG가 급격히 커지므로 1.5MB 초과 시 고품질 JPEG로 대체.
         ip = os.path.join(tmp, f'p{idx}.png')
         im.save(ip, 'PNG')
+        try:
+            if os.path.getsize(ip) > 1_500_000:
+                ij = os.path.join(tmp, f'p{idx}.jpg')
+                im.save(ij, 'JPEG', quality=94, subsampling=0, optimize=True)
+                if os.path.getsize(ij) < os.path.getsize(ip):
+                    os.unlink(ip); ip = ij
+        except Exception:
+            pass
 
         s = prs.slides.add_slide(BL)
         s.shapes.add_picture(ip, 0, 0, prs.slide_width, prs.slide_height)

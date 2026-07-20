@@ -2,7 +2,7 @@
 [phases.setup]
 aptPkgs = [
   "poppler-utils",
-  "poppler_data",
+  "poppler-data",
   "libpango-1.0-0",
   "libpangocairo-1.0-0",
   "libgdk-pixbuf2.0-0",
