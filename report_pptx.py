@@ -11,7 +11,7 @@ from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 
 NS = {'x': 'http://www.w3.org/1999/xhtml'}
 EMU_PER_PT = 12700
-DPI = 300   # ★v106 초고화질(지점장 지시 2026.07.20): 150→300dpi (A4 2480x3509).
+DPI = 900   # ★v112 8K급(지점장 지시 2026.07.20): 300→900dpi (A4 7438x10525 = 가로 7.4K).
             #   구 v89 '150dpi로 낮춰 속도 확보'는 폐기 — 인쇄 시 글자가 뭉개졌다.
             #   래스터 시간은 늘지만 인쇄 품질이 우선. 용량은 아래 적응형 저장으로 방어.
 FONT = "맑은 고딕"
@@ -354,10 +354,19 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
     # ★v108: PPT는 간지 <앞>까지만 굽는다(고객 데이터 페이지). 뒤는 PDF가 담당.
     #   래스터 장수가 29→11로 줄어 300dpi로 올려도 오히려 기존보다 빠르다.
     _last = (_info - 1) if (_info and _info > 1) else None
-    if _last:
-        imgs = convert_from_path(pdf, dpi=dpi, first_page=1, last_page=_last)
-    else:
-        imgs = convert_from_path(pdf, dpi=dpi)
+    if not _last:
+        _last = 0
+        try:
+            _pi2 = subprocess.run(['pdfinfo', pdf], capture_output=True, text=True, timeout=60).stdout
+            for _ln in _pi2.split('\n'):
+                if _ln.startswith('Pages:'):
+                    _last = int(_ln.split(':')[1].strip()); break
+        except Exception:
+            _last = len(pages) or 1
+    # ★★v112 메모리 방어(8K 필수조건): 전 페이지를 한꺼번에 변환하면
+    #   900dpi에서 장당 약 224MB × 11장 = 2.4GB가 동시에 RAM에 뜬다 → Railway OOM.
+    #   그래서 <한 장씩 변환 → 저장 → 즉시 해제>로 바꾼다. 순간 점유 = 1장분(약 224MB).
+    _n_pages = _last
 
     prs = Presentation()
     pw_pt, ph_pt = (pages[0][0], pages[0][1]) if pages else (595.276, 841.890)
@@ -365,7 +374,8 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
     prs.slide_height = Emu(int(ph_pt * EMU_PER_PT))
     BL = prs.slide_layouts[6]
 
-    for idx, im in enumerate(imgs):
+    for idx in range(_n_pages):
+        im = convert_from_path(pdf, dpi=dpi, first_page=idx + 1, last_page=idx + 1)[0]
         im = im.convert('RGB')
         vals = pages[idx][2] if idx < len(pages) else []
         sx = im.width / pw_pt
@@ -393,6 +403,10 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
 
         s = prs.slides.add_slide(BL)
         s.shapes.add_picture(ip, 0, 0, prs.slide_width, prs.slide_height)
+        try:
+            im.close(); del im      # ★v112: 900dpi 1장분(약 224MB) 즉시 해제 — 다음 장 변환 전에 비운다
+        except Exception:
+            pass
 
         for txt, x0, y0, x1, y1, fg, ink, _bx in meta:
             h_pt = y1 - y0

@@ -585,24 +585,29 @@ def build_report_pdf(rep, out):
                 f'<b>{_html.escape(ci.get("residual","-"))}</b> 유지</span></div>')
     _gaprow=(f'<div class="sumrow"><span class="sumlb {_okc}">{"✓ 결론" if gap_cnt==0 else "! 결론"}</span>'
              f'<span class="sumtx">{"핵심담보 균형이 <b>양호</b>합니다. 지금 보장을 <b>유지</b>하십시오." if gap_cnt==0 else f"공백 <b>{gap_cnt}개</b> — 상담을 통한 <b>보완</b>이 필요합니다."}</span></div>')
+    # ★★v111(지점장 지시 2026.07.20): 세로 2박스 → <실제 2열 표>로 전환(장점|단점 나란히).
+    #   .citab CSS는 이미 있었으나 HTML이 .cibox(세로 적층)를 쓰고 있어 표로 안 나가고 있었다.
+    #   WeasyPrint 함정 대비: table-layout:fixed에서는 colgroup으로 열 폭을 강제한다.
+    _ci_pro = (
+        '<div class="cil"><b>주계약이 종신보장</b><span class="cis">중대한 담보가 만기 없이 평생 유지된다.</span></div>'
+        '<div class="cil"><b>원스톱 보장</b><span class="cis">사망 + 중대질병을 한 상품으로 대비한다.</span></div>'
+        '<div class="cil"><b>진단 즉시 선지급</b><span class="cis">사망보험금의 50~80%를 살아 있을 때 먼저 받는다. 치료비·생활비·소득공백에 쓸 수 있다.</span></div>'
+        '<div class="cil"><b>잔여 사망보장 유지</b><span class="cis">선지급을 받아도 남은 사망보험금은 그대로 지급된다.</span></div>'
+        '<div class="cil"><b>납입면제 결합 용이</b><span class="cis">중대질환 진단 이후 보험료 납입 부담이 사라진다.</span></div>')
+    _ci_con = (
+        '<div class="cil"><b class="r">암·뇌·심 중 딱 1가지만</b><span class="cis">먼저 발생한 <b>1회만</b> 선지급된다. 이후 다른 중증질환이 와도 <b class="r">중복 보장 불가</b>.</span></div>'
+        '<div class="cil"><b class="r">[뇌] 25% 후유장해가 영구적이어야 한다</b><span class="cis">재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태여야 지급. 일과성 허혈발작(TIA)·외상성 출혈은 제외.</span></div>'
+        '<div class="cil"><b class="r">★후유장해는 즉시 진단이 안 된다</b><span class="cis">후유장해는 <b>최소 6개월에서 1년간 지낸 후</b> 후유장해를 진단받아야 지급이 가능하다. 진단 직후 바로 받는 담보가 아니다.</span></div>'
+        '<div class="cil"><b class="r">[심장] 3가지를 전부 충족해야 한다</b><span class="cis">① 전형적 흉통 ② 새 심전도 변화(ST상승·Q파·T파역전) ③ 심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증은 제외</b> — 심근 괴사가 없기 때문이다.</span></div>'
+        '<div class="cil"><b class="r">[암] 침윤·파괴적 증식만 인정</b><span class="cis">상피내암·경계성종양·초기 전립선암·피부암은 전부 제외.</span></div>'
+        '<div class="cil"><b class="r">선지급 = 사망보험금 감소</b><span class="cis">받은 만큼 유족에게 갈 돈이 줄어든다. 보험료도 비싸고 지급 분쟁이 잦다.</span></div>')
     _citab=('<div class="sect" style="margin-top:4mm">CI보험 — 장점 vs 단점 <span>CRITICAL ILLNESS</span></div>'
-            '<div class="cibox cig">'
-            '<div class="cihd cig">■ 장점</div>'
-            '<div class="cil"><b>주계약이 종신보장</b><span class="cis">중대한 담보가 만기 없이 평생 유지된다.</span></div>'
-            '<div class="cil"><b>원스톱 보장</b><span class="cis">사망 + 중대질병을 한 상품으로 대비한다.</span></div>'
-            '<div class="cil"><b>진단 즉시 선지급</b><span class="cis">사망보험금의 50~80%를 살아 있을 때 먼저 받는다. 치료비·생활비·소득공백에 쓸 수 있다.</span></div>'
-            '<div class="cil"><b>잔여 사망보장 유지</b><span class="cis">선지급을 받아도 남은 사망보험금은 그대로 지급된다.</span></div>'
-            '<div class="cil"><b>납입면제 결합 용이</b><span class="cis">중대질환 진단 이후 보험료 납입 부담이 사라진다.</span></div>'
-            '</div>'
-            '<div class="cibox cir">'
-            '<div class="cihd cir">■ 단점 — 이것 때문에 못 받는다</div>'
-            '<div class="cil"><b class="r">암·뇌·심 중 딱 1가지만</b><span class="cis">먼저 발생한 <b>1회만</b> 선지급된다. 이후 다른 중증질환이 와도 <b class="r">중복 보장 불가</b>.</span></div>'
-            '<div class="cil"><b class="r">[뇌] 25% 후유장해가 영구적이어야 한다</b><span class="cis">재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태여야 지급. 일과성 허혈발작(TIA)·외상성 출혈은 제외.</span></div>'
-            '<div class="cil"><b class="r">[심장] 3가지를 전부 충족해야 한다</b><span class="cis">① 전형적 흉통 ② 새 심전도 변화(ST상승·Q파·T파역전) ③ 심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증은 제외</b> — 심근 괴사가 없기 때문이다.</span></div>'
-            '<div class="cil"><b class="r">[암] 침윤·파괴적 증식만 인정</b><span class="cis">상피내암·경계성종양·초기 전립선암·피부암은 전부 제외.</span></div>'
-            '<div class="cil"><b class="r">선지급 = 사망보험금 감소</b><span class="cis">받은 만큼 유족에게 갈 돈이 줄어든다. 보험료도 비싸고 지급 분쟁이 잦다.</span></div>'
-            '</div>'
-            '<div class="cint">※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드. 가입 시기·보험사별 약관이 다르므로 <b>원문 확인 필수</b>.</div>')
+            '<table class="citab"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>'
+            '<tr><th class="cig">■ 장점</th><th class="cir">■ 단점 — 이것 때문에 못 받는다</th></tr>'
+            '<tr><td class="cig">' + _ci_pro + '</td>'
+            '<td class="cir">' + _ci_con + '</td></tr></table>'
+            '<div class="cint">※ <b>후유장해 지급 요건</b> — 후유장해는 <b>최소 6개월~1년간 경과한 뒤</b> 후유장해 진단을 받아야 지급이 가능하다.<br>'
+            '※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드. 가입 시기·보험사별 약관이 다르므로 <b>원문 확인 필수</b>.</div>')
     comment_html=_citab
 
     css=f'''
@@ -1027,7 +1032,7 @@ body {{ color:{INK}; }}
 .citab td .cil:last-child {{ border-bottom:none; }}
 .cil:before {{ content:'● '; color:#1F7A4D; }}
 .cil.r:before {{ content:'× '; color:{GAP}; }}
-.cil b {{ color:{NAVY}; }} .cil.r b {{ color:{GAP}; }}
+.cil b {{ color:{NAVY}; }} .cil.r b {{ color:{GAP}; }} .cil b.r {{ color:{GAP}; }}   /* ★v111: <b class="r">가 규칙이 없어 빨강이 안 먹던 것 보정 */
 .cint {{ font-size:8pt; color:{MUT}; font-weight:600; margin-top:3mm; padding-top:2.4mm; border-top:0.6pt solid {LINE}; }}
 .sumrow {{ display:table; width:100%; margin-top:3mm; }}
 .sumlb {{ display:table-cell; width:24mm; font-size:12pt; font-weight:800; color:#fff; background:{NAVY}; border-radius:2mm; padding:2.5mm 2mm; text-align:center; vertical-align:middle; }}
