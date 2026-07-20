@@ -77,12 +77,57 @@ def _is_oneyear(contract_date, expiry_date):
     return 358 <= days <= 372
 
 
-def is_excluded(company, product='', contract_date='', expiry_date=''):
+def _pay_years(pay_period='', pay_count=''):
+    """납입기간을 '연수'로 환산. 판정 불가면 None(제외 안 함·누락 방지). v126"""
+    s = re.sub(r'\s', '', str(pay_period or ''))
+    if '일시' in s: return 0                       # 일시납 = 납입기간 0년
+    m = re.search(r'(\d+)\s*년', s)
+    if m: return int(m.group(1))
+    m2 = re.match(r'^\s*\d+\s*/\s*(\d+)\s*$', str(pay_count or ''))
+    if m2:                                         # 총회차 → 월납 가정 연환산
+        try: return int(m2.group(1)) // 12
+        except Exception: return None
+    return None
+
+def _is_paid_up(pay_period='', pay_count=''):
+    """납입완료 판정. 일시납은 정의상 완납. 회차 a/b에서 a>=b(b>0)면 완납. v126"""
+    if '일시' in re.sub(r'\s', '', str(pay_period or '')): return True
+    m = re.match(r'^\s*(\d+)\s*/\s*(\d+)\s*$', str(pay_count or ''))
+    if not m: return False
+    try:
+        a, b = int(m.group(1)), int(m.group(2))
+    except Exception:
+        return False
+    return b > 0 and a >= b
+
+def _is_short_paidup(pay_period='', pay_count=''):
+    """★★★제외 7종 ⑦ 단기완납 — 지점장 확정 2026.07.21(v131로 기준 변경).
+       사유: 단기납 종신보험은 5년납(60회)부터 시작한다 → 60회 이상 완납은 정상 계약으로 포함.
+       판정 = 완납(a>=b) AND 총회차 b < 60 → 제외(59회까지 제외).
+       일시납은 1회이므로 제외. 회차를 못 읽으면 제외 안 함(누락 방지).
+       ※구 기준 '120회 미만 제외'(v127)는 폐기."""
+    if '일시' in re.sub(r'\s', '', str(pay_period or '')): return True   # 일시납 = 1회 < 60
+    m = re.match(r'^\s*(\d+)\s*/\s*(\d+)\s*$', str(pay_count or ''))
+    if not m: return False
+    try:
+        a, b = int(m.group(1)), int(m.group(2))
+    except Exception:
+        return False
+    if not (b > 0 and a >= b): return False      # 납입 진행 중 → 대상 아님
+    return b < 60                                 # ★60회(5년납) 미만 완납만 제외
+
+
+def is_excluded(company, product='', contract_date='', expiry_date='', pay_period='', pay_count=''):
     t = re.sub(r'[\s（）()_·]|TM', '', str(company)+str(product))
     for kw in EXCLUDE:
         if kw in t: return True
     if _is_group_ins(product, contract_date, expiry_date): return True   # ★제외 5종: 단체보험
-    if _is_oneyear(contract_date, expiry_date): return True              # ★제외 6종: 보험기간 1년(v102)
+    if _is_oneyear(contract_date, expiry_date):                          # ★제외 6종: 보험기간 1년(v102)
+        print(f"[제외6·보험기간1년] {company} {product} — {contract_date}~{expiry_date}")
+        return True
+    if _is_short_paidup(pay_period, pay_count):                          # ★제외 7종: 단기완납(v126)
+        print(f"[제외7·단기완납] {company} {product} — 납입 {pay_period or pay_count} (총회차 60 미만 완납)")
+        return True
     if '운전자' in t: return False   # ★운전자·운전자상해보험은 포함(§4)
     # ★자동차보험(다이렉트/애니카/하이카 + 개인용/업무용/영업용/개인소유) = 제외
     if any(b in t for b in ('다이렉트','애니카','하이카','개인용자동차','업무용자동차')) and any(x in t for x in ('개인용','업무용','영업용','개인소유')):
@@ -570,8 +615,10 @@ def parse_sinjeong(lines):
             except: pass
         mper = re.search(r'(?:월납|매월납)\s*/\s*(\d+)\s*년', ht)
         if mper: pay_period = f'{mper.group(1)}년납'
+        elif re.search(r'일시납', ht): pay_period = '일시납'   # ★v127 3열 리포트 일시납 포착
+        pay_count = ''                                          # ★v127 3열은 납입회차 칸이 없다
         if not expiry_date and re.search(r'종신', ht): expiry_date = '9999.12.31'
-        if is_excluded(company, product, contract_date, expiry_date): continue   # 제외 5종(단체보험 포함)
+        if is_excluded(company, product, contract_date, expiry_date, pay_period, pay_count): continue   # 제외 5~7종
 
         dambo = {}
         for nm, v in _sj_rows(block):
@@ -678,6 +725,10 @@ def parse_txt(txt, filename=''):
                 except: pass
             _mper = re.search(r'월납\s*/?\s*(\d+)\s*년', _ht)
             if _mper: pay_period=f"{_mper.group(1)}년납"
+            # ★v126 열 어긋남 수정: 납입주기 칸이 '일시납/연납/N개월납'인 행에서
+            #   그 토큰이 회사명 앞에 붙어 '일시납AIG손보'로 오염되던 버그.
+            elif re.search(r'일시납', _ht): pay_period = '일시납'
+            elif re.search(r'연\s*납', _ht): pay_period = '연납'
             _mpc = re.search(r'(\d{1,3})\s*/\s*(\d{2,3})\s*회', _ht)
             if _mpc: pay_count=f"{_mpc.group(1)}/{_mpc.group(2)}"
             # 회사·상품 분리: 계약자·납입·보험료·보장기간·단위 boilerplate 제거 후 보험사 키워드로 split
@@ -688,6 +739,7 @@ def parse_txt(txt, filename=''):
             _ct = re.sub(r'보장기\s*간|보장기간',' ',_ct)
             _ct = re.sub(r'\d{4}\.\d{2}\.\d{1,2}\s*[-~（卜\s]+\d{4}\.\d{2}\.\d{1,2}',' ',_ct)
             _ct = re.sub(r'월납\s*/?\s*\d+\s*년',' ',_ct)
+            _ct = re.sub(r'일시납|연\s*납|월\s*납|\d+\s*개월납',' ',_ct)   # ★v126 납입주기 토큰 제거
             _ct = re.sub(r'\d{1,3}\s*/\s*\d{2,3}\s*회',' ',_ct)
             _ct = re.sub(r'[（(]?\s*단위\s*:?\s*만원\s*[）)]?',' ',_ct)
             _ct = re.sub(r'\s+',' ',_ct).strip()
@@ -732,7 +784,7 @@ def parse_txt(txt, filename=''):
                     if _l and not re.search(r'계약자|납입주기|보험료|보장기간', _l):
                         if len(_l) > 5 and not re.search(r'^[\d,]+$', _l) and not re.search(r'^\d{4}\.\d{2}', _l):
                             product = _l; i = _j + 1; break
-        if is_excluded(company, product, contract_date, expiry_date):
+        if is_excluded(company, product, contract_date, expiry_date, pay_period, pay_count):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
         renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period, company)
@@ -1064,6 +1116,43 @@ def parse_txt(txt, filename=''):
                 else:
                     deduped[0]['dambo']['[세부보충]'+k]=v
     except Exception as _e:
+        pass
+    # ★★v129 지점장 확정 2026.07.21: 월보험료 합계 판정 근거는 보유계약 리스트의
+    #   '납입횟수(납부기간/총납부횟수)'와 '잔여보험료(완납이면 0)'다.
+    #   보유계약 리스트 줄을 스캔해 계약에 remain을 붙인다. 못 찾으면 None → 회차로 폴백.
+    try:
+        _rows = []
+        _re_row = re.compile(
+            r'^\s*\d{1,2}\s+(\S.*?)\s+(\d{1,3})\s*/\s*(\d{1,3})\s+([\d,]+)\s*원'
+            r'\s+([\d,]+)\s*원\s+([\d,]+)\s*원\s*$')
+        for _ln in txt.split('\n'):
+            _m = _re_row.match(_ln)
+            if not _m: continue
+            try:
+                _rows.append({
+                    'head':   re.sub(r'\s', '', _m.group(1)),
+                    'pc':     f'{_m.group(2)}/{_m.group(3)}',
+                    'prem':   int(_m.group(4).replace(',', '')),
+                    'remain': int(_m.group(6).replace(',', '')),
+                })
+            except Exception:
+                pass
+        if _rows:
+            for _c in deduped:
+                _c['remain'] = None
+                _key = re.sub(r'\s', '', str(_c.get('company', '')) + str(_c.get('product', '')))
+                for _r in _rows:
+                    if _r['prem'] and _r['prem'] == (_c.get('premium') or 0):
+                        _c['remain'] = _r['remain']
+                        if not _c.get('pay_count'): _c['pay_count'] = _r['pc']
+                        break
+                else:
+                    for _r in _rows:
+                        if _key and _r['head'][:8] and _r['head'][:8] in _key:
+                            _c['remain'] = _r['remain']
+                            if not _c.get('pay_count'): _c['pay_count'] = _r['pc']
+                            break
+    except Exception:
         pass
     return {'client':client,'contracts':deduped}
 
@@ -2059,8 +2148,21 @@ def build_excel(data, out):
     hc = ws.cell(1, last_col)
     hc.value = '합계'; hc.font = W; hc.fill = FILL_SUM; hc.alignment = AL
     # 보험료 합계 = 숫자만 표기(§3): 수식 아닌 계산된 숫자값. 글자 검정(흰바탕)
+    # ★v128 지점장 확정 2026.07.21: 월보험료 합계 = 잔여보험료 > 0(납입 진행중) 계약만.
+    #   납입완료(회차 a>=b) 계약은 계약열에는 남기되 합계에서는 뺀다.
+    #   실측 근거(배학술 롯데): 12건 전액 711,218 → 교보 120/120·AIA 180/180 제외 → 605,618 = 리포트 일치.
     if n_ct>0:
-        ws.cell(2, last_col).value = f'=SUM(C2:{last_ct_L}2)'   # ★v29t §5: 보험료 합계도 동적 SUM
+        def _in_sum(ct):
+            """월보험료 합계 포함 여부. ★v129 정본: 잔여보험료 > 0 이면 포함(완납이면 0).
+               잔여보험료를 못 읽었으면(None) 납입횟수 a>=b(완납)로 폴백."""
+            r = ct.get('remain')
+            if r is not None:
+                return r > 0
+            return not _is_paid_up(ct.get('pay_period',''), ct.get('pay_count',''))
+        _live_i = [i for i, ct in enumerate(contracts) if _in_sum(ct)]
+        # ★v130: 합계 셀에 수식을 쓰면 openpyxl 재열람 시 값이 없어 보장설명서·PPT가 0원으로 읽는다.
+        #   지침 §3 원문대로 '보험료 합계 = 계산된 숫자값'을 박는다(계약 수에 따라 매번 재계산 = 동적).
+        ws.cell(2, last_col).value = sum((contracts[i].get('premium') or 0) for i in _live_i)
         ws.cell(2, last_col).font = BK
 
     for r in range(6, ws.max_row+1):
@@ -2869,7 +2971,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v125-noperiod-20260721'}
+def health(): return {'ok':True,'version':'v131-paidup60-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -2877,7 +2979,7 @@ def health(): return {'ok':True,'version':'v125-noperiod-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v125-noperiod-20260721'}
+    out = {'version': 'v131-paidup60-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
