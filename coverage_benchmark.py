@@ -241,6 +241,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     """완성 엑셀 → rep dict (report_weasy.build_report_pdf 입력)"""
     settings=settings or {}
     grp_rows, headers, total_prem = load_excel(xlsx_path)
+    # ★v134 흥국화재 10억통장 가입 판정(지점장 확정 2026.07.21):
+    #   엑셀 헤더 1행(회사\n상품\n[갱신])에 <b>'흥국' AND '리셋월렛'</b>이 둘 다 있으면 가입.
+    _r10=False
+    try:
+        import openpyxl as _ox
+        _w=_ox.load_workbook(xlsx_path); _s=_w.active
+        for _c in range(2,_s.max_column+1):
+            _t=str(_s.cell(1,_c).value or '').replace(' ','')
+            if ('흥국' in _t) and ('리셋월렛' in _t or '리셋월랫' in _t): _r10=True; break
+        _w.close()
+    except Exception: pass
     _badj=_bundle_adjust(xlsx_path)   # ★v30e 묶음 전개 중복 차감(심장·뇌 보유합)
     client=settings.get('client','고객')
 
@@ -391,7 +402,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,

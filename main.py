@@ -220,6 +220,61 @@ def get_종번호(name):
         if k in name: return i
     return 0
 
+def _reflow_cols(block_lines):
+    """★v133 (2026.07.21 장*상 현대해상 Hi2501 실측): 별첨이 3열이고 담보명이 길어 셀 안에서
+    2~3줄로 접히면, pdftotext -layout 출력에서 <b>금액이 담보명 중간 줄에 홀로 남는다</b>.
+    기존 _split_cols는 줄 단위라 조각난 이름을 이어붙이지 못하고, 금액이 <b>한 칸씩 밀려</b>
+    앞 담보의 값이 뒤 담보에 붙었다(실측: 간호통합병동 7→20, 간병인 20→10).
+    → 세로 거터(모든 줄이 공백인 열)로 칸을 나누고, 칸 안에서 연속 줄을 한 레코드로 묶어
+      '이름 조각 전부 이어붙이기 + 그 안의 단독 숫자 = 그 레코드의 금액'으로 재조립한다.
+    ★안전장치: '단독 숫자만 있는 줄'이 없으면 접힘 레이아웃이 아니므로 <b>원본 그대로 반환</b>
+      (기존 2열 롯데·3열 신정원 경로 무영향)."""
+    import re as _re
+    lines=[str(x).rstrip('\n') for x in block_lines]
+    if not lines: return block_lines
+    # 접힘 신호: 공백+숫자만 있는 줄 존재
+    if not any(_re.fullmatch(r'\s*[\d,]+\s*', l) and l.strip() for l in lines): return block_lines
+    W=max(len(l) for l in lines)
+    if W<40: return block_lines
+    pad=[l.ljust(W) for l in lines]
+    # 모든 줄이 공백인 열 = 거터
+    gut=[all(p[i]==' ' for p in pad) for i in range(W)]
+    # 폭 3 이상 거터 런의 시작 위치 = 열 경계
+    bounds=[0]; i=0
+    while i < W:
+        if gut[i]:
+            j=i
+            while j<W and gut[j]: j+=1
+            if (j-i)>=3 and j<W: bounds.append(j)
+            i=j
+        else: i+=1
+    if len(bounds)<2: return block_lines
+    bounds.append(W+1)
+    out=[]
+    for bi in range(len(bounds)-1):
+        a,b=bounds[bi],bounds[bi+1]
+        cells=[p[a:b] for p in pad]
+        rec=[]
+        def flush():
+            if not rec: return
+            amt=None; parts=[]
+            for c in rec:
+                t=c.strip()
+                if _re.fullmatch(r'[\d,]+', t):
+                    if amt is None: amt=t
+                elif t: parts.append(t)
+            nm=''.join(parts).strip()
+            if nm and amt is not None: out.append(nm+'    '+amt)
+            elif nm: out.append(nm)
+            elif amt is not None: out.append(amt)
+            rec.clear()
+        for c in cells:
+            if c.strip(): rec.append(c)
+            else: flush()
+        flush()
+    return out
+
+
 def _split_cols(block_lines):
     """★OCR PDF(pdftotext -layout) 별첨 다열(담보명|금액|담보명|금액|담보명|금액) → 1쌍 1줄로 분해.
     열 구분=공백 3개↑ 또는 탭. 담보명 내부 단일공백은 보존. 숫자 토큰=직전 담보명의 가입금액."""
@@ -243,7 +298,7 @@ def _split_cols(block_lines):
     return out
 
 def rule_extract(block_lines):
-    block_lines=_split_cols(block_lines)   # ★다열 별첨 분해(OCR PDF 대응)
+    block_lines=_split_cols(_reflow_cols(block_lines))   # ★v133 접힘 3열 재조립 → 기존 다열 분해
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
     dambo={}; names=[]; amts=[]; pend=None
@@ -2971,7 +3026,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v131-paidup60-20260721'}
+def health(): return {'ok':True,'version':'v137-cancerhalf-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -2979,7 +3034,7 @@ def health(): return {'ok':True,'version':'v131-paidup60-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v131-paidup60-20260721'}
+    out = {'version': 'v137-cancerhalf-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -3043,7 +3098,13 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
             _rawtl=_sp.run(['pdftotext','-layout',_tpp,'-'],capture_output=True,text=True,timeout=60).stdout
             try: os.unlink(_tpp)
             except: pass
-            if (not _rawtl or len(_rawtl.strip())<30) and not os.environ.get('ANTHROPIC_API_KEY',''):
+            # ★v132: '글자수<30'만 보면 못 잡는 케이스가 있다 — 브라우저 '인쇄→PDF 저장'본은
+            #   Type3 서브셋 폰트 + ToUnicode 없음이라 pdftotext가 글자는 1만자 넘게 뱉지만
+            #   한글은 0자다(전부 깨진 제어문자). 실측: 권양영_보장.pdf = 18,333자 / 한글 0자.
+            #   따라서 판정 기준을 '한글 글자 수'로 바꾼다.
+            _hangul = sum(1 for _c in (_rawtl or '') if '\uac00' <= _c <= '\ud7a3')
+            print(f'[PDF_DIAG] chars={len(_rawtl or "")} hangul={_hangul}')
+            if (not _rawtl or len(_rawtl.strip())<30 or _hangul<100) and not os.environ.get('ANTHROPIC_API_KEY',''):
                 _img_pdf_nokey=True
         except Exception: pass
         pdf_txt=pdf_to_txt(pdf_bytes)
@@ -3065,7 +3126,9 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         if not data or not data.get('contracts'):
             if _img_pdf_nokey:
                 return JSONResponse({'ok':False,'source':'이미지PDF',
-                    'error':'이미지 PDF입니다 — OCR.PDF로 변환해서 올리세요'})
+                    'error':'글자를 읽을 수 없는 PDF입니다. 브라우저 "인쇄 → PDF로 저장"으로 만든 파일은 '
+                            '한글이 통째로 깨져 분석이 불가능합니다. let: 리포트 화면에서 인쇄가 아니라 '
+                            'PDF 다운로드(저장) 버튼으로 받은 원본 파일을 그대로 올려주세요.'})
             # ★v101: 원인을 화면에서 바로 알 수 있게 추출 단계 수치를 함께 노출(진단용)
             _dbg = (f'계약을 찾지 못했습니다. [진단] 경로={src_note} / '
                     f'PDF추출글자={len(pdf_txt or "")} / TXT입력글자={len(txt or "")} / '
