@@ -2098,7 +2098,7 @@ def build_excel(data, out):
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
                 # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
-                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','일상배상책임')) else BK   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
+                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','간호통합병동','일상배상책임')) else BK   # ★v139 간호통합병동 추가 — 같은 계약인데 간병인=파랑/간호통합=검정으로 갈리던 불일치(지점장 지적 2026.07.21)   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
                 # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
                 _WS_STD = ('암주요치료비','하이클래스(암)','2대 주요치료비','산정특례뇌혈관','산정특례심장','일반암','뇌혈관진단비','뇌졸증진단비','급성심근경색','허혈성 진단비')
                 if std in _WS_STD:
@@ -2436,7 +2436,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
 
     # ★PPT 색: 하나라도 갱신=파랑 / 전부 비갱신=검정 / 실손 항상 파랑 (미가입은 값 미기재라 해당없음)
     _BLUE=RGBColor(0x00,0x00,0xFF); _BLACK=RGBColor(0x00,0x00,0x00)
-    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인','일상배상책임'}  # 간병인·일상배상책임=무조건 파랑
+    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인','간병인지원일당','간호통합병동','일상배상책임'}  # ★v139 간병인 계열 3행 전부 무조건 파랑(불일치 차단)
     # 담보별 '최대 기여 계약'의 갱신여부로 색 결정 → 합산 시 전부 파랑 쏠림 방지(엑셀 혼합과 일치)
     _dom={}  # std -> (max_amt, gen)
     for ct in contracts:
@@ -3026,7 +3026,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v137-cancerhalf-20260721'}
+def health(): return {'ok':True,'version':'v144-revert6p-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3034,7 +3034,7 @@ def health(): return {'ok':True,'version':'v137-cancerhalf-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v137-cancerhalf-20260721'}
+    out = {'version': 'v144-revert6p-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -3153,7 +3153,26 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         rep=None
         try:
             from coverage_benchmark import map_excel_to_report
-            rep=map_excel_to_report(xl, settings={'client':cust,
+            # ★★★v138 흥국화재 10억통장 가입 판정(지점장 실측 정정 2026.07.21):
+            #   '리셋월렛'은 <b>상품명이 아니라 담보명</b>으로 들어온다.
+            #   실측(장기상) — 상품 '무배당 흥Good 든든한 3N5 간편종합보험' 안의
+            #   담보 '플래티넘 건강 리셋월렛II(3대질병고액및중환자실치료,특정…) 100,000'(=10억).
+            #   따라서 <b>상품명·담보명 두 곳을 모두</b> 본다(지점장 '2가지 다 적용' 지시).
+            _r10=False
+            try:
+                for _c in (data.get('contracts') or []):
+                    _co=str(_c.get('company','')).replace(' ','')
+                    if '흥국' not in _co: continue
+                    _pd=str(_c.get('product','')).replace(' ','')
+                    _hit=('리셋월렛' in _pd) or ('리셋월랫' in _pd)
+                    if not _hit:
+                        for _k in (_c.get('dambo') or {}):
+                            _kk=str(_k).replace(' ','')
+                            if ('리셋월렛' in _kk) or ('리셋월랫' in _kk): _hit=True; break
+                    if _hit: _r10=True; break
+            except Exception: pass
+            print(f'[R10] 흥국화재 10억통장 가입판정={_r10}')
+            rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,
                 'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)

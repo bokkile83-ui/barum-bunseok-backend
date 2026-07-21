@@ -243,8 +243,26 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     grp_rows, headers, total_prem = load_excel(xlsx_path)
     # ★v134 흥국화재 10억통장 가입 판정(지점장 확정 2026.07.21):
     #   엑셀 헤더 1행(회사\n상품\n[갱신])에 <b>'흥국' AND '리셋월렛'</b>이 둘 다 있으면 가입.
-    _r10=False
+    # ★★★v139 갱신 색 원천(지점장 2026.07.21): 엑셀 값 글자색이 파랑(0070C0)이면 그 담보는 '갱신'.
+    #   엑셀이 이미 정본이므로 색을 그대로 읽어 설명서·PPT에 전달한다(4대 산출물 연동).
+    _gen_map={}
     try:
+        import openpyxl as _ox2
+        _w2=_ox2.load_workbook(xlsx_path); _s2=_w2.active
+        for _r2 in range(6,_s2.max_row+1):
+            _nm2=_s2.cell(_r2,2).value
+            if not _nm2: continue
+            _nm2=str(_nm2).strip()
+            for _c2 in range(3,_s2.max_column):
+                _f2=_s2.cell(_r2,_c2).font
+                _rgb=(_f2.color.rgb if (_f2 and _f2.color and _f2.color.rgb) else '')
+                if _rgb and str(_rgb).upper().endswith('0070C0') and _s2.cell(_r2,_c2).value not in (None,'',0):
+                    _gen_map[_nm2]=True; break
+        _w2.close()
+    except Exception: pass
+    _r10=bool(settings.get('reset10')) if settings.get('reset10') is not None else False
+    try:
+        if settings.get('reset10') is not None: raise StopIteration
         import openpyxl as _ox
         _w=_ox.load_workbook(xlsx_path); _s=_w.active
         for _c in range(2,_s.max_column+1):
@@ -402,7 +420,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'gen_map':_gen_map,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,
