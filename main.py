@@ -39,7 +39,11 @@ def _isci_prod(p):
     #    <퍼펙트통합보험>은 상품명에 CI/GI/리빙케어 표기가 없어도 <무조건 CI보험>이다.
     #    (v105에서 '퍼펙트통합'을 오기로 보고 뺐으나, 지점장이 별개 상품으로 추가 확정 → 둘 다 CI)
     #    '퍼텍트~'는 리포트 표기 흔들림 대비 동의어.
-    if any(k in t for k in ('퍼펙트플러스', '퍼텍트플러스', '퍼펙트통합', '퍼텍트통합')): return True
+    # ★★★v150 영구지침(지점장 확정 2026.07.21): <b>삼성생명 '퍼펙트' 시리즈는 전부 CI</b>다.
+    #    퍼펙트통합보험 · 퍼펙트플러스보험 · 퍼펙트플러스종합보험 … 변형이 계속 나오므로
+    #    <b>2종 열거를 폐기하고 '퍼펙트'(오타 '퍼텍트') 포함 여부로 판정</b>한다.
+    #    근거: 상품명에 CI/GI/리빙케어 표기가 없어 이름만으로는 못 걸러진다 → 상세내역(세부가입현황) 검수 필수.
+    if ('퍼펙트' in t) or ('퍼텍트' in t): return True
     return any(k in t for k in ('CI보험', '리빙케어', 'GI보험'))
 
 
@@ -1312,6 +1316,12 @@ def _rmn(s):
 
 def resolve_kw(raw):
     if str(raw).startswith('[확인]'): return None, 0   # ★v98 확인큐 항목은 표준행 매핑 금지(중복합산 차단)
+    # ★★★v146 (지점장 확정 2026.07.21): 흥국화재 10억통장(플래티넘 건강 리셋월렛II)은
+    #   <b>엑셀·보장분석 PPT에 표기 금지</b>. 보장진단서 7p 카드에만 표기한다.
+    #   ★사고: 담보명에 '중환자실'이 들어 있어 resolve_kw가 '질병중환자실' 행으로 잡아
+    #   엑셀 61행에 100,000(=10억)을 박고 있었다(실측). 최우선으로 차단한다.
+    if ('리셋월렛' in re.sub(r'\s','',str(raw))) or ('리셋월랫' in re.sub(r'\s','',str(raw))):
+        return None, 0
     """raw 담보명 -> (std표준명 or None, jong 0~5). API 불필요."""
     raw = re.sub(r"^\[세부보충\]","",str(raw))  # ★세부보충 접두 제거
     # ★Adobe OCR 깨짐: '상하!'·'상하 !'·'상하）' = '상해' (지점장 2026.07.05)
@@ -2300,6 +2310,11 @@ def build_excel(data, out):
     ws2.cell(6,1,'[확인] 자동매핑 실패 담보 (마스터 미수록 또는 약관 확인 후 수기 기재)')
     ws2.cell(7,1,'회사'); ws2.cell(7,2,'담보명'); ws2.cell(7,3,'금액(만원)'); ws2.cell(7,4,'보장범위(참고)'); ws2.cell(7,5,'약관검색')
     LINKF = Font(color='0000FF', underline='single')
+    # ★v148 (지점장 확정 2026.07.21): 흥국화재 10억통장(리셋월렛II)은 <b>엑셀 전면 기재금지</b>.
+    #   본표에서 뺐어도 [확인] 큐(확인사항 시트)에 남으면 설계사가 수기 기재하게 되므로 여기서도 제외한다.
+    #   이 담보는 보장진단서 7p 카드 전용이다.
+    unmapped = [u for u in unmapped
+                if not (('리셋월렛' in re.sub(r'\s','',str(u[2]))) or ('리셋월랫' in re.sub(r'\s','',str(u[2]))))]
     for k,(col,comp,raw,amt,note) in enumerate(unmapped):
         rr = 8+k
         ws2.cell(rr,1,comp); ws2.cell(rr,2,raw); ws2.cell(rr,3,amt); ws2.cell(rr,4,note)
@@ -3026,7 +3041,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v145-slim-20260721'}
+def health(): return {'ok':True,'version':'v179-cirate-20260721'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3034,7 +3049,7 @@ def health(): return {'ok':True,'version':'v145-slim-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v145-slim-20260721'}
+    out = {'version': 'v179-cirate-20260721'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -3171,8 +3186,19 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
                             if ('리셋월렛' in _kk) or ('리셋월랫' in _kk): _hit=True; break
                     if _hit: _r10=True; break
             except Exception: pass
-            print(f'[R10] 흥국화재 10억통장 가입판정={_r10}')
-            rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,
+            # ★v146 금액도 함께 전달(진단서 카드에 표기). 만원 단위 원본값.
+            _r10amt=0
+            try:
+                for _c in (data.get('contracts') or []):
+                    if '흥국' not in str(_c.get('company','')).replace(' ',''): continue
+                    for _k,_v in (_c.get('dambo') or {}).items():
+                        _kk=str(_k).replace(' ','')
+                        if ('리셋월렛' in _kk) or ('리셋월랫' in _kk):
+                            try: _r10amt=max(_r10amt,int(float(_v)))
+                            except Exception: pass
+            except Exception: pass
+            print(f'[R10] 흥국화재 10억통장 가입판정={_r10} 금액={_r10amt}만원')
+            rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,'reset10_amt':_r10amt,
                 'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)

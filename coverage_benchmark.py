@@ -103,8 +103,13 @@ def _ci_meta(path):
     wb=openpyxl.load_workbook(path,data_only=True); ws=wb.active
     last=ws.max_column
     def _isci(t):
+        # ★★★v149 (지점장 지적 2026.07.21): CI 판정이 main.py `_isci_prod`에만 있고
+        #   coverage_benchmark에는 <b>퍼펙트 예외가 통째로 빠져</b> 있었다 → 엑셀·PPT는 CI로 인식하는데
+        #   보장진단서(설명서 3p 핵심보장)만 'CI보험 아님'으로 떴다. 두 경로의 판정을 일치시킨다.
+        #   영구지침(2026.07.20): 삼성생명 <퍼펙트플러스보험>·<퍼펙트통합보험>은 표기 없어도 무조건 CI.
         t=re.sub(r'[\s\u3000]','',str(t or ''))
-        return any(k in t for k in ('CI보험','리빙케어','GI보험'))
+        # ★v150 '퍼펙트' 시리즈 전체 CI(퍼펙트통합·퍼펙트플러스·퍼펙트플러스종합 등 변형 포함)
+        return any(k in t for k in ('CI보험','리빙케어','GI보험','퍼펙트','퍼텍트'))
     cols=[c for c in range(3,last) if _isci(ws.cell(1,c).value)]
     if not cols: return None
     rows={}
@@ -290,7 +295,11 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         status='full' if p>=70 else ('part' if p>=40 else 'gap')
         blue = cat in ('실손·일배책','입원·일당')  # 실손·간병인·일배책 항상 파랑
         _disp=getattr(load_excel,'_disp',{})   # ★v30h 슬래시 원문 우선
-        items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),**({'blue':True} if blue else {})} for b,v in top]
+        # ★★★v147 (지점장 지적 2026.07.21): 파랑이 <b>카테고리 단위</b>로만 걸려 있어
+        #   갱신 담보인 '허혈성 진단비'(엑셀 글자색 0070C0)가 보장현황에서 검정으로 나왔다.
+        #   → 담보별 gen_map(엑셀 글자색=원천)을 함께 본다. 4대 산출물 색 연동.
+        items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),
+                **({'blue':True} if (blue or _gen_map.get(str(b).strip())) else {})} for b,v in top]
         if not items or all(not it['v'] for it in items):
             items=[{'t':f'{cat} 없음','none':True}]
         coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
@@ -388,7 +397,11 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
         'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
     # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
-    _ci_prod=any(('CI' in str(h.get('nm','')) or '리빙케어' in str(h.get('nm','')) or 'GI보험' in str(h.get('nm',''))) for h in headers)
+    def _ciprod1(nm):
+        # ★v149 위 _isci와 동일 기준(퍼펙트플러스·퍼펙트통합 포함). 정본 1개로 통일.
+        t=re.sub(r'[\s\u3000]','',str(nm or ''))
+        return any(k in t for k in ('CI','리빙케어','GI보험','퍼펙트','퍼텍트'))
+    _ci_prod=any(_ciprod1(h.get('nm','')) for h in headers)
     # ★2026.07.12 지점장 확정: 상품명에 CI/GI/리빙케어가 없으면 '중대한OO' 담보가 있어도 진짜 CI가 아니다(가짜).
     #   → 상품명이 1순위. 상품명에 표기 없으면 무조건 none(Plan B).
     if not _ci_prod:
@@ -420,7 +433,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'gen_map':_gen_map,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,
