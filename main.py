@@ -1118,7 +1118,17 @@ def parse_txt(txt, filename=''):
     #   [정본] AIA생명·라이나생명·AIG손보·우체국 = 별첨에 '뇌혈관'이라 적혀 있어도 그대로 믿지 말 것.
     #          반드시 세부가입현황 표를 100% 대조해서, 실제로 잡힌 행(뇌혈관진단비/뇌졸증/뇌출혈)으로 배치한다.
     #          엑셀·PPT·보장진단서 모두 이 결과를 따른다. 회사별 하드코딩(구 '라이나=뇌출혈') 폐기.
-    _SEBU_FORCE = ('AIA', '라이나', 'AIG', '우체국')
+    # ★★★v181 (지점장 확정 2026.07.22): <b>상세 세부내역 체크는 1000% 필수</b>.
+    #   대상을 4개사에서 <b>생명보험사 전체 + CI/GI/리빙케어/퍼펙트 상품 전체</b>로 확대한다.
+    #   생보 CI/GI는 담보명이 '뇌혈관진단'이어도 실제는 뇌출혈인 경우가 많아 담보명만 믿으면 안 된다.
+    _SEBU_FORCE = ('AIA', '라이나', 'AIG', '우체국')          # 뇌출혈 기본배치 대상(실측 확인된 4개사)
+    _SEBU_CHECK = ('생명', '라이프', '공제', 'AIA', 'AIG', '라이나', '우체국',
+                   '메트라이프', '처브', 'ABL', 'KDB')        # 반드시 세부내역 대조할 대상(확대)
+    def _sebu_target(_co, _pd):
+        _c1 = re.sub(r'[\s（）()]', '', str(_co or ''))
+        _p1 = re.sub(r'[\s（）()]', '', str(_pd or ''))
+        if any(f in _c1 for f in _SEBU_CHECK): return True
+        return any(k in _p1 for k in ('CI보험', 'GI보험', '리빙케어', '퍼펙트', '퍼텍트'))
     try:
         _sb = parse_sebu(lines)
         _nh  = float(_sb.get('뇌혈관진단비', 0) or 0)
@@ -1126,16 +1136,30 @@ def parse_txt(txt, filename=''):
         _chu = float(_sb.get('뇌출혈진단비', 0) or 0)
         for _c in deduped:
             _co = re.sub(r'[\s（）()]', '', str(_c.get('company', '')))
-            if not any(_f in _co for _f in _SEBU_FORCE):
-                continue                                   # 대상 4개사만
+            _pd = str(_c.get('product', ''))
+            if not _sebu_target(_co, _pd):
+                continue                                   # ★v181 생보사 전체 + CI/GI/리빙케어/퍼펙트
             for _k in list(_c['dambo'].keys()):
                 _kk = str(_k).replace(' ', '')
                 if not (('뇌혈관' in _kk) and ('진단' in _kk)):            continue
                 if any(x in _kk for x in ('수술','주요치료','산정특례','혈전','특정')): continue
                 if any(x in _kk for x in ('Ⅰ','Ⅱ','Ⅲ','II','III')):        continue
-                if not _sb:                                # ★세부가입현황 파싱 실패 → 추측 금지
-                    _c['dambo']['[확인] 뇌혈관 축 판별불가(세부가입현황 미파싱) ' + str(_k)] = _c['dambo'].get(_k, 0)
-                    print(f"[v43 확인큐] {_co} '{_k}' 세부가입현황 미파싱 → 수기확인")
+                if not _sb:
+                    # ★★★v180 (지점장 확정 2026.07.21): 세부가입현황이 <b>이미지/벡터라 텍스트가 아예 없는</b>
+                    #   리포트가 있다(실측 장문순: '한장 보장 현황'·'세부 가입 현황' 글자 자체가 0건 추출).
+                    #   이때 [확인]큐로만 두면 <b>뇌혈관진단비 행에 그대로 남아 오류로 나간다</b>.
+                    #   → 대상 4개사(AIA·라이나·AIG·우체국)는 <b>기본값을 뇌출혈진단비로 배치</b>하고
+                    #     확인 메모를 남긴다(지점장: "AIA생명은 뇌출혈인데 뇌혈관으로 나온다").
+                    if not any(_f in _co for _f in _SEBU_FORCE):
+                        # ★v181 4개사 외(그 외 생보·CI)는 임의 이동 금지 — 확인큐로만 강하게 띄운다.
+                        _c['dambo']['[확인] 세부가입현황 미파싱 · 뇌혈관/뇌졸증/뇌출혈 축 대조 필수 ' + str(_k)] = 0
+                        print(f"[v43 확인큐·필수대조] {_co} '{_k}' 세부가입현황 미파싱 → 상세내역 수기 대조")
+                        continue
+                    _v0 = _c['dambo'].pop(_k)
+                    _nk0 = '뇌출혈진단비[세부가입정본]'
+                    _c['dambo'][_nk0] = float(_c['dambo'].get(_nk0, 0) or 0) + float(_v0 or 0)
+                    _c['dambo']['[확인] 세부가입현황 미파싱 → 뇌출혈로 배치함, 상세내역 대조 요망 ' + str(_k)] = 0
+                    print(f"[v43 기본값·뇌출혈] {_co} '{_k}' 세부가입현황 미파싱 → 뇌출혈진단비 배치(+확인메모)")
                     continue
                 if   _nh  > 0: _tgt = None                 # 세부가입현황이 뇌혈관진단비로 잡음 → 유지
                 elif _jol > 0: _tgt = '뇌졸중'
@@ -2307,6 +2331,17 @@ def build_excel(data, out):
     ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}')
     ws2.cell(3,1,'계약수'); ws2.cell(3,2,n_ct)
     ws2.cell(4,1,'월보험료합계'); ws2.cell(4,2,f'{sum(c["premium"] for c in contracts):,}원')
+    # ★★v186 (지점장 2026.07.22): AIA/AIG/라이나(우체국) 계약이 있으면 <b>엑셀 확인사항 시트 최상단</b>에
+    #   "뇌 범위 부분 꼭 체크" 경고를 굵은 빨강으로 박는다. 3군데(엑셀·진단서 1p·7p 워크시트) 동일 문구.
+    try:
+        _wc = [f for f in ('AIA','AIG','라이나','우체국')
+               if any(f in str(c.get('company','')).replace(' ','') for c in contracts)]
+        if _wc:
+            # ★v187 회사명은 <b>항상 3개 고정</b>(AIA / AIG / 라이나) — 보유분만 나열하지 않는다.
+            _wcell = ws2.cell(2,1, '★ AIA / AIG / 라이나생명은 "뇌 범위 부분" 꼭 체크하기 '
+                                   '(세부가입현황에서 뇌혈관 / 뇌졸증 / 뇌출혈 축 대조)')
+            _wcell.font = Font(bold=True, size=13, color='C0392B')
+    except Exception: pass
     ws2.cell(6,1,'[확인] 자동매핑 실패 담보 (마스터 미수록 또는 약관 확인 후 수기 기재)')
     ws2.cell(7,1,'회사'); ws2.cell(7,2,'담보명'); ws2.cell(7,3,'금액(만원)'); ws2.cell(7,4,'보장범위(참고)'); ws2.cell(7,5,'약관검색')
     LINKF = Font(color='0000FF', underline='single')
@@ -3041,7 +3076,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v179-cirate-20260721'}
+def health(): return {'ok':True,'version':'v203-fin3max-20260722'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3049,7 +3084,7 @@ def health(): return {'ok':True,'version':'v179-cirate-20260721'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v179-cirate-20260721'}
+    out = {'version': 'v203-fin3max-20260722'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

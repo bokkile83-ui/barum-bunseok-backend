@@ -1,3 +1,4 @@
+__VERSION__ = 'v203-fin3max-20260722'
 # ===== BARUM coverage_benchmark.py v33-ci-rate-20260708 (선지급률=CI계약열 직접산출·50/80 고정) =====
 # -*- coding: utf-8 -*-
 """
@@ -265,6 +266,39 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                     _gen_map[_nm2]=True; break
         _w2.close()
     except Exception: pass
+    # ★★★v182 (지점장 2026.07.22): 세부가입현황 미파싱 등 <b>수기 확인이 필요한 건</b>을
+    #   확인사항 시트에서 모아 보장진단서에 <b>빨간 경고 배너</b>로 띄운다(방치 출고 차단).
+    _warn=[]
+    try:
+        import openpyxl as _ox3
+        _w3=_ox3.load_workbook(xlsx_path)
+        if '확인사항' in _w3.sheetnames:
+            _s3=_w3['확인사항']
+            for _r3 in range(1,_s3.max_row+1):
+                _t3=' '.join(str(_s3.cell(_r3,_c3).value or '') for _c3 in range(1,6))
+                if '세부가입현황' in _t3 or '축 대조' in _t3 or '상세내역' in _t3:
+                    _co3=str(_s3.cell(_r3,1).value or '').strip()
+                    _nm3=str(_s3.cell(_r3,2).value or '').strip()
+                    # ★v183 팩트만 남긴다: 설명문 제거 → 담보명 · 배치결과
+                    _res3 = '뇌출혈로 배치' if '뇌출혈로 배치' in _nm3 else '축 미확정'
+                    _dm3 = re.sub(r'^\[확인\]\s*', '', _nm3)
+                    _dm3 = re.sub(r'세부가입현황[^·]*?(요망|필수)\s*', '', _dm3).strip()
+                    _dm3 = re.sub(r'^[·\s]+', '', _dm3)[:28] or _nm3[:28]
+                    _warn.append((_co3, _dm3, _res3))
+        _w3.close()
+    except Exception: pass
+    # ★★v185 (지점장 2026.07.22): AIA·AIG·라이나(우체국) 계약이 <b>하나라도 있으면</b>
+    #   파싱 성공 여부와 무관하게 <b>"뇌 범위 부분 꼭 체크"</b> 경고를 띄운다(1000% 대조 원칙).
+    _warn_co=[]
+    try:
+        import openpyxl as _ox4
+        _w4=_ox4.load_workbook(xlsx_path); _s4=_w4.active
+        for _c4 in range(3,_s4.max_column+1):
+            _h4=str(_s4.cell(1,_c4).value or '').replace(' ','')
+            for _f4 in ('AIA','AIG','라이나','우체국'):
+                if _f4 in _h4 and _f4 not in _warn_co: _warn_co.append(_f4)
+        _w4.close()
+    except Exception: pass
     _r10=bool(settings.get('reset10')) if settings.get('reset10') is not None else False
     try:
         if settings.get('reset10') is not None: raise StopIteration
@@ -433,7 +467,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,
