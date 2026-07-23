@@ -1,5 +1,4 @@
-__VERSION__ = 'v203-fin3max-20260722'
-# ===== BARUM coverage_benchmark.py v33-ci-rate-20260708 (선지급률=CI계약열 직접산출·50/80 고정) =====
+# ===== BARUM coverage_benchmark.py v199-sumfix-20260723 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -59,6 +58,13 @@ def _man(v):
         try:
             if isinstance(v,str) and '/' in v:
                 return max(float(p) for p in v.split('/') if p.strip().replace('.','').isdigit())
+        except: pass
+        # ★★v199: 완납 계약의 보험료 칸은 '58,340 (완납)' 텍스트다(엑셀 =SUM에서 자동 제외용).
+        #   설명서 계약별 보험료가 0원으로 표기되던 것 차단 — 숫자만 뽑아 되돌린다.
+        try:
+            if isinstance(v,str):
+                _m = re.match(r'^\s*([\d,]+)', v)
+                if _m: return float(_m.group(1).replace(',',''))
         except: pass
         return 0.0
 

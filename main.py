@@ -594,7 +594,9 @@ def _sj_rows(block):
             out.append(('[확인] 금액판독불가 ' + name, sj, 0)); continue
         name = _sj_fixname(name, sj, _SJC.get('c',''), _SJC.get('p',''))
         if '특정암진단' in re.sub(r'\\s','',sj) and '유사암' not in sj:
-            name = '[확인] 특정암 ' + name       # ★v98 F5: 특정암=일반암 산입 금지(등식1)
+            # ★v197(2026.07.23): 신정원 '특정암진단' = 고액암 행으로 확정(구 v98 F5 [확인]큐 폐기)
+            if '특정암' not in name:
+                name = '특정암진단비(' + name + ')'
         out.append((name, sj, v))
     # ★v44 실측보정: DB 실손처럼 회사담보명이 '질병(전체질병을 의미)' 하나로 3행(입원·통원·약값)이 겹치는 경우
     #    회사담보명만 쓰면 dict 키 충돌 → 합산 사고. 계약 내 중복 회사담보명은 신정원담보명으로 분리한다.
@@ -1470,6 +1472,10 @@ def resolve_kw(raw):
         if has('생식기') or has('전립선') or has('음경') or has('고환') or has('유방') or has('자궁') or has('갑상선'): return None,0
         return '항암방사선약물',0
     if has('카티') or has('CAR-T') or has('CART'): return '항암방사선약물',0
+    # ★v197 지점장 확정 2026.07.23: 'N대특정암진단비'(16대·11대·5대 등)·'특정암진단비' = 고액암 행
+    #   근거: 암진단비(유사암제외)와 별개 담보 → 일반암 산입 금지(등식1 위반)
+    if has('특정암') and has('진단') and no('주요치료','특정치료','수술','일당','입원','방사선','약물','표적','양성자','세기','중입자','통원','보험료'):
+        return '고액암',0
     if has('고액암'): return '고액암',0
     # ★v29q-2 '암입원일당(…유사암들…)' = 암입원일당 키워드 우선 → 암일당 (유사암 판정보다 먼저)
     if ('암입원일당' in n) or (has('암') and has('입원일당')): return '암일당',0
@@ -1894,16 +1900,29 @@ def build_excel(data, out):
     heart_trace = []   # ★v29z (지점장 2026.07.03): 심장 블록 기재 근거 — (회사, 원담보명, 기재행들, 금액). '없는 값이 튀어나옴' 방지용 감사 로그
     silson_trace = []  # ★v29z: 실손 세대 판정 근거 — (회사, 가입일, 상품코드, 판정)
 
+    def _in_sum(ct):
+        """월보험료 합계 포함 여부. ★v129 정본: 잔여보험료 > 0 이면 포함(완납이면 0).
+           잔여보험료를 못 읽었으면(None) 납입횟수 a>=b(완납)로 폴백."""
+        _r = ct.get('remain')
+        if _r is not None: return _r > 0
+        return not _is_paid_up(ct.get('pay_period',''), ct.get('pay_count',''))
+
     for i, ct in enumerate(contracts):
         col = 3 + i
         gen  = ct['renewal'] == '갱신'
-        paid = '완납' in ct['renewal']
+        paid = not _in_sum(ct)          # ★v199: 헤더 진녹(완납) 판정 = 합계 제외 판정과 동일 근거
         h = ws.cell(1, col)
         h.value = f"{ct['company']}\n{ct['product']}\n[{ct['renewal']}]"
         h.font = W; h.alignment = AL
         h.fill = FILL_GREEN if paid else (FILL_BLUE if gen else FILL_RED)
         pm = ct['premium']
-        ws.cell(2,col).value = pm if pm else None
+        # ★★v199 지점장 확정 2026.07.23: 보험료 합계를 '=D2+E2+…'가 아니라 단일 '=SUM()'으로 만들기 위해
+        #   완납 계약의 보험료 칸은 <b>텍스트</b>로 넣는다. 엑셀 SUM은 텍스트를 무시하므로
+        #   금액은 화면에 그대로 보이면서 합계에서만 자동 제외된다(v129 정본 유지).
+        if pm and paid:
+            ws.cell(2,col).value = f'{pm:,} (완납)'
+        else:
+            ws.cell(2,col).value = pm if pm else None
         ws.cell(2,col).font = BL if gen else BK
         ws.cell(3,col).value = ct['contract_date']
         ws.cell(4,col).value = ct['expiry_date']
@@ -2125,7 +2144,7 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동')
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금')   # ★v198 지점장 확정 2026.07.23: 교통사고처리지원금(합의금)=대표금액 1개(합산 금지)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -2241,17 +2260,11 @@ def build_excel(data, out):
     #   납입완료(회차 a>=b) 계약은 계약열에는 남기되 합계에서는 뺀다.
     #   실측 근거(배학술 롯데): 12건 전액 711,218 → 교보 120/120·AIA 180/180 제외 → 605,618 = 리포트 일치.
     if n_ct>0:
-        def _in_sum(ct):
-            """월보험료 합계 포함 여부. ★v129 정본: 잔여보험료 > 0 이면 포함(완납이면 0).
-               잔여보험료를 못 읽었으면(None) 납입횟수 a>=b(완납)로 폴백."""
-            r = ct.get('remain')
-            if r is not None:
-                return r > 0
-            return not _is_paid_up(ct.get('pay_period',''), ct.get('pay_count',''))
-        _live_i = [i for i, ct in enumerate(contracts) if _in_sum(ct)]
-        # ★v130: 합계 셀에 수식을 쓰면 openpyxl 재열람 시 값이 없어 보장설명서·PPT가 0원으로 읽는다.
-        #   지침 §3 원문대로 '보험료 합계 = 계산된 숫자값'을 박는다(계약 수에 따라 매번 재계산 = 동적).
-        ws.cell(2, last_col).value = sum((contracts[i].get('premium') or 0) for i in _live_i)
+        # ★★★v199 지점장 확정 2026.07.23: 보험료 합계도 '=D2+E2+…'가 아니라 <b>단일 =SUM()</b>.
+        #   근거: 셀을 복사·이동하면 a+b+ 수식은 참조가 어긋나 합계가 하나도 안 맞는다.
+        #   완납 계약은 보험료 칸을 텍스트로 넣어(위 루프) SUM이 자동으로 건너뛴다 = v129 정본 유지.
+        #   ★캐시: inject_sum_cache가 숫자 셀만 합산해 같은 값을 박으므로 설명서·PPT가 0원으로 읽지 않는다.
+        ws.cell(2, last_col).value = f'=SUM(C2:{last_ct_L}2)'
         ws.cell(2, last_col).font = BK
 
     for r in range(6, ws.max_row+1):
@@ -3076,7 +3089,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v203-fin3max-20260722'}
+def health(): return {'ok':True,'version':'v199-sumfix-20260723'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3084,7 +3097,7 @@ def health(): return {'ok':True,'version':'v203-fin3max-20260722'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v203-fin3max-20260722'}
+    out = {'version': 'v199-sumfix-20260723'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
