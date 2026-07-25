@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v199-sumfix-20260723 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v205-reflowfix-20260725 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -573,12 +573,28 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         if _cca: _ciamt['__cancer__']=_fmt(_cca)
     rep['ci_amounts']=_ciamt
     # ★2026.07.11 실손 세대 자동판별(CI식 3상태): 실손 계약 가입일 → 세대
-    def _gen_of(js, comp=''):
+    def _gen_of(js, comp='', prod=''):
         import re as _r
         m=_r.search(r'(\d{4})\D+(\d{1,2})(?:\D+(\d{1,2}))?', str(js))
-        if not m: return None
         from datetime import date
-        y=int(m.group(1)); mo=int(m.group(2)); d=int(m.group(3) or 1)
+        _bycode=False
+        _pm0=_r.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])\.?(0[1-9]|1[0-2])(?!\d)', str(prod or ''))
+        if m:
+            y=int(m.group(1)); mo=int(m.group(2)); d=int(m.group(3) or 1)
+            # ★v200: main.py `silson_gen`과 동일 — 가입일과 상품코드가 둘 다 있으면 <b>더 이른 쪽</b>을
+            #   쓴다(갱신 재가입일로 세대를 오판하는 것 차단). 엑셀·설명서 세대가 갈리면 안 된다.
+            if _pm0:
+                _y2=2000+int(_pm0.group(1)); _m2=int(_pm0.group(2))
+                if (_y2,_m2,1) < (y,mo,d):
+                    y,mo,d=_y2,_m2,1; _bycode=True
+        else:
+            # ★★v200 (윤*관 실측 2026.07.23): 가입일이 공란인 실손 계약은
+            #   <b>상품명 끝의 상품코드(YYMM)</b>로 세대를 판정한다 — 지침 v90 정본을
+            #   main.py `silson_gen`에만 넣고 여기(설명서·진단서 경로)에 빠뜨려
+            #   '무배당 한화실손의료보험(갱신형)(실손전환용)<b>2301</b>'이 '확인불가'로 떴다.
+            #   정규식·경계는 main.py `silson_gen`과 동일해야 한다(4대 산출물 연동).
+            if not _pm0: return None
+            y=2000+int(_pm0.group(1)); mo=int(_pm0.group(2)); d=1; _bycode=True
         try: dt=date(y,mo,d)
         except Exception: return None
         # ★2026.07.11 지점장 확정: 1세대=~2009.09 / 2세대=2009.10~ (2009.07~09은 회사별 상이 → 주석)
@@ -599,10 +615,10 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             elif dt<=date(2015,12,31): sub='2-2'
             else: sub='2-3'
         elif dt<=date(2021,6,30): g=3
-        elif dt<=date(2026,5,5): g=4
+        elif dt<=date(2026,4,30): g=4      # ★v200 main.py silson_gen과 통일(5세대=2026.05~)
         else: g=5
-        dstr=f'{y}.{mo:02d}.{d:02d}' if m.group(3) else f'{y}.{mo:02d}'
-        return {'gen':g,'sub':sub,'date':dstr}
+        dstr=(f'{y}.{mo:02d}' if _bycode else (f'{y}.{mo:02d}.{d:02d}' if m.group(3) else f'{y}.{mo:02d}'))
+        return {'gen':g,'sub':sub,'date':dstr,'src':('code' if _bycode else 'join')}
     _sil=[h for h in headers if h.get('sil')]
     if not _sil:
         rep['silson_gen']={'status':'none'}
@@ -611,16 +627,18 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         #   그 계약이 '가장 오래된 계약'으로 뽑혀 세대 판별이 통째로 실패했다.
         #   → 가입일이 있는 계약 중에서 고르고, 전부 비었을 때만 첫 계약을 쓴다.
         _dated=[h for h in _sil if str(h.get('join','')).strip()]
+        if not _dated:   # ★v200 가입일이 전부 비면 상품코드로 세대가 나오는 계약을 대표로
+            _dated=[h for h in _sil if _gen_of('', h.get('nm',''), h.get('prod',''))]
         _sh=min(_dated, key=lambda h:str(h.get('join',''))) if _dated else _sil[0]
         _cnm=_sh.get('nm','')
-        _g=_gen_of(_sh.get('join'), _cnm)
+        _g=_gen_of(_sh.get('join'), _cnm, _sh.get('prod',''))
         # 실손 계약 전체 목록(회사·상품명·가입일·보험료)
         # ★v79 실손은 2개 이상일 수 있다(지점장 확정 2026.07.18).
         #   예) 상해의료비 가입 후 실손을 추가로 드는 경우 / DB손보 2006년형 특수 실손 등.
         #   → 계약을 합치지 말고 <b>각각</b> 표기하고, 세대도 <b>계약별로 각각</b> 판정한다.
         _sillist=[]
         for _h in sorted(_sil, key=lambda x:str(x.get('join',''))):
-            _gh=_gen_of(_h.get('join'), _h.get('nm',''))
+            _gh=_gen_of(_h.get('join'), _h.get('nm',''), _h.get('prod',''))
             if not _gh and _h.get('genhint'):
                 _gh={'gen':_h['genhint'],'sub':'','date':''}   # ★가입일이 비면 헤더 표기 세대 사용
             _sillist.append({'co':str(_h.get('co',''))[:14],

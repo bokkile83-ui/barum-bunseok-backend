@@ -276,6 +276,14 @@ def _reflow_cols(block_lines):
             if c.strip(): rec.append(c)
             else: flush()
         flush()
+    # ★★v205 (2026.07.25 김*구 흥국화재 실측 회귀수정):
+    #   1열 레이아웃('담보명    금액'이 같은 줄)에서 담보명 칸과 금액 칸 사이 거터가 3칸 이상이면
+    #   위 로직이 두 칸을 <b>별개 열</b>로 갈라 '이름 11줄 → 금액 10줄' 순서로 재배열해버린다.
+    #   → 페어링이 통째로 소실되어 그 계약 담보가 <b>0건</b>이 된다(실측: 흥국화재 10담보 전멸).
+    #   재조립 결과에 '이름+금액' 쌍이 <b>하나도 없으면</b> 접힘 레이아웃이 아니므로 원본을 그대로
+    #   돌려준다. 그러면 기존 _split_cols가 같은 줄 페어링으로 정상 처리한다.
+    if not any(_re.search(r'\S\s{4}[\d,]+$', str(o)) for o in out):
+        return block_lines
     return out
 
 
@@ -3089,7 +3097,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v199-sumfix-20260723'}
+def health(): return {'ok':True,'version':'v205-reflowfix-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3097,7 +3105,7 @@ def health(): return {'ok':True,'version':'v199-sumfix-20260723'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v199-sumfix-20260723'}
+    out = {'version': 'v205-reflowfix-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

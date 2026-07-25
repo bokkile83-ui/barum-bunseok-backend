@@ -291,7 +291,19 @@ def _find_info_page(pdf_path):
 
 
 def _pdf_slice(src, dst, first, last):
-    """poppler pdfseparate+pdfunite로 first~last 페이지만 잘라 dst에 저장."""
+    """first~last 페이지만 잘라 dst에 저장.
+    ★★v205 (2026.07.25 김*구 실측): 기존 pdfseparate+pdfunite는 <b>페이지마다 문서 전체의
+      이미지 리소스를 복제</b>한다. 재무 3장 base64가 v201에서 정상 복구되자 22페이지 분할본이
+      <b>5.2MB → 116.3MB(22배)</b>로 폭증했다(/Image 스트림만 89.4MB). 다운로드·인쇄 불가 수준.
+      qpdf --pages는 리소스를 공유한 채 잘라 <b>같은 22페이지가 5.18MB</b>였다(동일 원본 실측).
+      → qpdf 우선, 없거나 실패하면 기존 방식으로 폴백(동작 보장)."""
+    try:
+        subprocess.run(['qpdf', '--empty', '--pages', src, '%d-%d' % (first, last), '--', dst],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(dst) and os.path.getsize(dst) > 0:
+            return True
+    except Exception:
+        pass
     d = tempfile.mkdtemp()
     pat = os.path.join(d, 'p%d.pdf')
     subprocess.run(['pdfseparate', '-f', str(first), '-l', str(last), src, pat],
