@@ -318,7 +318,76 @@ def _split_cols(block_lines):
         if name_acc: out.append(' '.join(name_acc))  # 값없는 담보명 → pend 경유
     return out
 
+_AMT_TAIL_UF = re.compile(r'(?<!\S)([\d][\d,]{0,11})\s*$')
+def _paren_bal(s): return s.count('(')+s.count('（')-s.count(')')-s.count('）')
+
+def _unfold_cols(block_lines):
+    """★★★v225 (지점장 지시 2026.07.25, 영구): <b>별첨 담보명 접힘 복원</b>.
+    롯데 3열 별첨은 담보명이 길면 <b>위·아래 줄에 걸쳐 접히고 금액은 가운데 줄</b>에 온다.
+      1007| 중증질환자뇌혈관질환산정특례대상진단비Ⅱ(연간1회한)(맞춤        간호 간병통합서비스사용질병입원일당(요
+      1008|                    1,000   주요심뇌5대혈관수술비Ⅱ  1,000              10
+      1009| 간편고지)                                            외)(181일이상)(맞춤간편고지)
+    구 파서는 이 구조를 몰라 <b>여러 담보명을 한 줄로 뭉치고 엉뚱한 열의 금액(10)을 붙였다</b>
+    → 산정특례뇌혈관에 10이 찍히고 산정특례심장은 통째로 사라졌다(실측·정답 각 1,000).
+    <b>복원 원리 2개</b>
+      ①<b>열 경계 = 금액 토큰의 끝 좌표 클러스터</b>(금액은 우측정렬). 마지막 열은 줄 끝까지.
+      ②<b>괄호 균형</b>으로 머리·꼬리를 판별 — 열림>닫힘이면 미완결이라 다음 조각이 꼬리다.
+    ★<b>안전장치</b>: 복원 담보 수가 원본 페어 수보다 <b>적으면 원본을 그대로 반환</b>한다
+      (v205 `_reflow_cols` 회귀 사고와 같은 실수를 막는다)."""
+    try:
+        lines=[str(l) for l in block_lines]
+        if len(lines)<3: return block_lines
+        pos={}
+        for l in lines:
+            for m in re.finditer(r'(?<!\S)[\d][\d,]{0,11}(?!\S)', l):
+                pos[m.end()]=pos.get(m.end(),0)+1
+        ends=sorted(pos.keys())
+        if not ends: return block_lines
+        # ★★★v226 (2026.07.25 삼성화재 실측 회귀수정): 구 코드는 <b>2회 이상 등장한 end만</b> 경계로 썼다.
+        #   그래서 같은 열에 <b>자리수가 더 긴 금액이 1건만</b> 있으면(삼성 `상해 사망 5,000` end=48,
+        #   나머지 9건은 end=46) 그 금액이 <b>경계 밖으로 밀려 `5,0`으로 잘렸다</b>(실측: 5,000 → 50).
+        #   → <b>모든 end를 근접(±4) 클러스터링하고, 2회 이상 등장한 end를 포함한 클러스터만</b> 열로 인정하며
+        #   경계는 그 클러스터의 <b>최댓값</b>을 쓴다(가장 긴 금액까지 안전하게 포함).
+        grp=[]
+        for e in ends:
+            if grp and e-grp[-1][-1]<=4: grp[-1].append(e)
+            else: grp.append([e])
+        ends=[max(g) for g in grp if any(pos[x]>=2 for x in g)]
+        if not ends: return block_lines
+        bounds=[]; prev=0
+        for e in ends: bounds.append((prev,e)); prev=e
+        bounds[-1]=(bounds[-1][0], 10**6)          # 마지막 열은 줄 끝까지
+        out=[]
+        for a,b in bounds:
+            cells=[l[a:b].rstrip() for l in lines if l[a:b].strip()]
+            buf=''; pend=None
+            for c in cells:
+                m=_AMT_TAIL_UF.search(c)
+                nm=(c[:m.start()] if m else c).strip(); amt=m.group(1) if m else None
+                if nm:
+                    if buf and _paren_bal(buf)>0: buf+=nm
+                    else:
+                        if buf and pend: out.append((buf,pend))
+                        buf=nm; pend=None
+                if amt:
+                    if buf and _paren_bal(buf)<=0: out.append((buf,amt)); buf=''; pend=None
+                    else: pend=amt
+                if buf and _paren_bal(buf)<=0 and pend:
+                    out.append((buf,pend)); buf=''; pend=None
+            if buf and pend: out.append((buf,pend))
+        # ★안전장치: 원본에서 '이름+금액' 같은 줄 페어 수를 세고, 복원이 그보다 적으면 원본 유지
+        base=sum(1 for l in lines if re.search(r'\S\s{2,}[\d][\d,]*\s*$', l))
+        if len(out) < max(base,1): 
+            print(f'[v225 unfold skip] 복원 {len(out)}건 < 원본페어 {base}건 → 원본 유지')
+            return block_lines
+        print(f'[v225 unfold] 담보 {len(out)}건 복원(열 {len(bounds)}개, 경계 {ends})')
+        return [f'{nm}    {amt}' for nm,amt in out]
+    except Exception as _e:
+        print(f'[v225 unfold ERR] {_e}')
+        return block_lines
+
 def rule_extract(block_lines):
+    block_lines=_unfold_cols(block_lines)                # ★v225 담보명 접힘 복원(성공 시 '이름  금액' 1줄 형태)
     block_lines=_split_cols(_reflow_cols(block_lines))   # ★v133 접힘 3열 재조립 → 기존 다열 분해
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
@@ -336,6 +405,10 @@ def rule_extract(block_lines):
         if '심뇌' in _n and '혈관' in _n and '수술' in _n and '[확인]' not in _n:
             for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
                 dambo[_r]=max(dambo.get(_r,0), _amt)
+        elif ('직접치료' in _n) and ('암' in _n) and ('일당' not in _n) and ('입원' not in _n):
+            # ★★v227: `일반암직접치료 1,000`이 별첨에 <b>2줄</b> 인쇄되는데 합산하면 2,000이 된다.
+            #   세부가입현황 정답은 <b>대표 1,000</b>(암수술 칸) → dambo 합산 이전에 max로 잡는다.
+            dambo[_nm]=max(dambo.get(_nm,0), _amt)
         elif ('사망' in _n) and ('후유장해' in _n):
             # ★★v92 (장혜경 실측): 결합담보 '상해사망후유장해 1,000'이 별첨에 <b>두 줄</b> 인쇄돼
             #   합산 2,000 → 분해 후 상해사망 2,000·상해후유 2,000이 되어 한장보장표(1,100/1,000)와 어긋났다.
@@ -1387,6 +1460,19 @@ def resolve_kw(raw):
     #   엑셀 61행에 100,000(=10억)을 박고 있었다(실측). 최우선으로 차단한다.
     if ('리셋월렛' in re.sub(r'\s','',str(raw))) or ('리셋월랫' in re.sub(r'\s','',str(raw))):
         return None, 0
+    # ★★★v224 (2026.07.25 이정화 실측): <b>담보명 접힘 잔해는 어느 행에도 넣지 않는다</b>.
+    #   3열 별첨에서 담보명이 위·아래 줄에 걸치면 파서가 <b>여러 담보명을 한 줄로 뭉치고
+    #   엉뚱한 열의 금액을 붙인다</b>. 실측 잔해(엑셀 `_dambo_raw`):
+    #   `외)(181일이상)(맞춤간편고지)중증질환자뇌혈관질환산정특례대상진단비Ⅱ(연간1회한)(맞춤
+    #    간호 간병통합서비스사용질병입원일당(요양/정신/한방병원제` → 금액 <b>10</b>
+    #   → 산정특례뇌혈관 행에 10(일당 금액)이 찍혔다. <b>정답은 1,000</b>.
+    #   접힘 복원(파서 개편) 전까지는 <b>[확인]큐로 보내 오출고를 막는다</b>.
+    _fz = re.sub(r'\s','',str(raw))
+    if re.match(r'^[\)\]）]|^외\)|^고지\)|^편고지\)|^한도\)|^신형\)|^외\(', _fz):
+        return None, 0        # 담보명이 닫는 괄호·꼬리로 시작 = 접힘 잔해
+    _mix = sum(1 for _k in ('진단비','입원일당','수술비','치료비','사망보험금') if _k in _fz)
+    if _mix >= 2 and len(_fz) > 45:
+        return None, 0        # 담보 종결어 2종 이상 + 45자 초과 = 여러 담보 혼합
     """raw 담보명 -> (std표준명 or None, jong 0~5). API 불필요."""
     raw = re.sub(r"^\[세부보충\]","",str(raw))  # ★세부보충 접두 제거
     # ★Adobe OCR 깨짐: '상하!'·'상하 !'·'상하）' = '상해' (지점장 2026.07.05)
@@ -1501,6 +1587,15 @@ def resolve_kw(raw):
     if (has('중증질환자') or has('중증환자')) and has('뇌혈관') and no('수술'): return '산정특례뇌혈관',0
     if has('삼장') and no('수술'): return '산정특례심장',0   # OCR '삼장'=심장, 중증질환자 산특 조각 전용
     if (has('중증질환자') or has('중증환자')) and (has('심장') or has('삼장')) and no('수술'): return '산정특례심장',0
+    # ★★★v227 (지점장 지시 2026.07.25, 영구): <b>'일반암직접치료' = 암수술 — 세부가입현황을 정본으로 따른다</b>.
+    #   근거(이정화 AIA 건강+ 실측·검산 일치): 세부가입현황 AIA 건강+ 암 칸 = <b>일반암 1,000 / 암수술 1,000
+    #   / 유사암 100 / 고액항암 8,000</b>. 별첨엔 `일반암직접치료 1,000`이 <b>2줄</b>인데 구 코드는
+    #   ①매핑이 없어 [확인]큐로 빠지고 ②`_add`가 두 줄을 <b>합산 2,000</b>으로 만들었다.
+    #   → <b>암수술 행 + 계약 내 대표(max) 1건</b>으로 처리하면 1,000이 되어 세부가입현황과 일치한다.
+    #   전수 검산: 암수술 = 한화 750 + AIA 1,000 = <b>1,750</b> = 한장보장표 값.
+    #   ★'암직접치료<b>입원일당</b>'은 위 일당 블록에서 이미 암일당으로 갔다(여기 안 온다).
+    if has('암') and has('직접치료') and no('일당','입원','통원','방사선','약물','표적','양성자','세기','중입자','유사암'):
+        return '암수술',0
     # ── 암 치료비 ── (지점장 2026.07.09 최종확정: '암주요치료비' 명시 > 하이클래스 > 유사암무시)
     if has('유사암') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
     if has('암주요치료비') and no('유사암'): return '암주요치료비',0   # ★②담보명에 '암주요치료비' 있으면 하이클래스보다 우선→암주요치료비행 (하이클래스 암주요치료비형)
@@ -1550,7 +1645,12 @@ def resolve_kw(raw):
     if has('소아암') and no('제외'): return None,0   # ★v30q 다발성소아암 등 = 일반암과 별개 담보 → [확인](합산 금지, 지점장 2026.07.03)
     if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
-    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
+    # ★★★v230 (지점장 지시 2026.07.25 "유사암 적힌 것만 넣어라"): <b>유사암 4종의 동의어를 전부 포함</b>한다.
+    #   유사암(갑.기.경.제) = <b>갑</b>상선암(=갑상<b>샘</b>암) · <b>기</b>타피부암 · <b>경</b>계성종양 · <b>제</b>자리암(=<b>상피내</b>암).
+    #   구 리스트에는 '갑상선'·'제자리'만 있어 <b>'갑상샘'·'상피내' 표기가 통째로 [확인]큐로 빠졌다</b>.
+    #   실측(이정화 우체국): `갑상샘암치료보험금` 75 · `상피내암치료보험금` 75가 누락돼 우체국 유사암이
+    #   300(정답) 대신 150이 됐다 → 동의어 추가 후 <b>300</b>, 전체 합계 <b>900</b>으로 한장보장표와 일치.
+    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','갑상샘','경계성','제자리','상피내','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
         # ★★★v207 (지점장 확정 2026.07.25, 양*선 메리츠 실측): '유사암(갑.기.경.제)'는 <b>진단비 전용 행</b>이다.
         #   글자만 보고 넣던 탓에 <b>수술비·치료비·일당</b>까지 산입돼 유사암이 1,250(=100+1,000+150)으로 부풀었다.
         #   실측 오류 2건 — '갱신형 갑상선기능항진증치료비' 100(갑상선 <b>기능</b>항진증 = 암이 아니다) ·
@@ -2107,7 +2207,13 @@ def build_excel(data, out):
             _rn = re.sub(r'\s','',raw)
             _heart_bundle = None
             _co = ct.get('company','')
-            if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
+            if ('진단' in _rn and '수술' not in _rn and '주요치료' not in _rn
+                and '산정특례' not in _rn and '혈전' not in _rn):
+                # ★★★v225 (2026.07.25 이정화 실측): <b>산정특례·혈전용해는 심장 묶음이 아니다</b>.
+                #   실사고 = `중증질환자심장질환산정특례대상진단비<b>Ⅱ</b>(연간1회한)` 의 <b>로마숫자 Ⅱ</b> 때문에
+                #   `_rmn()`이 `_t=2`를 반환해 DB '특정Ⅱ' 묶음으로 오인 → <b>급성심근경색 행에 1,000이 배정</b>되고
+                #   <b>산정특례심장은 0</b>이 됐다(급성심근경색 8,000 = 정답 7,000 + 오배정 1,000).
+                #   `_HB` 후처리 테이블에는 이미 산정특례 제외가 있었는데 <b>이 인라인 블록에만 빠져 있었다</b>.
                 # ★v30o 고정(메리츠, 지점장 2026.07.03): 심장질환진단비Ⅰ→허혈성 진단비 / 심장질환진단비Ⅱ→급성심근경색
                 if ('심장질환진단' in _rn) and ('허혈' not in _rn) and ('급성심근' not in _rn):
                     # ★양예서/메리츠 어린이: 심장질환진단비Ⅱ→급성심근경색 / Ⅰ→허혈성 진단비 (별첨값 앵커: Ⅰ=600 허혈성, Ⅱ=3000 급성심근)
@@ -2312,7 +2418,7 @@ def build_excel(data, out):
                 #   <b>합산 6이 아니라 3</b>이다(둘 중 하나만 기재). 간병인·간호통합병동·1인실과 동일 처리.
                 # ★항암방사선약물도 대표(max) 1건 — 항암약물치료비 / 항암방사선치료비 /
                 #   항암방사선약물치료비 / 항암약물방사선치료비는 <b>이름만 다른 같은 담보</b>다(합산 금지).
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','간병인지원일당','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','1인실 상급병원','1인실 종합병원')   # ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','간병인지원일당','창상봉합술','항암방사선약물','암수술','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','1인실 상급병원','1인실 종합병원')   # ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -2437,16 +2543,12 @@ def build_excel(data, out):
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
-    # ★v30q 유사암 자동유도(지점장 2026.07.03): 계약에 일반암 있고 유사암 담보가 따로 없으면 유사암 = 그 일반암 × 10%
-    _r일반암 = nm2r.get('일반암'); _r유사암 = nm2r.get('유사암(갑.기.경.제)')
-    if _r일반암 and _r유사암:
-        for _c in range(3, last_col):
-            _v일 = ws.cell(_r일반암, _c).value
-            _v유 = ws.cell(_r유사암, _c).value
-            if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
-                ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
-                try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색(갱신/비갱신) 따라감
-                except: pass
+    # ★★★v230 (지점장 지시 2026.07.25, 영구): <b>유사암 자동유도(일반암×10%)는 완전 폐기</b>.
+    #   지점장 원문 = <b>"유사암 적힌 것만 넣어라"</b>. 별첨에 유사암 담보가 없으면 <b>그 계약은 공란</b>이다 —
+    #   일반암 금액으로 유추해 넣지 않는다. 구 v30q 자동유도가 없는 담보를 만들어냈다.
+    #   실측(이정화): 한화 일반암 6,000 → 유사암 <b>600 자동생성</b> · 메리츠0804 1,000 → <b>100 자동생성</b>
+    #   = 합계 1,450(정답 900). 자동유도 제거 + 명시 담보만 산입 → <b>900</b>으로 한장보장표와 일치.
+    #   ★구 v213 '명시액이 하나도 없을 때만 유도' 게이트 방식도 함께 폐기(지점장 'no').
 
     first_L = get_column_letter(3)
     last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
@@ -3372,7 +3474,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v223-sanggeup-20260725'}
+def health(): return {'ok':True,'version':'v230-yusaam-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3380,7 +3482,7 @@ def health(): return {'ok':True,'version':'v223-sanggeup-20260725'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v223-sanggeup-20260725'}
+    out = {'version': 'v230-yusaam-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
