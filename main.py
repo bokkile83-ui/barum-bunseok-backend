@@ -328,8 +328,12 @@ def rule_extract(block_lines):
         #   '심뇌혈관…수술' = 심장수술비 + 뇌혈관수술비 각 100% 동일액.
         #   ★중복줄(상해·질병 등 같은 3,000이 2줄) = 합산 아니라 대표(max) — 6,000 오합산 방지.
         #   라인 단위로 쪼개므로 dambo 합산(6,000) 이전에 처리된다.
+        # ★★★v217 (지점장 지시 2026.07.25, 영구): <b>DB손보 '주요심뇌5대혈관수술비' = 뇌혈관수술비 + 심장수술비
+        #   각각 대표값 입력</b>. 구 조건은 `'심뇌혈관' in _n` 완전연속이라 <b>'심뇌<u>5대</u>혈관'처럼 사이에
+        #   글자가 끼면 탈락</b>해 [확인]큐로 사라졌다(실측). → <b>'심뇌' + '혈관' + '수술'</b>로 완화.
+        #   커버: 심뇌혈관수술비 · 주요심뇌5대혈관수술비 · 심뇌 5대혈관 수술 등.
         _n=re.sub(r'\s','',str(_nm))
-        if '심뇌혈관' in _n and '수술' in _n and '[확인]' not in _n:
+        if '심뇌' in _n and '혈관' in _n and '수술' in _n and '[확인]' not in _n:
             for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
                 dambo[_r]=max(dambo.get(_r,0), _amt)
         elif ('사망' in _n) and ('후유장해' in _n):
@@ -1101,12 +1105,13 @@ def parse_txt(txt, filename=''):
         for _k in list(_c['dambo'].keys()):
             _kk = re.sub(r'\s', '', str(_k))
             if '[확인]' in _kk: continue
-            if '심뇌혈관' not in _kk or '수술' not in _kk: continue
+            # ★v217: '심뇌<u>5대</u>혈관'처럼 사이에 글자가 끼는 표기도 잡는다(구 '심뇌혈관' 연속 조건 완화).
+            if '심뇌' not in _kk or '혈관' not in _kk or '수술' not in _kk: continue
             _v = _c['dambo'].pop(_k)
             for _r in ('심장수술비', '뇌혈관수술비'):
                 _nk = f'{_r}[묶음]'   # ★태그에 '뇌혈관' 금지(resolve 오인 방지)
-                _c['dambo'][_nk] = _c['dambo'].get(_nk, 0) + _v
-            print(f"[v51 심뇌혈관수술] {_c.get('company')} '{_k}' {_v} → 심장수술비 + 뇌혈관수술비 (각각 {_v})")
+                _c['dambo'][_nk] = max(_c['dambo'].get(_nk, 0), _v)   # ★v217 대표(max) — 여러 줄 합산 금지
+            print(f"[v217 심뇌혈관수술] {_c.get('company')} '{_k}' {_v} → 심장수술비 + 뇌혈관수술비 (각각 대표 {_v})")
 
     # ══════════════════════════════════════════════════════════════════
     # ★★v46 결합담보 분해 (지점장 확정 2026.07.13 / 지침 §8.3.1 묶음담보 공통원칙 적용)
@@ -1425,12 +1430,33 @@ def resolve_kw(raw):
     if has('통원') and (has('실손') or has('외래') or has('의료비')) and no('주사','MRI','도수','체외','증식','비급여'): return '통원',0
     if has('상해') and has('수술') and has('일당'): return '상해수술일당',0   # ★v29q-10 상해수술입원일당→상해수술일당(질병수술일당 오입력 차단)
     if has('수술') and has('일당'): return '질병수술일당',0
+    # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>생명보험사 '급부금' 담보명 4종 정본 매핑</b>.
+    #   ①질병수술급부금 = <b>질병수술비</b>  ②재해수술급부금 = <b>상해수술비</b>
+    #   ③질병입원급부금 = <b>질병입원일당(질병일당)</b>  ④재해입원(급부금) = <b>상해입원일당(상해일당)</b>
+    #   근거: 생보 약관은 '수술비·일당' 대신 '급부금'으로 인쇄한다. 구 코드는 '급부금' 문자열을 몰라
+    #   `_is_pure_s/_is_pure_q`(상해수술비·질병수술비로 시작) 검사에서 전부 탈락 → <b>4종 모두 [확인]큐로 사라졌다</b>(실측).
+    #   ★수식어가 붙은 변형(암·뇌·특정·교통·종합병원 등)은 base 담보가 아니므로 여기서 제외 → 기존 로직/[확인]으로 흘린다.
+    _gbex = ('암','뇌','심','허혈','간질환','신장','폐','위','골절','화상','특정','교통','종합','상급','중환자','요양','재활','통원','외래','간병','장해','후유')
+    if has('급부금') or has('재해입원'):
+        if has('수술') and no(*_gbex) and jong==0:
+            if has('질병'): return '질병수술비',0
+            if has('상해') or has('재해'): return '상해수술비',0
+        if has('입원') and no('수술', *_gbex):
+            if has('질병'): return '질병일당',0
+            if has('상해') or has('재해'): return '상해일당',0
+
     # ── 수술비 ──
     if has('수술'):
         if has('상해') and jong: return '상해 종수술비(1-5종)', jong
         if has('질병') and jong: return '질병 종수술비(1-5종)', jong
-        if has('중대한','상해'): return '중대한상해수술비',0
-        if has('5대기관') and has('비관혈'): return '5대기관 수술비 비관혈',0
+        # ★v215 (지점장 확정 2026.07.25): <b>'중대상해수술비' = '중대한상해수술비'</b>(같은 담보, '한' 한 글자 차이).
+        #   구 코드는 `has('중대한','상해')`라 '중대상해수술비'가 탈락 → [확인]큐로 빠졌다(실측).
+        if has('중대') and has('상해'): return '중대한상해수술비',0
+        # ★★v216 자가진단으로 발견한 버그: 공백을 지우면 <b>'수술비 관혈' → '수술비관혈'</b>이 되어
+        #   그 안에 <b>'비관혈'이 우연히 만들어진다</b> → 관혈 담보가 통째로 <b>비관혈 행</b>으로 갔다.
+        #   괄호가 있는 '5대기관수술비(관혈)'은 우연히 살아남고, 괄호 없는 표기만 틀리던 <b>조용한 오분류</b>.
+        _gwan = n.replace('수술비관혈', '수술비|관혈')
+        if has('5대기관') and ('비관혈' in _gwan): return '5대기관 수술비 비관혈',0
         if has('5대기관'): return '5대기관 수술비 관혈',0
         if re.search(r'(?<!\d)\d{2,3}\s*대', r): return 'n대수술비',0   # ★v30k 10~150대(10·20·116·120·123대 등)→n대수술비. 5대기관은 위에서 처리, 2대주요치료비는 진단이라 여기 안 옴
         if has('뇌혈관') or has('심뇌혈관'): return '뇌혈관수술비',0
@@ -1482,6 +1508,13 @@ def resolve_kw(raw):
     if has('주요치료') and no('순환계','2대','뇌','허혈','심장','심근','유사암','하이클래스'):   # ③하이클래스 없는 '병원+암주요치료비'→암주요치료비행. ★심장 추가(심장/순환계 주요치료비=2대주요치료비로, v38d)
         return '암주요치료비',0
     if has('고액항암') or (has('고액') and has('항암') and has('치료')): return '__무시__',0   # ★v30z 고액항암치료비=표적+양성자+세기조절+카티 합계값 → 무시(구성 치료비는 아래에서 각각 개별 매핑)
+    # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>괄호 안의 실제 치료법이 정본이다</b>.
+    #   ①표적항암방사선치료비<b>(항암세기조절방사선)</b> = <b>세기조절치료</b>
+    #   ②표적항암방사선치료비<b>(항암양성자방사선)</b> = <b>양성자치료</b>
+    #   구 코드는 `has('표적')`이 세기조절·양성자 판정(아래)보다 <b>먼저</b> 걸려 둘 다 표적항암치료비로 뭉갰다(실측).
+    #   ★세기조절·양성자 판정을 표적 <b>앞</b>으로 올린다.
+    if has('세기조절'): return '세기조절치료',0
+    if has('양성자'): return '양성자치료',0
     if has('표적'): return '표적항암치료비',0
     # ★v30h 암주요치료비 = 암특정치료비/암주요치료비/암(특정유사암포함)진단후(종합병원/상급종합병원)특정치료(지원금/비)
     #   구간밴드(연간1천~1억) 다줄·부위별 = 대표 1개(max, §8.2). 뇌·심·순환계·비급여·재활·통원·검사는 제외(각 전용행).
@@ -1574,6 +1607,12 @@ def resolve_kw(raw):
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
     if has('빈맥'): return '빈맥',0   # ★지점장 2026.07.05: 빈맥(I47·48)=master 40행 정식 사용(v30z6 '무행' 폐기). 빈맥≠부정맥(I49)
+    # ★★★v217 (지점장 지시 2026.07.25, 영구): <b>'심장부정맥 고주파·냉각절제술보장' = 부정맥 행이 아니다</b>.
+    #   지점장 원문 = <b>"부정맥은 부정맥이라고 적혀있다"</b> → 마스터 '부정맥'(42행)은 <b>진단비 전용</b>이고,
+    #   <b>고주파절제술·냉각절제술(전극도자절제술)은 치료 시술 담보</b>라 진단비 행에 넣으면 안 된다 → <b>[확인]큐</b>.
+    #   실측 오류: `심장부정맥고주파·냉각절제술보장`이 아래 `has('부정맥')`에 걸려 부정맥 진단비로 산입됐다.
+    if has('부정맥') and (has('고주파') or has('절제') or has('냉각') or has('시술') or has('도자')):
+        return None,0
     if has('부정맥'): return '부정맥',0
     if has('산정특례') and has('심'): return '산정특례심장',0
     if has('2대') and has('주요'): return '2대 주요치료비',0
@@ -1592,6 +1631,13 @@ def resolve_kw(raw):
     #    구 로직은 '상해/재해/교통' 글자가 없어 질병후유80%로 잘못 갔다.
     if has('고도장해') and no('질병'): return '상해후유80%',0
     if has('후유') or has('장해') or has('장애'):
+        # ★★★v222 (지점장 지시 2026.07.25, 영구): <b>후유장해 20% · 50%는 결과값 미기재 — 더하지도 말 것</b>.
+        #   마스터 후유장해 행은 <b>3% · 80% 넷뿐</b>이고 20%·50% 전용행은 없다.
+        #   구 코드는 '80'이 없으면 전부 <b>3% 행에 합산</b>해서 금액을 부풀렸다.
+        #   실측(이정화): `일반상해50%이상후유장해생활자금` 4,800 · `교통상해50%이상후유장해(운전자)` 100이
+        #   상해후유3%에 합산됐다. → <b>[확인]큐로 보내고 어느 행에도 넣지 않는다</b>.
+        if re.search(r'(?<![\d.])(20|50)\s*%', n) and not re.search(r'(?<![\d.])80\s*%', n):
+            return None,0
         # ★★v92 (장혜경 실측): '질병후유장해(80%미만)Ⅱ'가 '80' 글자 때문에 80%행으로 잘못 갔다.
         #   → '80%미만'/'80% 미만'이면 3% 행. (한장보장표 질병3% 100과 일치)
         _u80 = ('80%미만' in n.replace(' ','')) or has('미만')
@@ -1606,7 +1652,25 @@ def resolve_kw(raw):
     if has('간호') and has('간병') and has('통합'):
         if has('181'): return None,0        # 1-180일 기준만(181일이상 제외, v41 유지)
         return '간호통합병동',0
+    # ★★v216 (지점장 지시 2026.07.25): <b>'간호'가 빠진 '간병통합서비스' 형태도 간호통합병동</b>.
+    #   실측 누락: `간병통합서비스입원일당`이 위 조건(간호+간병+통합)에서 탈락하고
+    #   아래 `has('간병인')`에도 안 걸려(‘간병인’이 아니라 ‘간병’) <b>[확인]큐로 사라졌다</b>.
+    #   ★'간병인'이 들어간 담보는 제외한다(그건 간병인/간병인지원일당 행).
+    # ★★★v220 (2026.07.25 긴급 축소 — v216 과잉 완화가 사고를 냈다):
+    #   v216에서 `간병+통합+서비스`만 있으면 간호통합병동으로 보냈더니
+    #   <b>`간병비통합서비스보장`·`통합간병서비스진단비`·`간병통합서비스수술비` 같은 진단비·수술비까지
+    #   간호통합병동 행으로 들어갔다</b>(실측). 진단비가 들어오면 <b>2,000만원</b>이 일당 칸에 찍힌다.
+    #   → <b>'입원' 또는 '일당'이 있는 담보만</b> 허용하고, 진단·수술·사망·치료비·간병인은 제외한다.
+    if has('간병') and has('통합') and has('서비스') and (has('입원') or has('일당')) \
+       and no('간병인','진단','수술','사망','치료비','후유','장해','보험료'):
+        if has('181'): return None,0
+        return '간호통합병동',0
     if has('간병인') and has('요양병원') and no('제외'): return None,0  # ★요양병원 포함형 미기재(지점장)
+    # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>'간병인사용'이 들어가면 '지원'보다 우선해서 '간병인' 행</b>이다.
+    #   실측 오분류: '간병인사용지원일당' · '간병인사용비용지원' · '간병인사용 질병입원일당(간병인 지원)'이
+    #   아래 `has('간병인') and has('지원')`에 먼저 걸려 <b>간병인지원일당 행에 20만·7만이 찍혔다</b>(지점장 지적).
+    #   '간병인사용'은 실제 간병인을 쓴 날에 주는 <b>간병인 담보</b>이고, '간병인지원일당'은 별개 전용 담보다.
+    if has('간병인') and has('사용'): return '간병인',0
     if has('간병인') and has('지원'): return '간병인지원일당',0   # ★v29w (지점장 2026.07.02) 간병인지원일당 전용행
     if has('간병인'): return '간병인',0
     if has('간호') and (has('통합') or has('간병')):
@@ -1622,15 +1686,22 @@ def resolve_kw(raw):
     #   마스터에 있는 병실 행은 <b>1인실 종합병원 · 1인실 상급병원 둘뿐</b>이고, 2~3인실 전용행은 만든 적이 없다.
     #   실측 오류(양*선 삼성 New내돈내삼): 상급 2~3인실 5 + 종합 2~3인실 5가 이 행에 들어가 10으로 찍혔다.
     if has('인실'): return None,0
+    # ★★★v223 (지점장 지시 2026.07.25, 영구): <b>'상급병원질병입원일당' = 마스터 전용행 신설(54행)</b>.
+    #   지점장 원문 = "상급병원질병입원일당 → 그건 상급병원질병입원일당 신설해야 한다".
+    #   질병일당·질병종합병원일당과 <b>별개 담보</b>다. ★'인실' 담보는 위에서 이미 걸러졌다(1인실 2행 전용).
+    if has('상급') and has('질병') and (has('일당') or has('입원')) and no('수술','중환자','간병','간호','진단'):
+        return '상급병원질병입원일당',0
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
+    # ★★★v223 = v212 재적용(지점장 지시 2026.07.25, 영구): <b>'N대질병입원일당'(2대·3대·5대…) ·
+    #   '특정질병입원일당'은 질병입원일당이 아니다 → 기재 금지</b>([확인]큐).
+    #   지점장 원문 = "2대질병입원일당(1일이상) → 그건 질병일당이 아니므로 기재금지".
+    #   실측 오류: 메리츠 `갱신형 2대질병입원일당(1일이상)` 3만이 질병일당으로 산입됐다.
+    if (has('일당') or has('입원')) and re.search(r'\d+\s*대', n) and no('인실'):
+        return None,0
     # ★v30k 교통상해입원일당 ≠ 상해입원일당(합산 금지). 질환·부위·교통 접두 변형은 base 아님 → [확인]
     # ★병원규모(상급종합/종합) 명시 = 개별 전용행 / 일반 질병입원일당(밴드) = 합산 (지점장 2026.07.05)
-    # ★★★v212 (지점장 확정 2026.07.25, 영구): <b>'2대질병입원일당'·'특정질병입원일당'은 질병입원일당이 아니다</b>.
-    #   질병입원일당 행에 넣는 것은 <b>(1-10)·(1-20)·(1-30)·(1-180) 같은 일수 밴드 표기의 순수 담보</b>뿐이다.
-    #   <b>N대(2대·3대·5대…) 접두가 붙으면 별개 담보</b> → [확인]큐. 실측 오류: 메리츠 '갱신형 2대질병입원일당(1일이상)' 3만이
-    #   질병일당으로 산입됐다('2대'가 제외어에 없어 통과). ★<b>종합병원입원일당·상급병원입원일당도 개별 행</b>이다.
-    if re.search(r'\d+\s*대', n) and (has('일당') or has('입원일당')): return None,0
-    if has('상급') and (has('일당') or has('입원일당')): return None,0
+    # ★v223 `_dilqual`에 <b>'상급'</b> 추가 — 상급병원 일당은 위 전용행으로 갔고, 남은 변형이
+    #   질병일당·상해일당에 섞이는 것을 막는다(v212 정본 재적용).
     _dilqual = ('교통','암','뇌','심','허혈','간','신장','폐','위','골절','화상','특정','재해외','종합','요양','중환자','수술','상급')
     if (has('상해일당') or has('상해입원일당') or has('재해일당') or has('재해입원일당')) and no(*_dilqual): return '상해일당',0   # ★재해=상해 동일(정본)
     if (has('질병일당') or has('질병입원일당')) and no(*_dilqual): return '질병일당',0   # 순수 질병(입원)일당만 합산
@@ -1899,8 +1970,14 @@ def _fix_silson(contracts):
             _set('통원', _tw if (_tw and _tw<=20) else 20)
             _set('약값', 0)
             continue
-        # ★v41 정본(지점장 2026.07.12): 1세대 = 통원 한도에 약제비 포함 → 약값 행 미표기
-        if _gen == '1세대':
+        # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>실손 1세대 = 입원 3,000 / 통원 10 / 약값 0</b>.
+        #   1세대는 외래+약제가 <b>통원 한 한도로 통합</b>이라 약값 담보 자체가 없다.
+        #   ★버그: `silson_gen`은 입원한도 3,000이면 <b>'1세대(구형)'</b>을 반환하는데 구 v41 코드는
+        #   `== '1세대'`로 비교해 <b>항상 False</b>였다 → 아래 손보/생보 기본값으로 흘러
+        #   <b>약값 5(손보)·10(생보)이 신설</b>됐고, 그 값이 그대로 엑셀→보장진단서 PPT까지 나갔다
+        #   (지점장 지적 "간병인·실손 보장진단서 오류"). → `.startswith('1세대')`로 수정.
+        if str(_gen).startswith('1세대'):
+            if not _tw: _set('통원', 10)      # ★v215 1세대 통원 기본 10(명시값 있으면 그대로)
             _set('약값', 0)
             continue
         # 1~3세대: 통원·약값 명시값 우선, 없으면 회사유형 기본값.
@@ -2156,6 +2233,17 @@ def build_excel(data, out):
                 elif std in ('중대한 뇌졸증', '중대한 급성심근', '중대한CI적용', '중대한 뇌출혈'):
                     unmapped.append((col, ct['company'], raw, amt, 'CI/GI/리빙케어 상품 아님 → 중대한OO 무시'))
                     continue
+            # ★★★v220 영구 가드(2026.07.25 실사고): <b>일당 행에 진단비 금액이 들어가면 그건 일당이 아니다</b>.
+            #   실사고 = 간호통합병동 행에 <b>2,000(2천만원)</b>이 찍혔다. 일당은 하루당 지급액이라
+            #   실무 최대가 <b>30~50만원</b>이고 100만원을 넘는 일당 담보는 존재하지 않는다.
+            #   → 일당 계열 행에 <b>100 초과</b> 금액이 오면 매핑 오류로 보고 [확인]큐로 보낸다(조용한 오출고 차단).
+            _DAILY = ('질병일당','상해일당','간병인','간병인지원일당','간호통합병동','질병종합병원일당','상급병원질병입원일당',
+                      '1인실 상급병원','1인실 종합병원','질병중환자실','상해중환자실',
+                      '질병수술일당','상해수술일당','암일당')
+            if std in _DAILY and isinstance(amt,(int,float)) and amt > 100:
+                unmapped.append((col, ct['company'], raw, amt,
+                                 f'[확인] 일당 행에 100만원 초과({amt}) — 진단비·수술비 오매핑 의심'))
+                continue
             if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
                 unmapped.append((col, ct['company'], raw, amt, '등급별 100만↑ 제외'))  # 등급별 → 합산·기재 안 함
                 continue
@@ -2198,10 +2286,33 @@ def build_excel(data, out):
                 unmapped.append((col, ct['company'], raw, amt, m.get('note','') or ''))
                 continue
             # 2대 주요치료비는 뇌혈관·심장 두 칸 모두 기재(동일 담보, 양쪽 표기). 그 외는 단일 행.
-            target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
+            # ★★★v216 (지점장 지시 2026.07.25, 영구): <b>혈전용해치료비 누락 수정</b>.
+            #   마스터에 '혈전용해치료비' 행이 <b>2개</b>다 — <b>뇌 블록 37행 · 심장 블록 50행</b>.
+            #   그런데 `nm2r[담보명]=행`은 <b>뒤에 나온 50행이 앞의 37행을 덮어써</b> 뇌 37행에는
+            #   <b>어떤 값도 영원히 들어가지 않았다</b>(구조적 누락). 게다가 실측에서 메리츠
+            #   '뇌혈관혈전용해치료비 200' + '급성심근경색증혈전용해치료비 200'이 <b>같은 50행에 400으로 합산</b>됐다.
+            #   → <b>담보명의 축으로 갈라 배정한다</b>: 뇌 축=37행 / 심장 축(심근·심장·허혈·관상동맥·심혈관)=50행 /
+            #   <b>축 미표기 또는 심뇌 동시 표기 = 양쪽 행에 각 100% 동일 금액</b>(2대 주요치료비·묶음담보 공통원칙 §8.3.1과 동일).
+            if std == '2대 주요치료비':
+                target_rows = nm2r_multi.get(std, [r])
+            elif std == '혈전용해치료비':
+                _hjall = nm2r_multi.get(std, [r])
+                _hjn = _norm(raw)
+                _hjb = ('뇌' in _hjn)
+                _hjh = any(_k in _hjn for _k in ('심근','심장','허혈','관상동맥','심혈관'))
+                if _hjb and not _hjh:   target_rows = [_hjall[0]]     # 뇌 전용 → 뇌 블록 행
+                elif _hjh and not _hjb: target_rows = [_hjall[-1]]    # 심장 전용 → 심장 블록 행
+                else:                   target_rows = _hjall          # 축 미표기·심뇌동시 → 양쪽 각 100%
+            else:
+                target_rows = [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','1인실 상급병원','1인실 종합병원')   # ★v198 합의금=대표1개 / ★v208 1인실=질병·상해 택일이라 대표(max)
+                # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>간병인지원일당 = 대표(max) 1건</b>.
+                #   근거: 간병인지원 질병입원일당 3 + 간병인지원 상해입원일당 3 은 <b>질병·상해 택일 지급</b>이라
+                #   <b>합산 6이 아니라 3</b>이다(둘 중 하나만 기재). 간병인·간호통합병동·1인실과 동일 처리.
+                # ★항암방사선약물도 대표(max) 1건 — 항암약물치료비 / 항암방사선치료비 /
+                #   항암방사선약물치료비 / 항암약물방사선치료비는 <b>이름만 다른 같은 담보</b>다(합산 금지).
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','간병인지원일당','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','1인실 상급병원','1인실 종합병원')   # ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -2265,12 +2376,26 @@ def build_excel(data, out):
             _guhy=(_ipv==3000)                            # 입원한도 3,000=구형
             _twc=ws.cell(_rtw,col).value if _rtw else None
             _ykc=ws.cell(_ryk,col).value if _ryk else None
+            # ★v215: 통원 디폴트 판정에도 1세대(가입일 기준)를 포함한다. 구 코드는 입원한도 3,000(_guhy)일
+            #   때만 10을 넣어, 가입일이 2009.09 이전인데 입원한도가 3,000이 아닌 1세대는 25/20이 됐다.
+            _g1a=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))).startswith('1세대')
             if _rtw and not isinstance(_twc,(int,float)):  # ① 별첨 통원 없을 때만 디폴트
-                _twd = 10 if _guhy else (20 if _g4 else (20 if _life else 25))
+                _twd = 10 if (_guhy or _g1a) else (20 if _g4 else (20 if _life else 25))
                 ws.cell(_rtw,col).value=_twd; ws.cell(_rtw,col).font=BL
-            _g1=(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product','')) == '1세대')   # ★v41
-            if _ryk and not isinstance(_ykc,(int,float)):  # ① 별첨 약값 없을 때만 디폴트
-                _ykd = 0 if (_g4 or _g1) else (5 if _guhy else (10 if _life else 5))   # ★v41 1세대=약값 통원포함
+            # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>실손 1세대 = 입원 3,000 / 통원 10 / 약값 0</b>.
+            #   1세대는 외래+약제가 <b>통원 한 한도로 통합</b>돼 있어 <b>약값 담보 자체가 없다</b> → 약값 칸은 비운다.
+            #   ★버그2건 실측: ①`silson_gen`은 입원한도 3,000이면 <b>'1세대(구형)'</b>을 반환하는데
+            #     구 코드는 `== '1세대'`로 비교해 <b>_g1이 항상 False</b>였다 → `_guhy` 분기로 빠져 <b>약값 5가 찍혔다</b>
+            #     (지점장 지적 "보장진단서 오류"의 원인). → `.startswith('1세대')`로 수정.
+            #     ②구 코드는 '별첨에 약값이 없을 때만' 0으로 뒀다 → 별첨에 약값이 인쇄돼 있으면 그대로 들어갔다.
+            #     → 1세대는 <b>별첨 명시값이 있어도 약값 칸을 지운다</b>(강제).
+            _g1=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))).startswith('1세대')   # ★v215 (구 v41 == '1세대' 버그)
+            if _ryk and _g1:                               # ★v215 1세대=약값 없음(강제 미기재)
+                if isinstance(_ykc,(int,float)) and _ykc:
+                    silson_trace.append((ct['company'], ct.get('contract_date',''), '1세대 약값삭제', f'{_ykc}→0'))
+                ws.cell(_ryk,col).value=None
+            elif _ryk and not isinstance(_ykc,(int,float)):  # ① 별첨 약값 없을 때만 디폴트
+                _ykd = 0 if _g4 else (10 if _life else 5)
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
             # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
             _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))
@@ -2312,24 +2437,16 @@ def build_excel(data, out):
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
-    # ★★★v213 유사암 자동유도(지점장 확정 2026.07.25, 영구): <b>"일반암의 10% or 유사암이라고 적힌 금액을
-    #   최종값으로 본다"</b> — 즉 <b>둘 중 하나만</b> 쓴다. 계약 중 <b>유사암 명시 담보가 하나라도 있으면
-    #   그 금액이 최종값</b>이므로 나머지 계약에 ×10% 유도를 하지 않는다.
-    #   실측 오류: 메리츠 유사암 1,000(명시) + 미래에셋 200(유도) + 라이나 100(유도) = 합계 <b>1,300</b>이
-    #   엑셀·설명서·PPT 2개에 그대로 나갔다(KB 리포트 정답 1,000).
-    #   → 명시액이 전혀 없을 때만 일반암 × 10%로 유도한다.
+    # ★v30q 유사암 자동유도(지점장 2026.07.03): 계약에 일반암 있고 유사암 담보가 따로 없으면 유사암 = 그 일반암 × 10%
     _r일반암 = nm2r.get('일반암'); _r유사암 = nm2r.get('유사암(갑.기.경.제)')
     if _r일반암 and _r유사암:
-        _has_myeongsi = any(isinstance(ws.cell(_r유사암, _c).value, (int, float))
-                            for _c in range(3, last_col))
-        if not _has_myeongsi:
-            for _c in range(3, last_col):
-                _v일 = ws.cell(_r일반암, _c).value
-                _v유 = ws.cell(_r유사암, _c).value
-                if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
-                    ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
-                    try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색 따라감
-                    except: pass
+        for _c in range(3, last_col):
+            _v일 = ws.cell(_r일반암, _c).value
+            _v유 = ws.cell(_r유사암, _c).value
+            if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
+                ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
+                try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색(갱신/비갱신) 따라감
+                except: pass
 
     first_L = get_column_letter(3)
     last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
@@ -2523,15 +2640,69 @@ def _force_nocalc_xml(path):
 
 def read_excel_totals(path):
     """완성 엑셀에서 담보명->합계 읽음. 등식2: PPT는 이것만 본다.
-       끝열 =SUM() 캐시(LibreOffice 의존) 대신 데이터셀(C~끝열-1) 직접 합산 → 재계산 없어도 PPT=엑셀 보장."""
+       ★★★v218 (지점장 지시 2026.07.25, 영구): <b>PPT 합계는 엑셀 끝열과 '반드시' 같아야 한다</b>.
+       구 코드는 캐시가 없으면 <b>무조건 데이터셀 단순 SUM</b>으로 폴백했는데, 엑셀 끝열은 행마다
+       수식이 다르다 → <b>대표(max)·캡 담보가 전부 어긋났다</b>(실측 불일치 5건):
+         간병인 MAX 20 → PPT 30 / 간호통합병동 MAX 7 → PPT 12 / 중입자 MAX 300 → PPT 400 /
+         자부상 MIN(,80) 80 → PPT 100 / 120대수술비 '1000/500' → PPT 1500.
+       → <b>폴백도 끝열 수식 종류를 그대로 따른다</b>(inject_sum_cache와 동일 규칙).
+       ★<b>동명 담보 행이 2개 이상</b>(혈전용해치료비 = 뇌 37행·심장 50행)이면 dict 키가 충돌해
+       <b>뒤엣것이 앞엣것을 덮어쓴다</b> → PPT엔 한 칸뿐이므로 <b>두 행 중 대표(max)</b>로 병합한다."""
     wb = openpyxl.load_workbook(path, data_only=True)
-    ws = wb['보장분석']; last = ws.max_column
-    out = {}; sq=[0]*5; ss=[0]*5
+    wbf = openpyxl.load_workbook(path)            # ★v218 수식 원문 판독용(data_only=False)
+    ws = wb['보장분석']; wsf = wbf['보장분석']; last = ws.max_column
+    out = {}; sq=[0]*5; ss=[0]*5; splits={}   # ★v219 splits[담보]=(갱신합, 비갱신합) — 엑셀 글자색 근거
+
+    def _fallback(r):
+        """끝열 캐시가 없을 때 — 엑셀 끝열 수식과 <b>같은 규칙</b>으로 계산한다."""
+        nums = [ws.cell(r,c).value for c in range(3,last) if isinstance(ws.cell(r,c).value,(int,float))]
+        s = sum(nums)
+        f = wsf.cell(r,last).value
+        if isinstance(f,str) and f.startswith('='):
+            if f.startswith('=MIN('):
+                mm = re.search(r',\s*(\d+)\s*\)\s*$', f)
+                return min(s, int(mm.group(1))) if mm else s
+            if f.startswith('=IF(COUNT'):   return max(nums) if nums else 0   # 대표(max) 담보
+            if f.startswith('=IF(SUM'):     return 7 if s>0 else 0
+        return s
+
+    def _put(nm, val):
+        """★v218 동명 행 충돌 방지 — 이미 있으면 큰 값 유지(대표)."""
+        if not val: return
+        prev = out.get(nm)
+        out[nm] = max(prev, val) if isinstance(prev,(int,float)) else val
+
     for r in range(6, ws.max_row+1):
         nm = ws.cell(r,2).value
         if not nm: continue
         nm = str(nm).strip()
         endv = ws.cell(r,last).value
+        # ★★★v219 (지점장 지시 2026.07.25, 영구): <b>PPT 갱신/비갱신 색은 엑셀 글자색이 원천이다</b>.
+        #   구 코드는 PPT가 raw dambo로 갱신합/비갱신합을 <b>따로 다시 계산</b>했다. 그런데 엑셀 끝열은
+        #   대표(max)·캡·[확인] 제외 때문에 raw 분할합과 <b>거의 항상 다르다</b> → 구 코드는 그럴 때
+        #   <b>'큰 쪽으로 전부 몰아버려'</b>(`if gs>=ns: gs,ns=_T,0`) <b>갱신↔비갱신이 통째로 뒤바뀌었다</b>.
+        #   실측 뒤바뀜: 갱신 100(엑셀 산입) + 비갱신 200([확인] 제외) → ns가 커서 <b>검정</b>으로 찍히지만
+        #   엑셀의 100은 <b>갱신 계약 값이라 파랑</b>이어야 한다. 역방향도 동일하게 발생.
+        #   → <b>엑셀 데이터셀의 글자색(파랑 0070C0 = 갱신)을 그대로 읽어</b> 분할한다. 이중 계산 폐기.
+        _cells=[]
+        for c in range(3, last):
+            _v = ws.cell(r,c).value
+            if not isinstance(_v,(int,float)) or not _v: continue
+            try: _rgb = str(wsf.cell(r,c).font.color.rgb or '')
+            except Exception: _rgb = ''
+            _cells.append((_v, _rgb.upper().endswith('0070C0')))
+        _f0 = wsf.cell(r,last).value
+        if isinstance(_f0,str) and _f0.startswith('=IF(COUNT') and _cells:
+            # ★대표(max) 행 — 끝열 값을 만든 <b>최댓값 셀 하나의 색</b>이 정답이다.
+            #   합으로 나누면 갱신 8+9(=17)가 비갱신 15를 눌러 <b>색이 뒤집힌다</b>(구 코드 실패 지점).
+            _mx = max(_cells, key=lambda x: x[0])
+            _gs, _ns = (_mx[0], 0) if _mx[1] else (0, _mx[0])
+        else:
+            _gs = sum(v for v,b in _cells if b)
+            _ns = sum(v for v,b in _cells if not b)
+        if _gs or _ns:
+            _pv0 = splits.get(nm,(0,0))
+            splits[nm] = (max(_pv0[0], _gs), max(_pv0[1], _ns))
         # 수술비 1~5종: 끝열 슬래시 문자열(수식 아님, 항상 존재)
         if nm == '상해 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
             for k,p in enumerate(endv.split('/')[:5]):
@@ -2549,18 +2720,21 @@ def read_excel_totals(path):
                 try: out[_std]=int(_ps[_k])
                 except: pass
             continue
-        # 숫자 합계: 끝열 캐시값 있으면 사용, 없으면(=SUM 미계산) 데이터셀 C~끝열-1 직접 합산
-        if isinstance(endv,(int,float)) and endv:
-            out[nm] = endv
-        else:
-            s = 0
-            for c in range(3, last):
-                v = ws.cell(r,c).value
-                if isinstance(v,(int,float)): s += v
-            if s: out[nm] = s
-    return out, sq, ss
+        # ★★v218 120대수술비(n대수술비) = 끝열이 <b>계약별 가로 슬래시 문자열</b>이다(합산 금지, v30k 정본).
+        #   구 코드는 이 문자열을 못 읽어 폴백 단순합산 1,500을 PPT에 넣었다(엑셀 '1000/500'과 불일치).
+        #   → 슬래시를 쪼개 <b>대표(max)</b>를 PPT 값으로 쓴다.
+        if isinstance(endv,str) and '/' in endv:
+            _pv=[]
+            for _p in endv.split('/'):
+                try: _pv.append(int(str(_p).strip().replace(',','')))
+                except: pass
+            if _pv: _put(nm, max(_pv))
+            continue
+        # 숫자 합계: 끝열 캐시값 있으면 사용, 없으면 끝열 수식과 동일 규칙으로 계산(★v218)
+        _put(nm, endv if isinstance(endv,(int,float)) and endv else _fallback(r))
+    return out, sq, ss, splits
 
-def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
+def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if not os.path.exists(TPL_PPT): return False
     prs = Presentation(TPL_PPT)
     sl = prs.slides[0]
@@ -2594,15 +2768,23 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
         d=_dom.get(std)
         return _BLUE if (d and d[1]) else _BLACK
     # ★담보별 갱신합/비갱신합 (분할 표기용)
+    # ★★★v219 (지점장 지시 2026.07.25, 영구): <b>갱신합/비갱신합은 엑셀 글자색에서 그대로 가져온다</b>.
+    #   구 코드는 raw dambo로 재계산해 엑셀 끝열과 어긋났고, 어긋나면 큰 쪽으로 몰아버려
+    #   <b>갱신↔비갱신이 통째로 뒤바뀌었다</b>. splits=read_excel_totals가 준 (갱신합, 비갱신합).
     _gensum={}; _nonsum={}
-    for ct in contracts:
-        _gen=(ct.get('renewal','')=='갱신')
-        for raw,amt in ct.get('dambo',{}).items():
-            if not amt: continue
-            st=resolve(raw)
-            if not st: continue
-            tgt=_gensum if (_gen or '갱신' in raw) else _nonsum   # ★v29t: 담보명 (갱신형) = 파랑(엑셀 792행과 동일 기준)
-            tgt[st]=tgt.get(st,0)+amt
+    if splits:
+        for _st,(_g,_n) in splits.items():
+            if _g: _gensum[_st]=_g
+            if _n: _nonsum[_st]=_n
+    else:   # 폴백(엑셀 없이 호출된 경우) — 구 방식
+        for ct in contracts:
+            _gen=(ct.get('renewal','')=='갱신')
+            for raw,amt in ct.get('dambo',{}).items():
+                if not amt: continue
+                st=resolve(raw)
+                if not st: continue
+                tgt=_gensum if (_gen or '갱신' in raw) else _nonsum
+                tgt[st]=tgt.get(st,0)+amt
     # ★v30n PPT 골절 = 골절(치아파절포함) + 골절(치아파절제외) 합산. 엑셀은 두 행 분리 유지, PPT만 하나로 합산 표기(지점장 2026.07.03)
     for _b in (_gensum, _nonsum, totals):
         _b['골절합산PPT'] = (_b.get('골절(치아파절포함)',0) or 0) + (_b.get('골절(치아파절제외)',0) or 0)
@@ -2623,11 +2805,17 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
                 except: pass
     def pv(box,pi,ri,std,prefix=': ',suffix=''):
         # 한 칸 분할: 갱신합=파랑 / 비갱신합=검정 (둘 다면 'gen / non'), 실손=파랑 합계
-        if box not in by: return
+        # ★★★v221: 구 코드는 박스·문단·run을 못 찾으면 <b>아무 말 없이 return</b>했다.
+        #   그래서 'PPT 상해 수술 라인이 통째로 비어 있다' 같은 사고가 <b>로그 한 줄 없이</b> 나갔다.
+        #   → 실패 사유를 반드시 찍는다(배포 후 Railway 로그로 즉시 원인 확정 가능).
+        if box not in by:
+            print(f'[PPT_MISS] 박스없음 box={box} std={std} — 템플릿 ppt_form.pptx의 도형 이름 확인 필요'); return
         tf=by[box].text_frame
-        if pi>=len(tf.paragraphs): return
+        if pi>=len(tf.paragraphs):
+            print(f'[PPT_MISS] 문단없음 box={box} p{pi} (문단수 {len(tf.paragraphs)}) std={std}'); return
         p=tf.paragraphs[pi]
-        if ri>=len(p.runs): return
+        if ri>=len(p.runs):
+            print(f'[PPT_MISS] run없음 box={box} p{pi} r{ri} (run수 {len(p.runs)}) std={std}'); return
         gs=_gensum.get(std,0); ns=_nonsum.get(std,0)
         if std in _silson:
             _v = totals.get(std,0)            # ★실손=완성 엑셀값(입원5천캡·통원디폴트 반영). _gensum 원본합산(상해+질병=1만) 사용 안 함
@@ -2636,10 +2824,18 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
             _seg(p.runs[ri], segs); return
         # ★v30f 등식1 (지점장 승인 2026.07.03): PPT 표기 총액의 정본 = 완성 엑셀 끝열.
         #   대표 1건·MAX·캡·[확인] 분리로 끝열 ≠ raw 분할합이면 끝열 값 단색 표기(색=우세 성분측).
+        # ★★v219: gs·ns가 이미 <b>엑셀 셀에서 온 값</b>이므로 원칙적으로 gs+ns == 끝열이다.
+        #   다만 끝열이 대표(max)·캡 수식인 행은 합보다 작다 → <b>큰 쪽으로 몰지 말고</b>
+        #   <b>어느 쪽 성분이 끝열 값을 만들었는지</b>로 판정한다(색 뒤바뀜 차단).
         _T = totals.get(std, None)
         if isinstance(_T,(int,float)) and _T>0 and (gs+ns)!=_T:
-            if gs>=ns: gs,ns=int(_T),0
-            else: gs,ns=0,int(_T)
+            if   gs and not ns: gs,ns=int(_T),0
+            elif ns and not gs: gs,ns=0,int(_T)
+            elif gs>=_T and ns< _T: gs,ns=int(_T),0      # 끝열값을 만든 쪽 = 갱신
+            elif ns>=_T and gs< _T: gs,ns=0,int(_T)      # 끝열값을 만든 쪽 = 비갱신
+            else:                                        # 둘 다 기여(=SUM 계열) → 비율 보존
+                _tot=gs+ns
+                gs=int(round(_T*gs/_tot)); ns=int(_T)-gs
         if not gs and not ns: return
         if gs and ns:
             segs=[(f'{prefix}{gs:,}', _BLUE),(f'+{ns:,}{suffix}', _BLACK)]
@@ -2657,11 +2853,18 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
         return totals.get(nm,0)
     def r_set(box,pi,ri,val,std='__USE_LAST__'):
         use = _last_std[0] if std=='__USE_LAST__' else std
-        if box in by:
+        # ★v221 조용한 실패 금지 — 못 찍었으면 사유를 로그로 남긴다.
+        if box not in by:
+            print(f'[PPT_MISS] 박스없음 box={box} val={val}')
+        else:
             tf=by[box].text_frame
-            if pi<len(tf.paragraphs):
+            if pi>=len(tf.paragraphs):
+                print(f'[PPT_MISS] 문단없음 box={box} p{pi} (문단수 {len(tf.paragraphs)}) val={val}')
+            else:
                 p=tf.paragraphs[pi]
-                if ri<len(p.runs):
+                if ri>=len(p.runs):
+                    print(f'[PPT_MISS] run없음 box={box} p{pi} r{ri} (run수 {len(p.runs)}) val={val}')
+                else:
                     p.runs[ri].text=val
                     if use: _setcol(p.runs[ri], use)
         _last_std[0]=None
@@ -3169,7 +3372,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v214-dollar2-20260725'}
+def health(): return {'ok':True,'version':'v223-sanggeup-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3177,7 +3380,7 @@ def health(): return {'ok':True,'version':'v214-dollar2-20260725'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v214-dollar2-20260725'}
+    out = {'version': 'v223-sanggeup-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -3283,8 +3486,8 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
         unmapped=build_excel(data,xl)
         if not recalc_xlsx(xl): inject_sum_cache(xl)   # ★v29u: Railway(LibreOffice 없음)에서도 합계 캐시 보장
-        ppt_totals, sq, ss = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
-        ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss)
+        ppt_totals, sq, ss, ppt_splits = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
+        ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits)
         # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
