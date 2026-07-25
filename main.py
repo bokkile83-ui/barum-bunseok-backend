@@ -1625,7 +1625,13 @@ def resolve_kw(raw):
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
     # ★v30k 교통상해입원일당 ≠ 상해입원일당(합산 금지). 질환·부위·교통 접두 변형은 base 아님 → [확인]
     # ★병원규모(상급종합/종합) 명시 = 개별 전용행 / 일반 질병입원일당(밴드) = 합산 (지점장 2026.07.05)
-    _dilqual = ('교통','암','뇌','심','허혈','간','신장','폐','위','골절','화상','특정','재해외','종합','요양','중환자','수술')
+    # ★★★v212 (지점장 확정 2026.07.25, 영구): <b>'2대질병입원일당'·'특정질병입원일당'은 질병입원일당이 아니다</b>.
+    #   질병입원일당 행에 넣는 것은 <b>(1-10)·(1-20)·(1-30)·(1-180) 같은 일수 밴드 표기의 순수 담보</b>뿐이다.
+    #   <b>N대(2대·3대·5대…) 접두가 붙으면 별개 담보</b> → [확인]큐. 실측 오류: 메리츠 '갱신형 2대질병입원일당(1일이상)' 3만이
+    #   질병일당으로 산입됐다('2대'가 제외어에 없어 통과). ★<b>종합병원입원일당·상급병원입원일당도 개별 행</b>이다.
+    if re.search(r'\d+\s*대', n) and (has('일당') or has('입원일당')): return None,0
+    if has('상급') and (has('일당') or has('입원일당')): return None,0
+    _dilqual = ('교통','암','뇌','심','허혈','간','신장','폐','위','골절','화상','특정','재해외','종합','요양','중환자','수술','상급')
     if (has('상해일당') or has('상해입원일당') or has('재해일당') or has('재해입원일당')) and no(*_dilqual): return '상해일당',0   # ★재해=상해 동일(정본)
     if (has('질병일당') or has('질병입원일당')) and no(*_dilqual): return '질병일당',0   # 순수 질병(입원)일당만 합산
     # ★v29v (지점장 2026.07.02): 밴드형 '입원비(1일이상/180일한도)' = 입원일당
@@ -2306,16 +2312,24 @@ def build_excel(data, out):
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
-    # ★v30q 유사암 자동유도(지점장 2026.07.03): 계약에 일반암 있고 유사암 담보가 따로 없으면 유사암 = 그 일반암 × 10%
+    # ★★★v213 유사암 자동유도(지점장 확정 2026.07.25, 영구): <b>"일반암의 10% or 유사암이라고 적힌 금액을
+    #   최종값으로 본다"</b> — 즉 <b>둘 중 하나만</b> 쓴다. 계약 중 <b>유사암 명시 담보가 하나라도 있으면
+    #   그 금액이 최종값</b>이므로 나머지 계약에 ×10% 유도를 하지 않는다.
+    #   실측 오류: 메리츠 유사암 1,000(명시) + 미래에셋 200(유도) + 라이나 100(유도) = 합계 <b>1,300</b>이
+    #   엑셀·설명서·PPT 2개에 그대로 나갔다(KB 리포트 정답 1,000).
+    #   → 명시액이 전혀 없을 때만 일반암 × 10%로 유도한다.
     _r일반암 = nm2r.get('일반암'); _r유사암 = nm2r.get('유사암(갑.기.경.제)')
     if _r일반암 and _r유사암:
-        for _c in range(3, last_col):
-            _v일 = ws.cell(_r일반암, _c).value
-            _v유 = ws.cell(_r유사암, _c).value
-            if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
-                ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
-                try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색(갱신/비갱신) 따라감
-                except: pass
+        _has_myeongsi = any(isinstance(ws.cell(_r유사암, _c).value, (int, float))
+                            for _c in range(3, last_col))
+        if not _has_myeongsi:
+            for _c in range(3, last_col):
+                _v일 = ws.cell(_r일반암, _c).value
+                _v유 = ws.cell(_r유사암, _c).value
+                if isinstance(_v일,(int,float)) and _v일 > 0 and not isinstance(_v유,(int,float)):
+                    ws.cell(_r유사암, _c).value = round(_v일 * 0.1)
+                    try: ws.cell(_r유사암, _c).font = _copy.copy(ws.cell(_r일반암, _c).font)   # 일반암 색 따라감
+                    except: pass
 
     first_L = get_column_letter(3)
     last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
@@ -3155,7 +3169,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v211-gen5date-20260725'}
+def health(): return {'ok':True,'version':'v214-dollar2-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3163,7 +3177,7 @@ def health(): return {'ok':True,'version':'v211-gen5date-20260725'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v211-gen5date-20260725'}
+    out = {'version': 'v214-dollar2-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
