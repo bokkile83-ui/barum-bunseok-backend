@@ -636,6 +636,40 @@ _CI_SELFTEST = [
     ('DB손보 다이렉트 개인용',                               False),
 ]
 
+# ★★★★★v241 CI 4단계 체크리스트 자가진단(지점장 정본 2026.07.25)
+#   (중대한OO 리스트, 진단담보 리스트, 별첨 사망줄, 기대 선지급률, 기대 사망보장, 기대 판정근거)
+_CI_RATE_SELFTEST = [
+    ([2000], [3000,3000,3000,3000,2000], [10000], 50, 4000, '③'),  # ★신한 실사고: 중대한화상 2,000÷50%=4,000
+    ([],     [2400,2400,2400,2400,1000,1000,1000,3000,400], [3000,2000], 80, 3000, '④'),  # ★DB 실사고: 2,400×4개 ÷80%=3,000 ✓사망줄 일치
+    ([3200], [3200,1000], [4000],  80, 4000, '③'),                 # 교보CI 정본 검증예
+    ([],     [2000,2000], [4000],  50, 4000, '④'),                 # 동일금액 2개 → ×2 = 사망줄 일치
+]
+
+def ci_rate_selftest():
+    """★v241 CI 4단계(③중대한OO → ④동일금액 2개 이상 → 사망보장금 일치) 규칙 자가진단."""
+    bad=[]
+    for jd, cands, sl, exp_p, exp_s, exp_src in _CI_RATE_SELFTEST:
+        slset=set(sl); bon=None; pct=None; src=''
+        if jd:
+            bon=max(jd); src='③'
+            for r,p in ((0.5,50),(0.8,80)):
+                if round(bon/r) in slset: pct=p; break
+            if not pct: pct=50
+            sam=round(bon/(pct/100.0))
+        else:
+            cnt={}
+            for v in cands: cnt[v]=cnt.get(v,0)+1
+            sam=0
+            for v in sorted([x for x,c in cnt.items() if c>=2], reverse=True):
+                for r,p in ((0.5,50),(0.8,80)):
+                    if round(v/r) in slset:
+                        bon=v; pct=p; sam=round(v/r); src='④'; break
+                if bon: break
+        if pct!=exp_p or sam!=exp_s or src!=exp_src:
+            bad.append(f'중대한{jd}/사망줄{sl} → {src}{pct}%·{sam}(기대 {exp_src}{exp_p}%·{exp_s})')
+    return bad
+
+
 def ci_selftest():
     """CI 판정 4곳이 <b>같은 로직</b>인지 + 케이스 16건을 통과하는지 검사. 실패 목록을 돌려준다."""
     bad=[]
@@ -653,6 +687,7 @@ def ci_selftest():
                 if _cb._isci_hdr(p)!=exp: bad.append(f'[cb 불일치] {p}')
     except Exception:
         pass
+    bad += ['[선지급률] '+x for x in ci_rate_selftest()]
     return bad
 
 
@@ -1197,6 +1232,13 @@ def parse_txt(txt, filename=''):
                 except: pass
         # ★v29t 생보 입원특약 일당: 줄별 값 수집(병합 전 원값 보존)
         ipwon=[]; _ipkey=None
+        # ★★★★★v239 (지점장 지적 2026.07.25): <b>CI 주계약 사망은 별첨 '줄 단위 개별값'이다 — 합산 금지</b>.
+        #   실측 증거(DB생명 CI종신 1701): 별첨에 <b>질병사망 3,000 / 질병사망 2,000</b> 2줄 = 주계약 3,000 + 추가특약 2,000.
+        #   그런데 dambo는 이를 <b>합산해 5,000</b>으로 만든다 → 2,400/5,000=48%가 되어 50%·80% 어디에도 안 맞고
+        #   [확인]으로 빠졌다. <b>주계약 3,000으로 보면 2,400/3,000 = 정확히 80%</b>(뇌출혈·급성심근·암·특정질병·치매가
+        #   전부 2,400으로 일치) → <b>80%형이 정답</b>이었다.
+        #   → CI 계약은 <b>접힘 복원된 줄에서 사망 줄과 담보 줄의 원값을 따로 수집</b>한다.
+        ci_lines={'samang':[], 'cands':[], 'jungdae':[]}
         # ★★★v234: 별첨이 <b>다열</b>이면 원본 줄은 `재해장해특약  6,000   입원  3` 처럼
         #   두 담보가 한 줄에 붙어 있어 `^입원 …$` 앵커가 절대 맞지 않는다(실측 메트라이프 9p).
         #   → rule_extract와 <b>동일한 접힘 복원</b>을 거친 1담보 1줄 형태에서 스캔한다.
@@ -1208,6 +1250,23 @@ def parse_txt(txt, filename=''):
             # ★★★v234 (한정환 메트라이프생명 실측): 별첨에 <b>수식어 없는 '입원'</b>만 인쇄되는 생보가 있다.
             #   구 정규식은 '입원특약'만 잡아 `입원 3` 2줄을 일당 어느 행에도 못 넣었다
             #   (세부가입현황 4p 입원비 칸 = `3 | 3` = 질병 3 · 상해 3, 한장보장표 일당 13 = 신한 10 + 메트 3).
+            # ★★★v239 CI 주계약/본체 후보 = 줄 단위 원값(합산 전)
+            if _isci_prod(product):
+                _mc = re.match(r'^\s*(\S.*?)\s{2,}([\d,]{3,})\s*$', _bl.rstrip()) or \
+                      re.match(r'^\s*(\S.*?)\s+([\d,]{3,})\s*$', _bl.rstrip())
+                if _mc:
+                    _nmc = re.sub(r'\s','',_mc.group(1))
+                    try: _vc = int(_mc.group(2).replace(',',''))
+                    except Exception: _vc = 0
+                    if 0 < _vc <= 200000 and re.search(r'[가-힣]', _nmc):
+                        if re.search(r'사망', _nmc) and not re.search(r'후유|장해', _nmc):
+                            ci_lines['samang'].append(_vc)
+                        elif _nmc.startswith('중대한'):
+                            # ★★★★★v240(지점장 지시 2026.07.25): 별첨에 <b>'중대한OO' 담보가 명시</b>되어 있으면
+                            #   <b>그 금액이 곧 CI 본체(선지급액)</b>다. 실측 신한 `중대한화상진단 2,000`.
+                            ci_lines['jungdae'].append(_vc)
+                        elif re.search(r'진단', _nmc):     # 본체 후보 = 진단비 담보만
+                            ci_lines['cands'].append(_vc)
             _m=re.match(r'^\s*(입원특약|입원)\s+([\d,]+)\s*$', _bl.strip())
             if _m:
                 _ipkey=_m.group(1)
@@ -1236,7 +1295,7 @@ def parse_txt(txt, filename=''):
             except Exception: pass
             contracts.append({'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
-                'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye,'ci_sebu':_cs})
+                'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye,'ci_sebu':_cs,'ci_lines':ci_lines})
     # ★★v100 단계약 사각지대: KB·메리츠 3열이 '계약 1건'이면 앵커가 1개뿐이라
     #   sinjeong_detect(>=2)를 못 넘겨 2열 파서로 가고 계약 0건이 된다(양예서형 단계약 고객).
     #   → 2열이 0건일 때만 3열을 재시도한다. 2열이 1건이라도 잡으면 손대지 않으므로 회귀 없음.
@@ -2373,6 +2432,7 @@ def build_excel(data, out):
         # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
         #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
         _is_ci = _isci_prod(ct.get('product'))
+        _ci_fix = None      # ★v239 CI 본체 최종 기재 예약(담보 루프 뒤에서 적용)
         _cij = ct.get('ci_jugye') or []
         # ★★★v237 (지점장 지시 2026.07.25, 영구): <b>선지급률(50%형/80%형)을 세부가입현황(상세내역)에서 찾아낸다</b>.
         #   구 코드는 근거가 <b>별첨의 '주계약' 라벨(`ci_jugye`)뿐</b>이었다. 롯데(let:) 별첨엔 '주계약' 라벨이
@@ -2380,28 +2440,68 @@ def build_excel(data, out):
         #   그래서 CI 상품인데 선지급 분해가 하나도 안 됐다(v235에서 `_isci_prod`를 고쳐도 여기서 다시 막혔다).
         #   → <b>①별첨 주계약(1순위) ②세부가입현황 계약열(2순위)</b> 순으로 사망액·본체 후보를 확보한다.
         _sebu_ci = ct.get('ci_sebu') or {}
-        if _is_ci and not _cij and _sebu_ci.get('samang'):
-            # ★★★중요 — <b>사망액만</b> 채택한다. 세부가입현황의 암·뇌·심 숫자는 <b>담보군 합계</b>이지
-            #   선지급 본체가 아니다. 실측 회귀: DB생명 심장 2,400을 본체로 인정(2,400/5,000=48%→50%형)했더니
-            #   중대한 암이 <b>9,800</b>이 되어 한장보장표 일반암 9,400을 <b>초과</b>했고 상해사망도 23,100→28,100으로
-            #   부풀었다 = <b>등식1 위반</b>. 후보를 넘기지 않으면 `_bonche=None`이 되어 안전하게 [확인]큐로 간다.
-            _cij = [_sebu_ci['samang']]
-            print(f"[v237 CI·세부내역] {ct.get('company')} 사망={_sebu_ci['samang']:,} "
-                  f"(참고 담보군값 {sorted(set(_sebu_ci.get('cands') or []),reverse=True)[:6]} — 합계값이라 본체로 쓰지 않음)")
+        _cl = ct.get('ci_lines') or {}
+        _samang=0; _cand=[]
+        # ★★★★★v239 판정 근거 우선순위(영구): ①별첨 '주계약' 라벨 → ②<b>별첨 줄 단위 사망/진단 원값</b> → ③세부가입현황 사망액
+        #   ②가 핵심이다. 롯데 별첨은 주계약을 `질병사망`으로 쓰고 <b>추가특약 사망이 별도 줄</b>로 온다.
+        #   dambo는 이를 합산하므로(3,000+2,000=5,000) 비율이 깨진다 → <b>줄 단위 개별값</b>으로 봐야 80%가 나온다.
         if _is_ci and _cij:
-            _samang = max(_cij); _bonche=None; _pct=None
-            _cand=[v for v in _cij if 0<v<_samang]
-            for _ratio,_p in ((0.8,80),(0.5,50)):
-                for v in sorted(set(_cand), key=lambda x:-_cand.count(x)):
-                    # ★정본: 선지급률은 50%·80% 두 가지뿐 · 추측 금지 → 근접 허용폭은 좁게(±2%) 유지.
-                    #   (48%를 50%로 인정하면 값이 부풀려져 한장보장표가 깨진다 — 실측 확인)
-                    if _samang and abs(v/_samang-_ratio) < 0.02: _bonche=v; _pct=_p; break
-                if _bonche: break
+            _samang = max(_cij); _cand=[v for v in _cij if 0<v<_samang]
+        elif _is_ci and (_cl.get('samang') or []):
+            _samang = max(_cl['samang'])
+            _cand   = [v for v in (_cl.get('cands') or []) if 0<v<_samang]
+            print(f"[v239 CI·별첨줄] {ct.get('company')} 주계약사망={_samang:,} "
+                  f"(사망줄 {sorted(set(_cl['samang']),reverse=True)}) 진단후보={sorted(set(_cand),reverse=True)[:8]}")
+        elif _is_ci and _sebu_ci.get('samang'):
+            _samang = _sebu_ci['samang']; _cand=[]
+            print(f"[v239 CI·세부내역] {ct.get('company')} 사망={_samang:,} (담보군 합계는 본체로 쓰지 않음)")
+        if _is_ci and _samang:
+            _bonche=None; _pct=None; _samang_all=_samang; _cisrc=''
+            _slset = set(_cl.get('samang') or []) | {_samang}
+            # ★★★★★v241 <b>CI보험 찾기 4단계 체크리스트 — 영구지침(지점장 2026.07.25)</b>
+            #   지점장 원문: "1)상세 세부내역에 체크 2)[별첨]보험서비스(상품)별보장현황에서 체크
+            #   3)중대한*** 이 있는지 체크 4)똑같은 금액이 2개 이상 있다면 50%이라면 2배 계산이 사망보장,
+            #   80%형이라면 수학으로 계산해서 사망보장금과 맞는지 체크.
+            #   위의 3가지 다 체크해야 하는 <b>까다롭지만 보람된 CI보험 찾기</b>"
+            #   → ①②는 소스 2개(`ci_sebu` 세부내역 · `ci_lines` 별첨)를 <b>둘 다</b> 확보해 교차확인,
+            #     ③ '중대한OO' 담보가 있으면 <b>그것이 본체</b>(최우선),
+            #     ④ 없으면 <b>동일 금액이 2개 이상</b>인 값을 본체 후보로 삼아
+            #       <b>50%형이면 ×2, 80%형이면 ÷0.8 한 값이 별첨 사망보장금과 일치</b>하는지 검증한다.
+            _jd=[v for v in (_cl.get('jungdae') or []) if 0<v<_samang]
+            if _jd:                                   # ③ 중대한*** 최우선
+                _bonche=max(_jd); _cisrc='③중대한OO담보'
+                for _r2,_p2 in ((0.5,50),(0.8,80)):
+                    if round(_bonche/_r2) in _slset: _pct=_p2; break
+                if not _pct: _pct=50                  # 사망줄 매칭 없으면 50%형(지점장 확정)
+                _samang = round(_bonche/(_pct/100.0))
+            else:                                     # ④ 동일 금액 2개 이상 → 사망보장금 일치 검증
+                _cnt={}
+                for v in _cand: _cnt[v]=_cnt.get(v,0)+1
+                _dup=[v for v,c in _cnt.items() if c>=2]
+                for v in sorted(_dup, reverse=True):
+                    for _r2,_p2 in ((0.5,50),(0.8,80)):
+                        if round(v/_r2) in _slset:    # ★사망보장금과 수학적으로 일치할 때만 인정
+                            _bonche=v; _pct=_p2; _samang=round(v/_r2); _cisrc='④동일금액2개이상'
+                            break
+                    if _bonche: break
+                if not _bonche:                       # 폴백: 사망 대비 비율 매칭(±2%)
+                    for _ratio,_p in ((0.8,80),(0.5,50)):
+                        for v in sorted(set(_cand), key=lambda x:-_cand.count(x)):
+                            if _samang and abs(v/_samang-_ratio) < 0.02:
+                                _bonche=v; _pct=_p; _cisrc='폴백·비율매칭'; break
+                        if _bonche: break
+            if _bonche:
+                print(f"[v241 CI 4단계] {ct.get('company')} {_cisrc} → 본체 {_bonche:,} ÷ {_pct}% "
+                      f"= 사망보장 {_samang:,} · 별첨사망총액 {_samang_all:,} · 차액 {_samang_all-_samang:,}→질병사망(80세)"
+                      + ("  ✓사망줄 일치" if _samang in _slset else "  (사망줄 미매칭)"))
             _pl=[]
             if _bonche:
                 _pl=[f'중대한 암 {_bonche:,}', f'중대한 뇌졸증 {_bonche:,}', f'중대한 급성심근 {_bonche:,}']
             _ci_diag.append({'co':ct.get('company',''),'pd':ct.get('product',''),
                              'samang':_samang,'pct':_pct,'bonche':_bonche or 0,
+                             'src':_cisrc or '판정불가',
+                             'sebu':bool((ct.get('ci_sebu') or {}).get('samang')),
+                             'byul':bool((ct.get('ci_lines') or {}).get('samang')),
                              'placed':len(_pl),'placed_txt':' · '.join(_pl)})
             if not _bonche:
                 _sc = sorted(set(_sebu_ci.get('cands') or []), reverse=True)[:6]
@@ -2410,13 +2510,15 @@ def build_excel(data, out):
                 unmapped.append((col, ct.get('company',''), '[확인] CI 선지급률',
                                  0, f"세부가입현황 사망 {_samang:,} · 담보군값 {_sc} — 50%/80% 미해당. 상세내역에서 선지급형 대조 요망"))
             if _bonche:
-                for _nm in ('중대한 암','중대한 뇌졸증','중대한 급성심근'):
-                    _r=nm2r.get(_nm)
-                    if _r:
-                        ws.cell(_r,col).value=_bonche; ws.cell(_r,col).font = BL if gen else BK
-                # ★v29t 등식1: CI 사망은 dambo 합성 키로 주입 → 엑셀·PPT 분할합 동일 (셀 직접기재 폐기)
-                dambo['일반사망(종신주계약)']=dambo.get('일반사망(종신주계약)',0)+_samang
-                dambo['상해사망(종신주계약)']=dambo.get('상해사망(종신주계약)',0)+_samang   # §8.1 종신 1:1, 재해특약은 별도 합산
+                # ★v239: 담보 루프가 뒤에서 중대한OO 행에 별첨 원값을 <b>가산</b>하므로(실측 중대한 암 7,800=5,400+2,400)
+                #   여기서 기재하면 덮어써진다 → <b>예약해두고 담보 루프 뒤에서 최종 기재</b>한다.
+                _ci_fix = {'bonche':_bonche,'samang':_samang,'pct':_pct}
+                # ★★★★★v239 이중계산 차단: 별첨 '주계약' 라벨 경로(`ci_jugye`)에서만 dambo에 사망을 주입한다.
+                #   롯데 줄단위 경로(`ci_lines`)는 <b>이미 dambo에 '질병사망'이 들어 있어</b> 여기서 또 더하면
+                #   일반사망 3,000+5,000=8,000 · 상해사망 26,100(한장표 23,100 초과)로 부푼다 — 실측 확인.
+                if _cij:
+                    dambo['일반사망(종신주계약)']=dambo.get('일반사망(종신주계약)',0)+_samang
+                    dambo['상해사망(종신주계약)']=dambo.get('상해사망(종신주계약)',0)+_samang   # §8.1 종신 1:1
                 _rci=nm2r.get('중대한CI적용')   # 사망−본체=선지급 후 잔여 사망보험금(80%형=20%잔여).
                 if _rci:
                     ws.cell(_rci,col).value=_samang-_bonche; ws.cell(_rci,col).font = BL if gen else BK
@@ -2696,9 +2798,60 @@ def build_excel(data, out):
                 ws.cell(_rt,col).value='/'.join(str(x) for x in trio_acc)
                 ws.cell(_rt,col).font=BL
 
+        # ★★★★★v239 CI 본체 최종 기재 — 담보 루프가 끝난 뒤에 한다.
+        #   정본: 본체(=사망액 × 선지급률)를 <b>중대한 암·중대한 뇌졸증·중대한 급성심근 3행에 동일 금액</b>으로 기재하고,
+        #   <b>초과분은 일반 담보 행</b>에 남긴다. 중대한CI적용 = 사망 − 본체.
+        #   (지점장 지적 "각 중대한의 금액이 다 틀리다" = 구 코드가 별첨 담보 원값을 그대로 옮겨 3행이 제각각이었다)
+        if _ci_fix:
+            _bc=_ci_fix['bonche']; _sm=_ci_fix['samang']
+            for _nm,_ovf in (('중대한 암','일반암'),('중대한 뇌졸증','뇌졸증진단비'),('중대한 급성심근','급성심근경색')):
+                _r=nm2r.get(_nm)
+                if not _r: continue
+                _cur=ws.cell(_r,col).value
+                _cur=_cur if isinstance(_cur,(int,float)) else 0
+                # ★★★v239 등식1 보존: 본체는 <b>기존 값을 자르는 용도</b>이지 없는 보장을 만드는 게 아니다.
+                #   원값이 본체보다 작으면 <b>그대로 둔다</b>(실측: DB 중대한 뇌졸증 원값 1,000인데 본체 2,400을
+                #   기재하니 뇌졸증 합이 4,000→5,400으로 부풀어 한장보장표와 어긋났다).
+                if _cur <= _bc:
+                    continue
+                ws.cell(_r,col).value=_bc; ws.cell(_r,col).font = BL if gen else BK
+                _ro=nm2r.get(_ovf)                 # ★초과분은 일반 담보 행으로
+                if _ro:
+                    _o0=ws.cell(_ro,col).value
+                    ws.cell(_ro,col).value=(_o0 if isinstance(_o0,(int,float)) else 0)+(_cur-_bc)
+                    ws.cell(_ro,col).font = BL if gen else BK
+            _rci=nm2r.get('중대한CI적용')
+            if _rci:
+                ws.cell(_rci,col).value=_sm-_bc; ws.cell(_rci,col).font = BL if gen else BK
+            print(f"[v239 CI본체] {ct.get('company')} 사망{_sm:,} × {_ci_fix['pct']}% = 본체 {_bc:,} → 중대한OO 3행 동일기재 · 잔여 {_sm-_bc:,}")
+
         # ★ §8 생보 종신(만기 9999): 일반사망(종신) + 상해사망 1:1 복제
         if ct['expiry_date'].startswith('9999'):
-            r_il = nm2r.get('일반사망'); r_sh = nm2r.get('상해사망')
+            r_il = nm2r.get('일반사망'); r_sh = nm2r.get('상해사망'); r_jb = nm2r.get('질병사망(80세)')
+            # ★★★★★v239 (지점장 지적 2026.07.25 "엑셀에 사망이 안 잡혀있다"): 정본 §8.1은
+            #   <b>"일반사망 = 생명보험사 만기 9999(종신)으로 표기된 사망"</b>인데, 구 코드는
+            #   담보명이 <b>'일반사망'</b>일 때만 6행에 넣고 <b>'질병사망'</b>은 질병사망(80세) 8행에 뒀다.
+            #   → CI 종신보험(신한 라이프케어CI·DB CI종신)은 별첨 담보명이 <b>'질병사망'</b>이라
+            #   <b>일반사망 행이 통째로 비었고</b>, 그 결과 선지급률 계산 근거가 엑셀에 없었다.
+            #   ★생보 + 만기 9999면 질병사망(80세) 값을 <b>일반사망(종신) 행으로 이동</b>한다.
+            #   (질병사망 합계는 '일반사망 + 질병사망(80세)'로 보므로 <b>한장보장표 총액은 불변</b> — 실측 확인)
+            _life = any(k in (ct.get('company') or '') for k in ('생명','라이프','AIA','메트라이프','우체국','공제'))
+            if _life and r_il and r_jb:
+                _vjb = ws.cell(r_jb,col).value
+                if isinstance(_vjb,(int,float)) and _vjb:
+                    # ★★★★★v240(지점장 지시): CI 계약이면 <b>주계약 사망만 일반사망(종신)</b>으로 옮기고,
+                    #   <b>차액(추가 특약 사망)은 질병사망(80세) 행에 그대로 남긴다</b>.
+                    #   실측 신한 — 별첨 사망 10,000 중 주계약 4,000(본체 2,000÷50%) → 일반사망 4,000 / 질병사망 6,000.
+                    #   (CI가 아니거나 주계약 판별 실패면 종전대로 전액 이동 — 한장표 총액은 어느 쪽이든 불변)
+                    _mv = _vjb
+                    if _ci_fix and 0 < _ci_fix.get('samang',0) < _vjb:
+                        _mv = _ci_fix['samang']
+                    _v0 = ws.cell(r_il,col).value
+                    ws.cell(r_il,col).value = (_v0 if isinstance(_v0,(int,float)) else 0) + _mv
+                    ws.cell(r_il,col).font = BL if gen else BK
+                    ws.cell(r_jb,col).value = (_vjb-_mv) if (_vjb-_mv) > 0 else None
+                    print(f"[v240 종신사망] {ct.get('company')} 별첨사망 {_vjb:,} → 일반사망(종신) {_mv:,}"
+                          + (f" · 질병사망(80세) {_vjb-_mv:,}(추가특약)" if _vjb-_mv>0 else ""))
             v = ws.cell(r_il,col).value if r_il else None
             if isinstance(v,(int,float)) and r_sh and not isinstance(ws.cell(r_sh,col).value,(int,float)):
                 ws.cell(r_sh,col).value = v
@@ -2937,17 +3090,20 @@ def build_excel(data, out):
             try: ws2.cell(_rr,1).font = Font(bold=True, color='C00000')
             except Exception: pass
         _rr += 1
-        for _i,_h in enumerate(('회사','상품명','사망액(만원)','선지급률','본체(만원)','중대한OO 배치'),1):
+        for _i,_h in enumerate(('회사','상품명','①세부내역','②별첨','판정근거','사망보장(만원)','선지급률','본체(만원)','중대한OO 배치'),1):
             ws2.cell(_rr,_i,_h)
         for d in _cid:
             _rr += 1
-            ws2.cell(_rr,1,d.get('co','')); ws2.cell(_rr,2,str(d.get('pd',''))[:46])
-            ws2.cell(_rr,3,d.get('samang') or 0)
-            ws2.cell(_rr,4,(f"{d['pct']}%형" if d.get('pct') else '[확인] 50%/80% 미해당'))
-            ws2.cell(_rr,5,d.get('bonche') or 0)
-            ws2.cell(_rr,6,d.get('placed_txt') or '없음 — [확인]')
+            ws2.cell(_rr,1,d.get('co','')); ws2.cell(_rr,2,str(d.get('pd',''))[:40])
+            ws2.cell(_rr,3,'O' if d.get('sebu') else 'X')
+            ws2.cell(_rr,4,'O' if d.get('byul') else 'X')
+            ws2.cell(_rr,5,d.get('src',''))
+            ws2.cell(_rr,6,d.get('samang') or 0)
+            ws2.cell(_rr,7,(f"{d['pct']}%형" if d.get('pct') else '[확인] 50%/80% 미해당'))
+            ws2.cell(_rr,8,d.get('bonche') or 0)
+            ws2.cell(_rr,9,d.get('placed_txt') or '없음 — [확인]')
         _rr += 1
-        ws2.cell(_rr,1,'※ 선지급률은 [별첨]이 아니라 세부가입현황(상세내역)에서 확인한다. 50%형·80%형 두 가지뿐 — 추측 금지.')
+        ws2.cell(_rr,1,'※ CI 4단계 체크: ①상세 세부내역 ②[별첨] 보장현황 ③중대한*** 유무 ④동일금액 2개 이상 → 50%면 ×2 / 80%면 ÷0.8 이 사망보장금과 맞는지 검증. 선지급률은 50%·80% 두 가지뿐 — 추측 금지.')
     if cancer_trace:   # ★v30h 암 블록 근거 — 일반암 과다·통합암 중복 즉시 추적
         _rr += 2; ws2.cell(_rr,1,'[근거] 암 블록 기재 내역 (원 담보명 → 기재 행) — 별첨 원문 그대로')
         _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
@@ -3736,7 +3892,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v238-ci-guard-20260725',
+    return {'ok':True,'version':'v241-ci-4step-20260725',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -3745,7 +3901,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v238-ci-guard-20260725'}
+    out = {'version': 'v241-ci-4step-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
