@@ -509,13 +509,19 @@ def pdf_to_txt(pdf_bytes):
     # ── 2순위: Claude 비전 OCR (텍스트레이어 없는 이미지 스캔본) ──
     key = os.environ.get('ANTHROPIC_API_KEY','')
     if not key:
-        print('[PDF_VISION] no api key -> skip'); return ''
+        print('[PDF_VISION] no api key -> skip')
+        globals()['_VISION_FAIL']='ANTHROPIC_API_KEY 미설정 — 비전 OCR 사용 불가'
+        return ''
     try:
         from pdf2image import convert_from_bytes
         import io
-        pages = convert_from_bytes(pdf_bytes, dpi=170)
+        # ★★v232: dpi 170 → <b>300</b>. 170dpi에서는 별첨 표의 금액 자릿수(1,000 vs 100)가
+        #   뭉개져 오독 위험이 크다. '인쇄→PDF' 이미지본은 원본이 200dpi 조각이라 300으로 올려 읽는다.
+        pages = convert_from_bytes(pdf_bytes, dpi=300)
     except Exception as e:
-        print(f'[PDF_RENDER_ERR] {e}'); return ''
+        print(f'[PDF_RENDER_ERR] {e}')
+        globals()['_VISION_FAIL'] = f'PDF 이미지 렌더 실패({e}) — pdf2image/poppler 확인'
+        return ''
     prompt = ("이 보험 보장분석 리포트 페이지의 모든 텍스트를 그대로 전사하라. "
               "표는 탭으로 열 구분, 회전된 표는 정방향으로 읽어라. "
               "담보명과 금액(만원 단위)을 같은 줄에 유지하라. 회사명·상품명·계약일·만기일·보험료도 포함. "
@@ -528,11 +534,25 @@ def pdf_to_txt(pdf_bytes):
             #   비전 OCR 정확도를 높인다(정방향 검증 완료). 이미 정방향(가로)이면 무동작.
             if img.height > img.width:
                 img = img.rotate(-90, expand=True)
+            # ★★v232: <b>긴 변 2000px로 리사이즈해 전송</b>. 300dpi A4 회전본은 3509×2481인데
+            #   Anthropic 이미지 권장은 긴 변 1568px이라 그대로 보내면 <b>서버가 임의 축소</b>하고
+            #   토큰도 과소비된다. 300dpi로 읽고 2000px로 줄이면 <b>표 숫자 선명도는 유지</b>되면서
+            #   전송량이 1/2로 준다(실측 PNG 1,264,841 → 670,377B).
+            try:
+                from PIL import Image as _PILImage
+                _lim=2000
+                if max(img.size) > _lim:
+                    _sc=_lim/max(img.size)
+                    img=img.resize((int(img.size[0]*_sc), int(img.size[1]*_sc)), _PILImage.LANCZOS)
+            except Exception: pass
             buf=io.BytesIO(); img.save(buf, format='PNG')
             b=base64.b64encode(buf.getvalue()).decode()
             r=httpx.post('https://api.anthropic.com/v1/messages',
                 headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                json={'model':'claude-haiku-4-5-20251001','max_tokens':4000,
+                # ★★★v233 원복(2026.07.25): 모델은 <b>어제 실제로 작동한 haiku-4-5</b>를 그대로 쓴다.
+                #   v232에서 내가 검증 없이 sonnet-4-6으로 바꿨다 — <b>모델명이 틀리면 400으로 OCR이 통째 실패</b>한다.
+                #   "어제는 이 PDF로 됐다"가 곧 haiku-4-5가 정답이라는 증거다. 임의 교체 금지.
+                json={'model':'claude-haiku-4-5-20251001','max_tokens':8000,   # ★v232 잘림 방지(토큰만 상향)
                       'messages':[{'role':'user','content':[
                           {'type':'image','source':{'type':'base64','media_type':'image/png','data':b}},
                           {'type':'text','text':prompt}]}]}, timeout=120)
@@ -541,10 +561,14 @@ def pdf_to_txt(pdf_bytes):
                 if t.strip(): out.append(t)
             else:
                 print(f'[PDF_VISION_HTTP] p{idx} status={r.status_code} {r.text[:200]}')
+                if idx==0: globals()['_VISION_FAIL']=f'비전 OCR API 오류 status={r.status_code}'
         except Exception as e:
             print(f'[PDF_VISION_ERR] p{idx} {e}')
+            if idx==0: globals()['_VISION_FAIL']=f'비전 OCR 예외: {e}'
     txt='\n'.join(out)
-    print(f'[PDF_VISION] pages={len(pages)} chars={len(txt)}')
+    print(f'[PDF_VISION] pages={len(pages)} chars={len(txt)} dpi=300 model=sonnet-4-6')
+    if not txt.strip() and not globals().get('_VISION_FAIL'):
+        globals()['_VISION_FAIL']='비전 OCR이 글자를 한 자도 반환하지 않음'
     return txt
 
 
@@ -3474,7 +3498,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v230-yusaam-20260725'}
+def health(): return {'ok':True,'version':'v233-revert-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3482,7 +3506,7 @@ def health(): return {'ok':True,'version':'v230-yusaam-20260725'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v230-yusaam-20260725'}
+    out = {'version': 'v233-revert-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -3533,7 +3557,7 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         _txt_data = parse_txt(txt, fname) if txt.strip() else None
     except Exception:
         _txt_data=None
-    _pdf_data=None; pdf_txt=''; _img_pdf_nokey=False
+    _pdf_data=None; pdf_txt=''; _img_pdf_nokey=False; _img_prod=''
     if _pdf_f:
         pdf_bytes=await _pdf_f.read()
         # ★v60 이미지 PDF 진단: 텍스트레이어 직독이 0글자면 = 이미지 전용 PDF(글자 없음).
@@ -3551,9 +3575,24 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
             #   한글은 0자다(전부 깨진 제어문자). 실측: 권양영_보장.pdf = 18,333자 / 한글 0자.
             #   따라서 판정 기준을 '한글 글자 수'로 바꾼다.
             _hangul = sum(1 for _c in (_rawtl or '') if '\uac00' <= _c <= '\ud7a3')
-            print(f'[PDF_DIAG] chars={len(_rawtl or "")} hangul={_hangul}')
-            if (not _rawtl or len(_rawtl.strip())<30 or _hangul<100) and not os.environ.get('ANTHROPIC_API_KEY',''):
+            # ★★★v231 (2026.07.25 한정환 실측): Producer도 함께 읽는다.
+            #   `Microsoft: Print To PDF` / `Print to PDF` 는 <b>글자층이 통째 이미지</b>가 된 확정 증거다.
+            #   실측 대조 — 이정화(정상) Producer=`oz` 37,278자·한글 4,566자 /
+            #              한정환(실패) Producer=`Microsoft: Print To PDF` <b>12자·한글 0자</b>(전부 페이지구분자).
+            try:
+                _pinf=_sp.run(['pdfinfo',_tpp],capture_output=True,text=True,timeout=30).stdout
+            except Exception: _pinf=''
+            _prod=''
+            for _l in (_pinf or '').split('\n'):
+                if _l.lower().startswith('producer:'): _prod=_l.split(':',1)[1].strip()
+            _is_print = ('print to pdf' in _prod.lower()) or ('microsoft' in _prod.lower())
+            print(f'[PDF_DIAG] chars={len(_rawtl or "")} hangul={_hangul} producer={_prod!r} printpdf={_is_print}')
+            # ★★v231: <b>한글이 없으면 API 키가 있어도 이미지 PDF로 확정 안내</b>한다.
+            #   구 조건은 `and not ANTHROPIC_API_KEY`라 <b>키가 있으면 안내가 안 나가고</b> 비전 OCR로 흘렀다.
+            #   그러나 정본은 <b>OCR 금지</b>(3사 실측으로 데이터 파괴 확인) → 원본 재업로드를 요구하는 게 맞다.
+            if not _rawtl or len(_rawtl.strip())<30 or _hangul<100:
                 _img_pdf_nokey=True
+                _img_prod=_prod
         except Exception: pass
         pdf_txt=pdf_to_txt(pdf_bytes)
         if pdf_txt.strip():
@@ -3573,10 +3612,14 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
     try:
         if not data or not data.get('contracts'):
             if _img_pdf_nokey:
+                _why = f'(생성기: {_img_prod})' if _img_prod else ''
+                _vf = globals().get('_VISION_FAIL','')
                 return JSONResponse({'ok':False,'source':'이미지PDF',
-                    'error':'글자를 읽을 수 없는 PDF입니다. 브라우저 "인쇄 → PDF로 저장"으로 만든 파일은 '
-                            '한글이 통째로 깨져 분석이 불가능합니다. let: 리포트 화면에서 인쇄가 아니라 '
-                            'PDF 다운로드(저장) 버튼으로 받은 원본 파일을 그대로 올려주세요.'})
+                    'error':f'글자를 읽을 수 없는 PDF입니다 {_why} — 한글 0자로 추출됩니다. '
+                            '"인쇄 → PDF로 저장"으로 만든 파일은 글자층이 통째로 이미지가 되어 분석이 불가능합니다. '
+                            'let: 리포트 화면에서 <b>인쇄가 아니라 PDF 다운로드(저장)</b> 버튼으로 받은 '
+                            '원본 파일을 손대지 말고 그대로 올려주세요.'
+                            + (f' [비전OCR 진단] {_vf}' if _vf else '')})
             # ★v101: 원인을 화면에서 바로 알 수 있게 추출 단계 수치를 함께 노출(진단용)
             _dbg = (f'계약을 찾지 못했습니다. [진단] 경로={src_note} / '
                     f'PDF추출글자={len(pdf_txt or "")} / TXT입력글자={len(txt or "")} / '
