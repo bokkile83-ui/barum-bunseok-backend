@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v233-revert-20260725 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v238-ci-guard-20260725 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -103,6 +103,57 @@ def _bundle_adjust(path):
     return adj
 
 
+def _CI_MAX(): return 3   # ★★★v236 영구지침(지점장 확정 2026.07.25): CI 계약 표기 <b>최대 3건</b>
+
+def _ci_meta_list(path):
+    """★★★v236 (지점장 확정 2026.07.25, 영구): <b>CI 계약을 계약별로 각각 표기한다 — 최대 3건</b>.
+    구 `_ci_meta`는 `c=cols[0]`로 <b>첫 CI 열만</b> 봐서 두 번째 CI 계약을 통째로 버렸다
+    (한정환 실측: 신한 라이프케어CI + DB CI종신 2건 중 DB가 사라지고 3p가 '선지급 80%형 사망 2,000만'으로 오출력).
+    ★사망액 찾기: CI 종신은 담보명이 '일반사망'이 아니라 <b>'질병사망'</b>으로 인쇄되는 경우가 있어
+      마스터 <b>일반사망 · 질병사망(80세)</b> 두 행을 모두 보고 <b>큰 값</b>을 사망액으로 쓴다.
+      (구 코드는 사망액을 `bonche+중대한CI적용`으로 <b>역산</b>해 실제 10,000/5,000을 못 봤다.)
+    ★선지급률: 정본은 <b>50% 또는 80% 두 가지뿐 · 추측 금지</b>.
+      → 비율이 둘 중 어디에도 근접하지 않거나(±12% 초과) <b>본체 ≥ 사망액</b>이면
+      선지급형이 아니라고 보고 <b>pct=None([확인])</b>으로 둔다. 억지 반올림 금지.
+    """
+    wb=openpyxl.load_workbook(path,data_only=True); ws=wb.active
+    last=ws.max_column
+    cols=[c for c in range(3,last) if _isci_hdr(ws.cell(1,c).value)]
+    if not cols: return []
+    rows={}
+    for r in range(6,ws.max_row+1):
+        b=str(ws.cell(r,2).value or '').strip()
+        if b in ('중대한 암','중대한 뇌졸증','중대한 급성심근','중대한CI적용',
+                 '일반사망','질병사망(80세)','상해사망'): rows[b]=r
+    def _cv(k,c):
+        return _man(ws.cell(rows[k],c).value) if k in rows else 0
+    out=[]
+    for c in cols[:_CI_MAX()]:
+        hdr=[x.strip() for x in str(ws.cell(1,c).value or '').split('\n') if x.strip()]
+        company = hdr[0] if hdr else ''
+        product = hdr[1] if len(hdr)>1 else ''
+        samang = max(_cv('일반사망',c), _cv('질병사망(80세)',c))
+        bonche = max(_cv('중대한 암',c), _cv('중대한 뇌졸증',c))
+        resid  = _cv('중대한CI적용',c)
+        pct=None; raw=0
+        if samang>0 and bonche>0 and bonche<samang:
+            raw=bonche/samang*100
+            if min(abs(raw-80),abs(raw-50))<=12:      # ★50/80 근접만 인정
+                pct = 80 if abs(raw-80)<=abs(raw-50) else 50
+        out.append({'company':company,'product':product,
+                    'samang':samang,'bonche':bonche,'resid':resid,
+                    'pct':pct,'raw':round(raw),
+                    'items':[(n,_cv(n,c)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근') if _cv(n,c)>0]})
+    return out
+
+
+def _isci_hdr(t):
+    """★v235/v236 CI 상품명 판정 — main.py `_isci_prod`와 정본 1개(연속문자열 매칭 금지)."""
+    t=re.sub(r'[\s\u3000]','',str(t or ''))
+    if ('퍼펙트' in t) or ('퍼텍트' in t) or ('리빙케어' in t): return True
+    return bool(re.search(r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])', t)) and ('보험' in t or '종신' in t)
+
+
 def _ci_meta(path):
     """★v33 선지급률 정본 계산 — CI 계약 '열'에서 직접 읽는다.
     끝열 '중대한CI적용' 은 비CI 계약 일반사망이 합산돼 오염되어 있어 사용 금지.
@@ -116,7 +167,11 @@ def _ci_meta(path):
         #   영구지침(2026.07.20): 삼성생명 <퍼펙트플러스보험>·<퍼펙트통합보험>은 표기 없어도 무조건 CI.
         t=re.sub(r'[\s\u3000]','',str(t or ''))
         # ★v150 '퍼펙트' 시리즈 전체 CI(퍼펙트통합·퍼펙트플러스·퍼펙트플러스종합 등 변형 포함)
-        return any(k in t for k in ('CI보험','리빙케어','GI보험','퍼펙트','퍼텍트'))
+        # ★★★v235 (한정환 실측): 구 `'CI보험'` 연속매칭이 `CI종신보험`을 놓쳤다(CI와 '보험' 사이에
+        #   '종신' 등 수식어가 끼면 탈락). main.py `_isci_prod`와 <b>정본 1개로 통일</b>.
+        #   영문 경계 필수 — `ACCIDENT` 안의 우연한 'CI' 배제.
+        if ('퍼펙트' in t) or ('퍼텍트' in t) or ('리빙케어' in t): return True
+        return bool(re.search(r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])', t)) and ('보험' in t or '종신' in t)
     cols=[c for c in range(3,last) if _isci(ws.cell(1,c).value)]
     if not cols: return None
     rows={}
@@ -429,6 +484,8 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _ci_apply=_gv('중대한CI적용')
     _ci_bonche=max((v for _,v in _ci_pairs), default=0)
     # ★v33 선지급률: 끝열(_ci_apply)은 비CI 일반사망 오염 → CI 계약 열에서 직접 산출
+    # ★★★v236: 계약별 CI 리스트(최대 3) — 3p를 계약 수만큼 분리 표기하기 위한 원천
+    _ci_list=_ci_meta_list(xlsx_path)
     _cm=_ci_meta(xlsx_path)
     if _cm:
         _ci_bonche=_cm['bonche']; _ci_samang=_cm['samang']; _ci_rate=_cm['pct']; _ci_apply=_cm['resid']
@@ -438,12 +495,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         _ci_rate=(80 if abs(_ci_rate-80)<=abs(_ci_rate-50) else 50) if _ci_rate else 0
     ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
+        'list':_ci_list,'n_ci':len(_ci_list),
         'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
     # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
     def _ciprod1(nm):
         # ★v149 위 _isci와 동일 기준(퍼펙트플러스·퍼펙트통합 포함). 정본 1개로 통일.
         t=re.sub(r'[\s\u3000]','',str(nm or ''))
-        return any(k in t for k in ('CI','리빙케어','GI보험','퍼펙트','퍼텍트'))
+        # ★★★v235 (한정환 실측): 구 `'CI보험'` 연속매칭이 `CI종신보험`을 놓쳤다(CI와 '보험' 사이에
+        #   '종신' 등 수식어가 끼면 탈락). main.py `_isci_prod`와 <b>정본 1개로 통일</b>.
+        #   영문 경계 필수 — `ACCIDENT` 안의 우연한 'CI' 배제.
+        if ('퍼펙트' in t) or ('퍼텍트' in t) or ('리빙케어' in t): return True
+        return bool(re.search(r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])', t)) and ('보험' in t or '종신' in t)
     _ci_prod=any(_ciprod1(h.get('nm','')) for h in headers)
     # ★2026.07.12 지점장 확정: 상품명에 CI/GI/리빙케어가 없으면 '중대한OO' 담보가 있어도 진짜 CI가 아니다(가짜).
     #   → 상품명이 1순위. 상품명에 표기 없으면 무조건 none(Plan B).

@@ -614,7 +614,43 @@ def build_report_pdf(rep, out):
 
     # ── CI 선지급 분석 블록 (rep['ci'], 없으면 빈 문자열) ──
     ci=rep.get('ci',{'present':False})
-    if ci.get('present'):
+    # ★★★v236 영구지침(지점장 확정 2026.07.25): <b>CI 계약은 계약별로 각각 표기 — 최대 3건</b>.
+    #   구 코드는 CI 1건만 상정(`_ci_meta`의 `cols[0]`)해 2번째 CI를 통째로 버렸다.
+    #   ★3p는 <b>제로섬</b>(6p·7p에서 블록 추가로 페이지 파괴 실사고 2회) → <b>div를 늘리지 않는다</b>:
+    #     ・1건  = 기존 풀 블록(설명 + 선지급/잔여 split + 카드 + note) 그대로
+    #     ・2~3건 = 계약별 <b>압축 카드</b>를 `.ci2` 안에 나열(공통 note 1개만) → 블록 높이 통제
+    #   ★선지급률은 <b>50%/80% 두 가지뿐 · 추측 금지</b>(정본) → 판정 불가 시 <b>[확인]</b>로 찍고
+    #     "세부가입현황(상세내역)에서 대조" 문구를 남긴다. 억지 반올림 금지.
+    _cil = ci.get('list') or []
+    if ci.get('present') and len(_cil) >= 2:
+        _n = len(_cil)
+        _rowsci = ''
+        for _d in _cil[:3]:
+            _pc  = f'{_d["pct"]}%형' if _d.get('pct') else '[확인]'
+            _pcc = '' if _d.get('pct') else ' style="color:#8A6D1E"'
+            _it  = ' · '.join(f'{n.replace("중대한 ","중대한")} {int(v):,}' for n, v in _d.get('items', [])) or '—'
+            _rowsci += (f'<div class="cirow">'
+                        f'<div class="co">{_html.escape(str(_d["company"]))}</div>'
+                        f'<div class="pd">{_html.escape(str(_d["product"])[:30])}</div>'
+                        f'<div class="sm">사망 {int(_d["samang"]):,}</div>'
+                        f'<div class="pt"{_pcc}>선지급 {_pc}</div>'
+                        f'<div class="it">{_html.escape(_it)}</div>'
+                        f'</div>')
+        _anychk = any(not _d.get('pct') for _d in _cil[:3])
+        _note = ('■ <b>CI 선지급형이란</b> — 중대질병 진단 시 사망보험금의 일부를 미리 받아 치료비로 쓰고, 사망 시 잔여분이 지급되는 구조다. '
+                 '선지급률은 상품별로 <b>50% 또는 80%만</b> 존재한다.')
+        if _anychk:
+            _note += ('<br>★ <b>선지급 [확인] 표시 계약</b> — 사망보험금 대비 중대질병 진단금 비율이 50%·80% 어디에도 맞지 않습니다'
+                      '(선지급형이 아닌 <b>별도 진단비 특약</b> 구조일 수 있음). <b>선지급률은 [별첨]이 아니라 세부가입현황(상세내역)에서 확인된다</b> — '
+                      '상세내역을 열어 대조한 뒤 확정하세요. 추측 금지 · [확인].')
+        ci_html = (f'<div class="sect">CI 선지급 분석 <span>CRITICAL ILLNESS · PRE-PAYMENT</span>'
+                   f'<span class="cibadge">CI {_n}건</span></div>'
+                   f'<div class="ci2">'
+                   f'<div class="ci2-hd">CI 계약 <b>{_n}건</b> — 계약별 개별 분석</div>'
+                   f'{_rowsci}'
+                   f'<div class="ci2-note">{_note}</div>'
+                   f'</div>')
+    elif ci.get('present'):
         _rate=ci.get('rate',0); _rem=max(0,100-_rate)
         _cards=''.join(f'<div class="cicard"><div class="t">{_html.escape(i["t"])}</div><div class="v">{_html.escape(i["v"])}</div><div class="s">진단 시 선지급</div></div>' for i in ci['items'])
         _pre=ci.get('items',[{}])[0].get('v','')
@@ -1031,6 +1067,15 @@ body {{ color:{INK}; }}
 .scvbot b {{ color:{NAVY}; }}
 
 .ci2 {{ border:0.6pt solid {LINE}; border-radius:2mm; padding:4mm; }}
+/* ★★★v236 계약별 CI 압축 카드 — 3p 제로섬 보호를 위해 <b>새 div 계층을 만들지 않고</b>
+   `.ci2` 안에서 1계약=1행으로만 쌓는다. `.pg` 내부 display:flex 신규 금지 정본에 따라 flex 미사용. */
+.cirow {{ border:0.5pt solid {LINE}; border-left:2pt solid {NAVY}; border-radius:1.4mm;
+          padding:2.0mm 3mm; margin-top:2.2mm; background:#FBFCFD; line-height:1.34; }}
+.cirow .co {{ display:inline; font-size:10pt; font-weight:800; color:{NAVY}; }}
+.cirow .pd {{ display:inline; font-size:8.4pt; color:#5A6672; }}
+.cirow .sm {{ display:inline-block; font-size:9pt; font-weight:700; margin-left:2mm; }}
+.cirow .pt {{ display:inline-block; font-size:9pt; font-weight:800; margin-left:2mm; color:{NAVY}; }}
+.cirow .it {{ display:block; font-size:8.6pt; color:#33404C; margin-top:0.6mm; }}
 .ci2-hd {{ display:inline-block; background:{NAVY}; color:#fff; font-size:10pt; font-weight:800; padding:1.4mm 4mm; border-radius:4mm; }}
 .ci2-hd b {{ color:{GOLDL}; }}
 .ci2-desc {{ font-size:8.6pt; line-height:1.5; color:{INK}; margin:3mm 0; }}
@@ -3251,7 +3296,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v233-revert-20260725</div>'
+    _VSTAMP = '<div class="vstamp">v238-ci-guard-20260725</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
