@@ -205,7 +205,16 @@ def silson_gen(contract_date, ipv=None, product=''):
     if ym<200910:  return '1세대'
     if ym<=201703: return '2세대'
     if ym<=202106: return '3세대'
-    if ym<=202604: return '4세대'
+    # ★★★v211 (지점장 확정 2026.07.25, 영구): <b>5세대 출시 = 2026.05.06</b>
+    #   근거 = 금융위원회·금융감독원 보도자료(보도시점 2026.5.6 조간) "5월 6일부터 …
+    #   5세대 실손의료보험이 새롭게 출시·판매됩니다". 구 기재 '5세대=2026.05~'는 폐기.
+    #   판정 근거는 <b>상품명의 상품코드(YYMM) 또는 가입일자</b>(지점장 지시) — 둘 다 있으면 더 이른 쪽.
+    #   상품코드는 월까지만 있어 2605면 5세대로 보고, <b>가입일자가 있으면 일자까지</b> 따진다(5/1~5/5 = 4세대).
+    if ym<202605: return '4세대'
+    if ym==202605:
+        try: _d=int(str(contract_date)[8:10])
+        except Exception: _d=0
+        if _d and _d<=5: return '4세대'
     return '5세대'
 
 def silson_gen_desc(gen):
@@ -616,6 +625,21 @@ def _sj_rows(block):
             fixed.append((_sj_fixname(sj, sj, _SJC.get('c',''), _SJC.get('p','')), v))  # ★v98 채택 후 재정규화
         else:
             fixed.append((nm, v))
+    # ★★★v208 (지점장 확정 2026.07.25, 양*선 삼성 New내돈내삼 실측): 위에서 신정원담보명으로 갈아탄 뒤
+    #   <b>신정원담보명끼리 또 중복</b>이면 1인실·2~3인실 구분이 통째로 사라져 <b>합산 사고</b>가 난다.
+    #   실측: 상급종합 1인실 20 + 상급종합 2~3인실 5 → '상급종합병원 질병입원일당' 25 /
+    #         종합 1인실 10 + 종합 2~3인실 5 → '종합병원이하 질병입원일당' 15 → 최종 질병종합병원일당 <b>40</b>.
+    #   → 회사담보명에서 <b>병실 토큰(1인실 · 2~3인실 등)</b>만 뽑아 접미로 붙여 되살린다.
+    cnt2 = {}
+    for nm, v in fixed: cnt2[nm] = cnt2.get(nm, 0) + 1
+    if any(c > 1 for c in cnt2.values()):
+        fixed2 = []
+        for (nm, v), (onm, osj, _ov) in zip(fixed, out):
+            if cnt2.get(nm, 0) > 1:
+                _rm = re.search(r'(\d+\s*~\s*\d+\s*인실|\d+\s*인실)', str(onm))
+                if _rm: nm = '%s(%s)' % (nm, re.sub(r'\s', '', _rm.group(1)))
+            fixed2.append((nm, v))
+        fixed = fixed2
     return fixed
 
 def _sj_unwrap(block):
@@ -1114,10 +1138,12 @@ def parse_txt(txt, filename=''):
             if pc: c['pay_count'] = pc
     # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
     for c in deduped:
-        # ★v44: 3열 신정원 포맷은 총회차가 없다 → judge_renewal ④(납입==보장) 적용 금지.
-        #        parse_sinjeong이 이미 확정(3) 기준(9999=비갱신 / 상품명 '갱신'=갱신)으로 판정 완료.
-        if not c.get('_sj'):
-            c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
+        # ★★★v207 (지점장 확정 2026.07.25, 영구지침): 3열(KB·메리츠)도 judge_renewal을 그대로 탄다.
+        #   <b>납입기간 == 보장기간(가입~만기)이면 '갱신'</b>이다 — 운전자·실손도 예외 없다.
+        #   구 v44 규칙('3열은 총회차가 없으니 ④ 적용 금지')은 <b>폐기</b>. 3열에도 납입기간(20년납)과
+        #   보험기간(2026.03.27~2046.03.27)이 그대로 인쇄돼 있어 ④ 판정에 필요한 값이 다 있다.
+        #   실측 오류(양*선 KB): 삼성 운전자 20년납/20년만기 → 비갱신(오류) · New내돈내삼 54년납/54년만기 → 비갱신(오류).
+        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
         # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
         if not c['expiry_date'].startswith('9999') and c['dambo']:
             _dk=list(c['dambo'].keys())
@@ -1492,6 +1518,13 @@ def resolve_kw(raw):
     if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
     if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','경계성','제자리','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
+        # ★★★v207 (지점장 확정 2026.07.25, 양*선 메리츠 실측): '유사암(갑.기.경.제)'는 <b>진단비 전용 행</b>이다.
+        #   글자만 보고 넣던 탓에 <b>수술비·치료비·일당</b>까지 산입돼 유사암이 1,250(=100+1,000+150)으로 부풀었다.
+        #   실측 오류 2건 — '갱신형 갑상선기능항진증치료비' 100(갑상선 <b>기능</b>항진증 = 암이 아니다) ·
+        #                  '갱신형 유사암수술비' 150(수술비는 진단비 행이 아니다).
+        #   → 진단이 아닌 담보는 <b>[확인] 큐로 보낸다</b>(임의로 암수술 행에 넣으면 암수술 200→350으로 또 틀린다).
+        if has('수술') or has('치료비') or has('일당') or has('입원') or has('통원') or has('주요치료') or has('기능항진') or has('기능저하'):
+            return None, 0
         return '유사암(갑.기.경.제)',0
     if has('중대한') and has('암'): return '중대한 암',0
     if has('암') and has('진단') and no('고액','소액','표적','방사선','약물','수술','일당','양성자','세기','중입자','전이','뇌','보험료'):
@@ -1584,6 +1617,11 @@ def resolve_kw(raw):
     if has('중환자') and has('상해'): return '상해중환자실',0
     if has('중환자') and has('질병'): return '질병중환자실',0
     if (has('질병') or has('수술')) and has('일당') and has('수술'): return '질병수술일당',0
+    # ★★★v209 단독행 원칙(지점장 확정 2026.07.25, 영구): <b>'질병종합병원일당' 행은 그 이름으로 된 단독 담보 전용</b>이다.
+    #   <b>병실 등급 담보(2~3인실 · 2인실 · 3인실 등)는 이 행에 넣지 않는다</b> → [확인] 큐.
+    #   마스터에 있는 병실 행은 <b>1인실 종합병원 · 1인실 상급병원 둘뿐</b>이고, 2~3인실 전용행은 만든 적이 없다.
+    #   실측 오류(양*선 삼성 New내돈내삼): 상급 2~3인실 5 + 종합 2~3인실 5가 이 행에 들어가 10으로 찍혔다.
+    if has('인실'): return None,0
     if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
     # ★v30k 교통상해입원일당 ≠ 상해입원일당(합산 금지). 질환·부위·교통 접두 변형은 base 아님 → [확인]
     # ★병원규모(상급종합/종합) 명시 = 개별 전용행 / 일반 질병입원일당(밴드) = 합산 (지점장 2026.07.05)
@@ -2068,9 +2106,14 @@ def build_excel(data, out):
                         elif _t==1 or '심혈관' in _rn: _heart_bundle=['빈맥','심부전']
                     # 삼성·메리츠: 허혈성심장질환 6가지 → 급성심근+협심증+허혈성 (메리츠는 기존 심장질환진단Ⅰ/Ⅱ와 병존)
                     elif ('삼성' in _co) or ('메리츠' in _co):
-                        # ★★단독담보 원칙(지점장 확정 2026.07.14, 최상위): 회사담보명이 '허혈성심장질환진단비'
+                        # ★★단독담보 원칙(지점장 확정 2026.07.14, 최상위 · 2026.07.25 재확정): 회사담보명이 '허혈성심장질환진단비'
                         #   단독이면 어느 회사든 분해 금지 → '허혈성 진단비' 행 단독. 묶음 수식어가 붙은 것만 분해.
-                        _solo = bool(re.match(r'^허혈(성)?심장질환진단(비)?$', _rmn0 if False else re.sub(r'\s','',_rn)))
+                        # ★★★v206 (2026.07.25 양*선 KB리포트 실측 회귀수정): 판정이 `^...$` 완전일치라
+                        #   회사담보명 앞에 <b>'갱신형 '</b>이 붙은 '갱신형 허혈성심장질환진단비'가 _solo=False로 떨어져
+                        #   급성심근+협심증+허혈성 3행으로 <b>분해</b>됐다(실측: 협심증 1,000 신규발생 · 급성심근 2,000→3,000).
+                        #   → 접두 수식어(갱신형·비갱신형·정액·실손·무배당·[건강] 등)를 떼고 판정한다.
+                        _rn_core = re.sub(r'^(?:갱신형|비갱신형|무배당|정액|실손|\[[^\]]*\])+', '', re.sub(r'\s', '', _rn))
+                        _solo = bool(re.match(r'^허혈(성)?심장질환진단(비)?$', _rn_core))
                         if _solo: pass
                         elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['급성심근경색','협심증','허혈성 진단비']
             if _heart_bundle:
@@ -2152,14 +2195,17 @@ def build_excel(data, out):
             target_rows = nm2r_multi.get(std, [r]) if std == '2대 주요치료비' else [r]
             for tr in target_rows:
                 existing = ws.cell(tr,col).value
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금')   # ★v198 지점장 확정 2026.07.23: 교통사고처리지원금(합의금)=대표금액 1개(합산 금지)
+                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','창상봉합술','항암방사선약물','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','1인실 상급병원','1인실 종합병원')   # ★v198 합의금=대표1개 / ★v208 1인실=질병·상해 택일이라 대표(max)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
                     ws.cell(tr,col).value = (existing+amt) if isinstance(existing,(int,float)) else amt
-                # 실손(입원/통원/약값)은 갱신·비갱신 무관 항상 파랑
-                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','간병인','간병인지원일당','간호통합병동','일상배상책임')) else BK   # ★v139 간호통합병동 추가 — 같은 계약인데 간병인=파랑/간호통합=검정으로 갈리던 불일치(지점장 지적 2026.07.21)   # ★v29w 실손·간병인·일배책 항상 파랑(§10)
+                # 실손(입원/통원/약값)·일상배상책임은 갱신·비갱신 무관 항상 파랑
+                # ★★★v210 (지점장 확정 2026.07.25, 영구): <b>간병인 · 간호통합병동 2가지는 '항상 파랑' 강제 폐기</b>.
+                #   보험료 · 가입년일 · 만기일자 · 총납입기간(=계약 갱신 판정) 또는 담보명의 <b>[갱신] 표기</b>에 따라
+                #   갱신=파랑 / 비갱신=검정으로 <b>일반 담보와 동일하게</b> 칠한다(구 v139 '간병인 계열 3행 무조건 파랑' 폐기).
+                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','일상배상책임')) else BK
                 # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
                 _WS_STD = ('암주요치료비','하이클래스(암)','2대 주요치료비','산정특례뇌혈관','산정특례심장','일반암','뇌혈관진단비','뇌졸증진단비','급성심근경색','허혈성 진단비')
                 if std in _WS_STD:
@@ -2231,6 +2277,18 @@ def build_excel(data, out):
 
     # ★v29t (지점장 확정 2026.07.02): CI 존재 시 '중대한CI적용' 행 = CI 잔여액 + 비CI 계약의 일반사망 동일액 —
     #   CI 적용/미적용 각각의 총 사망액이 양쪽 행에서 가로합산되도록.
+    # ★★★v208 1인실 상급병원 가산(지점장 확정 2026.07.25, 영구):
+    #   <b>1인실 상급병원 = 상급종합 1인실 + 종합 1인실</b>(상급종합에 입원하면 종합병원이하 담보도 함께 나온다).
+    #   <b>1인실 종합병원 = 종합 1인실만</b>. 질병·상해는 택일 지급이라 담보 기재 단계에서 대표(max)로 잡힌다.
+    #   실측(양*선 삼성 New내돈내삼): 상급 20 · 종합 10 → 상급행 30 / 종합행 10.
+    #   ★계약 루프 <b>바깥</b>에서 1회만 돌린다(루프 안에 넣으면 계약 수만큼 중복 가산 — 실측 60 오류).
+    _r1s = nm2r.get('1인실 상급병원'); _r1j = nm2r.get('1인실 종합병원')
+    if _r1s and _r1j:
+        for _c in range(3, 3 + n_ct):
+            _vs = ws.cell(_r1s, _c).value; _vj = ws.cell(_r1j, _c).value
+            if isinstance(_vs, (int, float)) and isinstance(_vj, (int, float)):
+                ws.cell(_r1s, _c).value = _vs + _vj
+
     _rci_all=None; _ril_all=None
     for _rr in range(6, ws.max_row+1):
         _b=str(ws.cell(_rr,2).value or '').strip()
@@ -2507,7 +2565,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None):
 
     # ★PPT 색: 하나라도 갱신=파랑 / 전부 비갱신=검정 / 실손 항상 파랑 (미가입은 값 미기재라 해당없음)
     _BLUE=RGBColor(0x00,0x00,0xFF); _BLACK=RGBColor(0x00,0x00,0x00)
-    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','간병인','간병인지원일당','간호통합병동','일상배상책임'}  # ★v139 간병인 계열 3행 전부 무조건 파랑(불일치 차단)
+    _silson={'입원','통원','약값','약','MRI','도수치료','비급여주사','일상배상책임'}  # ★v210 간병인·간호통합병동 강제 파랑 폐기(엑셀과 동일 규칙) — 구 v139 3행 무조건 파랑 폐기
     # 담보별 '최대 기여 계약'의 갱신여부로 색 결정 → 합산 시 전부 파랑 쏠림 방지(엑셀 혼합과 일치)
     _dom={}  # std -> (max_amt, gen)
     for ct in contracts:
@@ -3097,7 +3155,7 @@ document.addEventListener("DOMContentLoaded",function(){
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
 
 @app.get('/health')
-def health(): return {'ok':True,'version':'v205-reflowfix-20260725'}
+def health(): return {'ok':True,'version':'v211-gen5date-20260725'}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -3105,7 +3163,7 @@ def health(): return {'ok':True,'version':'v205-reflowfix-20260725'}
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v205-reflowfix-20260725'}
+    out = {'version': 'v211-gen5date-20260725'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

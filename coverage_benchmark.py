@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v205-reflowfix-20260725 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v211-gen5date-20260725 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -333,7 +333,10 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             have=sum(1 for b,v in cat_total(grp_rows,cat)[2] if v>0 and any(k in b for k in spec['keys']))
             detail_map[cat]={'have':f'{have}개','rec':f"{spec['need']}개",'unit':'개'}
         status='full' if p>=70 else ('part' if p>=40 else 'gap')
-        blue = cat in ('실손·일배책','입원·일당')  # 실손·간병인·일배책 항상 파랑
+        # ★★★v210 (지점장 확정 2026.07.25, 영구): <b>'입원·일당' 카테고리 강제 파랑 폐기</b>.
+        #   간병인 · 간호통합병동을 포함한 일당 계열은 보험료 · 가입년일 · 만기일자 · 총납입기간(=계약 갱신 판정)
+        #   또는 담보명 [갱신] 표기에 따라 <b>엑셀 글자색(gen_map)을 그대로 따라간다</b>. 실손 · 일배책만 항상 파랑.
+        blue = cat in ('실손·일배책',)
         _disp=getattr(load_excel,'_disp',{})   # ★v30h 슬래시 원문 우선
         # ★★★v147 (지점장 지적 2026.07.21): 파랑이 <b>카테고리 단위</b>로만 걸려 있어
         #   갱신 담보인 '허혈성 진단비'(엑셀 글자색 0070C0)가 보장현황에서 검정으로 나왔다.
@@ -615,7 +618,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             elif dt<=date(2015,12,31): sub='2-2'
             else: sub='2-3'
         elif dt<=date(2021,6,30): g=3
-        elif dt<=date(2026,4,30): g=4      # ★v200 main.py silson_gen과 통일(5세대=2026.05~)
+        elif dt<=date(2026,5,5): g=4       # ★v211 5세대 출시=2026.05.06(금융위·금감원 보도자료 2026.5.6) — main.py silson_gen과 통일
         else: g=5
         dstr=(f'{y}.{mo:02d}' if _bycode else (f'{y}.{mo:02d}.{d:02d}' if m.group(3) else f'{y}.{mo:02d}'))
         return {'gen':g,'sub':sub,'date':dstr,'src':('code' if _bycode else 'join')}
