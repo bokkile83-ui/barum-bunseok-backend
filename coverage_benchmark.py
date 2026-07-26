@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v250-np3gen-20260726 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v252-ws78-20260726 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -650,7 +650,15 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _ciamt={}
     if ci.get('status')=='ci':
         _cvz=_gv('중대한 뇌졸증'); _cam=_gv('중대한 급성심근'); _cca=_gv('중대한 암')
+        # ★★★v251(지점장 지시 2026.07.26): <b>6p 담보별 보장범위에 CI 뇌출혈이 기재되지 않던 결함</b>.
+        #   구 코드는 <b>'중대한 뇌졸증'만</b> 읽어서, v242로 축이 뇌출혈이 된 CI(신한·DB생명 실측)는
+        #   그 행이 0이라 <b>hem·infarct 둘 다 CI 칩이 안 찍혔다</b>.
+        #   → '중대한 뇌출혈'도 읽어 <b>뇌출혈 행(hem)</b>에 기재한다.
+        #   ・중대한 뇌졸증 = 출혈+경색 포괄 → hem·infarct 둘 다 (기존 유지)
+        #   ・중대한 뇌출혈 = 출혈 전용   → hem 만 (뇌경색은 미보장이므로 infarct에 넣지 않는다)
+        _chm=_gv('중대한 뇌출혈')
         if _cvz: _ciamt['hem']=_fmt(_cvz); _ciamt['infarct']=_fmt(_cvz)
+        if _chm: _ciamt['hem']=_fmt(_chm)
         if _cam: _ciamt['ami']=_fmt(_cam)
         if _cca: _ciamt['__cancer__']=_fmt(_cca)
     rep['ci_amounts']=_ciamt
