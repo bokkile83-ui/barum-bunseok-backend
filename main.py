@@ -208,10 +208,25 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     if pay_y and cov_y and pay_y == cov_y: return '갱신'
     return '비갱신'
 
-def silson_gen(contract_date, ipv=None, product=''):
+def _has_nonpay3(dambo):
+    """★★★v250 (지점장 확정 2026.07.26): <b>3대비급여 특약이 분리돼 있으면 실손 세대 하한 = 3세대</b>.
+    근거 = 도수치료·체외충격파·증식치료 / 비급여 주사제 / 비급여 MRI 검사 이 3특약은
+    <b>2017.04 3세대(착한실손)부터 신설</b>됐다 — 2세대 이하 계약에는 구조적으로 존재할 수 없다.
+    ★실측(한O환 DB생명 CI종신1701): 상품코드 1701(2017.01) 때문에 <b>2세대로 오판</b>됐으나
+      별첨에 도수350·주사제250·MRI300이 <b>분리 표기</b> → <b>3세대가 정답</b>(가입일 2018.03.30과도 일치).
+    ★상품코드는 <b>CI종신 주계약 코드</b>일 뿐 실손 특약 코드가 아니다 — 그래서 하한이 필요하다."""
+    for k in (dambo or {}):
+        n = re.sub(r'\s', '', str(k)).upper()
+        if ('도수' in n) or ('체외충격파' in n) or ('증식치료' in n): return True
+        if ('비급여' in n) and (('주사' in n) or ('MRI' in n)): return True
+        if ('MRI' in n) and (('검사' in n) or ('비급여' in n)): return True
+    return False
+
+def silson_gen(contract_date, ipv=None, product='', nonpay3=False):
     """실손 세대 판별 — 5세대=2026.05부터(정본 확정). 4세대=2021.07~2026.04. 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인].
     ★v29v: 상품명 연도코드(YYMM 4자리, 예 '1804'=2018.04 출시)가 있으면 판정일로 우선 사용 —
-    갱신 재가입일(계약일)로 세대를 오판(예 2018 실손을 4세대로)하는 것 차단."""
+    갱신 재가입일(계약일)로 세대를 오판(예 2018 실손을 4세대로)하는 것 차단.
+    ★★★v250: `nonpay3=True`(3대비급여 특약 분리)면 <b>3세대 하한 고정</b>(지점장 확정 2026.07.26)."""
     if ipv==3000: return '1세대(구형)'
     try: ym=int(str(contract_date)[:4])*100+int(str(contract_date)[5:7])
     except: ym=0
@@ -220,6 +235,10 @@ def silson_gen(contract_date, ipv=None, product=''):
         _pym=2000*100+int(_pm.group(1))*100+int(_pm.group(2))
         ym=_pym if not ym else min(ym,_pym)
     if not ym: return ''
+    # ★★★v250 3대비급여 하한 — 상품코드가 실손이 아닌 주계약 코드일 때의 오판을 막는다.
+    if nonpay3 and ym < 201704:
+        print(f'[v250 3대비급여] 실손 세대 하한 고정 {ym} → 201704(3세대) · 근거=도수/비급여주사/비급여MRI 특약 분리')
+        ym = 201704
     if ym<200910:  return '1세대'
     if ym<=201703: return '2세대'
     if ym<=202106: return '3세대'
@@ -2432,7 +2451,7 @@ def _fix_silson(contracts):
         _ym=None
         _mm=re.search(r'(\d{4})\.(\d{2})',cd)
         if _mm: _ym=int(_mm.group(1))*100+int(_mm.group(2))
-        _gen=silson_gen(cd, ipw, prod)
+        _gen=silson_gen(cd, ipw, prod, _has_nonpay3(d))   # ★v250 3대비급여 하한(d=이 계약 dambo)
         if _gen in ('4세대','5세대') or (_ym and _ym>=202107):
             # ★★★★★v246 영구지침(지점장 확정 2026.07.25): <b>실손은 [별첨] 상품별 보장현황이 답이다</b>.
             #   구 코드는 `_tw<=20`이 아니면 <b>20으로 덮어썼다</b> → 별첨 명시값이 20 초과면 잘렸다.
@@ -2629,6 +2648,15 @@ def build_excel(data, out):
                 if not _ax:
                     _ax = '뇌출혈' if any(a=='뇌출혈' for a,_ in _br) else ('뇌졸증' if _br else None)
                 ct['ci_brain'] = {'axis':_ax, 'rows':_br}
+                # ★★★v249 (2026.07.26 한정환 KB 3열 실측): 확인사항 CI 진단표의 '중대한OO 배치' 문구가
+                #   <b>'중대한 뇌졸증'으로 하드코딩</b>돼 있었다(2606행 `_pl`). 본표(엑셀 34행)는 v242로
+                #   축을 따라 <b>중대한 뇌출혈</b>에 기재되는데 <b>진단표만 뇌졸증</b>이라 산출물끼리 어긋났다.
+                #   실측 — 신한 본체 2,000·DB생명 본체 2,400 둘 다 축=뇌출혈인데 진단표는 '중대한 뇌졸증' 출력.
+                #   `_pl` 생성이 축 판별보다 <b>앞</b>이라 생긴 순서 결함 → 여기서 배치 문구를 최종 갱신한다.
+                if _ci_diag:
+                    _bxl = '중대한 뇌출혈' if _ax == '뇌출혈' else '중대한 뇌졸증'
+                    _ci_diag[-1]['placed_txt'] = ' · '.join(
+                        [f'중대한 암 {_bonche:,}', f'{_bxl} {_bonche:,}', f'중대한 급성심근 {_bonche:,}'])
                 print(f"[v242 CI뇌축] {ct.get('company')} 본체 {_bonche:,} → <b>중대한 {_ax or '뇌졸증(기본)'}</b>"
                       f"  (별첨 뇌담보 {_br})")
                 # ★★★★★v239 이중계산 차단: 별첨 '주계약' 라벨 경로(`ci_jugye`)에서만 dambo에 사망을 주입한다.
@@ -3007,13 +3035,13 @@ def build_excel(data, out):
             def _ym(d):
                 try: return int(str(d)[:4])*100+int(str(d)[5:7])
                 except: return 0
-            _g4=(silson_gen(ct.get('contract_date',''), None, ct.get('product','')) in ('4세대','5세대'))   # ★v29v 상품코드 반영
+            _g4=(silson_gen(ct.get('contract_date',''), None, ct.get('product',''), _has_nonpay3(ct.get('dambo'))) in ('4세대','5세대'))   # ★v29v 상품코드 반영
             _guhy=(_ipv==3000)                            # 입원한도 3,000=구형
             _twc=ws.cell(_rtw,col).value if _rtw else None
             _ykc=ws.cell(_ryk,col).value if _ryk else None
             # ★v215: 통원 디폴트 판정에도 1세대(가입일 기준)를 포함한다. 구 코드는 입원한도 3,000(_guhy)일
             #   때만 10을 넣어, 가입일이 2009.09 이전인데 입원한도가 3,000이 아닌 1세대는 25/20이 됐다.
-            _g1a=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))).startswith('1세대')
+            _g1a=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))).startswith('1세대')
             if _rtw and not isinstance(_twc,(int,float)):  # ① 별첨 통원 없을 때만 디폴트
                 _twd = 10 if (_guhy or _g1a) else (20 if _g4 else (20 if _life else 25))
                 ws.cell(_rtw,col).value=_twd; ws.cell(_rtw,col).font=BL
@@ -3024,7 +3052,7 @@ def build_excel(data, out):
             #     (지점장 지적 "보장진단서 오류"의 원인). → `.startswith('1세대')`로 수정.
             #     ②구 코드는 '별첨에 약값이 없을 때만' 0으로 뒀다 → 별첨에 약값이 인쇄돼 있으면 그대로 들어갔다.
             #     → 1세대는 <b>별첨 명시값이 있어도 약값 칸을 지운다</b>(강제).
-            _g1=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))).startswith('1세대')   # ★v215 (구 v41 == '1세대' 버그)
+            _g1=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))).startswith('1세대')   # ★v215 (구 v41 == '1세대' 버그)
             if _ryk and _g1:                               # ★v215 1세대=약값 없음(강제 미기재)
                 if isinstance(_ykc,(int,float)) and _ykc:
                     silson_trace.append((ct['company'], ct.get('contract_date',''), '1세대 약값삭제', f'{_ykc}→0'))
@@ -3033,7 +3061,7 @@ def build_excel(data, out):
                 _ykd = 0 if _g4 else (10 if _life else 5)
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
             # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
-            _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''))
+            _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))
             _pm0=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])(0[1-9]|1[0-2])(?!\d)', str(ct.get('product','')))
             silson_trace.append((ct['company'], ct.get('contract_date',''), (_pm0.group(0) if _pm0 else '없음'), _sg or '판정불가'))   # ★v29z 세대 근거
             if _sg:
@@ -3665,7 +3693,8 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
     실손가입일=min((c['contract_date'] for c in 실손_cts), default='___________')
     _실손상품=next((c.get('product','') for c in 실손_cts if c['contract_date']==실손가입일), '')
-    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품)   # ★실손 세대 자동판별(상품명 연도코드 반영)
+    _np3=any(_has_nonpay3(c.get('dambo')) for c in 실손_cts)   # ★v250 3대비급여 하한
+    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품, _np3)   # ★실손 세대 자동판별(상품명 연도코드 반영)
     by['TextBox 59'].text_frame.word_wrap=False
     by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
     by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
@@ -4049,7 +4078,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v248-yusa-20260726',
+    return {'ok':True,'version':'v250-np3gen-20260726',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4058,7 +4087,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v248-yusa-20260726'}
+    out = {'version': 'v250-np3gen-20260726'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
