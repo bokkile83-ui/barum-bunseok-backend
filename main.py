@@ -968,7 +968,7 @@ def _sj_rows(block):
         if v is None:
             out.append(('[확인] 금액판독불가 ' + name, sj, 0)); continue
         name = _sj_fixname(name, sj, _SJC.get('c',''), _SJC.get('p',''))
-        if '특정암진단' in re.sub(r'\\s','',sj) and '유사암' not in sj:
+        if '특정암진단' in re.sub(r'\s','',sj) and '유사암' not in sj:   # ★v257 `r'\\s'` 오타 수정(공백 제거가 죽어 있었다)
             # ★v197(2026.07.23): 신정원 '특정암진단' = 고액암 행으로 확정(구 v98 F5 [확인]큐 폐기)
             # ★★★★★v247 (KB 3열 실측): <b>회사담보명이 유사암 4종이면 리네임하지 않는다</b>.
             #   정본 = <b>담보명 정본은 회사담보명</b>(신정원담보명은 분류 참고용)이다.
@@ -1435,7 +1435,12 @@ def parse_txt(txt, filename=''):
     merged = {}
     order = []
     for c in contracts:
-        key = (re.sub(r'\\s','',c['company']), c['premium'], re.sub(r'\\s','',c['product'])[:12])   # ★v30p 날짜 OCR 깨짐 대비 병합키
+        # ★★★★★v257(2026.07.27 실측): 이 병합키의 공백 제거가 <b>한 글자도 작동하지 않았다</b>.
+        #   `r'\\s'`는 <b>역슬래시+s 문자</b>를 찾는 패턴이라 공백이 그대로 남는다.
+        #   → pdftotext -layout이 같은 계약을 페이지마다 `KB손해보험` / `KB 손해보험`으로 뱉으면
+        #     키가 달라져 <b>한 계약이 두 열로 쪼개지고, 담보가 페이지별로 절반씩</b> 나뉜다.
+        #     별첨 뒷부분에 몰린 <b>심장 묶음·수술비·치료비</b>가 통째로 빠지는 원인이다.
+        key = (re.sub(r'\s','',c['company']), c['premium'], re.sub(r'\s','',c['product'])[:12])   # ★v30p 날짜 OCR 깨짐 대비 병합키
         if key not in merged:
             merged[key] = c; order.append(key)
         else:
@@ -2060,6 +2065,17 @@ def resolve_kw(raw):
     # ★v29q-1 '암진단비(…유사암들…)' = 암진단비 키워드 우선 → 일반암 (괄호 유사암 구성 무시)
     if has('소아암') and no('제외'): return None,0   # ★v30q 다발성소아암 등 = 일반암과 별개 담보 → [확인](합산 금지, 지점장 2026.07.03)
     if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
+    # ★★★v255(장O경 KB 실측 2026.07.26): KB 별첨 3열은 담보명이 접혀 <b>'진단비'가 잘려 나간다</b>.
+    #   실측 — `암진단비(유사암제외)` → <b>`암(유사암제외)`</b>로 절단되어 매핑 실패(None) → 일반암 1,000 누락.
+    #   → '암' + '유사암제외'가 함께 있으면(수술·일당·치료비 계열이 아닌 한) <b>일반암</b>으로 본다.
+    if (has('암') and has('유사암제외')
+            and no('수술','일당','입원','통원','치료비','방사선','약물','표적','양성자','세기','중입자','보험료')):
+        return '일반암',0
+    # ★v255: `비급여(전액본인부담 포함) 암` — KB 비급여 암주요치료비의 절단형.
+    #   '주요치료비'가 잘려도 <b>비급여 + 암</b>이면 하이클래스(암) 행이 정본(§8.2 ③).
+    if (has('비급여') and has('암') and (has('전액본인부담') or has('전액본인'))
+            and no('유사암','수술','일당','입원','통원','방사선','약물','표적','양성자','세기','중입자')):
+        return '하이클래스(암)',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
     # ★★★★★v248 (지점장 확정 2026.07.26): <b>"유사암이라고 기재된 것만 해라"</b>
     #   → 유사암 행에는 담보명에 <b>'유사암'(또는 '소액암')이 명시된 담보만</b> 넣는다.
@@ -4146,7 +4162,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v254-cijugye-20260726',
+    return {'ok':True,'version':'v257-mergekey-20260727',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4155,7 +4171,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v254-cijugye-20260726'}
+    out = {'version': 'v257-mergekey-20260727'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -4168,6 +4184,26 @@ def diag():
     out['api_key'] = bool(os.environ.get('ANTHROPIC_API_KEY', ''))
     out['pdf2image'] = _mod_ok('pdf2image')
     out['weasyprint'] = _mod_ok('weasyprint')
+    # ★★★v256(2026.07.27): <b>배포 파일 실물 점검</b> — "절반만 나온다"의 최다 원인은
+    #   코드가 아니라 <b>파일 누락</b>이다. ppt_form.pptx가 없으면 build_ppt가 조용히 False를
+    #   반환해 <b>엑셀만 나오고 PPT 2종이 통째로 사라진다</b>(에러 메시지 없음).
+    #   → 서버에 실제로 있는 파일과 바이트수를 그대로 노출한다. 로그를 못 봐도 한 번에 판별된다.
+    _need = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
+             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml',
+             'ppt_form.pptx','chiryo_form.pptx','requirements.txt']
+    _files = {}
+    for _fn in _need:
+        _p = os.path.join(HERE, _fn)
+        try:
+            _files[_fn] = os.path.getsize(_p) if os.path.exists(_p) else '★없음'
+        except Exception as _e:
+            _files[_fn] = 'ERR ' + str(_e)[:40]
+    out['files'] = _files
+    out['missing'] = [k for k, v in _files.items() if v == '★없음']
+    try:
+        _wb = openpyxl.load_workbook(TPL_XL); out['master_rows'] = _wb.active.max_row
+    except Exception as _e:
+        out['master_rows'] = 'ERR ' + str(_e)[:60]
     return out
 
 def _mod_ok(m):
