@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v241-ci-4step-20260725 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v248-yusa-20260726 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -123,7 +123,8 @@ def _ci_meta_list(path):
     rows={}
     for r in range(6,ws.max_row+1):
         b=str(ws.cell(r,2).value or '').strip()
-        if b in ('중대한 암','중대한 뇌졸증','중대한 급성심근','중대한CI적용',
+        # ★★★v243(지점장 지시): CI 뇌 축은 <b>뇌졸증 or 뇌출혈</b> — '중대한 뇌출혈'도 반드시 본다.
+        if b in ('중대한 암','중대한 뇌졸증','중대한 뇌출혈','중대한 급성심근','중대한CI적용',
                  '일반사망','질병사망(80세)','상해사망'): rows[b]=r
     def _cv(k,c):
         return _man(ws.cell(rows[k],c).value) if k in rows else 0
@@ -132,8 +133,11 @@ def _ci_meta_list(path):
         hdr=[x.strip() for x in str(ws.cell(1,c).value or '').split('\n') if x.strip()]
         company = hdr[0] if hdr else ''
         product = hdr[1] if len(hdr)>1 else ''
-        samang = max(_cv('일반사망',c), _cv('질병사망(80세)',c))
-        bonche = max(_cv('중대한 암',c), _cv('중대한 뇌졸증',c))
+        # ★★★v243: <b>일반사망(종신)=CI 주계약</b>이 있으면 그것이 사망보장이다.
+        #   구 max()는 신한(일반사망 4,000 / 질병사망 6,000=추가특약)에서 <b>6,000</b>을 골라
+        #   2,000/6,000=33% → [확인]이 됐다. 주계약 4,000이면 50%형이 정확히 맞는다.
+        samang = _cv('일반사망',c) or _cv('질병사망(80세)',c)
+        bonche = max(_cv('중대한 암',c), _cv('중대한 뇌졸증',c), _cv('중대한 뇌출혈',c))
         resid  = _cv('중대한CI적용',c)
         pct=None; raw=0
         if samang>0 and bonche>0 and bonche<samang:
@@ -143,15 +147,18 @@ def _ci_meta_list(path):
         out.append({'company':company,'product':product,
                     'samang':samang,'bonche':bonche,'resid':resid,
                     'pct':pct,'raw':round(raw),
-                    'items':[(n,_cv(n,c)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근') if _cv(n,c)>0]})
+                    'items':[(n,_cv(n,c)) for n in ('중대한 암','중대한 뇌졸증','중대한 뇌출혈','중대한 급성심근') if _cv(n,c)>0]})
     return out
 
 
 def _isci_hdr(t):
     """★v235/v236 CI 상품명 판정 — main.py `_isci_prod`와 정본 1개(연속문자열 매칭 금지)."""
-    t=re.sub(r'[\s\u3000]','',str(t or ''))
+    _t0=str(t or ''); t=re.sub(r'[\s\u3000]','',_t0)
     if ('퍼펙트' in t) or ('퍼텍트' in t) or ('리빙케어' in t): return True
-    return bool(re.search(r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])', t)) and ('보험' in t or '종신' in t)
+    # ★v246: 공백 제거 시 회사 영문약자와 CI가 붙는다(`무배당 KB CI종신보험`→`무배당KBCI종신보험`)
+    #   → 영문 경계에 걸려 False가 됐다. <b>공백제거본과 원문 둘 다</b> 검사한다.
+    _p=r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])'
+    return bool(re.search(_p, t) or re.search(_p, _t0)) and ('보험' in t or '종신' in t)
 
 
 def _ci_meta(path):
@@ -177,10 +184,10 @@ def _ci_meta(path):
     rows={}
     for r in range(6,ws.max_row+1):
         b=str(ws.cell(r,2).value or '').strip()
-        if b in ('중대한 암','중대한 뇌졸증','중대한 급성심근','중대한CI적용'): rows[b]=r
+        if b in ('중대한 암','중대한 뇌졸증','중대한 뇌출혈','중대한 급성심근','중대한CI적용'): rows[b]=r
     c=cols[0]
     # 본체 = 중대한 암·뇌졸증 (급성심근은 CI추가보장특약이 가산돼 오염)
-    pure=[_man(ws.cell(rows[k],c).value) for k in ('중대한 암','중대한 뇌졸증') if k in rows]
+    pure=[_man(ws.cell(rows[k],c).value) for k in ('중대한 암','중대한 뇌졸증','중대한 뇌출혈') if k in rows]
     pure=[v for v in pure if v>0]
     if not pure: return None
     bonche=max(pure)
@@ -468,7 +475,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         return 0
     # ★P5 상단 핵심 진단비 3종(지점장 지시): 뇌출혈·뇌졸증·급성심근경색
     def _fv(v): return _fmt(v) if v and v>0 else '미가입'
-    _p5=[('뇌출혈진단비',_gv('뇌출혈진단비') or _gv('중대한 뇌졸증')),
+    _p5=[('뇌출혈진단비',_gv('뇌출혈진단비') or _gv('중대한 뇌출혈') or _gv('중대한 뇌졸증')),
          ('뇌졸증진단비',_gv('뇌졸증진단비') or _gv('뇌혈관진단비')),
          ('급성심근경색',_gv('급성심근경색') or _gv('중대한 급성심근') or _gv('허혈성 진단비')),
          ('뇌혈관진단비',_gv('뇌혈관진단비')),
@@ -479,7 +486,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _sb=_gv('산정특례뇌혈관'); _sh=_gv('산정특례심장')
     if _sb>0: spec_amounts['brain']=_fv(_sb)
     if _sh>0: spec_amounts['heart']=_fv(_sh)
-    _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 급성심근')]
+    _ci_pairs=[(n,_gv(n)) for n in ('중대한 암','중대한 뇌졸증','중대한 뇌출혈','중대한 급성심근')]
     _ci_pairs=[(n,v) for n,v in _ci_pairs if v>0]
     _ci_apply=_gv('중대한CI적용')
     _ci_bonche=max((v for _,v in _ci_pairs), default=0)
@@ -496,7 +503,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     ci={'present':bool(_ci_pairs or _ci_apply>0),'samang':_fmt(_ci_samang),
         'rate':_ci_rate,'residual':_fmt(_ci_apply),
         'list':_ci_list,'n_ci':len(_ci_list),
-        'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
+        'items':[{'t':{'중대한 암':'ci암진단비','중대한 뇌졸증':'ci뇌졸증','중대한 급성심근':'ci급성심근경색','중대한 뇌출혈':'ci뇌출혈'}.get(n,n),'v':_fmt(v)} for n,v in _ci_pairs]}
     # ★CI 3상태 판정(2026.07.07 지점장): 상품명 CI/GI/리빙케어 + 중대한OO담보 값
     def _ciprod1(nm):
         # ★v149 위 _isci와 동일 기준(퍼펙트플러스·퍼펙트통합 포함). 정본 1개로 통일.

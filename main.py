@@ -54,7 +54,14 @@ def _isci_prod(p):
     #   = 연속 문자열 매칭의 함정. 세 번째 반복이다.
     #   → <b>CI·GI를 영문 경계로 잡고 '보험' 요구를 분리</b>한다.
     #   ★영문 경계 필수: `ACCIDENT`·`SPECIAL` 같은 영문 상품명 안의 우연한 'CI'를 배제해야 한다.
-    if re.search(r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])', t) and ('보험' in t or '종신' in t): return True
+    # ★★★★★v246 실사고(지점장 "롯데나 KB나 동일하다" 확인 중 발견):
+    #   <b>공백을 지우면 회사 영문약자와 CI가 붙어버린다</b> — `무배당 KB CI종신보험` → `무배당KBCI종신보험`
+    #   → 'BCI'가 되어 <b>영문 경계 조건에 걸려 False</b>가 됐다(KB·DB·LG 등 영문약자 전부 해당).
+    #   → <b>공백 제거본과 원문 둘 다</b> 검사한다. 원문에선 'KB CI종신보험'이라 CI 앞이 공백 → 정상 매칭.
+    #   ★`ACCIDENT`는 원문에서도 CI 앞뒤가 영문이라 여전히 배제된다.
+    t0 = str(p or '')
+    _pat = r'(?<![A-Za-z])(CI|GI)(?![A-Za-z])'
+    if (re.search(_pat, t) or re.search(_pat, t0)) and ('보험' in t or '종신' in t): return True
     return False
 
 
@@ -620,6 +627,8 @@ _CI_SELFTEST = [
     ('무）라이프케어CI 종신보험',                            True),   # ★v235 실사고
     ('（무） 변액유니버셜 세번받을수있는 CI종신보험（1701）',   True),   # ★v235 실사고
     ('무배당교보큰사랑 CI 보험',                             True),
+    ('무배당 KB CI종신보험',                                True),   # ★v246 실사고: 'KBCI'로 붙어 탈락하던 것
+    ('(무)DB CI종신보험',                                   True),   # 영문약자 + CI
     ('(무)교보GI종신보험',                                  True),
     ('CI간편종신보험',                                      True),
     ('무배당 삼성생명 퍼펙트통합보험(프리미엄,無)표준',        True),   # 퍼펙트 시리즈
@@ -670,6 +679,28 @@ def ci_rate_selftest():
     return bad
 
 
+# ★★★★★v246 실손 소스 자가진단 — <b>별첨 명시값이 살아남는지</b>를 매 배포마다 검사한다.
+#   (별첨 정본 원칙이 캡·기본값에 덮이는 사고를 코드로 차단)
+_SILSON_SELFTEST = [
+    # (세대, 별첨 통원 명시값, 기대 통원) — None = 별첨에 없음(기본값 적용)
+    ('3세대',  25, 25),   # ★DB생명 실사고: 별첨 25가 한장표 30에 덮이면 안 된다
+    ('3세대',  30, 30),   # 별첨이 30이면 30
+    ('4세대',  25, 25),   # ★구 코드는 20으로 캡했다 → 별첨 우선으로 수정
+    ('4세대',  None, 20), # 별첨에 없으면 기본 20
+    ('1세대',  None, 10), # 1세대 기본 10
+]
+
+def silson_selftest():
+    """별첨 명시값 우선 원칙이 지켜지는지 검사."""
+    bad=[]
+    for gen, tw, exp in _SILSON_SELFTEST:
+        if gen in ('4세대','5세대'): got = tw if tw else 20
+        elif gen.startswith('1세대'): got = tw if tw else 10
+        else: got = tw if tw else 25
+        if got != exp: bad.append(f'{gen}/별첨{tw} → {got}(기대 {exp})')
+    return bad
+
+
 def ci_selftest():
     """CI 판정 4곳이 <b>같은 로직</b>인지 + 케이스 16건을 통과하는지 검사. 실패 목록을 돌려준다."""
     bad=[]
@@ -688,6 +719,7 @@ def ci_selftest():
     except Exception:
         pass
     bad += ['[선지급률] '+x for x in ci_rate_selftest()]
+    bad += ['[실손소스] '+x for x in silson_selftest()]
     return bad
 
 
@@ -887,7 +919,15 @@ def _sj_rows(block):
         name = _sj_fixname(name, sj, _SJC.get('c',''), _SJC.get('p',''))
         if '특정암진단' in re.sub(r'\\s','',sj) and '유사암' not in sj:
             # ★v197(2026.07.23): 신정원 '특정암진단' = 고액암 행으로 확정(구 v98 F5 [확인]큐 폐기)
-            if '특정암' not in name:
+            # ★★★★★v247 (KB 3열 실측): <b>회사담보명이 유사암 4종이면 리네임하지 않는다</b>.
+            #   정본 = <b>담보명 정본은 회사담보명</b>(신정원담보명은 분류 참고용)이다.
+            #   실측 — 메리츠 `갱신형 갑상선암(초기제외)진단비` · `갱신형 갑상선암 및 기타피부암의 전이암…진단비`가
+            #   신정원명 '특정암진단' 때문에 <b>고액암 2,000</b>으로 갔다(KB 전체보장현황 고액암은 1,000=라이나뿐).
+            #   유사암 4종(갑상선·갑상샘·기타피부·경계성·제자리·상피내)은 <b>유사암 행</b>이 정답이다.
+            _nm0 = re.sub(r'\s', '', str(name))
+            if any(k in _nm0 for k in ('갑상선','갑상샘','기타피부','경계성','제자리','상피내')):
+                pass
+            elif '특정암' not in name:
                 name = '특정암진단비(' + name + ')'
         out.append((name, sj, v))
     # ★v44 실측보정: DB 실손처럼 회사담보명이 '질병(전체질병을 의미)' 하나로 3행(입원·통원·약값)이 겹치는 경우
@@ -936,6 +976,11 @@ def _sj_unwrap(block):
     return out
 
 def parse_sinjeong(lines):
+    # ★v244: 3열도 세부가입현황(상세내역)을 CI 선지급률 2순위 근거로 쓴다(2열과 동일).
+    try:
+        _SJ_SEBU = {re.sub(r'\s','',k): v for k, v in (parse_sebu_ci(lines) or {}).items()}
+    except Exception:
+        _SJ_SEBU = {}
     """KB·메리츠 3열 리포트 → contracts[]. 표 구조 동일 → 파서 1개로 두 채널 커버."""
     lines = _sj_unwrap(lines)          # ★v98 F1: 가운뎃점 줄바꿈 복원
     n = len(lines)
@@ -989,9 +1034,29 @@ def parse_sinjeong(lines):
         if is_excluded(company, product, contract_date, expiry_date, pay_period, pay_count): continue   # 제외 5~7종
 
         dambo = {}
+        # ★★★★★v244 (지점장 질문 "CI 대응 다 된 거냐" → 점검 중 발견): <b>3열(KB·메리츠) 경로에
+        #   `ci_lines`가 통째로 빠져 있었다</b>. 정본 "규칙 하나 고치면 2열·3열 두 경로를 반드시 다 돌린다"를
+        #   내가 지키지 않아, v239~v243의 CI 수정(줄단위 사망·중대한OO 본체·뇌 축 판별)이 <b>롯데에만</b> 적용됐다.
+        #   → KB·메리츠 CI 계약은 여전히 <b>무조건 '중대한 뇌졸증'</b>으로 가서 같은 오류가 재발한다.
+        # ★★★★★v246 (지점장 확정 2026.07.25): "<b>이건 롯데나 KB나 동일하다</b>" — CI 4단계·뇌 축·사망 배정은
+        #   2열(롯데 [별첨] 보험서비스(상품)별 보장현황)과 3열(<b>KB '상품별 가입담보상세'</b>) <b>동일 적용</b>.
+        #   ★3열은 앵커 줄(`| 가입일자 : |`)에서 <b>회사명 칸에 상품명이 붙어 오는 경우</b>가 있고
+        #     상품명은 그 <b>다음 줄</b>에서 뽑는다 → <b>회사명·상품명 둘 다</b> CI 판정에 넣는다(한쪽만 보면 놓친다).
+        _sjci = _isci_prod(product) or _isci_prod(company)
+        ci_lines = {'samang': [], 'cands': [], 'jungdae': [], 'brain': []}
         for nm, v in _sj_rows(block):
             if re.search(r'납입면제|납입지원', nm): continue
             dambo[nm] = dambo.get(nm, 0) + v
+            if _sjci and 0 < v <= 200000:
+                _n2 = re.sub(r'\s', '', str(nm))
+                if re.search(r'사망', _n2) and not re.search(r'후유|장해', _n2):
+                    ci_lines['samang'].append(v)
+                elif _n2.startswith('중대한'):
+                    ci_lines['jungdae'].append(v)
+                elif re.search(r'진단', _n2):
+                    ci_lines['cands'].append(v)
+                    if '뇌출혈' in _n2:   ci_lines['brain'].append(('뇌출혈', v))
+                    elif '뇌졸' in _n2:   ci_lines['brain'].append(('뇌졸증', v))
         if not dambo: continue
 
         # ★확정(3) 갱신판정: 만기 9999(종신)=비갱신 / 상품명 '갱신' 표기=갱신 / 그 외는 후처리 담보절반 규칙
@@ -1001,7 +1066,7 @@ def parse_sinjeong(lines):
         else: renewal = '비갱신'
 
         ci_jugye = []
-        if _isci_prod(product):
+        if _sjci:
             for bl in block:
                 for m2 in re.finditer(r'(?<![_가-힣])주계약\s+([\d,]{3,})', bl):
                     try:
@@ -1011,7 +1076,8 @@ def parse_sinjeong(lines):
         contracts.append({'company': company, 'product': product, 'contract_date': contract_date,
                           'expiry_date': expiry_date, 'premium': premium, 'pay_period': pay_period,
                           'pay_count': '', 'renewal': renewal, 'dambo': dambo,
-                          'ci_jugye': ci_jugye, 'ci_extra': [], 'ipwon': [], '_sj': True})
+                          'ci_jugye': ci_jugye, 'ci_extra': [], 'ipwon': [], '_sj': True,
+                          'ci_lines': ci_lines, 'ci_sebu': (_SJ_SEBU or {}).get(re.sub(r'\s','',str(company or '')))})
     print(f'[SINJEONG] 3열 포맷 감지 → 계약 {len(contracts)}건 / 담보 {sum(len(c["dambo"]) for c in contracts)}개')
     return contracts
 
@@ -1238,7 +1304,7 @@ def parse_txt(txt, filename=''):
         #   [확인]으로 빠졌다. <b>주계약 3,000으로 보면 2,400/3,000 = 정확히 80%</b>(뇌출혈·급성심근·암·특정질병·치매가
         #   전부 2,400으로 일치) → <b>80%형이 정답</b>이었다.
         #   → CI 계약은 <b>접힘 복원된 줄에서 사망 줄과 담보 줄의 원값을 따로 수집</b>한다.
-        ci_lines={'samang':[], 'cands':[], 'jungdae':[]}
+        ci_lines={'samang':[], 'cands':[], 'jungdae':[], 'brain':[]}
         # ★★★v234: 별첨이 <b>다열</b>이면 원본 줄은 `재해장해특약  6,000   입원  3` 처럼
         #   두 담보가 한 줄에 붙어 있어 `^입원 …$` 앵커가 절대 맞지 않는다(실측 메트라이프 9p).
         #   → rule_extract와 <b>동일한 접힘 복원</b>을 거친 1담보 1줄 형태에서 스캔한다.
@@ -1267,6 +1333,10 @@ def parse_txt(txt, filename=''):
                             ci_lines['jungdae'].append(_vc)
                         elif re.search(r'진단', _nmc):     # 본체 후보 = 진단비 담보만
                             ci_lines['cands'].append(_vc)
+                            # ★★★★★v242: 뇌 담보는 <b>축(뇌출혈/뇌졸증)과 금액</b>을 따로 기록한다.
+                            #   CI 본체를 '중대한 뇌졸증'에 넣을지 '중대한 뇌출혈'에 넣을지 판별하기 위함.
+                            if '뇌출혈' in _nmc:   ci_lines['brain'].append(('뇌출혈', _vc))
+                            elif '뇌졸' in _nmc:   ci_lines['brain'].append(('뇌졸증', _vc))
             _m=re.match(r'^\s*(입원특약|입원)\s+([\d,]+)\s*$', _bl.strip())
             if _m:
                 _ipkey=_m.group(1)
@@ -1718,6 +1788,17 @@ def _rmn(s):
     return 0
 
 def resolve_kw(raw):
+    # ★★★★★v247 (KB 3열 실측): <b>담보명 괄호 안의 장기 나열 글자에 걸려 오분류</b>되는 것을 최상단에서 차단한다.
+    #   실측 — `갱신형 5대질환(심장,뇌혈관,신부전,간,폐 질환)수술비(연간1회한)[관혈]` 500×2가
+    #   괄호 속 <b>'뇌혈관'</b> 글자 때문에 <b>뇌혈관수술비</b>로 가서 1,000 → <b>2,000</b>이 됐다(KB 표기 1,000).
+    #   이 담보의 신정원담보명은 '특정질병수술' = <b>별개 담보</b>이므로 [확인]큐가 정답이다.
+    #   ★기존 교훈("태그에 '뇌혈관' 글자 금지 — has('뇌혈관')를 먼저 검사해 오인한다")과 같은 뿌리.
+    try:
+        _r0 = re.sub(r'\s', '', str(raw or ''))
+        if re.search(r'\d+\s*대질환', _r0) and '수술' in _r0:
+            return None, 0
+    except Exception:
+        pass
     if str(raw).startswith('[확인]'): return None, 0   # ★v98 확인큐 항목은 표준행 매핑 금지(중복합산 차단)
     # ★★★v146 (지점장 확정 2026.07.21): 흥국화재 10억통장(플래티넘 건강 리셋월렛II)은
     #   <b>엑셀·보장분석 PPT에 표기 금지</b>. 보장진단서 7p 카드에만 표기한다.
@@ -1826,6 +1907,11 @@ def resolve_kw(raw):
             # ★XXXX상해수술비(질병/상해수술비 앞 어떤 접두든) = 별개 아님→[확인](지점장 2026.07.05)
             _core_s = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)
             _core_s2 = _core_s.strip().replace(' ','')
+            # ★★★★★v247 (2026.07.25 KB 3열 실측): <b>3열(KB·메리츠)은 회사담보명 앞에 '갱신형'이 붙는다</b>
+            #   (`갱신형 상해수술비` · `갱신형 질병수술비`). `startswith('상해수술비')` 검사라 <b>전부 탈락</b>해
+            #   상해수술비 200 · 질병수술비 30이 <b>통째로 [확인]큐로 사라졌다</b>(KB 전체보장현황 대조 실측).
+            #   → 판정 전에 <b>'갱신형'·'비갱신형' 접두어를 제거</b>한다. 2열(롯데)엔 이 접두어가 없어 영향 없다.
+            _core_s2 = re.sub(r'^(?:비)?갱신형', '', _core_s2)
             _core_s2 = re.sub(r'^재해상해', '상해', _core_s2)   # 재해상해=상해(중복 정리)
             _core_s2 = re.sub(r'^재해(입원)?수술', r'상해\1수술', _core_s2)  # ★v65 재해수술비·재해입원수술비=상해수술비(지점장 2026.07.15, '입원' 낀 변형도 포함)
             _is_pure_s = _core_s2.startswith('상해수술비') or _core_s2.startswith('상해입원수술비')
@@ -1837,6 +1923,7 @@ def resolve_kw(raw):
             #   ★XXXX질병수술비(어떤 접두든) = 별개→[확인](지점장 2026.07.05) → [확인]
             _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # 접두 수식어 괄호 제거
             _core_strip = _core.strip().replace(' ','')
+            _core_strip = re.sub(r'^(?:비)?갱신형', '', _core_strip)   # ★v247 3열 '갱신형' 접두어 제거(KB 실측)
             # 순수 질병수술비/질병입원수술비로 시작해야 함(자XXXX 등 한글 접두 배제)
             _is_pure_q = _core_strip.startswith('질병수술비') or _core_strip.startswith('질병입원수술비')
             _excl_ok = not any(k in _core for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
@@ -1885,7 +1972,12 @@ def resolve_kw(raw):
         return '2대 주요치료비',0
     if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 잔여 진단후 치료지원금(암·뇌·심 아닌) = 진단비 아님 → [확인]
     if has('유사암') and has('주요치료'): return None,0   # ★v30 유사암 주요치료비 = 전용행 없음 → [확인]
-    if has('갑상선암') and has('진단') and no('주요치료','수술','일당'): return '유사암(갑.기.경.제)',0   # ★v30a 갑상선암(통합·초기·중증)=유사암(소액암)
+    # ★★★★★v248 (지점장 확정 2026.07.26 "유사암이라고 기재된 것만 해라"):
+    #   구 v30a 규칙 <b>`갑상선암 + 진단 → 유사암`은 폐기</b>한다. 담보명에 '유사암'(또는 '소액암')이
+    #   명시되지 않으면 <b>[확인]큐</b>로 보내 신인이 수기 확인한다(추측 금지).
+    #   실측 — 메리츠 `갱신형 갑상선암(초기제외)진단비` 1,000이 유사암에 산입돼 3,000이 됐으나
+    #   KB 전체보장현황 유사암은 1,000(`갱신형 유사암진단비`뿐)이다.
+    if has('갑상선암') and has('진단') and no('유사암','소액암','주요치료','수술','일당'): return None,0
     if has('통합') and has('전이암') and no('주요치료','수술','통원','일당'): return '통합전이암',0   # ★v30z 통합전이암=개별담보·대표금액 1개(§8.2, PPT·보장설명지 반드시 반영)
     if has('전이암') and no('통합'): return '__무시__',0   # ★v30z 전이암진단비 단독=무시(지점장 2026.07.05)
     if has('암') and has('주요치료') and no('순환계','2대','유사암'): return '암주요치료비',0   # ★v30 '암주요치료' 명시가 비급여 수식어보다 우선
@@ -1910,12 +2002,15 @@ def resolve_kw(raw):
     if has('소아암') and no('제외'): return None,0   # ★v30q 다발성소아암 등 = 일반암과 별개 담보 → [확인](합산 금지, 지점장 2026.07.03)
     if re.search(r'암\s*진단비\s*[(（]', r) and no('유사암제외'): return '일반암',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
-    # ★★★v230 (지점장 지시 2026.07.25 "유사암 적힌 것만 넣어라"): <b>유사암 4종의 동의어를 전부 포함</b>한다.
-    #   유사암(갑.기.경.제) = <b>갑</b>상선암(=갑상<b>샘</b>암) · <b>기</b>타피부암 · <b>경</b>계성종양 · <b>제</b>자리암(=<b>상피내</b>암).
-    #   구 리스트에는 '갑상선'·'제자리'만 있어 <b>'갑상샘'·'상피내' 표기가 통째로 [확인]큐로 빠졌다</b>.
-    #   실측(이정화 우체국): `갑상샘암치료보험금` 75 · `상피내암치료보험금` 75가 누락돼 우체국 유사암이
-    #   300(정답) 대신 150이 됐다 → 동의어 추가 후 <b>300</b>, 전체 합계 <b>900</b>으로 한장보장표와 일치.
-    if any(k in n for k in [_norm(x) for x in ['유사암','소액암','갑상선','갑상샘','경계성','제자리','상피내','기타피부','양성뇌종양']]) and no('유사암제외','유사암 제외'):
+    # ★★★★★v248 (지점장 확정 2026.07.26): <b>"유사암이라고 기재된 것만 해라"</b>
+    #   → 유사암 행에는 담보명에 <b>'유사암'(또는 '소액암')이 명시된 담보만</b> 넣는다.
+    #   구 v230의 <b>동의어 자동산입</b>(갑상선·갑상샘·기타피부·경계성·제자리·상피내·양성뇌종양)은 <b>폐기</b>.
+    #   ★실측 근거(양*선 KB 3열): 메리츠 `갱신형 갑상선암(초기제외)진단비` 1,000 ·
+    #     `갱신형 갑상선암 및 기타피부암의 전이암(림프절 등 전이제외)진단비` 1,000이 유사암에 산입돼
+    #     <b>3,000</b>이 됐으나 KB 전체보장현황 유사암은 <b>1,000</b>(= `갱신형 유사암진단비`뿐)이다.
+    #   ★★<b>영향 고지</b>: 이 규칙으로 이정화 우체국 `갑상샘암치료보험금`·`상피내암치료보험금`은
+    #     <b>[확인]큐</b>로 간다(구 v230에선 유사암에 산입돼 한장표 900과 일치했다). 추측 대신 신인 수기 확인.
+    if any(k in n for k in [_norm(x) for x in ['유사암','소액암']]) and no('유사암제외','유사암 제외'):
         # ★★★v207 (지점장 확정 2026.07.25, 양*선 메리츠 실측): '유사암(갑.기.경.제)'는 <b>진단비 전용 행</b>이다.
         #   글자만 보고 넣던 탓에 <b>수술비·치료비·일당</b>까지 산입돼 유사암이 1,250(=100+1,000+150)으로 부풀었다.
         #   실측 오류 2건 — '갱신형 갑상선기능항진증치료비' 100(갑상선 <b>기능</b>항진증 = 암이 아니다) ·
@@ -2297,8 +2392,15 @@ def llm_resolve(raw_names, std_list):
         return {x:{'std':None,'jong':0,'note':''} for x in raw_names}
 
 def _fix_silson(contracts):
-    """★정본 §8.8 실손 후처리 (2026.07.05 지점장): 손보/생보 구분 + 입원=명시값 최우선(1세대 1억·5천·3천 다 유지) + 통원·약값 규칙.
-    우선순위 ①보장표 명시값 ②입원한도 3000짜리 구형=통원10·약5(입원 3000유지) ③회사유형(손보 통원25·약5 / 생보 통원20·약10) ④4세대(통원20·약0)."""
+    """★★★★★실손 정본 §8.8 — <b>실손은 [별첨] 보험서비스(상품)별 보장현황이 답이다</b>(지점장 확정 2026.07.25, 영구).
+    ★<b>소스 우선순위는 실손에도 그대로</b>: ①<b>[별첨] 상품별 보장현황 = 정본</b> ②세부가입현황 ③한장보장표(검산).
+      한장보장표·세부가입현황이 별첨과 다르면 <b>별첨을 따른다</b>. 실측 확정 사례 —
+      DB생명 CI종신(3세대) 별첨 `외래의료비 <b>25</b>` vs 한장표·세부내역 30 → <b>25가 정답</b>
+      (3세대 실손 외래 한도가 25만원). 구 [확인] 대기 항목은 이로써 <b>확정·해소</b>.
+    ★<b>입원·통원 = 별첨 명시값 최우선</b>(1세대 1억·5천·3천 다 유지, 절대 뭉개지 말 것).
+      명시값이 없을 때만 세대·회사유형 기본값을 넣는다: 1세대 통원10 / 손보 통원25·약5 / 생보 통원20·약10 / 4·5세대 통원20.
+    ★<b>약값은 예외 2건</b> — 1세대와 4·5세대는 외래+약제가 <b>통원 한 한도로 통합</b>이라
+      약값 담보 자체가 없다 → <b>별첨에 값이 있어도 0으로 삭제</b>(세대 규칙이 별첨보다 우선하는 유일한 항목)."""
     for c in contracts:
         d=c.get('dambo',{})
         co=str(c.get('company','') or '')
@@ -2332,8 +2434,11 @@ def _fix_silson(contracts):
         if _mm: _ym=int(_mm.group(1))*100+int(_mm.group(2))
         _gen=silson_gen(cd, ipw, prod)
         if _gen in ('4세대','5세대') or (_ym and _ym>=202107):
-            _set('통원', _tw if (_tw and _tw<=20) else 20)
-            _set('약값', 0)
+            # ★★★★★v246 영구지침(지점장 확정 2026.07.25): <b>실손은 [별첨] 상품별 보장현황이 답이다</b>.
+            #   구 코드는 `_tw<=20`이 아니면 <b>20으로 덮어썼다</b> → 별첨 명시값이 20 초과면 잘렸다.
+            #   → <b>별첨 명시값이 있으면 그대로 쓰고</b>, 없을 때만 기본값 20을 넣는다.
+            _set('통원', _tw if _tw else 20)
+            _set('약값', 0)     # ★4·5세대는 통원+약제 통합 → 약값 담보 자체가 없다(별첨에 있어도 삭제)
             continue
         # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>실손 1세대 = 입원 3,000 / 통원 10 / 약값 0</b>.
         #   1세대는 외래+약제가 <b>통원 한 한도로 통합</b>이라 약값 담보 자체가 없다.
@@ -2431,7 +2536,9 @@ def build_excel(data, out):
 
         # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
         #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
-        _is_ci = _isci_prod(ct.get('product'))
+        # ★v246: 3열(KB)은 회사명 칸에 상품명이 붙어 오는 경우가 있다 → <b>회사명·상품명 둘 다</b> 본다.
+        #   "이건 롯데나 KB나 동일하다"(지점장 확정) — 2열·3열이 같은 CI 규칙을 타야 한다.
+        _is_ci = _isci_prod(ct.get('product')) or _isci_prod(ct.get('company'))
         _ci_fix = None      # ★v239 CI 본체 최종 기재 예약(담보 루프 뒤에서 적용)
         _cij = ct.get('ci_jugye') or []
         # ★★★v237 (지점장 지시 2026.07.25, 영구): <b>선지급률(50%형/80%형)을 세부가입현황(상세내역)에서 찾아낸다</b>.
@@ -2513,6 +2620,17 @@ def build_excel(data, out):
                 # ★v239: 담보 루프가 뒤에서 중대한OO 행에 별첨 원값을 <b>가산</b>하므로(실측 중대한 암 7,800=5,400+2,400)
                 #   여기서 기재하면 덮어써진다 → <b>예약해두고 담보 루프 뒤에서 최종 기재</b>한다.
                 _ci_fix = {'bonche':_bonche,'samang':_samang,'pct':_pct}
+                # ★★★★★v242 뇌 축 판별: ①본체 금액과 <b>정확히 일치</b>하는 뇌 담보의 축 ②없으면 <b>뇌출혈 우선</b>
+                #   (지점장: "무조건 뇌졸증이 아니라는거다 뇌졸증 or 뇌출혈이다")
+                _br = (ct.get('ci_lines') or {}).get('brain') or []
+                _ax = None
+                for _a,_v in _br:
+                    if _v == _bonche: _ax = _a; break
+                if not _ax:
+                    _ax = '뇌출혈' if any(a=='뇌출혈' for a,_ in _br) else ('뇌졸증' if _br else None)
+                ct['ci_brain'] = {'axis':_ax, 'rows':_br}
+                print(f"[v242 CI뇌축] {ct.get('company')} 본체 {_bonche:,} → <b>중대한 {_ax or '뇌졸증(기본)'}</b>"
+                      f"  (별첨 뇌담보 {_br})")
                 # ★★★★★v239 이중계산 차단: 별첨 '주계약' 라벨 경로(`ci_jugye`)에서만 dambo에 사망을 주입한다.
                 #   롯데 줄단위 경로(`ci_lines`)는 <b>이미 dambo에 '질병사망'이 들어 있어</b> 여기서 또 더하면
                 #   일반사망 3,000+5,000=8,000 · 상해사망 26,100(한장표 23,100 초과)로 부푼다 — 실측 확인.
@@ -2804,22 +2922,45 @@ def build_excel(data, out):
         #   (지점장 지적 "각 중대한의 금액이 다 틀리다" = 구 코드가 별첨 담보 원값을 그대로 옮겨 3행이 제각각이었다)
         if _ci_fix:
             _bc=_ci_fix['bonche']; _sm=_ci_fix['samang']
-            for _nm,_ovf in (('중대한 암','일반암'),('중대한 뇌졸증','뇌졸증진단비'),('중대한 급성심근','급성심근경색')):
-                _r=nm2r.get(_nm)
+            # ★★★★★v242 영구지침(지점장 지시 2026.07.25): <b>CI 본체의 뇌 축은 '뇌졸증'이 아니라 '뇌졸증 or 뇌출혈'</b>이다.
+            #   지점장 원문 — "정답은 <b>중대한뇌출혈</b>이다. 왜냐면 사망이 3천에 중대한뇌출혈은 2400 + 추가로 뇌출혈 가입이고.
+            #   <b>신한도 뇌출혈</b>이다. … <b>무조건 뇌졸증이 아니라는거다 뇌졸증 or 뇌출혈이다.</b>"
+            #   ★실측 근거 — DB 별첨 `뇌출혈진단 2,400`이 <b>본체와 정확히 일치</b>(나머지 1,000+1,000은 추가 가입분),
+            #     신한은 뇌 담보가 `뇌출혈진단`뿐. 구 코드는 무조건 '중대한 뇌졸증'에 넣어 <b>축이 통째로 틀렸다</b>.
+            #   ★판별: 그 계약 별첨의 <b>뇌 담보 이름</b>을 본다 — ①본체 금액과 일치하는 담보의 축 ②없으면 뇌출혈 우선.
+            _braw = ct.get('ci_brain') or {}
+            _bax = '중대한 뇌출혈' if _braw.get('axis')=='뇌출혈' else '중대한 뇌졸증'
+            _bovf = '뇌출혈진단비' if _braw.get('axis')=='뇌출혈' else '뇌졸증진단비'
+            for _nm,_ovf in (('중대한 암','일반암'),(_bax,_bovf),('중대한 급성심근','급성심근경색')):
+                _r=nm2r.get(_nm); _ro=nm2r.get(_ovf)
                 if not _r: continue
-                _cur=ws.cell(_r,col).value
-                _cur=_cur if isinstance(_cur,(int,float)) else 0
-                # ★★★v239 등식1 보존: 본체는 <b>기존 값을 자르는 용도</b>이지 없는 보장을 만드는 게 아니다.
-                #   원값이 본체보다 작으면 <b>그대로 둔다</b>(실측: DB 중대한 뇌졸증 원값 1,000인데 본체 2,400을
-                #   기재하니 뇌졸증 합이 4,000→5,400으로 부풀어 한장보장표와 어긋났다).
-                if _cur <= _bc:
-                    continue
-                ws.cell(_r,col).value=_bc; ws.cell(_r,col).font = BL if gen else BK
-                _ro=nm2r.get(_ovf)                 # ★초과분은 일반 담보 행으로
+                # ★★★★★v242: <b>중대한 행 + 일반 행을 합쳐서</b> 본체만큼 중대한 행에, 나머지를 일반 행에 배분한다.
+                #   구 코드는 <b>중대한 행의 원값만</b> 봤다 → 뇌출혈처럼 값이 <b>일반 행(뇌출혈진단비)에만</b> 있으면
+                #   `원값 0 ≤ 본체`라 스킵되어 <b>중대한 뇌출혈이 0으로 남았다</b>(지점장 지적 "이번에도 틀렸다").
+                #   ★합계를 보존하므로 한장보장표(중대한OO + 일반 합산)는 어느 쪽이든 불변이다.
+                _v1=ws.cell(_r,col).value;  _v1=_v1 if isinstance(_v1,(int,float)) else 0
+                _v2=ws.cell(_ro,col).value if _ro else 0; _v2=_v2 if isinstance(_v2,(int,float)) else 0
+                _tot=_v1+_v2
+                if _tot<=0: continue
+                _put=min(_bc,_tot)                 # 중대한 행 = 본체(합계를 넘지 않음)
+                ws.cell(_r,col).value=_put; ws.cell(_r,col).font = BL if gen else BK
                 if _ro:
-                    _o0=ws.cell(_ro,col).value
-                    ws.cell(_ro,col).value=(_o0 if isinstance(_o0,(int,float)) else 0)+(_cur-_bc)
-                    ws.cell(_ro,col).font = BL if gen else BK
+                    _rest=_tot-_put
+                    ws.cell(_ro,col).value=(_rest if _rest>0 else None)
+                    if _rest>0: ws.cell(_ro,col).font = BL if gen else BK
+            # ★★★v242: <b>축이 아닌 쪽의 '중대한' 뇌 행은 일반 행으로 되돌린다</b>.
+            #   CI 상품이라 resolve가 `뇌졸중진단`을 '중대한 뇌졸증'으로 리네임했는데, 축이 뇌출혈로 확정되면
+            #   그 값은 <b>CI 본체가 아니라 별도 일반 담보</b>다(실측 DB 뇌졸중진단 1,000). 합계는 보존된다.
+            _other = ('중대한 뇌졸증','뇌졸증진단비') if _bax=='중대한 뇌출혈' else ('중대한 뇌출혈','뇌출혈진단비')
+            _ro2=nm2r.get(_other[0]); _rn2=nm2r.get(_other[1])
+            if _ro2 and _rn2:
+                _vo=ws.cell(_ro2,col).value
+                if isinstance(_vo,(int,float)) and _vo:
+                    _vn=ws.cell(_rn2,col).value
+                    ws.cell(_rn2,col).value=(_vn if isinstance(_vn,(int,float)) else 0)+_vo
+                    ws.cell(_rn2,col).font = BL if gen else BK
+                    ws.cell(_ro2,col).value=None
+                    print(f"[v242 축정리] {ct.get('company')} {_other[0]} {_vo:,} → {_other[1]} (축={_bax})")
             _rci=nm2r.get('중대한CI적용')
             if _rci:
                 ws.cell(_rci,col).value=_sm-_bc; ws.cell(_rci,col).font = BL if gen else BK
@@ -2914,20 +3055,30 @@ def build_excel(data, out):
             if isinstance(_vs, (int, float)) and isinstance(_vj, (int, float)):
                 ws.cell(_r1s, _c).value = _vs + _vj
 
-    _rci_all=None; _ril_all=None
+    _rci_all=None; _ril_all=None; _rjb_all=None
     for _rr in range(6, ws.max_row+1):
         _b=str(ws.cell(_rr,2).value or '').strip()
         if _b=='중대한CI적용': _rci_all=_rr
         if _b=='일반사망': _ril_all=_rr
+        if _b=='질병사망(80세)': _rjb_all=_rr
     _has_ci=any(_isci_prod(c.get('product')) for c in contracts)
-    if _has_ci and _rci_all and _ril_all:
+    # ★★★★★v245 영구지침(지점장 확정 2026.07.25): <b>비CI 계약의 사망은 '질병사망(80세)' 행에 넣는다</b>.
+    #   지점장 원문 = "(비CI 일반사망이 중대한CI적용에 찍히는 v29t 규칙) <b>그건 질병사망(80)에 넣어라</b>".
+    #   구 v29t는 비CI 계약의 일반사망을 <b>'중대한CI적용'에 복사</b>했다(실측 메트라이프 6,000).
+    #   → <b>'일반사망(종신)' 행은 CI 주계약 사망 전용</b>, 비CI 종신 사망은 질병사망(80세)로 옮긴다.
+    #   ★한장보장표 질병사망 = 일반사망 + 질병사망(80세) 합이므로 <b>총액은 불변</b>(실측 22,000 유지).
+    if _has_ci and _ril_all and _rjb_all:
         for _ix,_c in enumerate(contracts):
             _cl=3+_ix
-            _isci=_isci_prod(_c.get('product'))
+            if _isci_prod(_c.get('product')): continue
             _ilv=ws.cell(_ril_all,_cl).value
-            if (not _isci) and isinstance(_ilv,(int,float)) and not isinstance(ws.cell(_rci_all,_cl).value,(int,float)):
-                ws.cell(_rci_all,_cl).value=_ilv
-                ws.cell(_rci_all,_cl).font=ws.cell(_ril_all,_cl).font.copy()
+            if isinstance(_ilv,(int,float)) and _ilv:
+                _j0=ws.cell(_rjb_all,_cl).value
+                ws.cell(_rjb_all,_cl).value=(_j0 if isinstance(_j0,(int,float)) else 0)+_ilv
+                ws.cell(_rjb_all,_cl).font=ws.cell(_ril_all,_cl).font.copy()
+                ws.cell(_ril_all,_cl).value=None
+                if _rci_all: ws.cell(_rci_all,_cl).value=None   # ★구 v29t 복사분 제거
+                print(f"[v245 비CI사망] {_c.get('company')} 일반사망 {_ilv:,} → 질병사망(80세) (중대한CI적용 복사 제거)")
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
@@ -3604,7 +3755,13 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
             r2=_ciRunCls(el2,p); r2.text=f'+{exv:,}'
             try: r2.font.color.rgb=(_BLUE if _gensum.get(extra_std) else _BLACK)
             except: pass
-    _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
+    # ★★★★★v243(지점장 지시 2026.07.25): <b>보장분석지 PPT 뇌 칸도 축을 따라간다</b>.
+    #   구 코드는 `중대한 뇌졸증`만 봐서, 축이 뇌출혈인 CI(신한·DB 실측)는 <b>PPT에 아무것도 안 찍혔다</b>.
+    #   → 끝열 합계에 <b>중대한 뇌출혈</b>이 있으면 그 축으로 라벨·값을 바꾼다.
+    if (totals.get('중대한 뇌출혈',0) or 0) > (totals.get('중대한 뇌졸증',0) or 0):
+        _ci_split('TextBox 47','뇌출혈','중대한 뇌출혈','뇌출혈진단비')
+    else:
+        _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
     _ci_split('TextBox 55','급성심근','중대한 급성심근','급성심근경색')
     _ci_run('TextBox 14',0,'중대한 암','+')
     _ci_run('TextBox 10',3,'중대한CI적용','+')
@@ -3892,7 +4049,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v241-ci-4step-20260725',
+    return {'ok':True,'version':'v248-yusa-20260726',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -3901,7 +4058,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v241-ci-4step-20260725'}
+    out = {'version': 'v248-yusa-20260726'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
