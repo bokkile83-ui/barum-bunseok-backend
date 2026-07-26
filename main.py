@@ -754,14 +754,25 @@ def parse_sebu_ci(lines):
     """
     out={}
     try:
+        _CO=re.compile(r'[가-힣A-Za-z]{1,7}\s?(?:생명|손보|화재|해상|라이프|손해보험|공제|증권)')
         blk=[]; flag=False
         for l in lines:
             if ('계약별가입정보' in l) or ('계약별 가입정보' in l): flag=True
             if flag: blk.append(l)
             if flag and ('안내 및 유의' in l or '별첨' in l): break
+        # ★★★v253(김O구 실측 2026.07.26): <b>앵커 문자열에 의존하지 마라</b>.
+        #   이 리포트는 4p 표의 <b>헤더·담보명 한글이 pdftotext에서 통째로 빠진다</b>
+        #   (값·회사명은 정상 추출). 그래서 `'계약별가입정보'`를 못 찾아 blk=[] →
+        #   <b>즉시 빈 dict 반환</b> → ci_sebu=None → CI 중대한OO가 하나도 안 들어갔다.
+        #   → 앵커가 없으면 <b>회사 접미어가 2개 이상 있는 줄</b>을 직접 찾아 그 줄부터 읽는다.
+        if not blk:
+            for i,l in enumerate(lines):
+                if len(list(_CO.finditer(l)))>=2:
+                    blk=lines[i:i+60]
+                    print('[v253 sebu_ci] 앵커 없음 → 회사명 줄(%d)로 진입' % i)
+                    break
         if not blk: return out
         # ① 회사명 줄 = 회사 접미어가 2개 이상 등장하는 첫 줄
-        _CO=re.compile(r'[가-힣A-Za-z]{1,7}\s?(?:생명|손보|화재|해상|라이프|손해보험|공제|증권)')
         cidx=-1; cos=[]
         for i,l in enumerate(blk[:14]):
             ms=list(_CO.finditer(l))
@@ -778,6 +789,14 @@ def parse_sebu_ci(lines):
                 d=abs(x-sx)
                 if d<bd: bd=d; best=nm
             return best
+        # ★v253 회사별 보험료(노이즈) 수집 — samang 폴백에서 제외하기 위해
+        # ★v253: 보험료는 <b>'원'이 붙는다</b> → 영역 내 '원' 값 전부를 노이즈 집합으로 모은다
+        #   (회사별로 나누면 동일 회사 계약이 여러 건일 때 첫 건만 잡혀 보험료가 사망으로 새어든다 — 실측).
+        _PREMS=set()
+        for l in blk:
+            for mm in re.finditer(r'([\d,]{4,})\s*원', l):
+                try: _PREMS.add(int(mm.group(1).replace(',','')))
+                except: pass
         # ② 사망액은 '사망' 라벨 행에서, 본체 후보는 영역 내 전체 숫자에서 수집.
         #   ★계약별가입정보 표는 <b>라벨 행과 값 행이 어긋난다</b>(실측: '암' 라벨 47행 / 값 45행,
         #     '뇌혈관질환' 라벨 52행 / 값 51행). 라벨 기준으로 값을 묶으면 후보가 전멸한다.
@@ -802,6 +821,18 @@ def parse_sebu_ci(lines):
                 d=out.setdefault(nm, {'samang':0, 'cands':[]})
                 if _is_sam: d['samang']=max(d['samang'], v)
                 else: d['cands'].append(v)
+        # ★★★v253 samang 폴백(김O구 실측 2026.07.26): 담보명 라벨 한글이 빠진 PDF에서는
+        #   '사망' 라벨 행을 못 찾아 samang=0이 된다. 세부가입현황 계약열은 <b>행 순서가 고정</b>
+        #   (사망→후유장해→실손→암…)이라 <b>보험료 제거 후 첫 값이 사망</b>이다.
+        # ★★★그 첫 값 = <b>일반/질병사망만</b>(지점장 확정): 두 번째 값은 <b>상해사망</b>이고
+        #   <b>CI 법칙에 상해사망은 전혀 상관없다</b>. 실측 교보 4,000(질병)/10,000(상해) → <b>4,000</b>.
+        for _co, _d in out.items():
+            if float(_d.get('samang') or 0) > 0: continue
+            _pool = [v for v in (_d.get('cands') or [])
+                     if v >= 1000 and v not in (_PREMS or set()) and v % 100 == 0]
+            if _pool:
+                _d['samang'] = float(_pool[0])
+                print('[v253 samang폴백] %s 사망보장 %s (상해사망은 CI 무관 → 제외)' % (_co, format(_pool[0], ',')))
         return out
     except Exception as _e:
         print(f'[v237 sebu_ci ERR] {_e}')
@@ -854,6 +885,7 @@ def parse_sebu(lines):
                     if _std and _std!='__무시__':   # ★v30z 무시지정 담보(전이암·고액항암)는 세부보충에서도 제외
                         if _std not in out or out[_std]<val: out[_std]=val
             k+=1
+
     return out
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1068,7 +1100,13 @@ def parse_sinjeong(lines):
             dambo[nm] = dambo.get(nm, 0) + v
             if _sjci and 0 < v <= 200000:
                 _n2 = re.sub(r'\s', '', str(nm))
-                if re.search(r'사망', _n2) and not re.search(r'후유|장해', _n2):
+                # ★★★★★v253 지점장 지시 2026.07.26: <b>재해사망특약 6,000 → samang에서 삭제</b>.
+                #   + 2차 규칙 원문 "세부가입현황에서 '사망'에서 <b>상해사망은 제외</b> 질병사망에서
+                #   50% or 80%형 금액이 있는지 찾아본다".
+                #   → CI 사망보장 후보 = <b>일반사망 / 질병사망(주계약)</b>. <b>상해사망·재해사망은 제외</b>.
+                #   ★지점장이 말한 이 두 개만 제외한다 — 교통·외래 등 다른 항목을 임의로 덧붙이지 말 것.
+                if (re.search(r'사망', _n2) and not re.search(r'후유|장해', _n2)
+                        and not re.search(r'상해|재해', _n2)):
                     ci_lines['samang'].append(v)
                 elif _n2.startswith('중대한'):
                     ci_lines['jungdae'].append(v)
@@ -1344,7 +1382,9 @@ def parse_txt(txt, filename=''):
                     try: _vc = int(_mc.group(2).replace(',',''))
                     except Exception: _vc = 0
                     if 0 < _vc <= 200000 and re.search(r'[가-힣]', _nmc):
-                        if re.search(r'사망', _nmc) and not re.search(r'후유|장해', _nmc):
+                        # ★v253 상해사망·재해사망 제외(지점장 지시) — 위 3열 경로와 동일
+                        if (re.search(r'사망', _nmc) and not re.search(r'후유|장해', _nmc)
+                                and not re.search(r'상해|재해', _nmc)):
                             ci_lines['samang'].append(_vc)
                         elif _nmc.startswith('중대한'):
                             # ★★★★★v240(지점장 지시 2026.07.25): 별첨에 <b>'중대한OO' 담보가 명시</b>되어 있으면
@@ -2969,11 +3009,39 @@ def build_excel(data, out):
                 _v1=ws.cell(_r,col).value;  _v1=_v1 if isinstance(_v1,(int,float)) else 0
                 _v2=ws.cell(_ro,col).value if _ro else 0; _v2=_v2 if isinstance(_v2,(int,float)) else 0
                 _tot=_v1+_v2
-                if _tot<=0: continue
-                _put=min(_bc,_tot)                 # 중대한 행 = 본체(합계를 넘지 않음)
+                # ★★★★★v253 영구지침(지점장 지시 2026.07.26 "오늘 무조건 CI는 문제 없어야 한다"):
+                #   <b>합계가 0이어도 본체를 중대한OO 행에 기재한다</b>.
+                #   구 코드는 `_tot<=0`이면 continue라 <b>중대한OO 3행이 통째로 0</b>이 됐다.
+                #   ★왜 0이 되나 — 교보생명 큰사랑CI처럼 <b>별첨 담보명이 '주계약'·'○○특약'뿐</b>인 생보 CI는
+                #     암·뇌·심 담보가 종류별로 dambo에 없다(4p 세부가입현황에만 있다). 그래서 뺄 일반행이
+                #     없는데 정본 배분이 "합계에서 나눈다"라서 <b>나눌 합계가 0</b> → 스킵 → 기재 0.
+                #   ★실측(김O구 교보): 1차 별첨 주계약 4,000(=일반사망)×80% = 2차 세부가입현황 질병사망
+                #     4,000×80% = 본체 3,200. 두 경로 일치인데 <b>중대한 암·뇌졸증·급성심근이 전부 0</b>이었다.
+                #   ★합계가 있으면 기존 배분(합계 보존) 그대로 — 신한·DB생명 회귀 없음.
+                # ★★★★★v254 영구지침(지점장 지시 2026.07.26): <b>별첨 '주계약' 라벨 경로(교보 등)는
+                #   CI 본체와 일반 담보가 별개다</b> → 중대한행에 <b>본체를 기재하고 일반행은 손대지 않는다</b>.
+                #   지점장 원문 "니가 올린건 CI + 일반 담보다 / 교보의 일반 급성심근 담보 정답".
+                #   ★실측(김O구 교보): 급성심근 4,200 = <b>CI 본체 3,200 + 교보 일반 급성심근 1,000</b>.
+                #     구 코드는 합계에서 본체를 빼는 배분이라 <b>일반 1,000을 지워</b> 3,200이 됐다.
+                #   ★반대로 별첨 <b>담보명</b>으로 CI가 표시된 계약(신한 `뇌출혈진단`·DB생명)은 담보값에
+                #     본체가 <b>포함</b>돼 있으므로 기존 배분(합계 보존)을 유지한다 — 회귀 없음.
+                if _cij:
+                    ws.cell(_r,col).value=_bc; ws.cell(_r,col).font = BL if gen else BK
+                    print(f"[v254 CI가산] {ct.get('company')} {_nm} ← 본체 {_bc:,} · {_ovf} {_v2:,} 유지(일반 담보 별개)")
+                    continue
+                if _tot<=0:
+                    ws.cell(_r,col).value=_bc; ws.cell(_r,col).font = BL if gen else BK
+                    print(f"[v253 CI기재] {ct.get('company')} {_nm} ← 본체 {_bc:,} (일반행 값 0)")
+                    continue
+                # ★★★★★v253: 중대한 행 = <b>본체 그대로</b>(구 코드 `min(_bc,_tot)`은 합계가 본체보다
+                #   작을 때 <b>본체가 잘려나갔다</b>). 정본 = "중대한OO 3행에 <b>동일 금액</b> 기재".
+                #   ★실측(김O구 교보): 급성심근 합계 1,000 < 본체 3,200 → 1,000만 기재되어 한장표 4,200에
+                #     2,200이 비었다. 본체 3,200을 기재하면 다른 계약분 1,000과 합쳐 <b>4,200</b>이 맞는다.
+                #   ★합계 ≥ 본체인 경우는 `min(_bc,_tot)==_bc`라 <b>기존과 동일</b> — 신한·DB생명 회귀 없음.
+                _put=_bc
                 ws.cell(_r,col).value=_put; ws.cell(_r,col).font = BL if gen else BK
                 if _ro:
-                    _rest=_tot-_put
+                    _rest=max(0,_tot-_put)
                     ws.cell(_ro,col).value=(_rest if _rest>0 else None)
                     if _rest>0: ws.cell(_ro,col).font = BL if gen else BK
             # ★★★v242: <b>축이 아닌 쪽의 '중대한' 뇌 행은 일반 행으로 되돌린다</b>.
@@ -4078,7 +4146,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v252-ws78-20260726',
+    return {'ok':True,'version':'v254-cijugye-20260726',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4087,7 +4155,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v252-ws78-20260726'}
+    out = {'version': 'v254-cijugye-20260726'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
