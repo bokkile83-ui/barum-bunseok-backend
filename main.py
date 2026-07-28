@@ -1528,9 +1528,21 @@ def parse_txt(txt, filename=''):
         (lambda t: '심근병증' in t,                 ['심근병증']),
       ],
       'DB': [
+        # ★★★★★v263(지점장 지시 2026.07.27, 영구): <b>DB손보 `4대순환계질환진단비(특정3대심장질환)` = 심부전 · 부정맥</b>.
+        #   지점장 원문 = "디비손보 4대순환계질환진단비(특정3대심장질환) = 엑셀 = 심부전 부정맥 에 표시하라".
+        #   ★<b>반드시 '특정3' 규칙보다 앞에 둔다</b> — 담보명에 '특정3'과 '심장'이 둘 다 들어 있어
+        #     아래 특정Ⅲ 규칙(심장판막·빈맥·심부전)에 먼저 걸려 <b>심장판막·빈맥으로 오분류</b>됐다.
+        #   묶음 공통원칙대로 두 행에 <b>동일 금액 각 100%</b> 기재한다.
+        # ★v265(2026.07.28 박O정 실측): 같은 계약에 <b>`4대순환계질환진단비(특정하지정맥류질환)`</b>이
+        #   또 있어 <b>하지정맥류까지 심부전·부정맥에 산입</b>됐다(500+500=1,000). 지점장 지시는
+        #   <b>`(특정3대심장질환)`</b>만이다 → <b>'3대심장' 조건 추가</b>. 하지정맥류는 [확인]큐로 보낸다.
+        (lambda t: '4대순환계' in t and '3대심장' in t, ['심부전','부정맥']),
         (lambda t: '특정1' in t and '심장' in t,   ['협심증','주요심장염증']),
         (lambda t: '특정2' in t and '심장' in t,   ['급성심근경색']),
-        (lambda t: '특정3' in t and '심장' in t,   ['심장판막','빈맥','심부전']),
+        # ★★★★★v264(지점장 지시 2026.07.27, 영구): <b>DB손보 특정3대심장질환진단비 = 심장판막 · 심부전</b>.
+        #   지점장 원문 = "특정3대심장질환진단비 심장판막·심부전 / 빈맥삭제".
+        #   ★구 정본표의 「특정Ⅲ = 판막 + I47·48(빈맥) + I50」에서 <b>빈맥을 뺀다</b>. 이전 기재는 폐기.
+        (lambda t: '특정3' in t and '심장' in t,   ['심장판막','심부전']),
         (lambda t: '순환계3대' in t,               ['빈맥','부정맥','심부전']),
       ],
       '현대': [
@@ -2818,7 +2830,14 @@ def build_excel(data, out):
                     _heart_bundle = ['급성심근경색', _brain]
                 # ★v29w 심장 범위 재점검(지점장 2026.07.02, 6사 정본 대조):
                 # DB 순환계 5종(중증) = 급성심근경색 + 뇌졸중
-                if _heart_bundle is None and '순환계' in _rn and '5종' in _rn:
+                # ★★★★★v266(지점장 2026.07.28 "저건 2개가 세트라서 하나만 잡으면 된다"):
+                #   `4대순환계질환진단비(특정3대심장질환)`은 <b>위 `_HB` 후처리가 이미 심부전·부정맥으로 분해</b>했다.
+                #   그런데 아래 `elif '순환계' in _rn` 이 <b>같은 담보를 또 잡아</b> 심부전·부정맥이 <b>2배</b>가 되고
+                #   빈맥·급성심근까지 얹혔다(실측 박O정: 심부전 500 → 1,000 · 빈맥 0 → 500).
+                #   → <b>4대순환계 계열은 인라인 블록에서 제외</b>한다. 규칙은 하나만 잡는다.
+                if _heart_bundle is None and '4대순환계' in _rn:
+                    _heart_bundle = []          # _HB가 처리 완료 — 여기서 중복 적용 금지
+                elif _heart_bundle is None and '순환계' in _rn and '5종' in _rn:
                     _heart_bundle = ['급성심근경색','뇌졸증진단비']
                 # DB 순환계 4종 = 협심증·심부전(+빈맥, 심근병증 [확인])
                 elif '순환계' in _rn and '4종' in _rn:
@@ -4209,7 +4228,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v262-gigan-20260727',
+    return {'ok':True,'version':'v266-nodup-20260728',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4218,7 +4237,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v262-gigan-20260727'}
+    out = {'version': 'v266-nodup-20260728'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
