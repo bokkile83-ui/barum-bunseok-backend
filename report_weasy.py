@@ -228,6 +228,17 @@ def _wc_status(rep, lookup):
             val=c.get('value')
             if not val or val=='미가입': return ('off','')
             return ('on', val)
+    # ★★★v259(2026.07.27 장O경 실측): <b>chiryo에 없는 치료비가 통째로 사라진다</b>.
+    #   실측 — 엑셀 `2대 주요치료비 500`이 dambo엔 있는데 chiryo엔 '순환계주요치료비'로만 실려
+    #   <b>'2대주요치료비' 카드가 빈칸</b>이 됐다. → `_cov_val`과 같은 원리로 <b>dambo 폴백</b>을 단다.
+    #   키는 공백·괄호 제거형이므로 조회 전에 같은 방식으로 정규화한다.
+    _d=(rep or {}).get('dambo') or {}
+    _k=_r.sub(r'[\s·()\[\]/]','',str(lookup))
+    _v=_d.get(_k)
+    if not _v:
+        for _kk,_vv in _d.items():
+            if _vv and _k and _k in str(_kk): _v=_vv; break
+    if _v and str(_v)!='미가입': return ('on', str(_v))
     return ('off','')
 
 def _wc_raw(rep, lookup):
@@ -284,9 +295,15 @@ def _wcard(rep, title, desc, lookup, mode):
         _rw=_wc_raw(rep, lookup)
         _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
         _half=' half' if lookup in ('암생활비','순환계생활비','순환계주요치료비','비급여주요치료비') else ''
+        # ★★★v259(지점장 지시 2026.07.27): <b>값이 있으면 흰칸에 기재한다</b>.
+        #   구 코드는 na 카드의 흰칸을 <b>조회조차 하지 않고 무조건 비워</b> 놓았다 → 엑셀에
+        #   `하이클래스(비급여) 1,000만`·`순환계주요치료비 500만`이 있어도 <b>진단서엔 항상 빈칸</b>.
+        #   ★칩('상태')·카드 색·크기는 그대로 둔다(디자인 불변, 7p 제로섬 유지).
+        _st,_vl=_wc_status(rep, lookup)
+        _bv=_html.escape(str(_vl)) if (_st=='on' and _vl) else ''
         return (f'<div class="wcard plain{_half}"><div class="wct">{_html.escape(title)}</div>'
                 f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
-                f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
+                f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox">{_bv}</span><span class="wunit">만원</span></div></div>')
     st,val=_wc_status(rep, lookup)
     # ★v155 (지점장 2026.07.21): 암 주요치료비·2대 주요치료비 카드의 <b>× 기호 삭제</b>하고
     #   레드계열 → <b>하이클래스와 같은 plain(중립)</b>으로 통일. 진단비(diag)의 ✓·초록은 유지.
@@ -478,9 +495,14 @@ def _wcard_sj(rep, title, desc, lookup):
     # 산정특례 = 나란히 2칸, 회색 '상태' 칩, 빈 박스 (레퍼런스 그대로)
     _rw=_wc_raw(rep, lookup)
     _dn=(f'<div class="wdn">{_html.escape(_rw)}</div>') if _rw else ''
+    # ★★★v259(지점장 지시 2026.07.27): 산정특례도 <b>값이 있으면 흰칸에 기재</b>한다.
+    #   구 코드는 무조건 빈 박스라 엑셀에 산정특례 금액이 있어도 진단서엔 안 나왔다.
+    #   값이 없으면(미가입·0) 종전대로 빈칸 = 현장 수기 기입.
+    _st,_vl=_wc_status(rep, lookup)
+    _bv=_html.escape(str(_vl)) if (_st=='on' and _vl) else ''
     return (f'<div class="wcard plain sj"><div class="wct">{_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
-            f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox"></span><span class="wunit">만원</span></div></div>')
+            f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox">{_bv}</span><span class="wunit">만원</span></div></div>')
 
 # ★v41b 하단 여백 자동 채움 (지점장 2026.07.12: 여백 5% 미만).
 #   페이지별 세로 늘림 계수(mm). 0=원본 유지. 값이 크면 다음 장으로 넘어가니 반드시 25p 유지 확인.
@@ -3326,7 +3348,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v257-mergekey-20260727</div>'
+    _VSTAMP = '<div class="vstamp">v262-gigan-20260727</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

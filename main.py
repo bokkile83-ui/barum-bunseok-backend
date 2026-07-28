@@ -396,22 +396,36 @@ def _unfold_cols(block_lines):
         bounds[-1]=(bounds[-1][0], 10**6)          # 마지막 열은 줄 끝까지
         out=[]
         for a,b in bounds:
-            cells=[l[a:b].rstrip() for l in lines if l[a:b].strip()]
-            buf=''; pend=None
-            for c in cells:
+            # ★★★★★v260(2026.07.27 장O경 KB 실측): <b>줄 번호를 함께 들고 간다</b>.
+            #   구 코드는 빈 줄을 버리고 조각만 이어 붙였고, <b>이어붙일지 말지를 괄호 균형 하나로</b>만 판단했다.
+            #   → 담보명 꼬리가 <b>`…(간편가입)(갱`처럼 열린 괄호로 잘려 끝나면</b> 균형이 영영 안 맞아
+            #     <b>다음 담보를 통째로 삼켰다</b>. 실측 사고:
+            #       `다빈치로봇 암수술비(…)(갱` + `화상수술비(` + `상해1~5종수술비` → 한 덩어리, 금액 7
+            #     → 다빈치 500·화상수술비·<b>상해1~5종 20/50/200/500/1,000</b>·산정특례 뇌심·중입자 5,000이 전부 소실.
+            #   ★<b>이 별첨의 실제 구조는 「머리줄 / 금액줄 / 꼬리줄」이 붙어 있고 담보 사이에는 빈 줄이 있다</b>.
+            #     따라서 <b>빈 줄(행 간격)이 레코드 경계</b>다. 괄호 균형은 보조 판정으로만 쓴다.
+            cells=[(i,l[a:b].rstrip()) for i,l in enumerate(lines) if l[a:b].strip()]
+            buf=''; pend=None; prev=None; tail=0
+            def _flush():
+                nonlocal buf,pend,tail
+                if buf and pend: out.append((buf,pend))
+                buf=''; pend=None; tail=0
+            for i,c in cells:
                 m=_AMT_TAIL_UF.search(c)
                 nm=(c[:m.start()] if m else c).strip(); amt=m.group(1) if m else None
+                gap = (prev is not None and i-prev > 1)          # 빈 줄이 끼었다 = 새 담보
+                dup = (pend is not None and amt is not None)      # 금액이 두 번째다 = 새 담보
+                # 금액을 이미 받았는데 또 순수 이름이 오면 꼬리 1개까지만 허용(그 이상은 새 담보)
+                over = (pend is not None and amt is None and nm and tail >= 1 and _paren_bal(buf) <= 0)
+                if gap or dup or over: _flush()
+                prev = i
                 if nm:
-                    if buf and _paren_bal(buf)>0: buf+=nm
-                    else:
-                        if buf and pend: out.append((buf,pend))
-                        buf=nm; pend=None
-                if amt:
-                    if buf and _paren_bal(buf)<=0: out.append((buf,amt)); buf=''; pend=None
-                    else: pend=amt
-                if buf and _paren_bal(buf)<=0 and pend:
-                    out.append((buf,pend)); buf=''; pend=None
-            if buf and pend: out.append((buf,pend))
+                    if buf: buf += nm; tail += 1
+                    else: buf = nm
+                if amt: pend = amt
+                if buf and pend and _paren_bal(buf) <= 0 and tail >= 1:
+                    _flush()
+            _flush()
         # ★안전장치: 원본에서 '이름+금액' 같은 줄 페어 수를 세고, 복원이 그보다 적으면 원본 유지
         base=sum(1 for l in lines if re.search(r'\S\s{2,}[\d][\d,]*\s*$', l))
         if len(out) < max(base,1): 
@@ -1459,14 +1473,17 @@ def parse_txt(txt, filename=''):
     #   보험기간(1년 여부)을 판정할 수 없다 → 엑셀·보장나무·보장진단서·보장설명서 전부 미포함.
     #   ★실손은 예외 — 롯데 리포트가 실손 계약의 계약일·보험료를 공란으로 주는 사례가 있다(v90·장문순 실측).
     #   ★담보를 봐야 실손인지 알 수 있으므로 파싱이 끝난 이 시점에서 판정한다.
-    _kept = []
+    # ★★★★★v262(지점장 지시 2026.07.27, 영구): <b>기간불명은 제외 사유가 아니다 — 엑셀에 기재만 한다</b>.
+    #   지점장 원문 = "이건 그냥 엑셀에 기재만하라 / 불명확한건 안해도된다".
+    #   구 v125는 계약일·만기일이 둘 다 없으면 계약을 <b>통째로 버렸다</b> → 실측(장O경) 한화손보
+    #   `무배당 한화보금자리안심보험1605`가 통째 소실되고 <b>한장표 화재벌금 2,000이 문서에서 사라졌다</b>.
+    #   → <b>계약열은 만든다</b>. 계약일·만기일·총납입기간 같은 <b>불명확한 칸은 공란</b>으로 둔다.
+    #   ★<b>제외 7종 ⑥은 '보험기간 1년(만기−가입 358~372일)'만</b>이다 — 기간을 <b>알 수 없는</b> 것과
+    #     기간이 <b>1년인</b> 것은 다르다. 1년 제외 규칙은 그대로 살아 있다.
     for _c in deduped:
         if _no_period(_c.get('contract_date'), _c.get('expiry_date')) and \
            not _is_silson_like(_c.get('company'), _c.get('product'), _c.get('dambo')):
-            print(f"[제외7·기간불명] {_c.get('company')} {str(_c.get('product'))[:28]} — 계약일/만기일 없음(실손 아님)")
-            continue
-        _kept.append(_c)
-    deduped = _kept
+            print(f"[v262 기간불명·포함] {_c.get('company')} {str(_c.get('product'))[:28]} — 계약일/만기일 공란 그대로 기재")
     # ══════════════════════════════════════════════════════════════════════════
     # ★★★v47 심장 묶음담보 분해 (지침 §8.3.1 + 보험인포메이션 p16~19 회사별 정본표)
     #   "묶음 진단비는 보장 구성질환의 마스터 행에 동일 금액을 각각 기재한다."
@@ -2013,10 +2030,22 @@ def resolve_kw(raw):
     if has('암') and has('직접치료') and no('일당','입원','통원','방사선','약물','표적','양성자','세기','중입자','유사암'):
         return '암수술',0
     # ── 암 치료비 ── (지점장 2026.07.09 최종확정: '암주요치료비' 명시 > 하이클래스 > 유사암무시)
-    if has('유사암') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
+    # ★★★v258b(2026.07.27): 지침 §8.2 원문에 <b>「암(유사암제외)주요치료비 → 암주요치료비」</b>가
+    #   명시돼 있는데, 구 조건 `has('유사암')`이 <b>'유사암<u>제외</u>'의 '유사암' 글자</b>에 걸려
+    #   <b>__무시__</b>로 보냈다(실측). '유사암제외'는 유사암을 <b>빼는</b> 담보 = 일반암 계열이다.
+    if has('유사암') and no('유사암제외') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
     if has('암주요치료비') and no('유사암'): return '암주요치료비',0   # ★②담보명에 '암주요치료비' 있으면 하이클래스보다 우선→암주요치료비행 (하이클래스 암주요치료비형)
     if has('하이클래스'): return '하이클래스(암)',0   # ③암주요치료비 없는 하이클래스(항암약물형 등)→하이클래스(암)행. 2건이면 합산
-    if has('주요치료') and no('순환계','2대','뇌','허혈','심장','심근','유사암','하이클래스'):   # ③하이클래스 없는 '병원+암주요치료비'→암주요치료비행. ★심장 추가(심장/순환계 주요치료비=2대주요치료비로, v38d)
+    # ★★★★★v258 (지점장 지침 개정 2026.07.27, 영구): 지침 §8.2 원문 =
+    #   <b>「(키워드 : 암+주요치료비 / 그외 는 다 아님)」</b>
+    #   → 담보명에 <b>'암'과 '주요치료비'가 둘 다</b> 있어야 암주요치료비 행이다. 그 외는 전부 아니다.
+    #   구 코드는 `has('주요치료')`만 보고 '암' 없이도 이 행에 넣었다(실측 오류 —
+    #   KB `3대(간,폐,신장)질환 주요치료비(간편가입)` 500이 암주요치료비로 들어갔다).
+    #   → `has('암')` 추가. 조건 미달은 [확인]큐로 보내 신인이 수기 확인한다(누락 금지).
+    # ★v260b: 지침 §8.2 우선순위 = <b>하이클래스/비급여 → 하이클래스(암)</b>가 암주요치료비보다 앞이다.
+    #   접힘이 풀리면서 `비급여(전액본인부담 포함) 암특정주요치료비Plus(상급종합병원)`처럼
+    #   <b>'비급여'와 '주요치료비'가 한 담보명에 같이</b> 들어오게 됐다 → `no('비급여')`로 아래 하이클래스 규칙에 넘긴다.
+    if has('암') and has('주요치료') and no('비급여','순환계','2대','뇌','허혈','심장','심근','유사암','하이클래스'):   # ③하이클래스 없는 '병원+암주요치료비'→암주요치료비행. ★심장 추가(심장/순환계 주요치료비=2대주요치료비로, v38d)
         return '암주요치료비',0
     if has('고액항암') or (has('고액') and has('항암') and has('치료')): return '__무시__',0   # ★v30z 고액항암치료비=표적+양성자+세기조절+카티 합계값 → 무시(구성 치료비는 아래에서 각각 개별 매핑)
     # ★★★v215 (지점장 확정 2026.07.25, 영구): <b>괄호 안의 실제 치료법이 정본이다</b>.
@@ -2044,7 +2073,7 @@ def resolve_kw(raw):
     if has('갑상선암') and has('진단') and no('유사암','소액암','주요치료','수술','일당'): return None,0
     if has('통합') and has('전이암') and no('주요치료','수술','통원','일당'): return '통합전이암',0   # ★v30z 통합전이암=개별담보·대표금액 1개(§8.2, PPT·보장설명지 반드시 반영)
     if has('전이암') and no('통합'): return '__무시__',0   # ★v30z 전이암진단비 단독=무시(지점장 2026.07.05)
-    if has('암') and has('주요치료') and no('순환계','2대','유사암'): return '암주요치료비',0   # ★v30 '암주요치료' 명시가 비급여 수식어보다 우선
+    if has('암') and has('주요치료') and no('비급여','순환계','2대','유사암'): return '암주요치료비',0   # ★v260c 지침 §8.2 = 비급여는 하이클래스(암)가 우선(리터럴 '암주요치료비'는 위 2034행이 먼저 잡는다)
     if has('하이클래스'): return '하이클래스(암)',0
     if (has('비급여') or has('하이클래스')) and has('주요치료'): return '하이클래스(암)',0   # 비급여 주요치료비(암 미명시)=하이클래스(암)
     if has('중입자'): return '중입자치료비',0
@@ -2569,6 +2598,24 @@ def build_excel(data, out):
     all_raw = sorted({raw for c in contracts for raw in c['dambo']})
     LLMMAP = llm_resolve(all_raw, std_list)
     unmapped = []  # (회사, 담보명, 금액) — 마스터 미수록/매핑실패 -> [확인]
+    # ★★★★★v261 접힘 자가진단(지점장 지시 2026.07.27, 영구) — <b>매 분석마다 자동 검수</b>.
+    #   2026.07.27 장O경 사고: `다빈치로봇 암수술비(…)(갱화상수술비(간편가입)상해1~5종수술비 → 7`
+    #   담보 3개가 한 줄로 뭉쳐 <b>상해1~5종·산정특례 뇌심·중입자·다빈치·화상수술비가 통째로 소실</b>됐는데
+    #   <b>확인사항에도 안 떠서</b> 지점장이 눈으로 발견할 때까지 몰랐다. 그게 진짜 문제였다.
+    #   → 접힘의 지문 2개를 자동 검출해 <b>확인사항에 강제 노출</b>한다(값은 그대로 두고 표시만 — 누락 금지).
+    #     ①<b>담보 접미어가 2회 이상</b>(진단비·수술비·치료비·일당·입원비·보장) = 두 담보가 뭉친 것
+    #     ②<b>괄호가 안 닫힘</b>(열림>닫힘) = 담보명이 잘려 다음 담보를 삼켰을 가능성
+    #   ★이 진단이 있었으면 지적받기 전에 잡았다. <b>절대 제거하지 말 것.</b>
+    _FOLD_SFX = ('진단비','수술비','치료비','일당','입원비','보장')
+    for _c in contracts:
+        for _rw, _av in (_c.get('dambo') or {}).items():
+            _s = str(_rw)
+            _cnt = sum(_s.count(_x) for _x in _FOLD_SFX)
+            _bal = _s.count('(') - _s.count(')')
+            if _cnt >= 2 or _bal > 0:
+                _why = ('담보 접미어 %d회 = 두 담보 뭉침 의심' % _cnt) if _cnt >= 2 else '괄호 미닫힘 = 담보명 잘림 의심'
+                print('[FOLD_AUDIT] %s | %s | %s | %s' % (_c.get('company',''), _s[:70], _av, _why))
+                unmapped.append((0, _c.get('company',''), '[접힘의심] ' + _s, _av, _why + ' → 별첨 원문 대조 필요'))
     cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
     surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
     raw_by_std = {}   # ★v39 워크시트 담보명 카피: 표준명→원본담보명(최댓값 담보 기준)
@@ -4162,7 +4209,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v257-mergekey-20260727',
+    return {'ok':True,'version':'v262-gigan-20260727',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4171,7 +4218,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v257-mergekey-20260727'}
+    out = {'version': 'v262-gigan-20260727'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

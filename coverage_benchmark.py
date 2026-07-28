@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v257-mergekey-20260727 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v262-gigan-20260727 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
