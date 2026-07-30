@@ -567,6 +567,15 @@ def pdf_to_txt(pdf_bytes):
         with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as _f:
             _f.write(pdf_bytes); _pp=_f.name
         _tl = subprocess.run(['pdftotext','-layout',_pp,'-'], capture_output=True, text=True, timeout=60).stdout
+        # ★★★v279: 세부가입현황 좌표 폴백용 bbox XML을 같이 확보한다.
+        #   신형 let: 리포트는 표 라벨이 통째로 이미지라 라벨 기반 매핑이 통째로 꺼진다.
+        try:
+            global _BBOX_XML
+            _BBOX_XML = subprocess.run(['pdftotext','-bbox','-layout',_pp,'-'],
+                                       capture_output=True, text=True, timeout=60).stdout or ''
+            print(f'[v279 bbox] 확보 {len(_BBOX_XML)}자')
+        except Exception as _eb:
+            _BBOX_XML = ''; print(f'[v279 bbox] 실패 {_eb}')
         try: os.unlink(_pp)
         except: pass
         if _tl and len(_tl) > 1500 and ('별첨' in _tl or '정상계약' in _tl or '보장' in _tl):
@@ -977,6 +986,122 @@ def _sebu_labels_of(seg):
         out[side] = tgt
     return out
 
+_BBOX_XML = ''
+
+# ★★★★★v279 세부가입현황 좌표 폴백 — 라벨 글자를 전혀 쓰지 않는다.
+#   [왜] 신형 let: 리포트(이명순·김진구)는 5~8p 좌측표 한글 라벨이 통째로 이미지라
+#        v276 라벨 매핑이 라벨 0개 → 블록 통째 스킵 → 별첨 담보명이 상품명뿐인 계약
+#        (삼성리빙케어·한화 종신)의 담보가 전부 사라졌다(이명순 담보 27/97행).
+#   [앵커] 좌측 '전체 가입현황' 표의 각 행 값은 <b>한장보장표 값과 같다</b>.
+#        → 행 순서표로 매핑한 뒤 <b>한장표 값과 대조해 검증</b>하고, 검증을 통과할 때만 채택한다.
+#          (순번을 쓰되 값으로 검증하므로 v271의 '검증 없는 고정 순번'과 성격이 다르다.)
+_SEBU_PAIRS = [
+    ('질병사망(80세)','상해사망'), ('질병후유3%','상해후유3%'),
+    ('입원','입원'),               ('통원','통원'),
+    ('일반암','암수술'),           ('유사암(갑.기.경.제)',None),
+    ('통합전이암',None),
+    ('뇌혈관진단비','뇌혈관수술비'), ('뇌졸증진단비',None),
+    ('허혈성 진단비','심장수술비'), ('급성심근경색',None),
+    ('질병수술비','상해수술비'),    ('질병일당','상해일당'),
+    ('간병인','간병인'),            (None,None),
+    ('합의금','변호사'),            ('대인','자부상'), ('대물',None),
+    (None,None),
+    ('골절(치아파절포함)','일상배상책임'), ('깁스진단비',None),
+]
+
+def _bbox_words(xml):
+    """bbox XML → [페이지별 [(x, y, text)]]"""
+    pages=[]
+    for pg in re.split(r'<page\b', xml)[1:]:
+        ws=[]
+        for m in re.finditer(r'xMin="([\d.]+)"\s+yMin="([\d.]+)"[^>]*>(.*?)</word>', pg):
+            ws.append((float(m.group(1)), float(m.group(2)), m.group(3)))
+        if ws: pages.append(ws)
+    return pages
+
+def _num_or_dash(t):
+    t=t.strip()
+    if t=='-': return 0.0
+    if not re.fullmatch(r'\d{1,3}(?:,\d{3})*|\d+', t): return None
+    try: return float(t.replace(',',''))
+    except: return None
+
+def parse_sebu_bbox(hj):
+    """좌표 기반 계약별 담보값. 반환 = { 보험료(int) : { 담보명 : 금액 } }
+       hj = parse_hanjang 결과(검증 기준). hj가 비면 검증 불가라 통째 포기한다."""
+    res={}
+    if not _BBOX_XML or not hj: return res
+    for ws in _bbox_words(_BBOX_XML):
+        # ── 보험료 줄(계약 열) 찾기: '숫자+원' 이 2개 이상 같은 y
+        byy={}
+        for x,y,t in ws: byy.setdefault(round(y/3.0)*3, []).append((x,t))
+        prem_y=None; cols=None
+        for y in sorted(byy):
+            ps=[(x,t) for x,t in byy[y] if re.fullmatch(r'\d[\d,]*원', t)]
+            if len(ps)>=2:
+                ps.sort(); prem_y=y
+                cols=[{'x':x,'prem':int(t[:-1].replace(',',''))} for x,t in ps]
+                break
+        if not cols: continue
+        w = (cols[-1]['x']-cols[0]['x'])/(len(cols)-1) if len(cols)>1 else 101.0
+        # ★보험료는 우측정렬이라 값보다 오른쪽에 찍힌다 → 열 구간은 보험료 x에서 15pt 당겨 잡는다.
+        for k,c in enumerate(cols):
+            c['lo'] = c['x'] - 15
+            c['hi'] = (cols[k+1]['x'] - 15) if k+1 < len(cols) else (c['x'] + w - 15)
+        L0 = cols[0]['lo'] - 10          # 좌측표 / 계약열 경계
+        # ── 값 행 수집(보험료 줄 아래)
+        rows=[]
+        for y in sorted(byy):
+            if y <= prem_y: continue
+            left=[(x,t) for x,t in byy[y] if x < L0]
+            right=[(x,t) for x,t in byy[y] if x >= L0]
+            lv={}
+            for x,t in left:
+                v=_num_or_dash(t)
+                if v is None: continue
+                lv['L' if x < 250 else 'R'] = v
+            if not lv and not right: continue
+            if lv or right: rows.append((y,lv,right))
+        # ── 값 없는 꼬리(페이지 번호·연락처) 제거: 좌측 판정값이 있는 행만 본문으로 본다
+        body=[r for r in rows if r[1]]
+        if len(body) < 10: continue
+        body=body[:len(_SEBU_PAIRS)]
+        # ── ★검증: 좌측값 ↔ 한장표 값 대조
+        ok=0; bad=0
+        for (y,lv,rt),(pl,pr) in zip(body,_SEBU_PAIRS):
+            for side,nm in (('L',pl),('R',pr)):
+                if not nm or side not in lv or nm not in hj: continue
+                if abs(lv[side]-hj[nm]) < 0.5: ok+=1
+                else: bad+=1
+        if ok < 5 or ok <= bad:
+            print(f'[v279 sebu-bbox] 검증 실패(일치 {ok}/불일치 {bad}) → 이 페이지 스킵'); continue
+        # ── 배정
+        for (y,lv,rt),(pl,pr) in zip(body,_SEBU_PAIRS):
+            # ★열별로 값을 모은 뒤 <b>개수로</b> 좌(질병)/우(상해)를 가른다.
+            #   한 열에 2개면 왼쪽=질병·오른쪽=상해. 1개면 열 시작 근처인지로 판정.
+            grp={}
+            for x,t in rt:
+                v=_num_or_dash(t)
+                if v is None or v<=0: continue
+                for ci,c in enumerate(cols):
+                    if c['lo'] <= x < c['hi']:
+                        grp.setdefault(ci,[]).append((x,v)); break
+            for ci,items in grp.items():
+                c=cols[ci]
+                if not c['prem']: continue
+                items.sort()
+                if len(items)>=2:
+                    pick=[(pl,items[0][1]),(pr,items[-1][1])]
+                else:
+                    x0,v0=items[0]
+                    pick=[((pl if x0 < c['x']+30 else pr), v0)]
+                for nm,v in pick:
+                    if not nm: continue
+                    d=res.setdefault(c['prem'],{})
+                    if nm not in d or d[nm] < v: d[nm]=v
+        print(f'[v279 sebu-bbox] 검증 통과(일치 {ok}) · 계약 {len(cols)}열 배정')
+    return res
+
 def parse_sebu_bycontract(lines):
     """세부가입현황 '계약별 가입정보'에서 계약별 담보값을 읽는다(v276 라벨 기반).
        반환 = { 보험료(int) : { 마스터담보명 : 금액(float) } }"""
@@ -1062,35 +1187,59 @@ _HJ_BLOCKS = {
                '__화재벌금','일상배상책임'],
 }
 
+_HJ_STD = {   # ★v278 표준금액 행 = 고객 무관 고정값 → 라벨이 이미지인 신형 리포트의 유일한 앵커
+    'A': ['20,000','10,000','5,000','3,000','5,000','5,000','30','30'],
+    'B': ['3,000','1,000','2,000','300','7,000','1,000','2,000','1,000','1,000','2,000','1,000'],
+    'C': ['100','30','3','12','3','12','2,000','1,000'],
+    'D': ['20,000','3,000','500','5,000','30','5','30','30','2,000','10,000'],
+}
+
+def _hj_toks(l):
+    return [m.group(1) for m in re.finditer(r'(-|\d{1,3}(?:,\d{3})*|\d+)', str(l))]
+
 def parse_hanjang(lines):
-    """한장보장현황(4p) → {검산키: 가입금액(만원)}. 실패하면 {} (추측 금지)."""
-    out={}
+    """한장보장현황(4p) → {검산키: 가입금액(만원)}. 실패하면 {} (추측 금지).
+       ★v278 근본수정: 구 v277은 '한장보장' 글자 + '가입금액' 라벨에 의존했다.
+       신형 let: 리포트는 이 표의 라벨이 통째로 이미지라 pdftotext에 글자가 한 자도 없다
+       (이명순·김진구 실측 = '한장' 0건) → 검산이 조용히 통째로 꺼져 있었다.
+       → 1순위 앵커 = <b>표준금액 행</b>. 이 값은 고객과 무관한 고정 상수라 블록까지 특정된다.
+       2순위 = 구 라벨 경로(표준금액이 다른 옛 템플릿 대비)."""
+    out={}; rows={}
     try:
-        st=None
-        for i,l in enumerate(lines):
-            if '한장보장' in l: st=i; break
-        if st is None: return {}
-        rows=[]
-        for k in range(st, min(st+120, len(lines))):
-            l=lines[k]
-            if '세부가입현황' in l: break
-            if re.sub(r'\s','',l).startswith('가입금액'):
-                seg = l[l.index('가입금액')+4:]
-                toks=[m.group(1) for m in
-                      re.finditer(r'(-|\d{1,3}(?:,\d{3})*|\d+)', seg)]
-                rows.append(toks)
-        for tag,toks in zip(('A','B','C','D'), rows):
-            key=(tag,len(toks))
-            names=_HJ_BLOCKS.get(key)
+        # ── 경로1(정본): 표준금액 시그니처 → 바로 다음 숫자줄 = 가입금액
+        for tag,std in _HJ_STD.items():
+            for i,l in enumerate(lines):
+                if _hj_toks(l)!=std: continue
+                for k in range(i+1, min(i+8, len(lines))):
+                    tk=_hj_toks(lines[k])
+                    if not tk: continue
+                    if len(tk)==len(std): rows[tag]=tk
+                    break
+                break
+        # ── 경로2(폴백): '가입금액' 라벨 (구형 리포트)
+        if len(rows)<4:
+            st=None
+            for i,l in enumerate(lines):
+                if '한장보장' in re.sub(r'\s','',l): st=i; break
+            if st is not None:
+                seq=[]
+                for k in range(st, min(st+120, len(lines))):
+                    if '세부가입현황' in re.sub(r'\s','',lines[k]): break
+                    if re.sub(r'\s','',lines[k]).startswith('가입금액'):
+                        seq.append(_hj_toks(lines[k][lines[k].index('가입금액')+4:]))
+                for tag,toks in zip(('A','B','C','D'), seq):
+                    rows.setdefault(tag, toks)
+        for tag,toks in rows.items():
+            names=_HJ_BLOCKS.get((tag,len(toks)))
             if not names: continue          # 토큰 수 불일치 → 그 블록은 통째 포기
             for nm,tk in zip(names,toks):
                 if nm.startswith('__'): continue
-                v = 0.0 if tk=='-' else float(tk.replace(',',''))
-                out[nm]=v
+                out[nm] = 0.0 if tk=='-' else float(tk.replace(',',''))
     except Exception as e:
-        print(f"[v277 한장표] 파싱 실패 → 검산 생략 ({e})")
+        print(f"[v278 한장표] 파싱 실패 → 검산 생략 ({e})")
         return {}
-    if out: print(f"[v277 한장표] 검산 기준 {len(out)}개 확보")
+    if out: print(f"[v278 한장표] 검산 기준 {len(out)}개 확보 (블록 {sorted(rows)})")
+    else:   print("[v278 한장표] 표를 찾지 못했다 → 검산 생략(3열 메리츠 등 한장표 없는 리포트)")
     return out
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1991,7 +2140,17 @@ def parse_txt(txt, filename=''):
     try: _sbc271 = parse_sebu_bycontract(lines)
     except Exception as _e271:
         _sbc271 = {}; print('[v271 sebu] 파서 실패:', _e271)
-    return {'client':client,'contracts':deduped,'sebu_bc':_sbc271,'surg13':_surg13,'hanjang':parse_hanjang(lines)}
+    _hj279 = parse_hanjang(lines)
+    # ★★★v279: 라벨 경로가 비었거나 빈약하면 <b>좌표 폴백</b>(신형 let: = 라벨이 이미지)
+    if len(_sbc271) < max(3, len(deduped)//2):
+        try:
+            _bb = parse_sebu_bbox(_hj279)
+            if len(_bb) > len(_sbc271):
+                print(f'[v279 sebu-bbox] 라벨 경로 {len(_sbc271)}건 → 좌표 경로 {len(_bb)}건으로 대체')
+                _sbc271 = _bb
+        except Exception as _e279:
+            print('[v279 sebu-bbox] 실패:', _e279)
+    return {'client':client,'contracts':deduped,'sebu_bc':_sbc271,'surg13':_surg13,'hanjang':_hj279}
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
@@ -4647,7 +4806,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v277-hanjang-audit-20260731',
+    return {'ok':True,'version':'v279-sebu-bbox-20260731',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4656,7 +4815,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v277-hanjang-audit-20260731'}
+    out = {'version': 'v279-sebu-bbox-20260731'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
