@@ -903,6 +903,197 @@ def parse_sebu(lines):
     return out
 
 # ══════════════════════════════════════════════════════════════════════════
+# ★★★★★v271 세부가입현황 '계약별 가입정보' 파서 (지점장 지적 2026.07.30
+#   "삼성생명 41,800원 계약이 다 비어있다")
+#
+#   [왜 필요한가 — 추측이 아니라 리포트 인쇄값이다]
+#   삼성생명 별첨은 담보명 칸에 <b>담보명이 아니라 특약명/상품명</b>이 인쇄된다.
+#     無신정기특약Ⅰ(표준,본인) 1,000 / 無재해상해(본인) 700 / 無입원(본인) 2 …
+#   담보 <b>종류를 알 수 없으니</b> 마스터 키워드에 걸릴 수가 없고 계약 열이 통째로 빈다.
+#   교보·동양 생보 CI가 별첨에 `주계약`만 찍히는 것과 <b>같은 상황</b>이며,
+#   그때 확립된 원칙 그대로 <b>세부가입현황이 유일한 정답 소스</b>다(지침 §3 ②).
+#
+#   [구조 — 실측 확정]
+#   '계약별 가입정보'(우측)는 <b>보험료 줄 아래로 21개 데이터 행</b>이 좌측
+#   '전체 가입현황' 라벨과 <b>같은 순서</b>로 내려온다. 행 번호가 곧 담보다.
+#   한 계약 열 안에서 <b>왼쪽 값=질병 · 오른쪽 값=상해</b>.
+#
+#   [배정 방법] pdftotext -layout은 x좌표에 비례해 공백을 넣으므로 문자 인덱스를
+#   좌표로 쓴다. 보험료 값의 위치로 계약 열 중심을 잡고 <b>최근접 계약</b>에 배정,
+#   그 계약 열의 <b>중간점 좌/우</b>로 질병·상해를 가른다.
+#   ★확신이 없는 행(요양·치매/응급실·화재벌금/깁스)은 <b>None으로 두어 건드리지 않는다</b>.
+# ★★★★★v276 (지점장 지적 2026.07.30 "이영태 — CI부터 보장성도 하나도 안 맞다")
+#   구 _SEBU_ROWMAP(21행 고정 순번)은 <b>완전 폐기</b>한다.
+#   실측: 이영태 리포트의 좌측 라벨은 <b>33개</b>(실손 4·암 5·입원비 4·운전자 5·기타 5)여서
+#   21행 고정표가 통째로 어긋났다 → 장기요양 3,200이 <b>뇌혈관진단비</b>로, 일배책 10,000이
+#   <b>상해수술비</b>로, 합의금 10,000이 <b>뇌졸증</b>으로 박혔다.
+#   ★새 원리 = <b>순번이 아니라 그 줄에 인쇄된 좌측 담보명 라벨</b>로 매핑한다.
+#     ①라벨 줄을 찾아 (좌=질병측, 우=상해측) 페어를 만든다(side는 사전에 고정 — x좌표 추정 금지)
+#     ②인접(≤3줄) 라벨 줄은 side가 겹치지 않을 때만 병합한다(질병입원비/상해입원비가 두 줄로 갈린다)
+#     ③구간 = [라벨줄-1 … 다음 라벨줄-2]. 값이 라벨보다 한 줄 앞서 인쇄되는 경우가 있다(실측 상해3%).
+#     ④값 배정은 종전대로 <b>보험료 위치로 계약 열 최근접 + 열 중간점 좌/우</b>.
+#   ★확신이 없는 라벨(장기요양·치매·응급실·화재벌금·고액항암)은 <b>None으로 두어 건드리지 않는다</b>.
+_SEBU_LAB = [
+    # (정규화 키워드, 마스터 담보명 or None, side)  side: 'L'=질병측(좌) 'R'=상해측(우)
+    ('질병사망','질병사망(80세)','L'),      ('상해사망','상해사망','R'),
+    ('질병3%','질병후유3%','L'),            ('상해3%','상해후유3%','R'),
+    ('질병입원의료비','입원','L'),          ('상해입원의료비','입원','R'),
+    ('질병통원의료비','통원','L'),          ('상해통원의료비','통원','R'),
+    ('일반암진단비','일반암','L'),          ('암수술비','암수술','R'),
+    ('유사암진단비','유사암(갑.기.경.제)','L'), ('고액항암치료비',None,'R'),
+    ('전이암진단비','통합전이암','L'),
+    ('뇌혈관진단비','뇌혈관진단비','L'),    ('뇌혈관수술비','뇌혈관수술비','R'),
+    ('뇌졸중진단비','뇌졸증진단비','L'),    ('뇌졸증진단비','뇌졸증진단비','L'),
+    ('허혈성심장질환진단비','허혈성 진단비','L'), ('심장질환수술비','심장수술비','R'),
+    ('급성심근경색진단비','급성심근경색','L'),
+    ('질병수술비','질병수술비','L'),        ('상해수술비','상해수술비','R'),
+    ('질병입원비','질병일당','L'),          ('상해입원비','상해일당','R'),
+    ('장기요양자금',None,'L'),              ('경증이상치매진단비',None,'R'),
+    ('교통사고처리지원금','합의금','L'),    ('변호사선임','변호사','R'),
+    ('벌금(대인)','대인','L'),              ('부상위로금','자부상','R'),
+    ('벌금(대물)','대물','L'),
+    ('응급실내원비',None,'L'),              ('화재벌금',None,'R'),
+    ('골절진단비','골절(치아파절포함)','L'),('일상생활배상책임','일상배상책임','R'),
+    ('깁스치료비','깁스진단비','L'),
+]
+
+def _sebu_norm(s):
+    """라벨 비교용 정규화: 공백·전각괄호·구분기호 제거."""
+    t = str(s or '')
+    t = t.replace('（','(').replace('）',')').replace('［','[').replace('］',']')
+    return re.sub(r'[\s,·:/]+','',t)
+
+def _sebu_labels_of(seg):
+    """좌측표 영역 문자열에서 담보 라벨을 찾아 {'L':마스터명|None, 'R':...} 반환.
+       ★'간병인사용/지원 ○○입원비'는 간병인 행으로 돌린다(질병일당/상해일당 아님)."""
+    t = _sebu_norm(seg)
+    if not t: return {}
+    care = ('간병' in t)
+    out = {}
+    for kw, tgt, side in _SEBU_LAB:
+        if _sebu_norm(kw) not in t: continue
+        if side in out: continue                       # 먼저 잡힌 라벨 우선(사전 순서 = 표 순서)
+        if care and tgt in ('질병일당','상해일당'): tgt = '간병인'
+        out[side] = tgt
+    return out
+
+def parse_sebu_bycontract(lines):
+    """세부가입현황 '계약별 가입정보'에서 계약별 담보값을 읽는다(v276 라벨 기반).
+       반환 = { 보험료(int) : { 마스터담보명 : 금액(float) } }"""
+    res={}
+    def _toks(s):
+        out=[]
+        for m in re.finditer(r'(?<![\d,])(\d{1,3}(?:,\d{3})*|\d+)(?![\d,])', s):
+            out.append(((m.start()+m.end())/2.0, m.group(1)))
+        return out
+    i=0; n=len(lines)
+    while i < n:
+        l=lines[i]
+        prem=[(m.start(), m.group(1)) for m in re.finditer(r'(\d[\d,]*)\s*원', l)]
+        if len(prem) < 2:
+            i+=1; continue
+        cols=[]
+        for st,v in prem:
+            try: p=int(v.replace(',',''))
+            except: p=None
+            cols.append({'start':st,'prem':p})
+        _w = ((cols[-1]['start']-cols[0]['start'])/(len(cols)-1)) if len(cols)>1 else 40.0
+        for k,c in enumerate(cols):
+            c['l'] = c['start']-6
+            c['r'] = (cols[k+1]['start']-6) if k+1<len(cols) else (c['start']+_w-6)
+            c['mid'] = (c['l']+c['r'])/2.0
+            c['ctr'] = c['start']+5
+        L0 = cols[0]['l']
+        # ── 블록 끝 = 다음 보험료 줄
+        j=i+1; end=n
+        while j < n:
+            if len(re.findall(r'(\d[\d,]*)\s*원', lines[j]))>=2: end=j; break
+            j+=1
+        # ── ① 라벨 줄 수집
+        labs=[]     # (줄번호, {'L':..,'R':..})
+        for k in range(i+1, end):
+            d=_sebu_labels_of(lines[k][:max(0,int(L0))])
+            if d: labs.append([k,d])
+        # ── ② 인접(≤3줄) & side 비겹침 → 병합
+        merged=[]
+        for k,d in labs:
+            if merged and (k-merged[-1][0])<=3 and not (set(d) & set(merged[-1][1])):
+                merged[-1][1].update(d); merged[-1][0]=k
+            else: merged.append([k,dict(d)])
+        # ★라벨이 빈약한 블록은 '계약별 가입정보'가 아니다(보유계약 리스트 등) → 통째 스킵
+        if len(merged) < 5:
+            i=end; continue
+        # ── ③ 구간 배정  ★구간 상한 lk+3 — 마지막 라벨이 페이지 꼬리/다음 헤더를 먹는 것을 막는다
+        for mi,(lk,d) in enumerate(merged):
+            s_from = lk-1
+            s_to   = (merged[mi+1][0]-2) if mi+1 < len(merged) else (end-1)
+            s_to   = min(s_to, lk+3)
+            if s_to < s_from: s_to = s_from
+            for k in range(max(i+1,s_from), min(end, s_to+1)):
+                for cx,val in _toks(lines[k]):
+                    if cx < L0: continue
+                    best=min(cols, key=lambda c: abs(cx-c['ctr']))
+                    if abs(cx-best['ctr']) > 30: continue
+                    tgt = d.get('L') if cx < best['mid'] else d.get('R')
+                    if not tgt: continue
+                    try: fv=float(val.replace(',',''))
+                    except: continue
+                    if fv<=0: continue
+                    if not best['prem']: continue        # ★보험료 0원 열은 키 충돌 → 배정 제외
+                    dd=res.setdefault(best['prem'],{})
+                    if tgt not in dd or dd[tgt] < fv: dd[tgt]=fv
+        i=end
+    return res
+
+# ★★★★★v277 한장보장표 자동 검산 (지점장 지시 2026.07.31 "지침 100% 활용 대안")
+#   지침 §1 등식1「한장보장표 = 엑셀 = PPT」와 §13 체크리스트 ①은 <b>사람이 눈으로</b> 대조해야만
+#   지켜지는 규칙이었다. 그래서 지침이 있어도 매번 지적을 받고서야 발견했다.
+#   → <b>앱이 매 분석마다 스스로 대조</b>해 확인사항 시트 [검산] 블록에 불일치를 강제 출력한다.
+#   ★이 값은 <b>검산 전용</b>이다. 절대 산출물(본표·PPT·설명서)에 기재하지 않는다.
+#     따라서 여기서 순번 가정을 쓰더라도 <b>토큰 수가 정확히 일치할 때만</b> 채택하므로
+#     틀려도 산출물이 오염되지 않는다(v276에서 폐기한 '순번 고정'과 성격이 다르다).
+_HJ_BLOCKS = {
+    ('A',8):  ['상해사망','질병사망','상해후유3%','질병후유3%','입원','__','통원','__'],
+    ('B',11): ['일반암','유사암(갑.기.경.제)','통합전이암','암수술','__고액항암',
+               '뇌혈관진단비','뇌졸증진단비','뇌혈관수술비','허혈성 진단비','급성심근경색','심장수술비'],
+    ('C',8):  ['상해수술비','질병수술비','상해일당','__간병인상해','질병일당','__간병인질병',
+               '__장기요양','__경증치매'],
+    ('D',10): ['합의금','대인','대물','변호사','자부상','__응급실','__골절','깁스진단비',
+               '__화재벌금','일상배상책임'],
+}
+
+def parse_hanjang(lines):
+    """한장보장현황(4p) → {검산키: 가입금액(만원)}. 실패하면 {} (추측 금지)."""
+    out={}
+    try:
+        st=None
+        for i,l in enumerate(lines):
+            if '한장보장' in l: st=i; break
+        if st is None: return {}
+        rows=[]
+        for k in range(st, min(st+120, len(lines))):
+            l=lines[k]
+            if '세부가입현황' in l: break
+            if re.sub(r'\s','',l).startswith('가입금액'):
+                seg = l[l.index('가입금액')+4:]
+                toks=[m.group(1) for m in
+                      re.finditer(r'(-|\d{1,3}(?:,\d{3})*|\d+)', seg)]
+                rows.append(toks)
+        for tag,toks in zip(('A','B','C','D'), rows):
+            key=(tag,len(toks))
+            names=_HJ_BLOCKS.get(key)
+            if not names: continue          # 토큰 수 불일치 → 그 블록은 통째 포기
+            for nm,tk in zip(names,toks):
+                if nm.startswith('__'): continue
+                v = 0.0 if tk=='-' else float(tk.replace(',',''))
+                out[nm]=v
+    except Exception as e:
+        print(f"[v277 한장표] 파싱 실패 → 검산 생략 ({e})")
+        return {}
+    if out: print(f"[v277 한장표] 검산 기준 {len(out)}개 확보")
+    return out
+
+# ══════════════════════════════════════════════════════════════════════════
 # ★★v44 신정원 3열 포맷 파서 (KB '상품별 가입담보상세' / 메리츠 '별첨 상품별 보험가입현황')
 #   지점장 확정 2026.07.13: (1) 3열 포맷을 입력 정본에 추가 (앵커 자동감지, 기존 2열과 병행)
 #                          (2) 담보명 정본 = 회사담보명
@@ -1779,7 +1970,28 @@ def parse_txt(txt, filename=''):
                             break
     except Exception:
         pass
-    return {'client':client,'contracts':deduped}
+    # ★v271: 세부가입현황 '계약별 가입정보'를 함께 실어 보낸다.
+    #   별첨 담보명이 특약명뿐인 계약(삼성생명 無○○(본인) 등)은 build_excel에서
+    #   매핑 0건으로 판정되며, 그때 이 값으로 계약 열을 채운다.
+    # ★★★v273(지점장 지시 2026.07.30 "1-3 1-5 1-7은 정상계약리스트에서만 나온다"):
+    #   '수술보장' 담보는 <b>별첨(정상계약 리스트) 줄 단위 대표(max)</b>가 정답이다.
+    #   dambo는 같은 담보명 2줄을 <b>합산</b>하므로(실측 100+100=200 · 200+200=400)
+    #   그 값을 쓰면 1-3종이 두 배가 된다. → 별첨 원문에서 계약별 max를 따로 뽑는다.
+    _surg13={}; _curp=None
+    for _l13 in lines:
+        _mp=re.search(r'보험료\s*([\d,]+)\s*원', _l13)
+        if _mp:
+            try: _curp=int(_mp.group(1).replace(',',''))
+            except: _curp=None
+        if _curp and ('수술보장' in re.sub(r'\s','',_l13)):
+            for _mm in re.finditer(r'수술보장[^0-9]*?([\d,]+)', _l13):
+                try: _v13=float(_mm.group(1).replace(',',''))
+                except: continue
+                if _v13>0: _surg13[_curp]=max(_surg13.get(_curp,0.0), _v13)
+    try: _sbc271 = parse_sebu_bycontract(lines)
+    except Exception as _e271:
+        _sbc271 = {}; print('[v271 sebu] 파서 실패:', _e271)
+    return {'client':client,'contracts':deduped,'sebu_bc':_sbc271,'surg13':_surg13,'hanjang':parse_hanjang(lines)}
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
@@ -3298,6 +3510,81 @@ def build_excel(data, out):
                 if _rci_all: ws.cell(_rci_all,_cl).value=None   # ★구 v29t 복사분 제거
                 print(f"[v245 비CI사망] {_c.get('company')} 일반사망 {_ilv:,} → 질병사망(80세) (중대한CI적용 복사 제거)")
 
+    # ★★★★★v271 (지점장 지적 2026.07.30 "삼성생명 41,800원 계약이 다 비어있다")
+    #   별첨 담보명이 <b>특약명/상품명뿐</b>이라 담보 종류를 알 수 없는 계약은
+    #   매핑이 0건이 되어 <b>열이 통째로 빈다</b>(삼성생명 無○○(본인) 계열, 교보 `주계약` 등).
+    #   → 그런 계약에 한해 <b>세부가입현황 '계약별 가입정보'의 인쇄값</b>으로 채운다(지침 §3 ②).
+    #   ★<b>매핑이 1건이라도 있는 계약은 절대 건드리지 않는다</b> — 별첨이 정본이므로 중복 기재 방지.
+    #   ★사망은 §8.1을 그대로 적용한다: 생보 AND 만기 9999(우체국·우정 제외) → <b>일반사망(종신)</b>.
+    _sbc = data.get('sebu_bc') or {}
+    if _sbc:
+        for _ci2, _c2 in enumerate(contracts):
+            _cl2 = 3 + _ci2
+            # ★★v276: 구 조건은 '별첨 매핑 0건'이었다. 그런데 삼성리빙케어처럼
+            #   별첨이 전부 상품명인데 <b>담보 1~2개만 우연히 매핑</b>되면 조건이 깨져
+            #   세부보충이 통째로 멈췄다(이영태 실측: 삼성 CI가 전부 0). →
+            #   <b>매핑 담보 3개 이하 = 별첨이 담보 종류를 알려주지 못하는 계약</b>으로 보고
+            #   그 열을 <b>세부가입현황으로 재구성</b>한다(지침 §3 ②가 유일 정본).
+            _filled = [_r2 for _r2 in range(6, ws.max_row+1)
+                       if isinstance(ws.cell(_r2,_cl2).value,(int,float))]
+            if len(_filled) > 3: continue          # 별첨이 제 역할을 한 계약 → 손대지 않는다
+            _pm = _c2.get('premium')
+            try: _pm = int(str(_pm).replace(',','').replace('원','').strip())
+            except: _pm = None
+            _vals = _sbc.get(_pm)
+            if not _vals: continue
+            _cn2 = _c2.get('company') or ''
+            _lf2 = any(k in _cn2 for k in ('생명','라이프','AIA','메트라이프','공제')) \
+                   and not any(k in _cn2 for k in ('우체국','우정'))
+            _jong = _lf2 and str(_c2.get('expiry_date') or '').startswith('9999')
+            _put=0
+            if _filled:                            # ★재구성: 별첨 잔재 제거 후 세부값으로 채운다
+                for _r2 in _filled: ws.cell(_r2,_cl2).value = None
+            for _nm2,_v2 in _vals.items():
+                _tgt = '일반사망' if (_jong and _nm2=='질병사망(80세)') else _nm2
+                _r2 = nm2r.get(_tgt)
+                if not _r2: continue
+                ws.cell(_r2,_cl2).value = _v2
+                _gen2 = ('비갱신' not in str(_c2.get('renewal') or '')) and ('갱신' in str(_c2.get('renewal') or ''))
+                ws.cell(_r2,_cl2).font  = BL if _gen2 else BK
+                ws.cell(_r2,_cl2).alignment = Alignment(horizontal='center', vertical='center')
+                _put+=1
+            if _put:
+                print(f"[v271 세부보충] {_cn2} {_pm:,}원 → 별첨 매핑 0건 → 세부가입현황에서 {_put}개 기재"
+                      + (" (종신→일반사망)" if _jong else ""))
+
+    # ★★★★★v272 영구지침(지점장 지시 2026.07.30):
+    #   <b>「~2005년 05월까지 가입 + 회사명에 '생명' + 담보명에 '수술보장'」</b>인 담보는
+    #   <b>질병 종수술비(1-3종) · 상해 종수술비(1-3종)</b> 두 행에 <b>각각 대표값(max)</b>을 기재한다.
+    #   ・마스터에 두 행을 신설했다(상해 67 · 질병 75). 이후 행은 전부 +2 밀렸다.
+    #   ・★<b>dambo 키로 넣으면 안 된다</b> — `resolve_kw('질병 종수술비(1-3종)')`가 종 번호 3을
+    #     읽어 <b>1-5종 3종 슬롯</b>으로 보낸다(실측). 그래서 엑셀 행에 직접 기재한다.
+    #   ・★<b>v271 블록보다 뒤</b>에 둔다. 앞에 두면 '별첨 매핑 0건' 판정이 깨져 세부보충이 멈춘다.
+    for _ix3, _c3 in enumerate(contracts):
+        _cn3 = _c3.get('company') or ''
+        if '생명' not in _cn3: continue
+        _m3 = re.match(r'(\d{4})[.\-/](\d{1,2})', str(_c3.get('contract_date') or ''))
+        if not _m3: continue
+        if (int(_m3.group(1)), int(_m3.group(2))) > (2005, 5): continue
+        # ★★★v273: 값은 <b>별첨(정상계약 리스트) 줄 단위 대표(max)</b>다.
+        #   dambo는 같은 담보명 2줄을 합산하므로(실측 100+100=200) 그대로 쓰면 두 배가 된다.
+        #   ★★계약이 여러 개면 <b>계약별로 각각</b> 기재한다(지점장 확정 2026.07.30:
+        #     "139800원 계약에 200만 있고 41,800원에 100이 더 있다").
+        #     끝열 SUM = 계약 합산이 정상이다. 전체 대표 1건으로 줄이지 말 것.
+        try: _pm3 = int(str(_c3.get('premium')).replace(',','').replace('원','').strip())
+        except: _pm3 = None
+        _mx3 = float((data.get('surg13') or {}).get(_pm3) or 0.0)
+        if _mx3 <= 0: continue
+        _cl3 = 3 + _ix3
+        _gen3 = ('비갱신' not in str(_c3.get('renewal') or '')) and ('갱신' in str(_c3.get('renewal') or ''))
+        for _nm3 in ('상해 종수술비(1-3종)', '질병 종수술비(1-3종)'):
+            _r3 = nm2r.get(_nm3)
+            if not _r3: continue
+            ws.cell(_r3, _cl3).value = _mx3
+            ws.cell(_r3, _cl3).font = BL if _gen3 else BK
+            ws.cell(_r3, _cl3).alignment = Alignment(horizontal='center', vertical='center')
+        print(f"[v272 1-3종] {_cn3} {_c3.get('contract_date')} 수술보장 대표 {_mx3:,.0f} → 질병·상해 종수술비(1-3종)")
+
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     last_col = 3 + n_ct
     # ★★★v230 (지점장 지시 2026.07.25, 영구): <b>유사암 자동유도(일반암×10%)는 완전 폐기</b>.
@@ -3478,6 +3765,98 @@ def build_excel(data, out):
         _rr += 1; ws2.cell(_rr,1,'회사'); ws2.cell(_rr,2,'별첨 원 담보명'); ws2.cell(_rr,3,'기재 행'); ws2.cell(_rr,4,'금액(만원)')
         for (_c,_raw,_rows,_a) in cancer_trace:
             _rr += 1; ws2.cell(_rr,1,_c); ws2.cell(_rr,2,str(_raw)[:60]); ws2.cell(_rr,3,_rows); ws2.cell(_rr,4,_a)
+    # ★★★★★v277 [검산] 한장보장표 자동 대조 (지침 §1 등식1 · §13 체크리스트 ① 자동화)
+    #   지금까지 이 대조는 <b>사람 눈</b>으로만 했다. 그래서 지침이 있어도 매번 놓쳤다.
+    #   → 앱이 스스로 대조해 <b>불일치를 확인사항 시트에 강제 출력</b>한다. 값은 건드리지 않는다.
+    try:
+        _hj = (data.get('hanjang') or {})
+        if _hj:
+            _lc2 = 3 + n_ct
+            def _num(v):
+                if isinstance(v,(int,float)): return float(v)
+                t=str(v or '')
+                if '/' in t:                       # 슬래시 행은 대표(max)
+                    try: return max(float(x.replace(',','')) for x in t.split('/') if x.strip())
+                    except Exception: return None
+                try: return float(t.replace(',',''))
+                except Exception: return None
+            # ★끝열은 이 시점에 <b>수식 문자열</b>이다(캐시 주입 전) → 등식2 v218 규칙 그대로
+            #   수식 종류를 보고 데이터셀(C~끝열-1)로 직접 계산한다.
+            _xl = {}
+            for _r9 in range(6, ws.max_row+1):
+                _n9 = ws.cell(_r9,2).value
+                if not _n9: continue
+                _f9 = ws.cell(_r9,_lc2).value
+                _ds = [_num(ws.cell(_r9,_c9).value) for _c9 in range(3,_lc2)]
+                _ds = [x for x in _ds if x is not None]
+                if isinstance(_f9,str) and _f9.startswith('='):
+                    if '=MIN(' in _f9:
+                        _cap = re.search(r',\s*(\d+)\s*\)\s*$', _f9)
+                        _v9 = min(sum(_ds), float(_cap.group(1))) if _cap else sum(_ds)
+                    elif '=IF(COUNT' in _f9: _v9 = max(_ds) if _ds else 0.0
+                    elif '=IF(SUM'   in _f9: _v9 = 7.0 if _ds else 0.0
+                    else:                    _v9 = sum(_ds)
+                else:
+                    _v9 = _num(_f9)
+                    if _v9 is None: _v9 = sum(_ds) if _ds else None
+                if _v9 is not None: _xl[str(_n9).strip()] = _v9
+            def _g(*names): return sum(_xl.get(x,0.0) for x in names)
+            # ★합산 규칙 = 지침 검산식. 행이 갈려도 합은 불변이어야 한다.
+            _pairs = [
+                ('상해사망',          _g('상해사망')),
+                ('질병사망',          _g('일반사망','질병사망(80세)')),
+                ('상해후유3%',        _g('상해후유3%')),
+                ('질병후유3%',        _g('질병후유3%')),
+                ('일반암',            _g('일반암','중대한 암')),
+                ('유사암(갑.기.경.제)',_g('유사암(갑.기.경.제)')),
+                ('통합전이암',        _g('통합전이암')),
+                ('암수술',            _g('암수술')),
+                ('뇌혈관진단비',      _g('뇌혈관진단비')),
+                ('뇌졸증진단비',      _g('뇌졸증진단비','중대한 뇌졸증')),
+                ('뇌혈관수술비',      _g('뇌혈관수술비')),
+                ('허혈성 진단비',     _g('허혈성 진단비')),
+                ('급성심근경색',      _g('급성심근경색','중대한 급성심근')),
+                ('심장수술비',        _g('심장수술비')),
+                ('상해수술비',        _g('상해수술비')),
+                ('질병수술비',        _g('질병수술비')),
+                ('상해일당',          _g('상해일당')),
+                ('질병일당',          _g('질병일당')),
+                ('합의금',            _g('합의금')),
+                ('대인',              _g('대인')),
+                ('대물',              _g('대물')),
+                ('변호사',            _g('변호사')),
+                ('자부상',            _g('자부상')),
+                ('깁스진단비',        _g('깁스진단비')),
+                ('일상배상책임',      _g('일상배상책임')),
+                ('입원',              _g('입원')),
+                ('통원',              _g('통원','약값')),
+            ]
+            _bad=[]; _ok=0
+            for _k,_ev in _pairs:
+                if _k not in _hj: continue
+                _hv=_hj[_k]
+                if abs(_hv-_ev) < 0.5: _ok+=1
+                else: _bad.append((_k,_hv,_ev))
+            _rr += 2
+            _c0 = ws2.cell(_rr,1, f'[검산] 한장보장표 대조 — 일치 {_ok}건 / 불일치 {len(_bad)}건'
+                                  + ('  ★불일치 해소 전 제출 금지' if _bad else '  (전 항목 일치)'))
+            _c0.font = Font(bold=True, size=13, color=('C0392B' if _bad else '1F7A1F'))
+            _rr += 1; ws2.cell(_rr,1,'담보'); ws2.cell(_rr,2,'한장보장표'); ws2.cell(_rr,3,'엑셀 끝열'); ws2.cell(_rr,4,'차이')
+            for _k,_hv,_ev in _bad:
+                _rr += 1
+                ws2.cell(_rr,1,_k); ws2.cell(_rr,2,_hv); ws2.cell(_rr,3,_ev); ws2.cell(_rr,4,round(_ev-_hv,1))
+                for _cc in range(1,5): ws2.cell(_rr,_cc).font = Font(color='C0392B', bold=True)
+            if not _bad:
+                _rr += 1; ws2.cell(_rr,1,'※ 대조 가능한 전 항목이 일치한다.')
+            print(f"[v277 검산] 한장표 대조 일치 {_ok} / 불일치 {len(_bad)}"
+                  + (" → " + ', '.join(f"{k}({hv:,.0f}≠{ev:,.0f})" for k,hv,ev in _bad) if _bad else ""))
+            # ★요약 한 줄을 시트 5행(눈에 먼저 들어오는 자리)에도 박는다
+            _c5 = ws2.cell(5,1, f'[검산] 한장보장표 대비 불일치 {len(_bad)}건'
+                                + (' — 아래 [검산] 표 확인' if _bad else ' — 전 항목 일치'))
+            _c5.font = Font(bold=True, size=12, color=('C0392B' if _bad else '1F7A1F'))
+    except Exception as _e9:
+        print(f"[v277 검산] 실패 → 생략 ({_e9})")
+
     # ★v39 워크시트 담보명 카피: 원본담보명을 숨김 시트 _dambo_raw 에 저장 (등식·기존시트 무손상)
     try:
         if '_dambo_raw' in wb.sheetnames: del wb['_dambo_raw']
@@ -4268,7 +4647,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v269-ucheguk-20260729',
+    return {'ok':True,'version':'v277-hanjang-audit-20260731',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4277,7 +4656,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v269-ucheguk-20260729'}
+    out = {'version': 'v277-hanjang-audit-20260731'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
