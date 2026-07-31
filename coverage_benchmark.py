@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v292-hjcheck-20260731 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v306-label-20260731 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
