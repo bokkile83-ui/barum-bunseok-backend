@@ -558,6 +558,9 @@ def llm_extract(block_text):
         return {}
 
 
+_IMG_PDF_WARN = ''   # ★v280 이미지PDF(비전OCR) 경고 전역 플래그
+_VISION_PARTIAL = ''  # ★v281 비전 OCR 부분 실패(페이지 유실) 경고
+
 def pdf_to_txt(pdf_bytes):
     """★v32 OCR PDF 입력(2026.07.07 지점장 정답): 1순위=텍스트레이어 직독(pdftotext -layout, 무키·100%),
     2순위=Claude 비전 OCR(이미지 전용 PDF). Adobe .txt 변환 없이 OCR PDF 1개로 완결."""
@@ -603,7 +606,8 @@ def pdf_to_txt(pdf_bytes):
               "표는 탭으로 열 구분, 회전된 표는 정방향으로 읽어라. "
               "담보명과 금액(만원 단위)을 같은 줄에 유지하라. 회사명·상품명·계약일·만기일·보험료도 포함. "
               "해석·설명·요약 금지, 페이지의 원문 텍스트만 출력.")
-    out=[]
+    out=[]; _fail_pages=[]
+    globals()['_VISION_PARTIAL']=''
     for idx, img in enumerate(pages):
         try:
             # ★v60 회전 보정: let: 리포트는 가로형인데 '인쇄→PDF' 이미지본은 세로 A4에
@@ -624,28 +628,53 @@ def pdf_to_txt(pdf_bytes):
             except Exception: pass
             buf=io.BytesIO(); img.save(buf, format='PNG')
             b=base64.b64encode(buf.getvalue()).decode()
-            r=httpx.post('https://api.anthropic.com/v1/messages',
-                headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                # ★★★v233 원복(2026.07.25): 모델은 <b>어제 실제로 작동한 haiku-4-5</b>를 그대로 쓴다.
-                #   v232에서 내가 검증 없이 sonnet-4-6으로 바꿨다 — <b>모델명이 틀리면 400으로 OCR이 통째 실패</b>한다.
-                #   "어제는 이 PDF로 됐다"가 곧 haiku-4-5가 정답이라는 증거다. 임의 교체 금지.
-                json={'model':'claude-haiku-4-5-20251001','max_tokens':8000,   # ★v232 잘림 방지(토큰만 상향)
-                      'messages':[{'role':'user','content':[
-                          {'type':'image','source':{'type':'base64','media_type':'image/png','data':b}},
-                          {'type':'text','text':prompt}]}]}, timeout=120)
-            if r.status_code==200:
-                t=''.join(x.get('text','') for x in r.json().get('content',[]) if x.get('type')=='text')
-                if t.strip(): out.append(t)
-            else:
-                print(f'[PDF_VISION_HTTP] p{idx} status={r.status_code} {r.text[:200]}')
-                if idx==0: globals()['_VISION_FAIL']=f'비전 OCR API 오류 status={r.status_code}'
+            # ★★★★★v281 (2026.07.31 이영태 32페이지 실사고):
+            #   구 코드는 <b>페이지당 1회 호출·재시도 0회</b>였고, 실패 흔적을 <b>idx==0일 때만</b> 남겼다.
+            #   → 1p가 성공하고 12~32p가 429/타임아웃으로 죽으면 <b>아무 데도 안 남고</b>
+            #     앞쪽 계약목록만 살아 "계약은 나오는데 담보가 통째로 빈" 산출물이 조용히 나갔다.
+            #   이영태 실측: 32페이지 · b64 906KB/장 · 이미지토큰 약 3,770/장 = <b>32장 약 12만 입력토큰</b>.
+            #   → ①429/5xx <b>재시도 3회 지수백오프</b> ②<b>모든 실패 페이지를 기록</b> ③성공/실패 수를 화면에 노출.
+            t=''
+            _last=''
+            for _try in range(3):
+                try:
+                    r=httpx.post('https://api.anthropic.com/v1/messages',
+                        headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+                        # ★★★v233 원복(2026.07.25): 모델은 <b>어제 실제로 작동한 haiku-4-5</b>를 그대로 쓴다.
+                        #   v232에서 내가 검증 없이 sonnet-4-6으로 바꿨다 — <b>모델명이 틀리면 400으로 OCR이 통째 실패</b>한다.
+                        json={'model':'claude-haiku-4-5-20251001','max_tokens':8000,
+                              'messages':[{'role':'user','content':[
+                                  {'type':'image','source':{'type':'base64','media_type':'image/png','data':b}},
+                                  {'type':'text','text':prompt}]}]}, timeout=120)
+                    if r.status_code==200:
+                        t=''.join(x.get('text','') for x in r.json().get('content',[]) if x.get('type')=='text')
+                        break
+                    _last=f'status={r.status_code}'
+                    print(f'[PDF_VISION_HTTP] p{idx+1} try{_try+1} {_last} {r.text[:160]}')
+                    if r.status_code in (429,500,502,503,504,529):
+                        import time as _tm; _tm.sleep((2,5,12)[_try]); continue
+                    break
+                except Exception as _ee:
+                    _last=f'예외 {_ee}'
+                    print(f'[PDF_VISION_ERR] p{idx+1} try{_try+1} {_ee}')
+                    import time as _tm; _tm.sleep((2,5,12)[_try])
+            if t.strip(): out.append(t)
+            else: _fail_pages.append((idx+1,_last))
         except Exception as e:
-            print(f'[PDF_VISION_ERR] p{idx} {e}')
-            if idx==0: globals()['_VISION_FAIL']=f'비전 OCR 예외: {e}'
+            print(f'[PDF_VISION_ERR] p{idx+1} {e}')
+            _fail_pages.append((idx+1,f'예외 {e}'))
     txt='\n'.join(out)
-    print(f'[PDF_VISION] pages={len(pages)} chars={len(txt)} dpi=300 model=sonnet-4-6')
+    print(f'[PDF_VISION] pages={len(pages)} ok={len(out)} fail={len(_fail_pages)} '
+          f'chars={len(txt)} dpi=300 model=claude-haiku-4-5-20251001')
+    # ★v281 실패 페이지는 <b>한 장이라도</b> 전부 노출한다(구 코드는 1페이지 실패만 기록).
+    if _fail_pages:
+        _fp=', '.join(f'{n}p({w})' for n,w in _fail_pages[:12])
+        _more='' if len(_fail_pages)<=12 else f' 외 {len(_fail_pages)-12}장'
+        globals()['_VISION_PARTIAL']=(f'비전 OCR {len(pages)}장 중 <b>{len(_fail_pages)}장 실패</b> '
+                                      f'— 실패: {_fp}{_more}')
+        print('[PDF_VISION_PARTIAL] '+globals()['_VISION_PARTIAL'])
     if not txt.strip() and not globals().get('_VISION_FAIL'):
-        globals()['_VISION_FAIL']='비전 OCR이 글자를 한 자도 반환하지 않음'
+        globals()['_VISION_FAIL']=(globals().get('_VISION_PARTIAL') or '비전 OCR이 글자를 한 자도 반환하지 않음')
     return txt
 
 
@@ -1493,8 +1522,50 @@ def parse_sinjeong(lines):
     return contracts
 
 
+
+# ★★★★★v282 (2026.07.31 이영태 OCR 실사고) — 계약 경계 앵커 복구
+#   <b>사고</b>: 별첨 계약 경계를 <b>'정상계약 리스트' 글자 하나</b>로만 잡는다.
+#   비전 OCR이 그 장식 헤더 한 줄을 놓치면 <b>두 계약이 한 계약으로 병합</b>되고,
+#   뒤 계약의 담보가 앞 계약 안으로 들어간다.
+#   → CI(삼성 리빙케어) 페이지 헤더가 유실되면 <b>CI 계약 자체가 사라져 'CI 미판정'</b>이 되고,
+#     그 암·뇌졸증·급성심근 담보는 비CI 계약의 담보가 되어 <b>중대한 3행이 아니라 일반 행</b>에 박힌다.
+#     운전자 벌금도 남의 계약에 붙어 합산이 뒤섞인다. <b>증상 3개가 원인 1개다.</b>
+#   <b>실측 재현</b>: 같은 내용 · 앵커 있음 → 계약 2건(CI True) / 앵커 1줄 삭제 → 계약 1건(운전자 담보가
+#   삼성 CI 계약 안으로 흡수).
+#   <b>영구원칙 위반 3번째</b>(v271 고정순번 · v277 '한장보장' 글자 · v282 '정상계약 리스트' 글자).
+#   → 글자 앵커에 의존하지 않는다. <b>보험료 N원 + 보장기간 날짜~날짜</b>는 계약마다 반드시 인쇄되고
+#     숫자라 OCR 생존율이 높다. 이 줄을 찾아 <b>앵커가 없는 계약 앞에만</b> 앵커 줄을 합성 삽입한다.
+#     파서 본체는 손대지 않는다(회귀 0). 앵커가 이미 있으면 삽입 0건 = 무해.
+_ANCHOR_TXT = '[별첨] 보험서비스(상품)별 보장 현황   (정상계약 리스트)'
+def _repair_anchor(lines):
+    try:
+        _re_prem = re.compile(r'보험료\s*[\d,\.]+\s*원')
+        _re_per  = re.compile(r'\d{4}\.\d{2}\.\d{1,2}\s*[-~（卜]\s*\d{4}\.\d{2}\.\d{1,2}')
+        ins = []
+        for i, l in enumerate(lines):
+            if not (_re_prem.search(l) and _re_per.search(l)): continue
+            # 계약 블록 시작(회사·상품 줄 포함)까지 최대 4줄 되감는다 — 빈 줄이 경계다.
+            b = i
+            while b > 0 and (i - b) < 4 and lines[b-1].strip(): b -= 1
+            # 블록 시작 앞 6줄 안에 이미 앵커가 있으면 건드리지 않는다.
+            if any('정상계약 리스트' in lines[k] for k in range(max(0, b-6), b)): continue
+            if any('실효계약 리스트' in lines[k] or '미납해지' in lines[k]
+                   for k in range(max(0, b-6), b)): continue
+            ins.append(b)
+        if not ins: return lines
+        out = []
+        _st = set(ins)
+        for i, l in enumerate(lines):
+            if i in _st: out.append(_ANCHOR_TXT)
+            out.append(l)
+        print(f'[v282 anchor] 계약 경계 앵커 {len(ins)}건 복구(유실된 별첨 헤더 보정)')
+        return out
+    except Exception as _e:
+        print(f'[v282 anchor ERR] {_e}'); return lines
+
 def parse_txt(txt, filename=''):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
+    lines = _repair_anchor(lines)   # ★v282 유실된 계약 경계 앵커 복구
     # ★★★v237: 세부가입현황(상세내역) 계약별 CI 정보 1회 계산 — 선지급률 판정 2순위 근거
     _cib = ci_selftest()
     print('[v238 CI자가진단] ' + ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST)) if not _cib else 'FAIL ' + ' | '.join(_cib[:6])))
@@ -1927,7 +1998,24 @@ def parse_txt(txt, filename=''):
                     if not _pred(_t2): continue
                 except Exception:
                     continue
-                if len(_rows) <= 1: break          # 단일행은 기존 resolve에 위임(변경 없음)
+                # ★★★★★v285 (지점장 지적 2026.07.31 "현대 심장도 미표기다"):
+                #   구 코드는 <b>구성행이 1개인 묶음</b>을 무조건 resolve_kw에 위임하고 break 했다.
+                #   그런데 resolve_kw가 그 표기를 못 잡으면 <b>아무도 처리하지 않아 담보가 통째로 사라진다</b>.
+                #   <b>실측(이영태 현대 Hi2007)</b>: `심혈관질환(특정Ⅱ)진단(갱신형)담보` 500
+                #     → _HB는 ['급성심근경색'] 단일행이라 break · resolve_kw는 None → <b>급성심근경색 미표기</b>.
+                #     (같은 계약의 `심혈관질환(특정Ⅰ)`은 3행 묶음이라 정상 분해됐다 — 그래서 Ⅱ만 조용히 빠졌다.)
+                #   같은 함정이 <b>KB·한화·NH·DB 특정Ⅱ · 현대 특정허혈/특정2대 · 롯데 특정심장Ⅰ/기타부정맥 ·
+                #   KB 심장판막/심근병증 · 흥국 기타심장부정맥</b>에 전부 걸려 있다.
+                #   → resolve_kw가 잡으면 <b>종전대로 위임</b>하고, <b>못 잡을 때만</b> 정본표대로 기재한다(회귀 0).
+                if len(_rows) <= 1:
+                    try: _std0 = resolve_kw(_k)[0]
+                    except Exception: _std0 = None
+                    if _std0: break                # 기존 경로가 이미 처리 중 — 손대지 않는다
+                    _v1 = _c['dambo'].pop(_k)
+                    _nk1 = f'{_rows[0]}[심장묶음]'
+                    _c['dambo'][_nk1] = _c['dambo'].get(_nk1, 0) + _v1
+                    print(f"[v285 심장단일] {_hk} '{_k}' {_v1} → {_rows[0]} (resolve 미매칭 구제)")
+                    break
                 _v = _c['dambo'].pop(_k)
                 for _r in _rows:
                     _nk = f'{_r}[심장묶음]'
@@ -2679,8 +2767,19 @@ def resolve_kw(raw):
     if has('6주'): return '6주미만',0
     if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
     if has('벌금') and has('대물'): return '대물',0
-    if has('벌금') and no('화재','과실','치사','업무'): return '대인',0   # ★v29q-7 벌금담보 단독=대인. 과실치사·업무과실 벌금 변형은 이중합산 차단→[확인]
-    if has('대인') and no('대물'): return '대인',0
+    # ★★★★★v284 (지점장 확정 2026.07.31): <b>"과실치사는 삭제다. 대인벌금은 과실치사랑 다른 담보다"</b>
+    #   → v283에서 내가 지점장 문구("표기 미이행 2가지")를 <b>반대로 해석</b>해 과실치사 계열을
+    #     대인에 합류시킨 것은 <b>오류</b>다. 구 v29q-7 배제어를 <b>그대로 원복</b>한다.
+    #   <b>과실치사상 벌금 · 업무상 과실치상해실치사상 벌금 = 대인벌금과 별개 담보</b> → 대인에 넣지 않는다.
+    #   (누락 방지 원칙에 따라 [확인]큐에는 그대로 남는다.)
+    if has('벌금') and no('화재','과실','치사','업무'): return '대인',0
+    # ★★★★★v288 (이명순 실측 2026.07.31 · 지점장 확정 "대인 2,000+1,000 총 3,000"):
+    #   지침 §8.6은 <b>"벌금(대인)·벌금(대인대물 미표기)→대인"</b> — 즉 <b>벌금 담보</b>의 대인/대물 구분 규칙이다.
+    #   구 코드는 '벌금' 없이 <b>'대인' 글자만으로</b> 대인 행에 넣어 지침 범위를 넘었다.
+    #   <b>실측(이명순 현대 Hi0910)</b>: `대인교통사고발생위로금담보특별` <b>20</b>이 대인으로 산입 →
+    #     대인 = 벌금담보 2,000 + 스쿨존 1,000 + <b>위로금 20</b> = <b>3,020</b>(한장표 정답 3,000).
+    #   → 지침 원문대로 <b>'벌금'을 필수 조건으로</b> 되돌린다. 위로금은 [확인]큐로 남는다(누락 금지).
+    if has('대인') and has('벌금') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
     if has('변호사'): return '변호사',0
     if has('자부상') or (has('자동차') and (has('부상') or has('자부상'))):
@@ -3015,6 +3114,14 @@ def build_excel(data, out):
     cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
     surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
     raw_by_std = {}   # ★v39 워크시트 담보명 카피: 표준명→원본담보명(최댓값 담보 기준)
+    # ★★★★★v289 (지점장 지시 2026.07.31 "계속 반복이야 — 우선 원인 잡자")
+    #   <b>반복의 구조적 원인</b>: 근거 수집이 `_WS_STD` 10개 담보에만 걸려 있어
+    #   <b>운전자·사망·일당·실손·골절 등은 어느 담보에서 왔는지 산출물 어디에도 없다</b>.
+    #   → 지점장이 "대인 3,020"을 보고도 원인을 알 수 없고, 물어보고, 내가 추측하고, 틀리고, 원복한다.
+    #   <b>실측(이명순)</b>: 대인 3,020의 범인 `대인교통사고발생위로금담보특별 20`을
+    #   찾는 데 이 대화에서만 6턴이 걸렸다. 근거표 한 줄이면 지점장이 1분에 짚는다.
+    #   → <b>전 담보 매핑 근거를 빠짐없이 기록</b>한다(표시 전용 — 값에 일절 영향 없음).
+    trace_all = []
     heart_trace = []   # ★v29z (지점장 2026.07.03): 심장 블록 기재 근거 — (회사, 원담보명, 기재행들, 금액). '없는 값이 튀어나옴' 방지용 감사 로그
     silson_trace = []  # ★v29z: 실손 세대 판정 근거 — (회사, 가입일, 상품코드, 판정)
 
@@ -3419,6 +3526,8 @@ def build_excel(data, out):
                 #   갱신=파랑 / 비갱신=검정으로 <b>일반 담보와 동일하게</b> 칠한다(구 v139 '간병인 계열 3행 무조건 파랑' 폐기).
                 ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','일상배상책임')) else BK
                 # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
+                try: trace_all.append((str(std), str(raw).strip(), amt, str(ct.get('company','')), str(ct.get('product',''))[:40]))
+                except Exception: pass
                 _WS_STD = ('암주요치료비','하이클래스(암)','2대 주요치료비','산정특례뇌혈관','산정특례심장','일반암','뇌혈관진단비','뇌졸증진단비','급성심근경색','허혈성 진단비')
                 if std in _WS_STD:
                     _prev = raw_by_std.get(std)
@@ -3844,6 +3953,12 @@ def build_excel(data, out):
         if _sn in wb.sheetnames: del wb[_sn]
     ws2 = wb.create_sheet('확인사항')   # ★v41 이모지·외부하이퍼링크 제거(엑셀 '편집사용' 지연 원인)
     ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}')
+    try:
+        _ipw = globals().get('_IMG_PDF_WARN','')
+        if _ipw:
+            _c1 = ws2.cell(1,1, f'{client} · 자동분석 {datetime.datetime.now():%Y.%m.%d}   ' + _ipw)
+            _c1.font = Font(bold=True, size=13, color='B00020')
+    except Exception: pass
     ws2.cell(3,1,'계약수'); ws2.cell(3,2,n_ct)
     ws2.cell(4,1,'월보험료합계'); ws2.cell(4,2,f'{sum(c["premium"] for c in contracts):,}원')
     # ★★v186 (지점장 2026.07.22): AIA/AIG/라이나(우체국) 계약이 있으면 <b>엑셀 확인사항 시트 최상단</b>에
@@ -3975,7 +4090,11 @@ def build_excel(data, out):
                 ('뇌혈관수술비',      _g('뇌혈관수술비')),
                 ('허혈성 진단비',     _g('허혈성 진단비')),
                 ('급성심근경색',      _g('급성심근경색','중대한 급성심근')),
-                ('심장수술비',        _g('심장수술비')),
+                # ★★★★★v292 (김진구 실측 2026.07.31): 한장표 '심장질환수술비'는 신정원 합산 표기라
+                #   <b>심장수술비 + 허혈성수술비</b>가 한 칸에 들어간다(KB '상해입원의료비=입원+외래+처방'과 동일 구조).
+                #   실측: 김진구 한장표 2,200 vs 엑셀 심장수술비 0 → 근거표에 허혈성수술비 1,000+1,000 존재.
+                #   BARUM은 두 행을 분리 기재하는 것이 정본(#단독담보 원칙)이므로 <b>검산식만</b> 합산한다.
+                ('심장수술비',        _g('심장수술비','허혈성수술비')),
                 ('상해수술비',        _g('상해수술비')),
                 ('질병수술비',        _g('질병수술비')),
                 ('상해일당',          _g('상해일당')),
@@ -4015,6 +4134,78 @@ def build_excel(data, out):
             _c5.font = Font(bold=True, size=12, color=('C0392B' if _bad else '1F7A1F'))
     except Exception as _e9:
         print(f"[v277 검산] 실패 → 생략 ({_e9})")
+
+    # ★★★★★v290 (지점장 지시 2026.07.31 "노란칸은 합계까지 이어지도록"):
+    #   <b>원인</b>: master.xlsx의 행 채우기(연노랑 FFFFFFCC 등)가 <b>B~J(10열)까지만</b> 칠해져 있다.
+    #   계약이 9건을 넘으면 끝열이 10열을 지나 <b>합계열에 색이 없다</b>(이명순 14계약 → 끝열 17).
+    #   → 담보 행마다 <b>B열 채우기를 C~끝열 전체에 복사</b>한다. 계약 수와 무관하게 이어진다.
+    #   ★값·수식·글자색은 건드리지 않는다(표시 전용). ★이미 다른 색이 칠해진 셀은 보존한다.
+    try:
+        _fillfix = 0
+        for _r in range(6, ws.max_row + 1):
+            if not ws.cell(_r, 2).value: continue
+            _bf = ws.cell(_r, 2).fill
+            _bg = _bf.fgColor.rgb if (_bf and _bf.fgColor) else None
+            if not _bg or _bg in ('00000000',) or _bf.patternType != 'solid': continue
+            for _c in range(3, last_col + 1):
+                _cf = ws.cell(_r, _c).fill
+                _cg = _cf.fgColor.rgb if (_cf and _cf.fgColor) else None
+                if _cg == _bg: continue
+                # 흰색·무채움 셀만 덮는다(특수 표시 색은 보존)
+                if _cf.patternType == 'solid' and _cg not in ('00000000','FFFFFFFF',None): continue
+                ws.cell(_r, _c).fill = PatternFill('solid', fgColor=_bg)
+                _fillfix += 1
+        print(f'[v290 행색] 합계열까지 채우기 연장 {_fillfix}셀')
+        # ★★★★★v291 (지점장 지적 2026.07.31 "허혈성이 갱신인데도 계속 블랙" · "실손도 파랑으로"):
+        #   <b>원인</b>: 담보별 글자색(갱신=파랑 0070C0) 규칙이 <b>데이터셀에만</b> 적용되고
+        #   <b>합계열(끝열)은 항상 검정</b>이었다. 실측: 허혈성·급성심근·입원·통원·약값 끝열 전부 FF000000.
+        #   지점장이 보는 곳은 <b>합계열</b>이라 "갱신인데 블랙"으로 보인다.
+        #   → 지침 §10 "갱신=파랑" 그대로 <b>합계열에도 적용</b>한다.
+        #     ①그 행 데이터셀에 파랑이 하나라도 있으면 합계도 파랑
+        #     ②실손(입원·통원·약값)·일상배상책임은 항상 파랑(§10 영구)
+        _bluefix = 0
+        _ALWAYS_BLUE = ('입원','통원','약값','약','일상배상책임')
+        for _r in range(6, ws.max_row + 1):
+            _nm = str(ws.cell(_r, 2).value or '').strip()
+            if not _nm: continue
+            _isblue = _nm in _ALWAYS_BLUE
+            if not _isblue:
+                for _c in range(3, last_col):
+                    _f = ws.cell(_r, _c).font
+                    _rgb = _f.color.rgb if (_f and _f.color) else None
+                    if _rgb and str(_rgb).endswith('0070C0'): _isblue = True; break
+            if _isblue:
+                _tc = ws.cell(_r, last_col)
+                _tc.font = Font(color='0070C0', bold=(_tc.font.bold if _tc.font else False))
+                _bluefix += 1
+        print(f'[v291 합계색] 합계열 파랑 적용 {_bluefix}행')
+    except Exception as _e:
+        print(f'[v290 행색 ERR] {_e}')
+
+    # ★★★★★v289 근거표 — 어느 담보가 어느 행에 들어갔는지 전수 노출(반복 차단의 핵심)
+    try:
+        if '근거표' in wb.sheetnames: del wb['근거표']
+        _tr = wb.create_sheet('근거표')
+        _hd = ['마스터 행','원본 담보명','금액(만원)','회사','상품']
+        for _j,_h in enumerate(_hd, start=1):
+            _c = _tr.cell(1,_j,_h); _c.font = Font(bold=True, color='FFFFFF')
+            _c.fill = PatternFill('solid', fgColor='1456B0')
+        _cnt = {}
+        for _t in trace_all: _cnt[_t[0]] = _cnt.get(_t[0],0)+1
+        _rr = 2
+        for _std0,_raw0,_amt0,_co0,_pd0 in sorted(trace_all, key=lambda x:(x[0], -x[2])):
+            _tr.cell(_rr,1,_std0); _tr.cell(_rr,2,_raw0); _tr.cell(_rr,3,_amt0)
+            _tr.cell(_rr,4,_co0);  _tr.cell(_rr,5,_pd0)
+            if _cnt.get(_std0,0) > 1:      # 한 행에 2개 이상 합쳐진 곳 = 오탐 1순위
+                for _j in range(1,6):
+                    _tr.cell(_rr,_j).fill = PatternFill('solid', fgColor='FFF2CC')
+            _rr += 1
+        for _j,_w in enumerate((22,52,12,14,34), start=1):
+            _tr.column_dimensions[chr(64+_j)].width = _w
+        _tr.freeze_panes = 'A2'
+        print(f'[v289 근거표] 담보 {len(trace_all)}건 기록 · 합산행 {sum(1 for v in _cnt.values() if v>1)}개')
+    except Exception as _e:
+        print(f'[v289 근거표 ERR] {_e}')
 
     # ★v39 워크시트 담보명 카피: 원본담보명을 숨김 시트 _dambo_raw 에 저장 (등식·기존시트 무손상)
     try:
@@ -4806,7 +4997,7 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v279-sebu-bbox-20260731',
+    return {'ok':True,'version':'v292-hjcheck-20260731',
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
@@ -4815,7 +5006,7 @@ def health():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v279-sebu-bbox-20260731'}
+    out = {'version': 'v292-hjcheck-20260731'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -4887,6 +5078,7 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
     except Exception:
         _txt_data=None
     _pdf_data=None; pdf_txt=''; _img_pdf_nokey=False; _img_prod=''
+    globals()['_IMG_PDF_WARN']=''   # ★v280 매 분석마다 초기화
     if _pdf_f:
         pdf_bytes=await _pdf_f.read()
         # ★v60 이미지 PDF 진단: 텍스트레이어 직독이 0글자면 = 이미지 전용 PDF(글자 없음).
@@ -4922,8 +5114,18 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
             if not _rawtl or len(_rawtl.strip())<30 or _hangul<100:
                 _img_pdf_nokey=True
                 _img_prod=_prod
+                globals()['_IMG_PDF_WARN'] = ('★ 경고 — 글자층 없는 이미지 PDF를 비전 OCR로 읽었습니다'
+                                              + (f' (생성기: {_prod})' if _prod else '')
+                                              + ' — 담보명 오독 가능. 고객 제출용으로 쓰지 말 것.')
         except Exception: pass
         pdf_txt=pdf_to_txt(pdf_bytes)
+        # ★v281 비전 OCR 부분 실패(페이지 유실)를 엑셀 확인사항·화면 배너로 함께 끌고 간다.
+        try:
+            _vp=globals().get('_VISION_PARTIAL','')
+            if _vp:
+                globals()['_IMG_PDF_WARN']=((globals().get('_IMG_PDF_WARN','') or '') +
+                                            ' / ★ ' + re.sub(r'<[^>]+>','',_vp))
+        except Exception: pass
         if pdf_txt.strip():
             try:
                 _pdf_data=parse_txt(pdf_txt, _pdf_f.filename)
@@ -4964,8 +5166,21 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits)
         # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
+        _sm = make_summary(data)
+        if _img_pdf_nokey:
+            _sm = ('<div style="background:#B00020;color:#fff;padding:12px;border-radius:6px;'
+                   'font-weight:700;line-height:1.6;margin-bottom:12px">'
+                   '★ 경고 — 글자층이 없는 <b>이미지 PDF</b>입니다'
+                   + (f' (생성기: {_img_prod})' if _img_prod else '') + '<br>'
+                   '비전 OCR로 읽었습니다. 담보명 한 글자만 오독돼도 담보 배정이 통째로 갈립니다.<br>'
+                   + ((f'<b>{globals().get("_VISION_PARTIAL","")}</b> — 실패한 페이지의 계약·담보는 '
+                       f'산출물에서 통째로 빠져 있습니다.<br>') if globals().get('_VISION_PARTIAL') else '') +
+                   '<b>이 산출물은 고객 제출용으로 쓰지 마십시오.</b><br>'
+                   'let: 리포트 화면에서 <b>인쇄가 아니라 PDF 다운로드(저장)</b> 버튼으로 받은 '
+                   '원본 파일을 그대로 다시 올려주세요.</div>') + _sm
+            src_note = (src_note or '') + ' / ★이미지PDF-비전OCR'
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
-                  'summary':make_summary(data),'pptx_ready':ppt_ok,'source':src_note}
+                  'summary':_sm,'pptx_ready':ppt_ok,'source':src_note}
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
