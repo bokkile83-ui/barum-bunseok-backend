@@ -3354,7 +3354,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v314-label54-20260801</div>'
+    _VSTAMP = '<div class="vstamp">v316-mobiledl-20260801</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

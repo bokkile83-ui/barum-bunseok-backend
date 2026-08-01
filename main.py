@@ -5533,32 +5533,26 @@ $("#send").onclick=async()=>{
     }
     else{
       savedFiles={};
-      const xlBlob=b64toBlob(j.xlsx_b64,XLMIME);
-      dl(xlBlob,j.xlsx_name);
+      /* ★v316: 자동 blob 다운로드 폐기(모바일 Chrome이 연속 다운로드를 차단해 저장이 안 됐다).
+         서버가 준 실제 URL(j.*_url)을 링크로 걸고, 사용자가 카드를 하나씩 눌러 받는다.
+         URL이 없으면(구버전 서버) 종전 blob 재저장(reDL)으로 자동 폴백된다. */
+      const _mk=(u,k)=>u?('href="'+u+'" download'):('href="javascript:void(0)" onclick="reDL(\''+k+'\')"');
       savedFiles.xlsx={b64:j.xlsx_b64,name:j.xlsx_name,mime:XLMIME};
       let ptCard='';
       if(j.pptx_b64){
-        const ptBlob=b64toBlob(j.pptx_b64,PTMIME);
-        setTimeout(()=>dl(ptBlob,j.pptx_name),800);
         savedFiles.pptx={b64:j.pptx_b64,name:j.pptx_name,mime:PTMIME};
-        ptCard=`<div class="file-card pt" onclick="reDL('pptx')" style="cursor:pointer"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
+        ptCard=`<a class="file-card pt" ${_mk(j.pptx_url,'pptx')} style="cursor:pointer;text-decoration:none"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">💾 저장</span></a>`;}
       if(j.chiryo_b64){
-        const txBlob=b64toBlob(j.chiryo_b64,PTMIME);
-        setTimeout(()=>dl(txBlob,j.chiryo_name),1600);
         savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
-        ptCard+=`<div class="file-card pt" onclick="reDL('chiryo')" style="cursor:pointer"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 다시저장</span></div>`;}
+        ptCard+=`<a class="file-card pt" ${_mk(j.chiryo_url,'chiryo')} style="cursor:pointer;text-decoration:none"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 저장</span></a>`;}
       if(j.report_b64){
-        const rpBlob=b64toBlob(j.report_b64,PDFMIME);
-        setTimeout(()=>dl(rpBlob,j.report_name),2400);
         savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
-        ptCard+=`<div class="file-card pt" onclick="reDL('report')" style="cursor:pointer"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 다시저장</span></div>`;}
+        ptCard+=`<a class="file-card pt" ${_mk(j.report_url,'report')} style="cursor:pointer;text-decoration:none"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 저장</span></a>`;}
       if(j.report_pptx_b64){
-        const rpxBlob=b64toBlob(j.report_pptx_b64,PTMIME);
-        setTimeout(()=>dl(rpxBlob,j.report_pptx_name),3000);
         savedFiles.reportpptx={b64:j.report_pptx_b64,name:j.report_pptx_name,mime:PTMIME};
-        ptCard+=`<div class="file-card pt" onclick="reDL('reportpptx')" style="cursor:pointer"><span class="ic">📋</span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">💾 다시저장</span></div>`;}
-      add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">(카드 누르면 다시 저장)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
-        `<div class="file-card xl" onclick="reDL('xlsx')" style="cursor:pointer"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 다시저장</span></div>`+ptCard+'</div>',"bot");}
+        ptCard+=`<a class="file-card pt" ${_mk(j.report_pptx_url,'reportpptx')} style="cursor:pointer;text-decoration:none"><span class="ic">📋</span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">💾 저장</span></a>`;}
+      add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">★카드를 <b>하나씩 눌러</b> 저장하세요 (휴대폰은 연속 저장이 막힙니다)</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
+        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 저장</span></a>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;$("#uplabel").textContent="TXT (구방식)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
@@ -5602,7 +5596,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v314-label54-20260801',
+    return {'ok':True,'version':'v316-mobiledl-20260801',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -5614,6 +5608,22 @@ def health():
 #   어디서 끊겼는지 확인할 장치가 없어 "업데이트했는데 없다"가 반복됐다.
 #   실측 2026.07.31 = ①v308-fxfont 유실 + ②GitHub v306 / zip v307 이 <b>동시에</b> 끊겨 있었다.
 #   ★둘 다 <b>표시 전용</b>. 산출물 값·행 배정은 건드리지 않는다.
+@app.get('/dl/{token}/{fname}')
+def dl_file(token: str, fname: str):
+    """★v316 산출물 실제 다운로드 — blob 대신 진짜 파일 URL.
+       모바일(삼성폰 Chrome)에서 blob 연속 다운로드가 차단되던 문제의 근본 해결책."""
+    from fastapi.responses import FileResponse
+    if not re.fullmatch(r'[0-9a-f]{6,32}', token or ''):
+        return JSONResponse({'ok': False, 'error': '잘못된 요청'}, status_code=400)
+    _base = os.path.join(tempfile.gettempdir(), 'barum_dl', token)
+    _p = os.path.join(_base, os.path.basename(urllib.parse.unquote(fname)))
+    if not os.path.isfile(_p):
+        return JSONResponse({'ok': False,
+                             'error': '파일이 만료되었습니다. 화면에서 다시 분석해 주세요.'},
+                            status_code=404)
+    return FileResponse(_p, filename=os.path.basename(_p),
+                        media_type='application/octet-stream')
+
 @app.get('/version')
 def version_bot():
     """업데이트 체크봇 — 서버 실물 8파일의 각인·md5를 GitHub raw와 직접 대조한다.
@@ -5622,7 +5632,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v314-label54-20260801'}
+    out = {'server_version': 'v316-mobiledl-20260801'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -5645,7 +5655,7 @@ def version_bot():
         _gs = ''
         if fn.endswith('.py'):
             try:
-                _m = re.findall(r'v\d{3}[a-z]*-[a-z]+-\d{8}', g.decode('utf8', 'ignore'))
+                _m = re.findall(r'v\d{3}[a-z]*-[a-z0-9]+-\d{8}', g.decode('utf8', 'ignore'))
                 _gs = sorted(set(_m))[-1] if _m else ''
             except Exception: _gs = ''
         rows.append({'file': fn, 'server': '%s (%dB)' % (mine, size), 'github': gh,
@@ -5655,7 +5665,7 @@ def version_bot():
     for fn in ('main.py','coverage_benchmark.py','report_weasy.py'):
         try:
             t = open(os.path.join(HERE, fn), encoding='utf8', errors='ignore').read()
-            m = re.findall(r'v\d{3}[a-z]*-[a-z]+-\d{8}', t)
+            m = re.findall(r'v\d{3}[a-z]*-[a-z0-9]+-\d{8}', t)
             out['stamps'][fn] = (sorted(set(m))[-1] if m else '각인없음')
         except Exception as e:
             out['stamps'][fn] = 'ERR ' + str(e)[:40]
@@ -5717,7 +5727,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v314-label54-20260801',
+    return {'version': 'v316-mobiledl-20260801',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -5729,7 +5739,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v314-label54-20260801'}
+    out = {'version': 'v316-mobiledl-20260801'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -5964,6 +5974,41 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
                     response['report_pptx_name']=f'보장진단서_{cust}.pptx'
             except Exception as _pe:
                 response['report_pptx_error']=str(_pe)
+        # ★★★★★v316 모바일 다운로드 근본 수정(지점장 실측 2026.08.01 "삼성폰에서 저장됨은
+        #   뜨는데 「내 파일」→다운로드 폴더에도 없다")
+        #   <b>원인</b>: 프론트가 blob 다운로드를 <b>5개나 0.8~3초 간격으로 연속 발사</b>했다.
+        #     ①<b>모바일 Chrome은 연속 다운로드를 차단</b>한다(첫 개 이후 전부 무시).
+        #     ②5.5MB PDF가 <b>3초 revoke</b>를 못 넘긴다. ③인앱 브라우저는 blob 자체가 막힌다.
+        #   <b>해법</b>: 파일을 서버에 잠깐 저장하고 <b>진짜 URL</b>을 준다 → 브라우저가 일반
+        #     다운로드로 처리하고, 사용자가 <b>카드를 하나씩</b> 누르므로 연속 차단에도 안 걸린다.
+        #   ★b64는 <b>그대로 유지</b>한다(PC 호환·`reDL` 폴백). URL만 추가한다 = 회귀 위험 0.
+        try:
+            import uuid as _uuid, shutil as _sh
+            _tok = _uuid.uuid4().hex[:12]
+            _dir = os.path.join(tempfile.gettempdir(), 'barum_dl', _tok)
+            os.makedirs(_dir, exist_ok=True)
+            for _bk, _nk, _uk in (('xlsx_b64','xlsx_name','xlsx_url'),
+                                  ('pptx_b64','pptx_name','pptx_url'),
+                                  ('chiryo_b64','chiryo_name','chiryo_url'),
+                                  ('report_b64','report_name','report_url'),
+                                  ('report_pptx_b64','report_pptx_name','report_pptx_url')):
+                if not response.get(_bk): continue
+                _fn = response.get(_nk) or (_bk + '.bin')
+                with open(os.path.join(_dir, _fn), 'wb') as _f:
+                    _f.write(base64.b64decode(response[_bk]))
+                response[_uk] = '/dl/%s/%s' % (_tok, urllib.parse.quote(_fn))
+            # ★오래된 임시 폴더 청소(2시간 초과) — 디스크 누적 방지
+            try:
+                _root = os.path.join(tempfile.gettempdir(), 'barum_dl')
+                _now = datetime.datetime.now().timestamp()
+                for _d in os.listdir(_root):
+                    _p = os.path.join(_root, _d)
+                    if os.path.isdir(_p) and (_now - os.path.getmtime(_p)) > 7200:
+                        _sh.rmtree(_p, ignore_errors=True)
+            except Exception: pass
+            print('[v316 dl] 서버 저장 %s — %d개' % (_tok, sum(1 for k in response if k.endswith('_url'))))
+        except Exception as _edl:
+            print('[v316 dl] 서버 저장 실패 → b64 폴백만 사용 (%s)' % str(_edl)[:80])
         return JSONResponse(response)
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e),'trace':traceback.format_exc()[-1500:]})
