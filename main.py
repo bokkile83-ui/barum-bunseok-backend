@@ -144,26 +144,25 @@ def is_excluded(company, product='', contract_date='', expiry_date='', pay_perio
     for kw in EXCLUDE:
         if kw in t: return True
     if _is_group_ins(product, contract_date, expiry_date): return True   # ★제외 5종: 단체보험
+    # ★★★★★v313 (지점장 확정 2026.08.01, 영구): <b>일시납(1/1)은 만기·기간 무관 무조건 기재한다</b>.
+    #   지점장 원문 = "단(1/1) 즉 <b>일시납은 기재하고 담보도 기재</b>해줘야 한다"
+    #                 "하나생명 VIP는 저축보험이다 — 담보가 사망 300만뿐 → <b>넣어라</b>"
+    #   ★구 v302 조건 <b>「일시납 AND 만기 9999(종신)」는 폐기</b> — 만기 조건이 사라졌다.
+    #   ★제외 ⑥(보험기간 1년)보다도 <b>앞</b>이다. 실측 = AIG 부모님건강보험(1/1 · 2025.12.31~2026.12.31)이
+    #     ⑥에 먼저 걸려 빠졌는데 지점장은 <b>둘 다 포함</b>으로 확정했다.
+    #   ★단 ①실효 ②미납해지 ③농업인 ④자동차 ⑤단체는 <b>그대로 제외</b>(위에서 이미 처리됨).
+    _pp = re.sub(r'\s', '', str(pay_period or ''))
+    _pc = re.sub(r'\s', '', str(pay_count or ''))
+    _onetime = ('일시' in _pp) or (_pc == '1/1')
+    if _onetime:
+        print(f"[v313 일시납 포함] {company} {product} — 납입 {pay_period or pay_count} · 만기 {expiry_date} → 제외6·7 면제")
+        return False
     if _is_oneyear(contract_date, expiry_date):                          # ★제외 6종: 보험기간 1년(v102)
         print(f"[제외6·보험기간1년] {company} {product} — {contract_date}~{expiry_date}")
         return True
     if _is_short_paidup(pay_period, pay_count):                          # ★제외 7종: 단기완납(v126)
-        # ★★★★★v302-C (지점장 지시 2026.07.31, 영구): <b>일시납 종신은 제외하지 않는다 — 포함한다</b>.
-        #   지점장 원문 = "푸르덴셜 일시납 종신 넣어야함 / 보험리스트에서 <b>종신사망</b>에 넣어야함 / 납부표시(1/1)".
-        #   근거 = 일시납 종신은 <b>보장이 평생 살아있는 정상 계약</b>이다. 납입만 끝났을 뿐이다.
-        #   실측(구 결함): 푸르덴셜 3건이 ⑦(60회 미만 완납)으로 통째 빠졌는데
-        #   <b>세부가입현황 검산상 포함이 정답</b>이었다(107,940 = 한장표 일치).
-        #   ★조건은 지점장 문구 그대로 <b>일시납(1회납) AND 종신(만기 9999)</b>뿐이다.
-        #     60회 미만 <b>분납</b> 완납은 종전대로 제외한다.
-        _pp = re.sub(r'\s', '', str(pay_period or ''))
-        _pc = re.sub(r'\s', '', str(pay_count or ''))
-        _onetime = ('일시' in _pp) or (_pc == '1/1')
-        _whole   = str(expiry_date or '').startswith('9999')
-        if _onetime and _whole:
-            print(f"[v302 일시납종신 포함] {company} {product} — 납입 {pay_period or pay_count} · 만기 {expiry_date} → 제외7 예외")
-        else:
-            print(f"[제외7·단기완납] {company} {product} — 납입 {pay_period or pay_count} (총회차 60 미만 완납)")
-            return True
+        print(f"[제외7·단기완납] {company} {product} — 납입 {pay_period or pay_count} (총회차 60 미만 완납)")
+        return True
     if '운전자' in t: return False   # ★운전자·운전자상해보험은 포함(§4)
     # ★자동차보험(다이렉트/애니카/하이카 + 개인용/업무용/영업용/개인소유) = 제외
     if any(b in t for b in ('다이렉트','애니카','하이카','개인용자동차','업무용자동차')) and any(x in t for x in ('개인용','업무용','영업용','개인소유')):
@@ -2899,7 +2898,10 @@ def resolve_kw(raw):
     #   ★유지 대상 2행 = <b>질병종합병원일당(기존)</b> + <b>종합병원 상해입원일당(v301 신설·v306 라벨 확정)</b>.
     if has('상급') and has('질병') and (has('일당') or has('입원')) and no('수술','중환자','간병','간호','진단'):
         return None,0
-    if has('질병') and has('종합') and has('일당'): return '질병종합병원일당',0
+    # ★v314 라벨 정본 = master.xlsx B54 「종합병원 질병입원일당」(지점장 수정 2026.08.01).
+    #   55행 「종합병원 상해입원일당」과 대칭. 구 라벨 '질병종합병원일당'은 폐기 —
+    #   마스터 라벨과 다르면 nm2r에서 못 찾아 <b>그 행이 통째로 0</b>이 된다.
+    if has('질병') and has('종합') and has('일당'): return '종합병원 질병입원일당',0
     # ★★★★★v301-C 신설: 종합병원 <b>상해</b>입원일당 = 전용행. 질병 짝 행과 1:1 대칭이다.
     #   ★'재해'=상해 동일 적용(§v29v). ★'상급'은 위에서 이미 [확인]큐로 빠졌다.
     if (has('상해') or has('재해')) and has('종합') and has('일당'): return '종합병원 상해입원일당',0
@@ -3275,6 +3277,170 @@ def _fix_silson(contracts):
     return contracts
 
 
+# ★★★★★v309 감사 2종 자동 게이트 (지점장 확정 2026.07.31, 영구)
+#   왜: 「감사 2종은 매 배포마다 돌린다」고 지침에 적어두고 <b>내가 계속 안 돌렸다</b>.
+#   사람이 기억해서 돌리는 방식은 이미 실패가 증명됐다 → <b>앱이 매 분석마다 자동으로 돌린다</b>.
+#   ㉠ 지침 규칙 케이스 55건 (담보명 → 기대 마스터 행). 기대값은 지침 원문 대조로 확정.
+#   ㉡ 마스터 전 행 커버리지 (라벨을 resolve2에 넣어 자기 행 복귀 검사).
+#      ★_COV_ALLOW = <b>라벨≠담보명 설계라 정상인 16건</b>. 이걸 빼지 않으면 게이트가 늘 FAIL이라
+#        아무도 안 보게 된다(늑대소년 방지).
+#   ★값·행 배정은 일절 건드리지 않는다. 결과는 확인사항 3행 D열 + 로그 + /health 전용.
+_AUDIT_GROUPS = [
+ ('§8.7 일당 계열 배정(v212·v303·v305)', [
+    ('2대질병입원일당', None), ('특정질병입원일당', None), ('3대질병입원일당', None),
+    ('질병입원일당(1-180)', '질병일당'), ('질병일당', '질병일당'), ('질병입원', '질병일당'),
+    ('상해입원일당(1-180)', '상해일당'), ('재해입원일당', '상해일당'),
+    ('종합병원 질병입원일당', '종합병원 질병입원일당'), ('상급병원 질병입원일당', None),
+    ('교통상해입원일당', None), ('암직접치료입원일당', '암일당'), ('입원급여금', '질병일당'),
+    ('간호간병통합서비스사용 질병입원일당', '간호통합병동')]),
+ ('§8.2 암·유사암(v248·v197·v227)', [
+    ('갱신형 유사암진단비', '유사암(갑.기.경.제)'), ('소액암진단', '유사암(갑.기.경.제)'),
+    ('갱신형 갑상선암(초기제외)진단비', None), ('갑상샘암치료보험금', None),
+    ('상피내암치료보험금', None), ('갱신형 유사암수술비', None),
+    ('암진단비(유사암제외)', '일반암'), ('16대특정암진단비', '고액암'),
+    ('일반암직접치료비', '암수술'), ('치매진단', None), ('치매진단(경증)', None)]),
+ ('§8.3 심장·부정맥(v217·단독담보 원칙)', [
+    ('심장부정맥고주파·냉각절제술보장', None), ('부정맥진단비', '부정맥'),
+    ('기타심장부정맥(I49)진단비', '부정맥'), ('허혈성심장질환진단비', '허혈성 진단비'),
+    ('주요심뇌5대혈관수술비', None), ('심뇌혈관수술비', '뇌혈관수술비')]),
+ ('§8.1 사망·후유장해(v222·v300·v302)', [
+    ('상해후유장해(20%이상)', None), ('상해후유장해(50%이상)', None),
+    ('상해후유장해(3%이상)', '상해후유3%'), ('재해장해연금', None), ('재해후유장해3%', '상해후유3%'),
+    ('교통상해사망', '교통상해사망'), ('대중교통상해사망', '교통상해사망'), ('상해사망', '상해사망')]),
+ ('§8.6 운전자(v198·v301·v302)', [
+    ('타인사망교통사고처리지원금', '합의금'), ('교통사고처리지원금(중상해포함)', '합의금'),
+    ('자동차사고부상치료비(14급)', '자부상'), ('교통사고 벌금(대인)', '대인'),
+    ('교통사고 벌금(대물)', '대물'), ('변호사선임비용', '변호사'), ('6주미만 진단위로금', '6주미만')]),
+ ('§8.7 골절·화상·기타(v301·v38c)', [
+    ('중증화상진단비', '중증화상진단비'), ('화상진단비', '화상진단비'),
+    ('중대한화상및부식진단비', '중증화상진단비'),
+    ('골절진단비(치아파절제외)', '골절(치아파절제외)'), ('골절진단비', '골절(치아파절포함)'),
+    ('일상생활배상책임', '일상배상책임'), ('응급실내원비', '응급실(응급)')]),
+ ('§8.5 수술·재해=상해(v304)', [
+    ('재해수술일당', '상해수술일당'), ('재해종수술비(1-5종)', '상해 종수술비(1-5종)')]),
+]
+_AUDIT_CASES = [c for _g, _cs in _AUDIT_GROUPS for c in _cs]
+
+# ★★★★★v311 <b>통제권 이관 — 감사 케이스의 정본은 master.xlsx 「지침케이스」 시트다</b>
+#   (지점장 지시 2026.07.31 "결국 너도 너의 생각대로 많이 하니까 또 하나의 너를 컨트롤할게 필요해")
+#   왜: v310 지침 체크봇은 <b>내가 고른 55개</b>만 봤다. 감시 기준을 감시 대상(코드=나)이 쥐고 있으면
+#   내가 언제든 줄이거나 지울 수 있다. → 기준을 <b>내 손이 닿지 않는 곳(지점장 엑셀)</b>으로 옮긴다.
+#   ★지점장이 시트에 <b>행만 추가하면</b> 앱이 매 분석마다 자동으로 검사한다. 코드 수정 불필요.
+#   ★시트가 없거나 비면 <b>위 하드코딩으로 폴백</b>(구버전 master로도 앱이 죽지 않게).
+#   ★<b>build_excel은 이 시트를 고객 산출물에서 삭제</b>한다(마스터 워크북을 그대로 save하므로).
+_DOCTRINE_SRC = '코드(폴백)'
+
+def load_doctrine_sheet():
+    """master.xlsx 「지침케이스」 시트를 읽어 (_AUDIT_GROUPS, _COV_ALLOW)를 갈아끼운다."""
+    global _AUDIT_GROUPS, _AUDIT_CASES, _COV_ALLOW, _DOCTRINE_SRC
+    try:
+        wb = openpyxl.load_workbook(TPL_XL)
+        if '지침케이스' not in wb.sheetnames:
+            _DOCTRINE_SRC = '코드(폴백 — 마스터에 「지침케이스」 시트 없음)'; return
+        ws = wb['지침케이스']
+        groups = {}; order = []; allow = set(); ncase = 0
+        for r in range(6, ws.max_row + 1):
+            kind = str(ws.cell(r, 1).value or '').strip()
+            gname = str(ws.cell(r, 2).value or '').strip()
+            raw = str(ws.cell(r, 3).value or '').strip()
+            exp = ws.cell(r, 4).value
+            exp = str(exp).strip() if exp not in (None, '') else None
+            if not raw: continue
+            if kind.startswith('커버리지'):
+                allow.add(raw); continue
+            if not kind.startswith('케이스'): continue
+            gname = gname or '(조항 미기재)'
+            if gname not in groups: groups[gname] = []; order.append(gname)
+            groups[gname].append((raw, exp)); ncase += 1
+        if ncase == 0:
+            _DOCTRINE_SRC = '코드(폴백 — 시트에 케이스 0건)'; return
+        _AUDIT_GROUPS = [(g, groups[g]) for g in order]
+        _AUDIT_CASES = [c for _g, _cs in _AUDIT_GROUPS for c in _cs]
+        if allow: _COV_ALLOW = allow
+        _DOCTRINE_SRC = 'master.xlsx 「지침케이스」 시트 (케이스 %d · 커버리지허용 %d)' % (ncase, len(allow))
+        print('[v311 지침정본] ' + _DOCTRINE_SRC)
+    except Exception as e:
+        _DOCTRINE_SRC = '코드(폴백 — 시트 읽기 실패: %s)' % str(e)[:60]
+        print('[v311 지침정본] ' + _DOCTRINE_SRC)
+
+load_doctrine_sheet()
+
+# ★★★★★v312 <b>「해석원칙」 = 관점의 정본</b>(지점장 지시 2026.07.31
+#   "관점은 니 맘대로 하지 않고 지침을 따르게 고정하는 법률 같은 봇 존재다")
+#   v311까지는 <b>조문(담보명→행)</b>만 고정했다. 그런데 실제 사고는
+#   <b>「지침에 없는 것을 내가 어떻게 판단하느냐」= 관점</b>에서 났다.
+#   → 해석 규칙 자체를 master.xlsx 「해석원칙」 시트에 성문화하고,
+#     <b>앱이 매 분석마다 확인사항 하단에 원문 그대로 인쇄</b>한다.
+#     내가 지침을 요약·재구성해도 <b>산출물에는 지점장 원문이 그대로 나가</b> 왜곡이 즉시 드러난다.
+#   ★시트가 없으면 기본 10개로 폴백(구버전 master로도 앱이 안 죽는다).
+_PRINCIPLES = []
+_PRINCIPLES_SRC = '코드(폴백)'
+_PRIN_BASE = [
+    '지점장이 준 자료는 문구·코드를 그대로 쓴다. 요약·재구성하거나 해설 주석을 덧붙이지 않는다.',
+    '지침에 없으면 추측하지 않는다 — 빈칸으로 두고 [확인]큐로 보낸다.',
+    '범위를 넓히려면 먼저 물어본다. 지점장이 두 개를 말했으면 두 개만 넣는다.',
+    '지침이 바뀌면 옛 내용을 남기지 말고 지운다. 세트로 내려온 지시는 전부 폐기·교체한다.',
+    '같은 데이터가 여러 곳에 있다 — 전수 수정하고 마지막에 옛 문구 잔재를 스캔한다.',
+    '규칙 두 개가 같은 값을 만지면 나중 것이 앞 것을 죽인다. 새 규칙 전에 같은 셀을 쓰는 기존 규칙을 확인한다.',
+    '직접 열어본 것만 "~이다"라고 쓴다. 안 본 것은 "가설"이라 명시한다. 측정하지 않은 수치는 말하지 않는다.',
+    '고장난 기능은 고치는 것이다 — 선택지로 만들어 지점장께 결정을 넘기지 않는다.',
+    '못 한 검증은 "못 했다"고 쓴다. 결과물만 올리지 않고 실행 과정을 보여준다.',
+    '규칙 하나를 고치면 2열(롯데)·3열(KB) 두 경로를 반드시 다 돌린다.',
+]
+
+def load_principles():
+    global _PRINCIPLES, _PRINCIPLES_SRC
+    _base = [(p, '', '') for p in _PRIN_BASE]
+    try:
+        wb = openpyxl.load_workbook(TPL_XL)
+        if '해석원칙' not in wb.sheetnames:
+            _PRINCIPLES = _base; _PRINCIPLES_SRC = '코드(폴백 — 마스터에 「해석원칙」 시트 없음)'; return
+        ws = wb['해석원칙']; rows = []
+        for r in range(5, ws.max_row + 1):
+            p = ws.cell(r, 2).value
+            if p is None or not str(p).strip(): continue
+            rows.append((str(p).strip(), str(ws.cell(r, 3).value or '').strip(),
+                         str(ws.cell(r, 4).value or '').strip()))
+        if not rows:
+            _PRINCIPLES = _base; _PRINCIPLES_SRC = '코드(폴백 — 시트에 원칙 0건)'; return
+        _PRINCIPLES = rows
+        _PRINCIPLES_SRC = 'master.xlsx 「해석원칙」 시트 (%d개)' % len(rows)
+        print('[v312 해석원칙] ' + _PRINCIPLES_SRC)
+    except Exception as e:
+        _PRINCIPLES = _base
+        _PRINCIPLES_SRC = '코드(폴백 — 시트 읽기 실패: %s)' % str(e)[:60]
+
+load_principles()
+
+_COV_ALLOW = {'중대한CI적용','일반암','암일당','항암방사선약물','중대한 뇌출혈','염증',
+              '상해 종수술비(1-3종)','상해 종수술비(1-8종)','질병 종수술비(1-3종)',
+              '질병 종수술비(1-8종)','120대수술비','대인','입원','통원','약값',
+              'MRI/도수치료/비급여주사'}
+_AUDIT_LAST = {'case':'-', 'cov':'-', 'fail':0, 'detail':[]}
+
+def audit_run(labels=None):
+    detail = []; c_ok = 0
+    for _raw, _exp in _AUDIT_CASES:
+        try: _got = resolve2(_raw)[0]
+        except Exception: _got = None
+        if (_got or None) == (_exp or None): c_ok += 1
+        else: detail.append('규칙 「%s」 기대 %s / 실제 %s' % (_raw, _exp, _got))
+    seen = []; v_ok = 0
+    for _L in (labels or []):
+        _L = str(_L).strip()
+        if not _L or _L in seen: continue
+        seen.append(_L)
+        try: _g = resolve2(_L)[0]
+        except Exception: _g = None
+        if _g == _L or _L in _COV_ALLOW: v_ok += 1
+        else: detail.append('커버리지 「%s」 → %s' % (_L, _g))
+    _AUDIT_LAST.update(case='%d/%d' % (c_ok, len(_AUDIT_CASES)),
+                       cov='%d/%d' % (v_ok, len(seen)), fail=len(detail), detail=detail[:20])
+    print('[v309 감사] 규칙 %d/%d · 마스터커버리지 %d/%d · FAIL %d'
+          % (c_ok, len(_AUDIT_CASES), v_ok, len(seen), len(detail)))
+    for _d in detail[:20]: print('   [AUDIT_FAIL]', _d)
+    return _AUDIT_LAST
+
 def build_excel(data, out):
     _ci_diag = []   # ★v238 CI 진단표(확인사항 상시 출력) — 함수 최상단에서 확실히 초기화
     wb = openpyxl.load_workbook(TPL_XL)
@@ -3292,6 +3458,7 @@ def build_excel(data, out):
             nm2r[k] = r
             nm2r_norm[re.sub(r'\s','',k)] = r
             nm2r_multi.setdefault(k, []).append(r)
+    _aud = audit_run(list(nm2r.keys()))   # ★v309 감사 2종 자동 실행(표시 전용)
 
     # ★ 데이터영역(C열~) 전체 초기화 — 옛 7계약 헤더·합계·SUM수식·슬래시골격 제거
     MAXC = 60  # 최대 50계약 + 여유
@@ -3671,7 +3838,7 @@ def build_excel(data, out):
             #   실사고 = 간호통합병동 행에 <b>2,000(2천만원)</b>이 찍혔다. 일당은 하루당 지급액이라
             #   실무 최대가 <b>30~50만원</b>이고 100만원을 넘는 일당 담보는 존재하지 않는다.
             #   → 일당 계열 행에 <b>100 초과</b> 금액이 오면 매핑 오류로 보고 [확인]큐로 보낸다(조용한 오출고 차단).
-            _DAILY = ('질병일당','상해일당','간병인','간병인지원일당','간호통합병동','질병종합병원일당','종합병원 상해입원일당',
+            _DAILY = ('질병일당','상해일당','간병인','간병인지원일당','간호통합병동','종합병원 질병입원일당','종합병원 상해입원일당',
                       '1인실 상급병원','1인실 종합병원','질병중환자실','상해중환자실',
                       '질병수술일당','상해수술일당','암일당')
             if std in _DAILY and isinstance(amt,(int,float)) and amt > 100:
@@ -4241,6 +4408,10 @@ def build_excel(data, out):
         ws.delete_cols(last_col+1, ws.max_column - last_col)
 
     # ── 확인사항 시트: LLM 매핑 실패 담보 노출(자가진단, §10) ──
+    # ★v311 「지침케이스」는 <b>마스터 전용 관리 시트</b>다 — 고객 산출물엔 나가면 안 된다.
+    #   build_excel이 마스터 워크북을 그대로 save하므로 여기서 지운다.
+    for _msn in ('지침케이스','해석원칙'):   # ★v312 마스터 전용 관리 시트 — 고객 산출물엔 안 나간다
+        if _msn in wb.sheetnames: del wb[_msn]
     for _sn in ('📋확인사항','확인사항'):
         if _sn in wb.sheetnames: del wb[_sn]
     ws2 = wb.create_sheet('확인사항')   # ★v41 이모지·외부하이퍼링크 제거(엑셀 '편집사용' 지연 원인)
@@ -4252,6 +4423,11 @@ def build_excel(data, out):
             _c1.font = Font(bold=True, size=13, color='B00020')
     except Exception: pass
     ws2.cell(3,1,'계약수'); ws2.cell(3,2,n_ct)
+    try:
+        _ac = ws2.cell(3,4, '[감사] 규칙 %s · 마스터커버리지 %s · FAIL %d건'
+                            % (_aud.get('case','-'), _aud.get('cov','-'), _aud.get('fail',0)))
+        if _aud.get('fail',0): _ac.font = Font(bold=True, size=12, color='C0392B')
+    except Exception: pass
     # ★★★v298-C: 확인사항 4행이 완납 계약까지 더해 본표 2행 합계와 달랐다.
     _pin  = sum(c["premium"] for c in contracts if _in_sum(c))
     _pout = sum(c["premium"] for c in contracts if not _in_sum(c))
@@ -4276,15 +4452,76 @@ def build_excel(data, out):
     #   이 담보는 보장진단서 7p 카드 전용이다.
     unmapped = [u for u in unmapped
                 if not (('리셋월렛' in re.sub(r'\s','',str(u[2]))) or ('리셋월랫' in re.sub(r'\s','',str(u[2]))))]
+    # ★★★★★v308 [확인]큐 3분류 (지점장 지시 2026.07.31, 영구) — <b>표시 전용·값 불변</b>
+    #   왜 필요한가: [검산]은 한장보장표 <b>27개만</b> 본다. 마스터 99행 중 <b>72행은 아무도 검증하지 않는다</b>.
+    #   그래서 [검산] 0건인데도 설계사는 [확인]큐 100~138건을 보고 "오류가 많다"고 한다(실측: 주재현 102 · 심정자 138).
+    #   그 큐에는 ①마스터에 행이 아예 없는 <b>정상</b>과 ②행이 있는데 못 찾은 <b>결함</b>이 섞여 있는데 구분이 없었다.
+    #   → 3분류해 <b>결함의심을 맨 위로</b> 올린다. 값·행 배정은 <b>일절 건드리지 않는다</b>(회귀 위험 0).
+    _MASTER_KEYS = []
+    try:
+        for _lab in nm2r.keys():
+            _b = re.sub(r'\([^)]*\)', '', str(_lab))
+            _b = re.sub(r'\s', '', _b)
+            if len(_b) >= 3: _MASTER_KEYS.append((_b, str(_lab)))
+        _MASTER_KEYS.sort(key=lambda t: -len(t[0]))
+    except Exception: _MASTER_KEYS = []
+    _RULE_OUT = [('치매','치매 = 기재 안 함(지점장 확정 2026.07.26)'),
+                 ('두번받는','두번받는 CI = 무시'), ('CI추가보장','두번째 CI 담보 = 무시'),
+                 ('상급','상급병원 입원일당 = 기재금지(v301)'),
+                 ('인실','병실등급 담보 = 종합병원 질병입원일당 아님(v209)'),
+                 ('고주파','부정맥 시술 담보 = 진단비 행 아님(v217)'),
+                 ('절제술','부정맥 시술 담보 = 진단비 행 아님(v217)'),
+                 ('냉각','부정맥 시술 담보 = 진단비 행 아님(v217)')]
+    def _qclass(_raw, _note):
+        _n = re.sub(r'\s', '', str(_raw or '')); _nt = str(_note or '')
+        if ('접힘의심' in _n) or ('원문 대조' in _nt):
+            return ('★결함의심', '담보명 잘림 — 별첨 원문 대조 필요')
+        for _k, _why in _RULE_OUT:
+            if _k in _n: return ('규칙제외', _why)
+        if ('후유' in _n) and ('80' not in _n) and re.search(r'(?<![\d.])(20|50)\s*%', _n):
+            return ('규칙제외', '후유장해 20%·50% = 미기재(v222)')
+        # ★v308b 오탐 제거 — 아래 3종은 <b>지침에 이미 명시된 제외</b>다(결함이 아니다).
+        if any(_k in _n for _k in ('납입면제','납입지원','보험료납입')):
+            return ('규칙제외', '납입면제·납입지원 = 비담보(§8.6)')
+        if ('간병인' in _n) and ('요양' in _n):
+            return ('규칙제외', '간병인(요양병원 포함형) = 드롭 정본')
+        if (('상해수술비' in _n) and not _n.startswith('상해수술비')) or \
+           (('질병수술비' in _n) and not _n.startswith('질병수술비')):
+            return ('규칙제외', '수술비 변형(부위·특정·병원규모) = 기재금지(§8.5)')
+        if _nt.strip(): return ('규칙제외', _nt.strip()[:40])
+        for _b, _lab in _MASTER_KEYS:
+            if _b in _n: return ('★결함의심', '마스터 「%s」 행 있음 → 그 행에 들어갔어야 함' % _lab)
+        return ('마스터 무행', '해당 담보 행 없음 — 기재 대상 아님')
+    _qc = []
+    for (_c0, _cm0, _r0, _a0, _n0) in unmapped:
+        _cl, _wy = _qclass(_r0, _n0); _qc.append((_cl, _wy, _c0, _cm0, _r0, _a0, _n0))
+    _QORD = {'★결함의심':0, '규칙제외':1, '마스터 무행':2}
+    _qc.sort(key=lambda t: (_QORD.get(t[0], 9), -(t[5] if isinstance(t[5], (int, float)) else 0)))
+    unmapped = [(t[2], t[3], t[4], t[5], t[6]) for t in _qc]
+    _qmeta = [(t[0], t[1]) for t in _qc]
+    _nbug  = sum(1 for t in _qc if t[0] == '★결함의심')
+    _nrule = sum(1 for t in _qc if t[0] == '규칙제외')
+    _nnone = sum(1 for t in _qc if t[0] == '마스터 무행')
+    print('[v308 확인큐] 총 %d = 결함의심 %d / 규칙제외 %d / 마스터무행 %d' % (len(_qc), _nbug, _nrule, _nnone))
+    _h6 = ws2.cell(6,1, '[확인] 자동매핑 실패 담보 %d건  —  ★결함의심 %d건 · 규칙제외 %d건 · 마스터 무행 %d건'
+                        % (len(_qc), _nbug, _nrule, _nnone))
+    if _nbug: _h6.font = Font(bold=True, size=12, color='C0392B')
+    ws2.cell(7,6,'분류'); ws2.cell(7,7,'분류 근거')
     for k,(col,comp,raw,amt,note) in enumerate(unmapped):
         rr = 8+k
         ws2.cell(rr,1,comp); ws2.cell(rr,2,raw); ws2.cell(rr,3,amt); ws2.cell(rr,4,note)
+        try:
+            _cl, _wy = _qmeta[k]
+            _f6 = ws2.cell(rr,6,_cl); ws2.cell(rr,7,_wy)
+            if _cl == '★결함의심': _f6.font = Font(bold=True, color='C0392B')
+        except Exception: pass
         prod = contracts[col-3]['product'] if 0<=col-3<len(contracts) else ''
         prod_key = re.sub(r'[\(\)\[\]ⅠⅡⅢ_]', ' ', prod)[:18].strip()
         q = f"{comp} {prod_key} {raw[:12]} 약관 보장내용"
         # ★v41 hyperlink 객체 금지 → 평문 URL(엑셀이 열 때 외부링크 검증 안 함 = 편집사용 즉시)
         ws2.cell(rr,5, "https://search.naver.com/search.naver?query=" + urllib.parse.quote(q))
     ws2.column_dimensions['B'].width = 34; ws2.column_dimensions['D'].width = 40; ws2.column_dimensions['E'].width = 12
+    ws2.column_dimensions['F'].width = 12; ws2.column_dimensions['G'].width = 46
     # ★v29z 근거 감사 로그 — '없는 값' 논쟁 즉시 검증용
     _rr = 9 + len(unmapped)
     if silson_trace:
@@ -4471,6 +4708,27 @@ def build_excel(data, out):
             _c5.font = Font(bold=True, size=12, color=('C0392B' if _bad else '1F7A1F'))
     except Exception as _e9:
         print(f"[v277 검산] 실패 → 생략 ({_e9})")
+
+    # ★★★★★v312 <b>해석원칙을 산출물에 원문 그대로 박는다</b>(지점장 지시 "법률 같은 봇").
+    #   내가 지침을 요약·재구성해도 <b>고객 엑셀에는 지점장 원문이 그대로 나가</b> 왜곡이 즉시 드러난다.
+    #   ★출력 전용 — 값·행 배정은 건드리지 않는다. 위치는 확인사항 시트 맨 아래.
+    try:
+        _pr = _PRINCIPLES or []
+        if _pr:
+            _pb = ws2.max_row + 3
+            _ph = ws2.cell(_pb, 1, '[해석원칙] 이 문장이 판단의 정본이다 — 요약·재해석 금지  (출처: %s)'
+                                   % _PRINCIPLES_SRC)
+            _ph.font = Font(bold=True, size=12, color='1F3864')
+            for _j, _t in enumerate(('No', '원칙 (원문)', '위반하면', '근거·사례'), 1):
+                _hc = ws2.cell(_pb + 1, _j, _t)
+                _hc.font = Font(bold=True, color='FFFFFF')
+                _hc.fill = PatternFill('solid', fgColor='1F3864')
+            for _i, (_p, _v, _g) in enumerate(_pr, 1):
+                _r = _pb + 1 + _i
+                ws2.cell(_r, 1, _i); ws2.cell(_r, 2, _p); ws2.cell(_r, 3, _v); ws2.cell(_r, 4, _g)
+                ws2.cell(_r, 2).alignment = Alignment(wrap_text=True, vertical='top')
+    except Exception as _ep:
+        print('[v312 해석원칙] 출력 실패 → 생략 (%s)' % str(_ep)[:60])
 
     # ★★★★★v290 (지점장 지시 2026.07.31 "노란칸은 합계까지 이어지도록"):
     #   <b>원인</b>: master.xlsx의 행 채우기(연노랑 FFFFFFCC 등)가 <b>B~J(10열)까지만</b> 칠해져 있다.
@@ -5334,16 +5592,144 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
-    return {'ok':True,'version':'v306-label-20260731',
+    # ★★★v309 감사 2종을 /health에서도 즉시 돌린다 — 지점장이 링크 한 번으로 확인.
+    try:
+        import openpyxl as _ox
+        _ws = _ox.load_workbook(TPL_XL)['보장분석']
+        _labs = [_ws.cell(r,2).value for r in range(6, _ws.max_row+1) if _ws.cell(r,2).value]
+        _a = audit_run(_labs)
+        _audit = ('PASS 규칙 %s · 커버리지 %s' % (_a['case'], _a['cov'])) if not _a['fail'] \
+                 else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
+    except Exception as _e:
+        _audit = 'ERROR ' + str(_e)[:80]
+    return {'ok':True,'version':'v314-label54-20260801',
+            'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
 #   'KB(PDF)는 죽고 롯데(txt)는 산다'의 원인을 서버 로그 없이 확정하기 위함.
+# ★★★★★v310 체크봇 2종 (지점장 지시 2026.07.31 "업데이트 체크봇·지침 체크봇 필요하다", 영구)
+#   문제: 업데이트는 <b>①로컬→zip ②zip→GitHub ③GitHub→Railway ④서버→산출물</b> 4단계인데
+#   어디서 끊겼는지 확인할 장치가 없어 "업데이트했는데 없다"가 반복됐다.
+#   실측 2026.07.31 = ①v308-fxfont 유실 + ②GitHub v306 / zip v307 이 <b>동시에</b> 끊겨 있었다.
+#   ★둘 다 <b>표시 전용</b>. 산출물 값·행 배정은 건드리지 않는다.
+@app.get('/version')
+def version_bot():
+    """업데이트 체크봇 — 서버 실물 8파일의 각인·md5를 GitHub raw와 직접 대조한다.
+       ③GitHub→Railway 단계가 끊겼는지(Deploy 블루를 안 눌렀는지)를 앱이 스스로 답한다."""
+    import hashlib, urllib.request, random
+    RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
+    NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
+            'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
+    out = {'server_version': 'v314-label54-20260801'}
+    rows = []; same = 0; diff = []; err = []
+    for fn in NEED:
+        p = os.path.join(HERE, fn)
+        try:
+            b = open(p, 'rb').read()
+            mine = hashlib.md5(b).hexdigest()[:10]; size = len(b)
+        except Exception as e:
+            rows.append({'file': fn, 'server': '★없음', 'github': '-', 'same': False})
+            err.append(fn + ' 서버에 없음'); continue
+        try:
+            u = RAW + fn + '?cb=' + str(random.randint(10**6, 10**7))
+            g = urllib.request.urlopen(u, timeout=15).read()
+            gh = hashlib.md5(g).hexdigest()[:10]
+        except Exception as e:
+            rows.append({'file': fn, 'server': '%s (%dB)' % (mine, size),
+                         'github': 'ERR ' + str(e)[:40], 'same': None})
+            err.append(fn + ' GitHub 조회 실패'); continue
+        ok = (mine == gh); same += 1 if ok else 0
+        if not ok: diff.append(fn)
+        _gs = ''
+        if fn.endswith('.py'):
+            try:
+                _m = re.findall(r'v\d{3}[a-z]*-[a-z]+-\d{8}', g.decode('utf8', 'ignore'))
+                _gs = sorted(set(_m))[-1] if _m else ''
+            except Exception: _gs = ''
+        rows.append({'file': fn, 'server': '%s (%dB)' % (mine, size), 'github': gh,
+                     'github_각인': _gs, 'same': ok})
+    out['files'] = rows
+    out['stamps'] = {}
+    for fn in ('main.py','coverage_benchmark.py','report_weasy.py'):
+        try:
+            t = open(os.path.join(HERE, fn), encoding='utf8', errors='ignore').read()
+            m = re.findall(r'v\d{3}[a-z]*-[a-z]+-\d{8}', t)
+            out['stamps'][fn] = (sorted(set(m))[-1] if m else '각인없음')
+        except Exception as e:
+            out['stamps'][fn] = 'ERR ' + str(e)[:40]
+    _st = set(v for v in out['stamps'].values() if not str(v).startswith('ERR'))
+    out['stamp_same'] = (len(_st) == 1)
+    try:
+        out['master_rows'] = openpyxl.load_workbook(TPL_XL).active.max_row
+    except Exception as e:
+        out['master_rows'] = 'ERR ' + str(e)[:40]
+    if err:
+        out['verdict'] = '★확인불가 — ' + ' / '.join(err[:3])
+    elif diff:
+        _gsv = [r.get('github_각인') for r in rows if r.get('github_각인')]
+        _gsv = sorted(set(_gsv))[-1] if _gsv else '?'
+        _sv = out['stamps'].get('main.py', '?')
+        if _gsv == _sv:
+            _why = ('각인은 같은데 내용이 다르다 → <b>손편집 오염 의심</b>(GitHub 편집창 붙여넣기 사고). '
+                    'zip으로 8파일을 다시 통째 올릴 것')
+        elif _gsv > _sv:
+            _why = ('GitHub이 더 새것(%s) 인데 서버는 %s → <b>Railway Deploy(블루)를 안 눌렀다</b>' % (_gsv, _sv))
+        else:
+            _why = ('서버가 더 새것(%s) 인데 GitHub은 %s → <b>zip을 GitHub에 안 올렸다</b>' % (_sv, _gsv))
+        out['verdict'] = '★불일치 %d개: %s — %s' % (len(diff), ', '.join(diff), _why)
+    elif not out['stamp_same']:
+        out['verdict'] = '★각인 불일치 — 3파일 버전이 다르다: %s' % out['stamps']
+    else:
+        out['verdict'] = 'PASS — 서버 8파일 = GitHub 8파일 · 3파일 각인 동일 (%s)' % out['stamps'].get('main.py', '')
+    return out
+
+@app.get('/doctrine')
+def doctrine_bot():
+    """지침 체크봇 — 지침 조항별로 담보명→마스터행 케이스를 돌려 통과/실패를 그대로 노출한다."""
+    groups = []; tot = 0; ok_all = 0
+    for gname, cases in _AUDIT_GROUPS:
+        det = []; ok = 0
+        for raw, exp in cases:
+            try: got = resolve2(raw)[0]
+            except Exception: got = None
+            good = ((got or None) == (exp or None))
+            ok += 1 if good else 0
+            det.append({'담보명': raw, '기대': exp or '(기재금지)',
+                        '실제': got or '(기재금지)', 'PASS': good})
+        tot += len(cases); ok_all += ok
+        groups.append({'조항': gname, '통과': '%d/%d' % (ok, len(cases)),
+                       'FAIL': [d for d in det if not d['PASS']], '케이스': det})
+    cov = {'미복귀_정상허용': sorted(_COV_ALLOW), '건수': len(_COV_ALLOW)}
+    try:
+        _ws = openpyxl.load_workbook(TPL_XL)['보장분석']
+        _labs = [str(_ws.cell(r, 2).value).strip() for r in range(6, _ws.max_row + 1)
+                 if _ws.cell(r, 2).value]
+        _seen = []; _bad = []
+        for L in _labs:
+            if L in _seen: continue
+            _seen.append(L)
+            try: g = resolve2(L)[0]
+            except Exception: g = None
+            if g != L and L not in _COV_ALLOW: _bad.append({'라벨': L, '실제': g})
+        cov['검사'] = '%d/%d' % (len(_seen) - len(_bad), len(_seen))
+        cov['FAIL'] = _bad
+    except Exception as e:
+        cov['검사'] = 'ERR ' + str(e)[:40]
+    return {'version': 'v314-label54-20260801',
+            '지침정본': _DOCTRINE_SRC,
+            '해석원칙_출처': _PRINCIPLES_SRC,
+            '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
+            '규칙케이스': '%d/%d' % (ok_all, tot),
+            '마스터커버리지': cov.get('검사', '-'),
+            'verdict': ('PASS' if ok_all == tot and not cov.get('FAIL') else '★FAIL — 아래 FAIL 항목을 먼저 고칠 것'),
+            '조항별': groups, '커버리지': cov}
+
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v306-label-20260731'}
+    out = {'version': 'v314-label54-20260801'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

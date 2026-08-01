@@ -368,6 +368,9 @@ def _ac(label):
     # 워크시트 라벨 → 담보명 후보(정확, 앞이 우선). 여기 있는 라벨은 이 후보로만 매칭(오매칭 방지).
     _ALIAS={
         '종신 사망':['일반사망'], '질병 사망':['질병사망(80세)','질병사망'], '상해 사망':['상해사망'],
+        # ★★★★★v307 (지점장 지시 2026.07.31, 영구): 교통상해사망도 <b>상해사망처럼 기재</b>한다.
+        #   마스터 9행 전용행(v300)이 엑셀에만 있고 설명서·진단서엔 없어 4대 산출물 연동이 깨져 있었다.
+        '교통상해 사망':['교통상해사망'],
         '종신':['일반사망'],
         '일반암':['일반암'], '유사암':['유사암(갑.기.경.제)','유사암'], '고액암':['고액암'],
         '뇌혈관 수술비':['뇌혈관수술비'], '허혈성 수술비':['허혈성수술비'], '심장 수술비':['심장수술비'],
@@ -1264,9 +1267,9 @@ body {{ color:{INK}; }}
 .wsmain .wscap {{ flex:0 0 auto; }}
 .wsmain .wsr {{ min-height:39mm; display:flex; flex-direction:column; justify-content:center; }}
 .wsr .box {{ display:block; margin-top:1.6mm; border:0.6pt solid {LINE}; border-radius:1mm; height:6mm; background:#FCFDFE; }}
-.wsmid {{ flex:0 0 14mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
+.wsmid {{ flex:0 0 12mm; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; }}
 .wsmid .lb {{ font-size:6.5pt; color:{MUT}; letter-spacing:1px; font-weight:700; }}
-.wsmid .nm {{ font-size:22pt; font-weight:800; color:{NAVY}; line-height:1.02; letter-spacing:0; margin:2mm 0 0; }}
+.wsmid .nm {{ font-size:12.5pt; font-weight:800; letter-spacing:-0.4pt; white-space:nowrap; color:{NAVY}; line-height:1.02; letter-spacing:0; margin:2mm 0 0; }}
 .wsmid .nmsub {{ font-size:9pt; font-weight:800; color:{GOLDD}; margin:1.5mm 0 2mm; }}
 .wsmid .cnt {{ font-size:10pt; font-weight:800; color:{NAVY}; }}
 .wsmid .cnt small {{ display:block; font-size:6.2pt; color:{MUT}; font-weight:600; }}
@@ -1293,16 +1296,16 @@ body {{ color:{INK}; }}
 .wcard.fx {{ min-height:46mm; }}
 .wcard.fx.tall {{ min-height:auto; }}
 .fxlist {{ margin-top:1.6mm; }}
-.fxsub {{ display:flex; align-items:center; gap:2mm; margin:0.7mm 0; font-size:8.2pt; }}
-.fxsub .lbl {{ flex:0 0 30mm; font-weight:700; color:#2B3A52; font-size:8pt; white-space:normal; word-break:keep-all; line-height:1.15; }}
-.fxsub .mb {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:4.8mm; line-height:4.8mm; padding:0 2mm; background:#fff; text-align:right; font-size:8.2pt; font-weight:800; color:{NAVY}; white-space:nowrap; overflow:hidden; }}
-.fxg {{ font-size:6.8pt; font-weight:900; color:{NAVY}; background:#EEF1F6; border-radius:1mm; padding:0.4mm 1.2mm; margin:0.8mm 0 0.3mm; }}
+.fxsub {{ display:flex; align-items:center; gap:2mm; margin:0.35mm 0; font-size:7.8pt; }}   /* ★v307 사망 칸 1개 추가분(15.6pt) 회수 — 제로섬 */
+.fxsub .lbl {{ flex:0 0 26mm; font-weight:700; color:#2B3A52; font-size:7.6pt; white-space:normal; word-break:keep-all; line-height:1.15; }}
+.fxsub .mb {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:4.2mm; line-height:4.2mm; padding:0 2mm; background:#fff; text-align:right; font-size:7.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; overflow:hidden; }}
+.fxg {{ font-size:6.4pt; font-weight:900; color:{NAVY}; background:#EEF1F6; border-radius:1mm; padding:0.4mm 1.2mm; margin:0.8mm 0 0.3mm; }}
 /* ★2열형: 형식(박스칸) 유지 + 가로 2개씩 */
 .fx2 {{ width:100%; border-collapse:separate; border-spacing:1mm 0; table-layout:fixed; margin-top:0; }}
 .fx2 td.fx2c {{ width:50%; vertical-align:middle; overflow:hidden; }}
 .wcard.two .fxsub {{ display:table; width:100%; margin:0.1mm 0; }}
-.wcard.two .fxsub .lbl {{ display:table-cell; width:44%; flex:none; font-size:6.4pt; white-space:nowrap; overflow:hidden; vertical-align:middle; padding-right:1mm; }}
-.wcard.two .fxsub .mb {{ display:table-cell; width:56%; flex:none; height:3.8mm; line-height:3.8mm; font-size:6.8pt; padding:0 1mm; overflow:hidden; vertical-align:middle; }}
+.wcard.two .fxsub .lbl {{ display:table-cell; width:38%; flex:none; font-size:6.1pt; white-space:nowrap; overflow:hidden; vertical-align:middle; padding-right:1mm; }}
+.wcard.two .fxsub .mb {{ display:table-cell; width:62%; flex:none; height:3.5mm; line-height:3.5mm; font-size:6.4pt; padding:0 1mm; overflow:hidden; vertical-align:middle; }}
 .wsectcap {{ margin-bottom:2.6mm; border-radius:1.4mm; }}
 .wsectcap.gap2 {{ margin-top:0.9mm; }}
 .wstalk2 {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2.2mm 3.2mm; font-size:8pt; line-height:1.5; color:{NAVY}; margin-top:2.6mm; }}
@@ -1691,7 +1694,7 @@ body {{ color:{INK}; }}
 .dgheart .dgrow .mb {{ height:7.4mm; line-height:7.4mm; font-size:9pt; }}
 .dgheart .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
 .dgheart .dgrow {{ margin:1.2mm 0; }}
-.dgrow .dglab {{ flex:0 0 11.5mm; font-size:6.6pt; font-weight:700; color:{NAVY}; }}
+.dgrow .dglab {{ flex:0 0 9.5mm; font-size:6.6pt; font-weight:700; color:{NAVY}; }}
 .dgrow .mb {{ flex:1; min-width:0; border:0.6pt solid {LINE}; border-radius:1mm; height:8.8mm; line-height:8.8mm; padding:0 1mm; background:#fff; text-align:right; font-size:6.8pt; font-weight:800; color:{NAVY}; white-space:nowrap; }}
 .dgrow .dgu {{ flex:0 0 auto; font-size:6pt; color:{MUT}; }}
 /* ★v139 갱신 담보 = 파랑(엑셀 글자색과 동일). 비갱신은 기존 네이비/검정 유지. */
@@ -2369,7 +2372,7 @@ body {{ color:{INK}; }}
    </div>
    <div class="wsmid">
     <div class="lb">OUR CLIENT</div>
-    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
+    <div class="nm">{cust}</div>
     <div class="nmsub">고객님</div>
     <div class="cnt">2/8<small>3대 치료비 보유</small></div>
    </div>
@@ -2402,13 +2405,13 @@ body {{ color:{INK}; }}
   <div class="ws3">
    <div class="wscol wsmain">
     <div class="wscap n2">■ 사망 · 진단비 · 수술</div>
-    {_wcard_fix_list('사망','평생 유지 · 종신형',['종신 사망','질병 사망','상해 사망'])}
+    {_wcard_fix_list('사망','평생 유지 · 종신형',['종신 사망','질병 사망','상해 사망','교통상해 사망'])}
     {_wcard_fix_group('진단비','암·뇌·심 진단 일시금 (CI 계약 시 중대한OO 자동 추가)',_dx_groups(rep))}
     {_wcard_fix_group('수술','질병 · 상해 구분',_SURG_GROUPS)}
    </div>
    <div class="wsmid">
     <div class="lb">OUR CLIENT</div>
-    <div class="nm">{"<br>".join(list(cust)[:4])}</div>
+    <div class="nm">{cust}</div>
     <div class="nmsub">고객님</div>
     <div class="cnt">평생<small>비갱신 고정</small></div>
    </div>
@@ -3351,7 +3354,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v306-label-20260731</div>'
+    _VSTAMP = '<div class="vstamp">v314-label54-20260801</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
