@@ -185,13 +185,19 @@ def ga_pages_html():
       '<div class="gwarn">⚠ 본 자료는 사내교육 정리본이며 보험안내자료로 사용할 수 없습니다. 수치는 원본(폰 캡처) 판독 기반이므로, 청약·비교설명 전 반드시 최신 상품설명서로 대조 확인 요망. ? 표시 셀은 원본 화면 잘림으로 미확정.</div>'
       '</div>'
       '<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 · 표지</span></div></div>')
-    for i,grp in enumerate(PAGES,1):
-        inner="".join(grp)
-        out.append(f'<div class="pg"><div class="top"><div class="eb">BARUM · 회사별 비교표 (설계사 참고용)</div>'
-          f'<div class="nm">회사별 비교표 <b>총정리</b></div>'
-          f'<div class="pgn"><b>{i}</b>회사별 비교표</div><div class="bar"></div></div>'
-          f'<div class="body gpg gpg{i}">{inner}</div>'
-          f'<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 {i}</span></div></div>')
+    # ★★★★★v328 (지점장 지시 2026.08.02, 영구): <b>회사별 비교표 1·2·3 본문 3장을 삭제</b>한다.
+    #   지점장 원문: "보험인포메이션 회사비교 1.2.3페이지는 삭제 요청했는데 그대로있다".
+    #   ★<b>표지(gacover)는 지시에 없어 남긴다</b> — 뺄지는 지점장 확정 후 반영(임의 확장 금지).
+    #   ★PAGES 데이터는 지우지 않는다(되돌릴 때 이 루프만 되살리면 된다).
+    _GA_BODY = False
+    if _GA_BODY:
+        for i,grp in enumerate(PAGES,1):
+            inner="".join(grp)
+            out.append(f'<div class="pg"><div class="top"><div class="eb">BARUM · 회사별 비교표 (설계사 참고용)</div>'
+              f'<div class="nm">회사별 비교표 <b>총정리</b></div>'
+              f'<div class="pgn"><b>{i}</b>회사별 비교표</div><div class="bar"></div></div>'
+              f'<div class="body gpg gpg{i}">{inner}</div>'
+              f'<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 {i}</span></div></div>')
     return "".join(out)
 
 if __name__=='__main__':

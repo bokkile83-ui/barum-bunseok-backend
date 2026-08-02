@@ -319,8 +319,16 @@ def _wcard(rep, title, desc, lookup, mode):
         _cinfo=(_CURREP or {}).get('ci',{}) if _CURREP else {}
         if str(_cinfo.get('status'))=='ci':
             _lk=str(lookup)
+            # ★★★★★v332 (지점장 지적 2026.08.02): <b>7p에 CI 뇌졸증이 두 번 찍혔다</b>.
+            #   v252가 pairs에 'CI 중대한 뇌졸증'을 넣었는데, 그 아래 CI 미니칩 블록이
+            #   <b>같은 축을 또</b> 찍었다(암·급성심근은 pairs에 없어 칩에만 나와 티가 안 났다).
+            #   → <b>pairs에 이미 나온 축은 칩에서 건너뛴다</b>(값은 그대로, 표시만 1회).
+            _ciin={str(l).replace('CI 중대한','').strip() for l,v in val
+                   if str(l).startswith('CI 중대한') and v}
             for _it in _cinfo.get('items',[]):
                 _nm=str(_it.get('t','')); _v=str(_it.get('v',''))
+                _ax=_nm.replace('ci','').replace('진단비','').strip()
+                if _ax and any((_ax in x) or (x in _ax) for x in _ciin): continue
                 _isam = ('암' in _nm)
                 _ishs = any(k in _nm for k in ('뇌','심근','심장'))
                 if ('암' in _lk and _isam) or ('뇌심' in _lk and _ishs):
@@ -2371,7 +2379,6 @@ body {{ color:{INK}; }}
     {_wcard(rep,'암 생활비','치료 중 소득보상','암생활비','na')}
    </div>
    <div class="wsmid">
-    <div class="lb">OUR CLIENT</div>
     <div class="nm">{cust}</div>
     <div class="nmsub">고객님</div>
     <div class="cnt">2/8<small>3대 치료비 보유</small></div>
@@ -2410,7 +2417,6 @@ body {{ color:{INK}; }}
     {_wcard_fix_group('수술','질병 · 상해 구분',_SURG_GROUPS)}
    </div>
    <div class="wsmid">
-    <div class="lb">OUR CLIENT</div>
     <div class="nm">{cust}</div>
     <div class="nmsub">고객님</div>
     <div class="cnt">평생<small>비갱신 고정</small></div>
@@ -3354,7 +3360,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v326b-excelsync-20260802</div>'
+    _VSTAMP = '<div class="vstamp">v333-holder-20260802</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
