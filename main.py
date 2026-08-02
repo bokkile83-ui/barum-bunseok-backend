@@ -27,6 +27,9 @@ BK  = Font(color='000000', name='맑은 고딕', size=9)
 FILL_RED   = PatternFill('solid', fgColor='C00000')
 FILL_BLUE  = PatternFill('solid', fgColor='0070C0')
 FILL_GREEN = PatternFill('solid', fgColor='375623')
+# ★v336 §10 정본: 실손(입원·통원·약값·MRI트리오·도수치료·비급여주사·상해의료비) + 일상배상책임 = 항상 파랑.
+#   계약 셀뿐 아니라 <b>끝열 합계 셀도</b> 파랑이어야 한다(구 코드는 끝열을 무조건 검정으로 찍었다).
+_BLUE_ROWS = {'입원','통원','약값','MRI트리오','도수치료','비급여주사','상해의료비','일상배상책임'}
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
 AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
@@ -2587,6 +2590,15 @@ def resolve_kw(raw):
 
     # ── 수술비 ──
     if has('수술'):
+        # ★★★★★v337 (지점장 지시 2026.08.02): <b>엑셀에 1-8종 = 1-7종 = 1-9종 동일</b>이다.
+        #   → 담보명에 1-7종·1-8종·1-9종이 있으면 <b>(1-8종) 행</b>으로 보낸다(1-5종과 절대 섞지 않는다).
+        #   실측 = 미래에셋 `1-7종수술특약(급여)` 2,000이 1-5종 쪽으로 섞여 지점장이 "합쳐졌다"고 지적.
+        #   ★엑셀은 1-5종과 같은 방식으로 <b>가로 슬래시 나열 + 끝열 종별 합산</b>,
+        #     PPT는 <b>대표값(최댓값)</b>으로 넣는다(`_rep1`에 이미 등록돼 있다).
+        _n78 = re.sub(r'\s','',n)
+        if any(k in _n78 for k in ('1-7종','1-8종','1-9종','1~7종','1~8종','1~9종')):
+            if has('질병'): return '질병 종수술비(1-8종)', jong
+            return '상해 종수술비(1-8종)', jong
         if has('상해') and jong: return '상해 종수술비(1-5종)', jong
         if has('질병') and jong: return '질병 종수술비(1-5종)', jong
         # ★v215 (지점장 확정 2026.07.25): <b>'중대상해수술비' = '중대한상해수술비'</b>(같은 담보, '한' 한 글자 차이).
@@ -3965,6 +3977,11 @@ def build_excel(data, out):
                 if not amt: amt=5000
             # ★v34 암주요치료비 10,000 강제 폐기(지점장 2026.07.09): 실제 가입금액 사용. 하이클래스는 별도행 합산.
             blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
+            # ★★★★★v337 (지점장 지적 2026.08.02 "표 안에 입원이 검정 통원·약은 파랑이다"):
+            #   §10 정본 = <b>실손(입원·통원·약값…) + 일상배상책임은 항상 파랑</b>.
+            #   통원·약값은 실손 디폴트 블록이 BL로 써서 파랑인데, <b>입원은 별첨 파싱 경로</b>를 타서
+            #   그 계약이 비갱신이면 검정으로 찍혔다 — 같은 실손 안에서 색이 갈렸다.
+            if std in _BLUE_ROWS: blue = True
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std == '종수술비공통' and 1 <= jong <= 5:   # ★v29q-12 상해/질병 미표기 → 상해·질병 양쪽 동일 기재
                 for _k in ('상해 종수술비(1-5종)','질병 종수술비(1-5종)'):
@@ -4466,7 +4483,8 @@ def build_excel(data, out):
                     except: pass
         sc = ws.cell(r, last_col)
         if is_slash and any(slash_t):
-            sc.value = '/'.join(str(x) for x in slash_t[:(slash_n or 5)]); sc.font = BK   # 슬래시 행은 §3 SUM 예외
+            sc.value = '/'.join(str(x) for x in slash_t[:(slash_n or 5)])
+            sc.font = BL if str(ws.cell(r,2).value).strip() in _BLUE_ROWS else BK   # 슬래시 행은 §3 SUM 예외
         else:
             # ★v29t: §5·v29c(2) 원복 — 합계는 동적 =SUM 수식(하드코딩 금지). 사용자가 값을 추가해도 자동 합산.
             #   저장 후 recalc_xlsx가 캐시값 주입 → 폰·미리보기에서도 숫자 표시(수식 유지).
@@ -4483,7 +4501,10 @@ def build_excel(data, out):
             elif _bnm in ('간병인','중입자치료비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자=전 계약 대표 최댓값 1건
             elif _bnm=='간호통합병동': sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'   # ★v41 1-180일 최댓값 1건
             else: sc.value = f'=SUM({_rng})'
-            sc.font = BK
+            # ★★★★★v336 (지점장 지적 2026.08.02 "또 실손이 검정으로 나온다. 실손은 비갱신이 없다"):
+            #   계약 셀은 파랑인데 <b>끝열 합계만 검정</b>이었다(`sc.font = BK` 고정).
+            #   §10 정본 = <b>실손(입원·통원·약값) + 일상배상책임은 항상 파랑</b> → 끝열도 파랑이어야 한다.
+            sc.font = BL if _bnm in _BLUE_ROWS else BK
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
@@ -4926,6 +4947,18 @@ def build_excel(data, out):
             _rs.cell(_i,1,_std); _rs.cell(_i,2,_rw); _rs.cell(_i,3,_am)
     except Exception:
         pass
+    # ★★★★★v337b: <b>저장 직전</b>에 실손·일배책 행의 <b>끝열 합계 색을 파랑으로 확정</b>한다.
+    #   중간에 넣으면 뒤 로직(세부보충·역기재 등)이 덮을 수 있어 지점장이 두 번 같은 지적을 했다.
+    try:
+        _ws0 = wb['보장분석']
+        _lc0 = _ws0.max_column
+        for _r9 in range(6, _ws0.max_row+1):
+            if str(_ws0.cell(_r9,2).value or '').strip() in _BLUE_ROWS:
+                for _c9 in range(3, _lc0+1):
+                    if _ws0.cell(_r9,_c9).value not in (None,''):
+                        _ws0.cell(_r9,_c9).font = BL
+    except Exception as _e9:
+        print('[v337b 색] 실패:', str(_e9)[:60])
     _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
     wb.save(out)
     _force_nocalc_xml(out)    # ★v124 저장 후 XML에 직접 못박음(3중 방어)
@@ -5326,27 +5359,23 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if g('2대 주요치료비'): pvl('TextBox 49','대주요치료비','2대 주요치료비')   # 뇌혈관쪽 2대주요치료비
 
     # ★ 심장 표기(설명서와 동일 8종): 1줄 협심증/심부전/염증/빈맥 · 2줄 부정맥/심근병증/심장판막. 값 있는 것만. 급성심근·허혈성 별도칸.
-    if 'TextBox 심장4종' in by:
-        _h4=by['TextBox 심장4종'].text_frame
-        _hp=totals.get('협심증',0); _sf=totals.get('심부전',0); _ym=totals.get('염증',0); _bm=totals.get('빈맥',0)
-        _bj=totals.get('부정맥',0); _mbz=totals.get('심근병증',0); _pmz=totals.get('심장판막',0)
-        _names=[n for n,v in [('협심증',_hp),('심부전',_sf),('염증',_ym),('빈맥',_bm)] if v]   # ★지점장 2026.07.05 빈맥 복원(40행 정식)
-        _amt=max(_hp,_sf,_ym,_bm)
-        if _names and len(_h4.paragraphs[0].runs)>=2:
-            _h4.paragraphs[0].runs[0].text='/'.join(_names)+' '
-            _h4.paragraphs[0].runs[1].text=f'{_amt:,}' if _amt else ''
-        elif len(_h4.paragraphs[0].runs)>=1:
-            _h4.paragraphs[0].runs[0].text=''
-        # 2줄 = 부정맥·심근병증·심장판막(★지점장 2026.07.05: 설명서와 동일하게 심근병증·판막 추가)
-        _names2=[n for n,v in [('부정맥',_bj),('심근병증',_mbz),('심장판막',_pmz)] if v]
-        _amt2=max(_bj,_mbz,_pmz)
-        if len(_h4.paragraphs)>1 and len(_h4.paragraphs[1].runs)>=2:
-            if _names2:
-                _h4.paragraphs[1].runs[0].text='/'.join(_names2)+' '
-                _h4.paragraphs[1].runs[1].text=f'{_amt2:,}' if _amt2 else ''
-            else:
-                _h4.paragraphs[1].runs[0].text=''
-                _h4.paragraphs[1].runs[1].text=''
+    # ★★★★★v336 (지점장 지시 2026.08.02): 심장 담보를 <b>담보별 칸</b>으로 표기한다.
+    #   구 코드는 `협심증/심부전/염증/빈맥`을 <b>슬래시로 묶고 최댓값 1개</b>만 찍어
+    #   담보별 금액이 보이지 않았다. 지점장: "<b>빈맥 : / 염증 : / 심근병증 : / 심장판막 :</b> 넣어야 한다".
+    #   → 폼 `TextBox 심장4종`에 4칸을 <b>가로 한 줄</b>로 두고 라벨로 찾아 값만 채운다(§11 v330).
+    #   ★협심증·심부전·부정맥은 종전대로 `TextBox 4` 칸을 쓴다(폼에 이미 있다).
+    #   ★`협심증 / 심부전 :`은 폼상 <b>한 칸</b>이므로 값이 있는 쪽(큰 쪽)을 대표로 넣는다 — 구 로직과 동일.
+    # ★★★★★v337 (지점장 지적 2026.08.02 "왜 이걸 두개를 합친것이냐 다른 담보들인데"):
+    #   구 코드는 폼의 `협심증 / 심부전 :` <b>한 칸</b>에 둘 중 큰 값만 넣었다 — <b>다른 담보를 합친 것</b>이다.
+    #   → 폼을 `협심증 :   심부전 :` <b>두 칸</b>으로 나누고 <b>각각 기재</b>한다.
+    if g('협심증'): pvl('TextBox 4','협심증','협심증')
+    if g('심부전'): pvl('TextBox 4','심부전','심부전')
+    if g('부정맥'): pvl('TextBox 4','부정맥','부정맥')
+    # ★v337 1-7/1-8/1-9종 = 폼 `1~7종 수술비 :` 칸에 대표값(최댓값)
+    if g('상해 종수술비(1-8종)'): pvl('TextBox 19','1~7종 수술비','상해 종수술비(1-8종)')
+    if g('질병 종수술비(1-8종)'): pvl('TextBox 17','1~7종 수술비','질병 종수술비(1-8종)')
+    for _hn in ('빈맥','염증','심근병증','심장판막'):
+        if g(_hn): pvl('TextBox 심장4종', _hn, _hn)
     # ★★★★★v318 허혈성 진단비(TextBox 54) — <b>pv() 경로로 통일</b>(지점장 지시 2026.08.01).
     #   <b>구 결함 2가지</b>: ①`허혈성 : 5,000` <b>한 줄</b>로 나와 뇌혈관·뇌졸증·급성심근(`이름\n값` 두 줄)과
     #   모양이 달랐다 ②`pv()`를 안 타고 `runs[0].text`를 직접 덮어써서 <b>색 지정이 아예 없었다</b>
@@ -5822,7 +5851,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v334-silsonhdr-20260802',
+    return {'ok':True,'version':'v337-split-20260802',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -5858,7 +5887,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v334-silsonhdr-20260802'}
+    out = {'server_version': 'v337-split-20260802'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -5953,7 +5982,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v334-silsonhdr-20260802',
+    return {'version': 'v337-split-20260802',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -5965,7 +5994,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v334-silsonhdr-20260802'}
+    out = {'version': 'v337-split-20260802'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
