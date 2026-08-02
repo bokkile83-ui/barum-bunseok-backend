@@ -15,7 +15,7 @@ from pptx.oxml.ns import qn as _qn
 from pptx.text.text import _Run
 
 app = FastAPI(title="BARUM 보장분석 v7")
-PW   = os.environ.get("ACCESS_PW", os.environ.get("BARUM_PW", "0101"))   # ★v331 대문 비번(지점장 지시 2026.08.02): 1009 → 0101
+PW   = "0101"   # ★★v334 대문 비번 고정(지점장 지시 2026.08.02). Railway Variables의 ACCESS_PW/BARUM_PW(=1009)가 코드 기본값을 이기고 있어 환경변수 참조를 제거했다.
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL_XL  = os.path.join(HERE, "master.xlsx")
 TPL_PPT = os.path.join(HERE, "ppt_form.pptx")
@@ -3579,7 +3579,15 @@ def build_excel(data, out):
         h = ws.cell(1, col)
         h.value = f"{ct['company']}\n{ct['product']}\n[{ct['renewal']}]"
         h.font = W; h.alignment = AL
-        h.fill = FILL_GREEN if paid else (FILL_BLUE if gen else FILL_RED)
+        # ★★★★★v334 (지점장 지적 2026.08.02): <b>실손 계약 헤더가 완납(진녹)으로 찍히던 것 수정</b>.
+        #   실측 = 현대해상 `무배당실손의료비보장보험(갱신형)(Hi2004)` 보험료 0원·납입 0/0 →
+        #   `_in_sum`이 완납으로 판정 → <b>초록</b>. 그러나 §6 ⓪ 정본은
+        #   <b>"실손은 비갱신이 없다 — 무조건 갱신. 어떤 조건보다 우선. 헤더색도 파랑"</b>이다.
+        #   → 실손이면 완납 판정보다 <b>파랑이 우선</b>한다.
+        if _is_silson_prod(ct.get('company',''), ct.get('product','')):
+            h.fill = FILL_BLUE
+        else:
+            h.fill = FILL_GREEN if paid else (FILL_BLUE if gen else FILL_RED)
         pm = ct['premium']
         # ★★v199 지점장 확정 2026.07.23: 보험료 합계를 '=D2+E2+…'가 아니라 단일 '=SUM()'으로 만들기 위해
         #   완납 계약의 보험료 칸은 <b>텍스트</b>로 넣는다. 엑셀 SUM은 텍스트를 무시하므로
@@ -5814,7 +5822,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v333-holder-20260802',
+    return {'ok':True,'version':'v334-silsonhdr-20260802',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -5850,7 +5858,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v333-holder-20260802'}
+    out = {'server_version': 'v334-silsonhdr-20260802'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -5945,7 +5953,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v333-holder-20260802',
+    return {'version': 'v334-silsonhdr-20260802',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -5957,7 +5965,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v333-holder-20260802'}
+    out = {'version': 'v334-silsonhdr-20260802'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
