@@ -2488,8 +2488,7 @@ def resolve_kw(raw):
     #   <b>엑셀·보장분석 PPT에 표기 금지</b>. 보장진단서 7p 카드에만 표기한다.
     #   ★사고: 담보명에 '중환자실'이 들어 있어 resolve_kw가 '질병중환자실' 행으로 잡아
     #   엑셀 61행에 100,000(=10억)을 박고 있었다(실측). 최우선으로 차단한다.
-    # ★★★★★v320 <b>10억 플랜 = 마스터 22행 신설</b>(지점장이 직접 넣음 2026.08.01).
-    #   지점장 원문 = "<b>10억통장은 엑셀에 내가 넣었다</b>" / "PPT에 이걸로 부탁해".
+    # ★★★★★v320 <b>10억 플랜 = 마스터 22행</b>(지점장 2026.08.01 "10억통장은 엑셀에 내가 넣었다").
     #   ★<b>구 v146·v148 「엑셀 전면 기재금지·PPT 금지」는 폐기</b> — 이제 정상 담보로 기재한다.
     if ('리셋월렛' in re.sub(r'\s','',str(raw))) or ('리셋월랫' in re.sub(r'\s','',str(raw))):
         return '10억 플랜', 0
@@ -2586,8 +2585,16 @@ def resolve_kw(raw):
         if has('5대기관') and ('비관혈' in _gwan): return '5대기관 수술비 비관혈',0
         if has('5대기관'): return '5대기관 수술비 관혈',0
         if re.search(r'(?<!\d)\d{2,3}\s*대', r): return 'n대수술비',0   # ★v30k 10~150대(10·20·116·120·123대 등)→n대수술비. 5대기관은 위에서 처리, 2대주요치료비는 진단이라 여기 안 옴
+        # ★★★★★v326b (지점장 확정 2026.08.02): <b>뇌혈관수술비 = 담보명에 '뇌혈관'이라고 적힌 것만</b>.
+        #   ★내 오류 정정 — v325에서 `뇌출혈`을 여기 넣었으나 지점장이 바로잡았다: "<b>뇌출혈도 엑셀에 없다</b>".
+        #   마스터에 「뇌출혈 수술비」 행이 <b>없으므로 [확인]큐</b>가 정답이다.
+        #   "뇌출혈은 뇌혈관의 하위 질환"은 <b>내 판단이지 지침이 아니다</b> — 비슷한 행에 임의로 밀어 넣지 않는다.
         if has('뇌혈관') or has('심뇌혈관'): return '뇌혈관수술비',0
         if has('허혈'): return '허혈성수술비',0
+        # ★★★★★v326b (지점장 확정 2026.08.02): <b>심장수술비 = 담보명에 '심장'이라고 적힌 것만</b>.
+        #   ★내 오류 정정 — v326에서 `급성심근`·`심근경색`을 여기 넣었으나 <b>지점장이 즉시 바로잡았다</b>:
+        #     "급성심근경색 수술비는 <b>엑셀에 없는데</b> 왜 그게 심장이냐 / <b>심장수술비는 심장이라고 적힌 것</b>만 된다".
+        #   → <b>마스터에 행이 없으면 [확인]큐</b>다. 비슷한 행에 임의로 밀어 넣지 않는다("엑셀에 없는 건 제외").
         if has('심장') or has('심질환'): return '심장수술비',0
         if has('5대골절'): return '5대골절수술비',0
         if has('골절') and no('후유','장해','진단','일당','입원'): return '골절수술비',0
@@ -2685,9 +2692,8 @@ def resolve_kw(raw):
     #   실측 — 메리츠 `갱신형 갑상선암(초기제외)진단비` 1,000이 유사암에 산입돼 3,000이 됐으나
     #   KB 전체보장현황 유사암은 1,000(`갱신형 유사암진단비`뿐)이다.
     if has('갑상선암') and has('진단') and no('유사암','소액암','주요치료','수술','일당'): return None,0
-    # ★★★★★v320 <b>통합암 = 마스터 16행 신설</b>(지점장이 직접 넣음 2026.08.01).
-    #   지침 §8.2 「통합암·통합전이암 = <b>대표금액 1개</b>」가 정본인데 통합암 행이 없어 갈 곳이 없었다.
-    #   ★순서 주의: <b>통합전이암이 먼저</b>다(둘 다 '통합'+'암'을 포함한다).
+    # ★★★★★v320 <b>통합암 = 마스터 16행</b>(지점장이 직접 넣음 2026.08.01).
+    #   지침 §8.2 「통합암·통합전이암 = <b>대표금액 1개</b>」가 정본. ★순서 주의: <b>통합전이암이 먼저</b>다.
     if has('통합') and has('전이암') and no('주요치료','수술','통원','일당'): return '통합전이암',0
     if has('통합') and has('암') and no('전이','간호','간병','주요치료','수술','통원','일당','보험료'):
         return '통합암',0   # ★v320 통합암 단독 = 대표금액 1개   # ★v30z 통합전이암=개별담보·대표금액 1개(§8.2, PPT·보장설명지 반드시 반영)
@@ -2765,7 +2771,10 @@ def resolve_kw(raw):
 
     # ── 뇌혈관 ──
     if has('외상성') and has('뇌출혈'): return '외상성뇌출혈',0
-    if has('뇌출혈'): return '뇌출혈진단비',0
+    # ★★★★★v325 <b>뇌출혈진단비는 진단 전용</b>(단독담보 원칙 = "그 담보 하나로 존재하면").
+    #   <b>수술·입원·일당·통원 담보는 이 행이 아니다</b>. 제외어가 없어 전부 합산되던 것을 막는다.
+    #   실측 = 우체국 `뇌출혈수술급부금`(→뇌혈관수술비) · `뇌출혈입원급부금`(→[확인]큐).
+    if has('뇌출혈') and no('수술','입원','일당','통원'): return '뇌출혈진단비',0
     if has('중대한') and has('뇌졸'): return '중대한 뇌졸증',0
     if has('뇌졸'): return '뇌졸증진단비',0
     if has('산정특례') and has('뇌'): return '산정특례뇌혈관',0
@@ -2784,7 +2793,10 @@ def resolve_kw(raw):
     if has('중대한') and (has('심근') or has('급성심근')): return '중대한 급성심근',0
     if has('심근병증') or has('심근증'): return '심근병증',0
     if has('판막'): return '심장판막',0
-    if has('급성심근'): return '급성심근경색',0
+    # ★★★★★v326 <b>급성심근경색은 진단 전용</b>(단독담보 원칙 = "그 담보 하나로 존재하면").
+    #   수술은 위 수술비 블록에서 <b>심장수술비</b>로 빠지고, <b>입원·일당은 마스터에 행이 없으므로 [확인]큐</b>
+    #   (지점장 "<b>엑셀에 없는 건 제외다</b>"). 통원도 동일.
+    if has('급성심근') and no('수술','입원','일당','통원'): return '급성심근경색',0
     # ★2026.07.12 지점장 확정: '특정허혈성' = 협심증 (v28 '허혈심장질환진단비→허혈성 진단비' 규칙보다 우선)
     if has('특정') and (has('허혈성') or has('허혈심장')) and has('진단') and not has('수술'): return '협심증',0
     if has('허혈성진단') or ((has('허혈성') or has('허혈심장')) and has('진단') and not has('수술')): return '허혈성 진단비',0   # ★v29t 허혈심장질환진단 포함
@@ -2799,7 +2811,9 @@ def resolve_kw(raw):
         return '급성심근경색',0   # 구분 불가 시 급성심근경색(보수적)
     if has('일당') and (has('허혈') or has('협심') or has('심부전') or has('부정맥') or has('빈맥') or has('뇌혈관') or has('심뇌')): return None,0   # ★v30b 질환별 입원일당 ≠ 진단비 → [확인] (조성래 허혈일당 오합산 수리)
     if has('협심'): return '협심증',0
-    if has('허혈'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비(구 협심증행 폐기)
+    # ★★★v326 허혈성 폴백에도 제외어 — 위 2795행에는 `not has('수술')`이 있었으나
+    #   이 <b>폴백에는 아무 제외어가 없어</b> 수술·입원 담보가 진단비로 샜다.
+    if has('허혈') and no('수술','입원','일당','통원'): return '허혈성 진단비',0   # ★v29t §8.3: 허혈 단독=허혈성 진단비
     if has('심부전'): return '심부전',0
     if has('심내막') or has('심근염') or has('심장막') or has('심장염증'): return '염증',0
     if has('빈맥'): return '빈맥',0   # ★지점장 2026.07.05: 빈맥(I47·48)=master 40행 정식 사용(v30z6 '무행' 폐기). 빈맥≠부정맥(I49)
@@ -3373,8 +3387,7 @@ def load_doctrine_sheet():
 
 # ★★★★★v320 <b>호출 위치 이동(구조 결함 수정)</b>: 구 코드는 여기서 `load_doctrine_sheet()`를
 #   불렀는데 <b>아래 `_COV_ALLOW` 하드코딩이 그 뒤에 있어 시트에서 읽은 값을 덮어썼다</b>.
-#   실측 = 시트에 커버리지허용 17건인데 `_COV_ALLOW`는 16건(10억 플랜 누락) → 감사 FAIL 1.
-#   → <b>정의가 모두 끝난 뒤</b>(_AUDIT_LAST 아래)에서 호출한다.
+#   실측 = 시트 커버리지허용 17건인데 `_COV_ALLOW`는 16건 → 감사 FAIL 1.
 
 # ★★★★★v312 <b>「해석원칙」 = 관점의 정본</b>(지점장 지시 2026.07.31
 #   "관점은 니 맘대로 하지 않고 지침을 따르게 고정하는 법률 같은 봇 존재다")
@@ -3428,7 +3441,7 @@ _COV_ALLOW = {'중대한CI적용','일반암','암일당','항암방사선약물
               '질병 종수술비(1-8종)','120대수술비','대인','입원','통원','약값',
               'MRI/도수치료/비급여주사'}
 _AUDIT_LAST = {'case':'-', 'cov':'-', 'fail':0, 'detail':[]}
-load_doctrine_sheet()   # ★v320 여기서 호출해야 _COV_ALLOW 하드코딩을 덮어쓸 수 있다
+load_doctrine_sheet()   # ★v320 정의가 모두 끝난 뒤에 호출해야 _COV_ALLOW를 덮어쓸 수 있다
 
 def audit_run(labels=None):
     detail = []; c_ok = 0
@@ -3927,7 +3940,7 @@ def build_excel(data, out):
                 #   항암방사선약물치료비 / 항암약물방사선치료비는 <b>이름만 다른 같은 담보</b>다(합산 금지).
                 _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','입원','통원','약값','약','간병인','간병인지원일당','창상봉합술','항암방사선약물','암수술','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','6주미만','1인실 상급병원','1인실 종합병원')   # ★v302-B 6주미만=대표(max) / ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
-                # ★v320 통합암·10억 플랜도 <b>대표금액 1개</b>(지점장 "통합암 … 대표값 1개만 넣으면 된다")
+                # ★v320 통합암·10억 플랜도 <b>대표금액 1개</b>
                 _rep1 = _rep1 or (std in ('통합암','10억 플랜'))
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
@@ -5184,7 +5197,6 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     #   <b>구 결함 2가지</b>: ①`허혈성 : 5,000` <b>한 줄</b>로 나와 뇌혈관·뇌졸증·급성심근(`이름\n값` 두 줄)과
     #   모양이 달랐다 ②`pv()`를 안 타고 `runs[0].text`를 직접 덮어써서 <b>색 지정이 아예 없었다</b>
     #   → 갱신=파랑/비갱신=검정(엑셀 글자색 원천, v219)이 허혈성에만 적용되지 않았다.
-    #   ★지점장 요청 형태 = `허혈성` 줄바꿈 `5,000`. 다른 심장 담보와 동일하게 맞춘다.
     if g('허혈성 진단비'): pv('TextBox 54',0,0,'허혈성 진단비',prefix='허혈성\n',suffix='')
     elif 'TextBox 54' in by:
         _t54=by['TextBox 54'].text_frame
@@ -5193,44 +5205,38 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if g('산정특례심장'): pv('TextBox 56',0,3,'산정특례심장',prefix=': ',suffix='')
     if g('2대 주요치료비'): pv('TextBox 56',2,2,'2대 주요치료비',prefix=': ',suffix='')   # 심장쪽 2대주요치료비
 
-    # ★★★★★v322 <b>암 블록 5줄 = 엑셀 순서와 동일</b>(지점장 지시 2026.08.01)
-    #   지점장 원문 = `고액암 : / 통합암 : / 일반암 : / 유사암 : / 통합전이암 :`
-    #   → 마스터 순서(15 고액암·16 통합암·17 일반암·19 유사암·20 통합전이암)와 <b>1:1</b>.
-    #   ★구 v320은 `암진단비`(=일반암) 한 줄 + 유사암 뒤에 통합암을 붙였다 — 순서가 달랐다.
-    #   ★템플릿 p0(암진단비)·p1(유사암)·p2(통합전이암) 3문단에 <b>줄바꿈으로 5줄</b>을 담는다.
-    def _amt_seg(std, first=False, label=None):
-        """담보 하나를 (갱신 파랑 + 비갱신 검정) 색 조각으로. label이 있으면 앞에 붙인다."""
-        _g0=_gensum.get(std,0) or 0; _n0=_nonsum.get(std,0) or 0; _v0=totals.get(std,0) or 0
-        out=[(('' if first else '\n')+(label or '')+': ', None)]
-        if _g0 and _n0: out += [(f'{_g0:,}',_BLUE),(f'+{_n0:,}',_BLACK)]
-        elif _g0:       out.append((f'{_g0:,}',_BLUE))
-        elif _n0:       out.append((f'{_n0:,}',_BLACK))
-        elif _v0:       out.append((f'{_v0:,}',_BLACK))
-        return out
+    # ★★★★★v322 <b>암 블록 순서 = 엑셀(마스터)과 동일</b>(지점장 지시 2026.08.01).
+    #   지점장 원문: `고액암 : / 통합암 : / 일반암 : / 유사암 : / 통합전이암 :`
+    #   템플릿은 `암진단비`(p0) / `유사암`(p1) / `통합전이암`(p2) 3문단뿐 → <b>p0에 3줄</b>을 줄바꿈으로 넣는다.
+    def _amt3(std):
+        _g=_gensum.get(std,0) or 0; _n=_nonsum.get(std,0) or 0; _v=totals.get(std,0) or 0
+        if _g and _n: return [(f'{_g:,}',_BLUE),(f'+{_n:,}',_BLACK)]
+        if _g:        return [(f'{_g:,}',_BLUE)]
+        if _n:        return [(f'{_n:,}',_BLACK)]
+        if _v:        return [(f'{_v:,}',_BLACK)]
+        return []
     try:
         _tf14=by['TextBox 14'].text_frame
-        # p0 = 고액암 / 통합암 / 일반암 (3줄)
         _p0=_tf14.paragraphs[0]
         if len(_p0.runs)>1:
             _p0.runs[0].text='고액암 '
             for _rr in _p0.runs[2:]: _rr.text=''
-            _seg(_p0.runs[1], _amt_seg('고액암',first=True)
-                              + _amt_seg('통합암',label='통합암 ')
-                              + _amt_seg('일반암',label='일반암 '))
+            _sg0=[(': ',None)] + _amt3('고액암')
+            _sg0.append(('\n통합암 : ',None)); _sg0 += _amt3('통합암')
+            _sg0.append(('\n일반암 : ',None)); _sg0 += _amt3('일반암')
+            _seg(_p0.runs[1], _sg0)
         else: print('[PPT_MISS] TextBox 14 p0 run수 %d'%len(_p0.runs))
-        # p1 = 유사암 (1줄) — 통합암은 p0으로 옮겼다
         _p1=_tf14.paragraphs[1]
         if len(_p1.runs)>2:
             for _rr in _p1.runs[3:]: _rr.text=''
-            _seg(_p1.runs[2], _amt_seg('유사암(갑.기.경.제)',first=True))
+            _seg(_p1.runs[2], [(': ',None)] + _amt3('유사암(갑.기.경.제)'))
         else: print('[PPT_MISS] TextBox 14 p1 run수 %d'%len(_p1.runs))
-        # p2 = 통합전이암 (1줄)
         _p2=_tf14.paragraphs[2]
         if len(_p2.runs)>1:
             for _rr in _p2.runs[2:]: _rr.text=''
-            _seg(_p2.runs[1], _amt_seg('통합전이암',first=True))
+            _seg(_p2.runs[1], [(': ',None)] + _amt3('통합전이암'))
         else: print('[PPT_MISS] TextBox 14 p2 run수 %d'%len(_p2.runs))
-    except Exception as _e14: print('[PPT_MISS] 암 5줄 (%s)'%str(_e14)[:60])
+    except Exception as _e14: print('[PPT_MISS] 암 블록 (%s)'%str(_e14)[:60])
     if g('항암방사선약물'): pv('TextBox 14',4,1,'항암방사선약물',prefix=': ',suffix=' / ')
     if g('표적항암치료비'): pv('TextBox 14',5,1,'표적항암치료비',prefix=': ',suffix=' / ')
     if g('세기조절치료'): pv('TextBox 14',5,4,'세기조절치료',prefix=': ',suffix='')
@@ -5238,19 +5244,13 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if g('다빈치로봇수술비'): pv('TextBox 14',7,1,'다빈치로봇수술비',prefix=': ',suffix='')
     # 상급병원 암주요치료비 / 하이클래스 (TextBox 57)
     if 'TextBox 57' in by: by['TextBox 57'].text_frame.word_wrap=False
-    # ★★★★★v320 TextBox 57 라벨 정본(지점장 지시 2026.08.01) — 지점장 원문:
-    #   `암주요치료비 : ` / `하이클래스(비급여) :` / (빈줄) / `10억통장 :`
-    #   구 라벨은 `상급병원암주요치료비`·`상급병원하이클래스`였다(상급병원 한정처럼 보였다).
-    #   ★라벨은 템플릿에 박혀 있으므로 코드가 <b>라벨 run을 직접 덮어쓴다</b>.
+    # ★★★★★v320 TextBox 57 라벨 정본(지점장 2026.08.01): `암주요치료비 :` / `하이클래스(비급여) :` / `10억통장 :`
     _lab57=lambda pi,ri,t:(by['TextBox 57'].text_frame.paragraphs[pi].runs[ri].__setattr__('text',t)
                            if ('TextBox 57' in by and pi<len(by['TextBox 57'].text_frame.paragraphs)
                                and ri<len(by['TextBox 57'].text_frame.paragraphs[pi].runs)) else None)
     _lab57(0,0,'암주요치료비'); _lab57(1,0,'하이클래스(비급여)')
     if g('암주요치료비'): pv('TextBox 57',0,2,'암주요치료비',prefix=': ',suffix='')
-    if g('하이클래스(암)'): pv('TextBox 57',1,2,'하이클래스(암)',prefix=': ',suffix='')
-    # ★10억통장 줄 — p1(하이클래스) 뒤에 <b>줄바꿈으로 이어붙인다</b>.
-    #   `_seg`가 run을 복제해 색 조각을 만들므로 라벨·값을 색까지 정확히 나눠 넣을 수 있다.
-    #   (문단 자체를 복제하면 템플릿 서식이 깨져 run 이어붙이기를 쓴다.)
+    # ★10억통장 줄 — p1(하이클래스) 뒤에 줄바꿈으로 이어붙인다(_seg 색 분할 유지)
     try:
         _p57=by['TextBox 57'].text_frame.paragraphs[1]
         if len(_p57.runs)>2:
@@ -5267,7 +5267,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
             elif _g10:        _s10.append((f'{_g10:,}',_BLUE))
             elif _n10:        _s10.append((f'{_n10:,}',_BLACK))
             elif _v10:        _s10.append((f'{_v10:,}',_BLACK))
-            for _rr in _p57.runs[3:]: _rr.text=''   # ★v320 잉여 run 제거(중복 인쇄 방지)
+            for _rr in _p57.runs[3:]: _rr.text=''
             _seg(_p57.runs[2], _s10)
         else: print('[PPT_MISS] TextBox 57 p1 run수 %d'%len(_p57.runs))
     except Exception as _e57: print('[PPT_MISS] 10억통장 (%s)'%str(_e57)[:60])
@@ -5322,10 +5322,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     # ★★★★★v319 일당 박스 라벨·값 정본(지점장 지시 2026.08.01) — 지점장 원문 형태:
     #   `질병일당 :   / 질병종합병원일당 : `  /  `상해일당 :   / 상해종합병원일당 : `
     #   `간병인일당 :   / 요양병원 : `        /  `간호통합병동일당 :   / 간병인지원일당 : `
-    #   <b>구 템플릿 라벨은 `병원일당`</b>(질병·상해 구분이 없어 어느 쪽인지 알 수 없었다)이고
-    #   <b>값도 안 채워졌다</b> — 마스터 54·55행(v314 `종합병원 질병입원일당`·`종합병원 상해입원일당`)이
-    #   보장분석지 PPT에 <b>한 번도 나온 적이 없다</b>.
-    #   ★라벨은 템플릿에 박혀 있으므로 <b>코드가 라벨 run을 직접 덮어쓴다</b>.
+    #   구 템플릿 라벨은 `병원일당`(질병·상해 구분이 없었다)이고 <b>값도 안 채워졌다</b>.
     def _lab(box,pi,ri,text):
         try:
             _p=by[box].text_frame.paragraphs[pi]
@@ -5339,15 +5336,13 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
     if g('간병인'): pv('TextBox 22',7,1,'간병인',prefix=': ',suffix=' / ')
     # ★v319: `간호통합병동일당 : 값 / 간병인지원일당 : 값` — 한 문단에 담보 2개.
-    #   `_seg`가 run을 복제해 색 조각을 만들므로 라벨·값을 색까지 정확히 나눠 넣을 수 있다.
-    _kh=totals.get('간호통합병동',0) or 0; _kj=totals.get('간병인지원일당',0) or 0
     try:
         _p8=by['TextBox 22'].text_frame.paragraphs[8]
         if len(_p8.runs)>2:
             _gk=_gensum.get('간호통합병동',0) or 0; _nk=_nonsum.get('간호통합병동',0) or 0
             _gj=_gensum.get('간병인지원일당',0) or 0; _nj=_nonsum.get('간병인지원일당',0) or 0
-            _sg=[]
-            _sg.append((': ', None))
+            _kh=totals.get('간호통합병동',0) or 0; _kj=totals.get('간병인지원일당',0) or 0
+            _sg=[(': ', None)]
             if _gk and _nk: _sg += [(f'{_gk:,}', _BLUE), (f'+{_nk:,}', _BLACK)]
             elif _gk:       _sg.append((f'{_gk:,}', _BLUE))
             elif _nk:       _sg.append((f'{_nk:,}', _BLACK))
@@ -5357,7 +5352,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
             elif _gj:       _sg.append((f'{_gj:,}', _BLUE))
             elif _nj:       _sg.append((f'{_nj:,}', _BLACK))
             elif _kj:       _sg.append((f'{_kj:,}', _BLACK))
-            for _rr in _p8.runs[3:]: _rr.text=''    # ★v320 잉여 run 제거(중복 인쇄 방지)
+            for _rr in _p8.runs[3:]: _rr.text=''   # ★v320 잉여 run 제거(중복 인쇄 방지)
             _seg(_p8.runs[2], _sg)
         else: print('[PPT_MISS] TextBox 22 p8 run수 %d'%len(_p8.runs))
     except Exception as _e8: print('[PPT_MISS] 간호통합/간병인지원 (%s)'%str(_e8)[:60])
@@ -5448,11 +5443,11 @@ def _autofit_ppt(by):
             w_in = sh.width / 914400.0
         except: continue
         if _bn in _SURGERY_BOXES:
-            # ★★★v318 수술 1~5종 슬래시 줄 = <b>9pt</b>(지점장 지시 2026.08.01).
-            #   구 v50 정본 「슬래시 줄 6pt」는 <b>폐기</b> — 지점장 원문 = "(40/80/600/2000/4800) → 글자포인트9".
-            #   나머지 수술 줄은 종전대로 10pt.
+            # ★수술비 폰트(지점장 규정 2026.07.07): 1-5종 슬래시 줄만 6pt, 나머지 수술 줄은 9pt 고정(축소 금지)
             for p in tf.paragraphs:
                 ptxt=''.join(r.text for r in p.runs)
+                # ★★★v318 수술 1~5종 슬래시 줄 = <b>9pt</b>(지점장 지시 2026.08.01).
+                #   구 v50 정본 「슬래시 줄 6pt」는 <b>폐기</b> — 지점장 원문 "(40/80/600/2000/4800) → 글자포인트9".
                 _sz = 9.0 if ('/' in ptxt) else 10.0  # ★v318: 슬래시(1-5종) 9pt, 그 외 10pt
                 for r in p.runs:
                     if r.text:
@@ -5462,8 +5457,8 @@ def _autofit_ppt(by):
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
         if not runs_all: continue
         # ★v50 정본(지점장 2026.07.13): 값 폰트는 전부 10pt 고정.
-        #   - v50(2026.07.13): 값·라벨 전부 10pt(지점장 '다10'). 예외=제목·날짜(18pt)·수술 1~5종(★v318 9pt).
-        #   - 9pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
+        #   - v50(2026.07.13): 값·라벨 전부 10pt(지점장 '다10'). 예외=제목·날짜(18pt)·수술 1~5종(6pt).
+        #   - 6pt는 수술 1~5종 슬래시 줄에만 허용(위 _SURGERY_BOXES 분기).
         for r in runs_all:
             try:
                 cur = r.font.size.pt if r.font.size else 9.0
@@ -5664,8 +5659,7 @@ $("#send").onclick=async()=>{
       savedFiles.xlsx={b64:j.xlsx_b64,name:j.xlsx_name,mime:XLMIME};
       /* ★★v317 (지점장 지시 2026.08.01): <b>PC는 자동저장 · 휴대폰은 카드 클릭</b>.
          모바일 Chrome만 연속 다운로드를 차단하므로, PC에서는 종전처럼 자동으로 받아준다.
-         ★blob이 아니라 <b>서버 실제 URL</b>로 받으므로 revoke 만료 문제가 없다.
-         URL이 없으면(구버전 서버) 자동저장은 건너뛰고 카드 클릭(reDL)만 남는다. */
+         ★blob이 아니라 <b>서버 실제 URL</b>로 받으므로 revoke 만료 문제가 없다. */
       const _isMobile=/Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(navigator.userAgent)
                       ||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent));
       function dlUrl(u,fn){const a=document.createElement("a");a.href=u;a.download=fn||"";
@@ -5734,7 +5728,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v323-r10name-20260801',
+    return {'ok':True,'version':'v326b-excelsync-20260802',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -5770,7 +5764,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v323-r10name-20260801'}
+    out = {'server_version': 'v326b-excelsync-20260802'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -5865,7 +5859,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v323-r10name-20260801',
+    return {'version': 'v326b-excelsync-20260802',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -5877,7 +5871,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v323-r10name-20260801'}
+    out = {'version': 'v326b-excelsync-20260802'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -6033,11 +6027,10 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
         unmapped=build_excel(data,xl)
         # ★★★★★v323 <b>10억통장 = 이름으로 찾는다</b>(지점장 지시 2026.08.01).
-        #   지점장 원문: "<b>10억통장은 이름으로 찾아야 한다. 유일하게 보장진단서에 10억통장이
-        #   기재되면 거꾸로 엑셀과 보장분석지 PPT에 기재해라</b>."
-        #   → <b>판정 원천 = 상품명·담보명의 '리셋월렛'(raw)</b>. 진단서 기준값을 <b>엑셀 22행에 역기재</b>하고,
-        #     `read_excel_totals`가 그 뒤에 돌므로 <b>보장분석지 PPT까지 자동 연동</b>된다.
-        #   ★v321의 「엑셀 우선 → raw 폴백」은 방향이 반대였다 → <b>폐기</b>.
+        #   지점장 원문: "10억통장은 이름으로 찾아야 한다. 유일하게 보장진단서에 10억통장이
+        #   기재되면 거꾸로 엑셀과 보장분석지 PPT에 기재해라."
+        #   → <b>판정 원천 = 담보명의 '리셋월렛'(raw)</b>. 엑셀 22행에 <b>역기재</b>하면
+        #     `read_excel_totals`가 그 뒤에 돌아 <b>보장분석지 PPT까지 자동 연동</b>된다.
         try:
             _r10v=0; _r10pd=''
             for _c in (data.get('contracts') or []):
@@ -6056,20 +6049,16 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
                 _tr=None; _tc=None
                 for _rr in range(6,_wsx.max_row+1):
                     if str(_wsx.cell(_rr,2).value or '').strip()=='10억 플랜': _tr=_rr; break
-                # ★그 담보를 가진 <b>바로 그 계약 열</b>을 헤더(회사+상품명)로 찾는다
                 _key=re.sub(r'\s','',_r10pd)[:20]
                 for _cc in range(3,_wsx.max_column):
                     _hd=re.sub(r'\s','',str(_wsx.cell(1,_cc).value or ''))
                     if '흥국' in _hd and _key and _key in _hd: _tc=_cc; break
                 if _tr and _tc:
                     if _wsx.cell(_tr,_tc).value in (None,'',0):
-                        _wsx.cell(_tr,_tc).value=_r10v
-                        _wbx.save(xl)
+                        _wsx.cell(_tr,_tc).value=_r10v; _wbx.save(xl)
                         print(f'[R10] 이름 판정 → 엑셀 「10억 플랜」 R{_tr}C{_tc} = {_r10v}만원 역기재')
-                    else:
-                        print(f'[R10] 엑셀 R{_tr}C{_tc}에 이미 값 있음({_wsx.cell(_tr,_tc).value}) — 역기재 생략')
-                else:
-                    print(f'[R10] 역기재 대상 못 찾음 (행={_tr} 열={_tc})')
+                    else: print(f'[R10] 엑셀 R{_tr}C{_tc}에 이미 값 있음 — 역기재 생략')
+                else: print(f'[R10] 역기재 대상 못 찾음 (행={_tr} 열={_tc})')
         except Exception as _erx: print('[R10] 엑셀 역기재 실패 (%s)'%str(_erx)[:60])
         if not recalc_xlsx(xl): inject_sum_cache(xl)   # ★v29u: Railway(LibreOffice 없음)에서도 합계 캐시 보장
         ppt_totals, sq, ss, ppt_splits = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
@@ -6117,15 +6106,6 @@ async def analyze(file:UploadFile=File(...), file2:UploadFile=File(None), pw:str
                     if _hit: _r10=True; break
             except Exception: pass
             # ★v146 금액도 함께 전달(진단서 카드에 표기). 만원 단위 원본값.
-            # ★★★★★v321 (지점장 확정 2026.08.01): <b>10억 플랜 = 보장진단서 10억통장과 동일 상품</b>.
-            #   → <b>보장분석지PPT = 엑셀 = 보장진단서PPT 세 값이 반드시 같아야 한다</b>.
-            #   <b>구 결함</b>: 진단서 카드만 <b>raw dambo</b>에서 뽑고 엑셀·분석지PPT는 <b>엑셀 끝열</b>을 써서
-            #   원천이 둘로 갈려 있었다(등식2 「PPT는 완성 엑셀만 읽는다」 위반).
-            #   → <b>엑셀 「10억 플랜」 행 끝열을 유일한 원천</b>으로 통일한다. 못 읽으면 raw 폴백.
-            # ★★★v323 <b>판정·금액 모두 이름(raw)이 원천</b>(지점장 지시 2026.08.01).
-            #   구 v321의 「엑셀 우선 → raw 폴백」은 방향이 반대라 <b>폐기</b>했다.
-            #   여기서 구한 값은 위 build_excel 직후 블록에서 <b>엑셀 22행에 이미 역기재</b>돼
-            #   보장분석지 PPT까지 같은 값이 나간다.
             _r10amt=0
             try:
                 for _c in (data.get('contracts') or []):
@@ -6248,245 +6228,4 @@ async def ask(body:dict):
         answer=r.get('content',[])[0].get('text','답변을 가져오지 못했습니다.')
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
-        return JSONResponse({'ok':False,'error':str(e)})    # ★★★★★v322 <b>암 블록 순서 = 엑셀(마스터)과 동일</b>(지점장 지시 2026.08.01).
-    #   지점장 원문: `고액암 : / 통합암 : / 일반암 : / 유사암 : / 통합전이암 :`
-    #   마스터 순서 15 고액암 · 16 통합암 · 17 일반암 · (18 중대한 암=CI 전용) · 19 유사암 · 20 통합전이암.
-    #   ★템플릿은 `암진단비`(p0) / `유사암`(p1) / `통합전이암`(p2) 3문단뿐이므로
-    #     <b>p0에 고액암·통합암·일반암 3줄</b>을 줄바꿈으로 넣고 p1·p2는 그대로 쓴다.
-    #   ★v320이 유사암 뒤에 붙였던 통합암 줄은 <b>여기로 옮겼다</b>(중복 금지).
-    def _amt3(std):
-        """엑셀 글자색 원천(v219) 그대로 갱신=파랑 / 비갱신=검정 조각을 만든다."""
-        _g=_gensum.get(std,0) or 0; _n=_nonsum.get(std,0) or 0; _v=totals.get(std,0) or 0
-        if _g and _n: return [(f'{_g:,}',_BLUE),(f'+{_n:,}',_BLACK)]
-        if _g:        return [(f'{_g:,}',_BLUE)]
-        if _n:        return [(f'{_n:,}',_BLACK)]
-        if _v:        return [(f'{_v:,}',_BLACK)]
-        return []
-    try:
-        _tf14=by['TextBox 14'].text_frame
-        _p0=_tf14.paragraphs[0]
-        if len(_p0.runs)>1:
-            _p0.runs[0].text='고액암 '                      # ★라벨 교체(구 '암진단비 ')
-            for _rr in _p0.runs[2:]: _rr.text=''             # 잉여 run 제거(중복 인쇄 방지)
-            _sg0=[(': ',None)] + _amt3('고액암')
-            _sg0.append(('\n통합암 : ',None)); _sg0 += _amt3('통합암')
-            _sg0.append(('\n일반암 : ',None)); _sg0 += _amt3('일반암')
-            _seg(_p0.runs[1], _sg0)
-        else: print('[PPT_MISS] TextBox 14 p0 run수 %d'%len(_p0.runs))
-        _p1=_tf14.paragraphs[1]
-        if len(_p1.runs)>2:
-            for _rr in _p1.runs[3:]: _rr.text=''
-            _seg(_p1.runs[2], [(': ',None)] + _amt3('유사암(갑.기.경.제)'))
-        else: print('[PPT_MISS] TextBox 14 p1 run수 %d'%len(_p1.runs))
-        _p2=_tf14.paragraphs[2]
-        if len(_p2.runs)>1:
-            for _rr in _p2.runs[2:]: _rr.text=''
-            _seg(_p2.runs[1], [(': ',None)] + _amt3('통합전이암'))
-        else: print('[PPT_MISS] TextBox 14 p2 run수 %d'%len(_p2.runs))
-    except Exception as _e14: print('[PPT_MISS] 암 블록 (%s)'%str(_e14)[:60])
-    if g('항암방사선약물'): pv('TextBox 14',4,1,'항암방사선약물',prefix=': ',suffix=' / ')
-    if g('표적항암치료비'): pv('TextBox 14',5,1,'표적항암치료비',prefix=': ',suffix=' / ')
-    if g('세기조절치료'): pv('TextBox 14',5,4,'세기조절치료',prefix=': ',suffix='')
-    if g('양성자치료'): pv('TextBox 14',5,5,'양성자치료',prefix=': ',suffix='')
-    if g('다빈치로봇수술비'): pv('TextBox 14',7,1,'다빈치로봇수술비',prefix=': ',suffix='')
-    # 상급병원 암주요치료비 / 하이클래스 (TextBox 57)
-    if 'TextBox 57' in by: by['TextBox 57'].text_frame.word_wrap=False
-    # ★★★★★v320 TextBox 57 라벨 정본(지점장 지시 2026.08.01) — 지점장 원문:
-    #   `암주요치료비 : ` / `하이클래스(비급여) :` / (빈줄) / `10억통장 :`
-    #   구 라벨은 `상급병원암주요치료비`·`상급병원하이클래스`였다(상급병원 한정처럼 보였다).
-    #   ★라벨은 템플릿에 박혀 있으므로 코드가 <b>라벨 run을 직접 덮어쓴다</b>.
-    _lab57=lambda pi,ri,t:(by['TextBox 57'].text_frame.paragraphs[pi].runs[ri].__setattr__('text',t)
-                           if ('TextBox 57' in by and pi<len(by['TextBox 57'].text_frame.paragraphs)
-                               and ri<len(by['TextBox 57'].text_frame.paragraphs[pi].runs)) else None)
-    _lab57(0,0,'암주요치료비'); _lab57(1,0,'하이클래스(비급여)')
-    if g('암주요치료비'): pv('TextBox 57',0,2,'암주요치료비',prefix=': ',suffix='')
-    if g('하이클래스(암)'): pv('TextBox 57',1,2,'하이클래스(암)',prefix=': ',suffix='')
-    # ★10억통장 줄 — p1(하이클래스) 뒤에 <b>줄바꿈으로 이어붙인다</b>.
-    #   `_seg`가 run을 복제해 색 조각을 만들므로 라벨·값을 색까지 정확히 나눠 넣을 수 있다.
-    #   (문단 자체를 복제하면 템플릿 서식이 깨져 run 이어붙이기를 쓴다.)
-    try:
-        _p57=by['TextBox 57'].text_frame.paragraphs[1]
-        if len(_p57.runs)>2:
-            _g10=_gensum.get('10억 플랜',0) or 0; _n10=_nonsum.get('10억 플랜',0) or 0
-            _v10=totals.get('10억 플랜',0) or 0
-            _s10=[(': ', None)]
-            if g('하이클래스(암)'):
-                _gh=_gensum.get('하이클래스(암)',0) or 0; _nh=_nonsum.get('하이클래스(암)',0) or 0
-                if _gh and _nh: _s10=[(': ',None),(f'{_gh:,}',_BLUE),(f'+{_nh:,}',_BLACK)]
-                elif _gh:       _s10=[(': ',None),(f'{_gh:,}',_BLUE)]
-                elif _nh:       _s10=[(': ',None),(f'{_nh:,}',_BLACK)]
-            _s10.append(('\n\n10억통장 : ', None))
-            if _g10 and _n10: _s10 += [(f'{_g10:,}',_BLUE),(f'+{_n10:,}',_BLACK)]
-            elif _g10:        _s10.append((f'{_g10:,}',_BLUE))
-            elif _n10:        _s10.append((f'{_n10:,}',_BLACK))
-            elif _v10:        _s10.append((f'{_v10:,}',_BLACK))
-            for _rr in _p57.runs[3:]: _rr.text=''   # ★v320 잉여 run 제거(중복 인쇄 방지)
-            _seg(_p57.runs[2], _s10)
-        else: print('[PPT_MISS] TextBox 57 p1 run수 %d'%len(_p57.runs))
-    except Exception as _e57: print('[PPT_MISS] 10억통장 (%s)'%str(_e57)[:60])
-
-    if g('질병수술비'): pv('TextBox 17',0,1,'질병수술비',prefix=': ',suffix='')
-    if any(surg_q): r_set('TextBox 17',3,0,f'({"/".join(str(x) for x in surg_q)})','질병 종수술비(1-5종)'); r_set('TextBox 17',3,2,'',None)
-    if g('뇌혈관수술비'): pv('TextBox 17',5,1,'뇌혈관수술비',prefix=': ',suffix='')
-    if g('심장수술비'): pv('TextBox 17',7,1,'심장수술비',prefix=': ',suffix='')
-    if g('상해수술비'): pv('TextBox 19',0,1,'상해수술비',prefix=': ',suffix='')
-    if any(surg_s): r_set('TextBox 19',3,0,f'({"/".join(str(x) for x in surg_s)})','상해 종수술비(1-5종)'); r_set('TextBox 19',3,2,'',None)
-    if g('골절수술비'): pv('TextBox 19',4,1,'골절수술비',prefix=': ',suffix='')
-
-    _ys=totals.get('양성자치료',0); _sgj=totals.get('세기조절치료',0)   # ★v29v (지점장 2026.07.02) 양성자·세기조절 → 암 박스
-    if _ys or _sgj:
-        try:
-            _p14=by['TextBox 14'].text_frame.paragraphs[5]
-            _t = (f'{_ys:,}/{_sgj:,}' if (_ys and _sgj) else f'{(_ys or _sgj):,}')
-            _p14.runs[-1].text=': '+_t
-        except Exception: pass
-    실손_cts=[ct for ct in contracts
-        if any('실손' in k or '입원의료비' in k for k in ct['dambo']) and ct['contract_date']]
-    실손가입일=min((c['contract_date'] for c in 실손_cts), default='___________')
-    _실손상품=next((c.get('product','') for c in 실손_cts if c['contract_date']==실손가입일), '')
-    _np3=any(_has_nonpay3(c.get('dambo')) for c in 실손_cts)   # ★v250 3대비급여 하한
-    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품, _np3)   # ★실손 세대 자동판별(상품명 연도코드 반영)
-    by['TextBox 59'].text_frame.word_wrap=False
-    by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
-    by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
-    by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
-    by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
-    for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(10)  # ★v50 '다10'
-    if g('입원'): pv('TextBox 6',0,1,'입원',prefix=': ',suffix='')
-    if g('통원'): pv('TextBox 6',1,1,'통원',prefix=': ',suffix=' / ')
-    if g('약값'): pv('TextBox 6',1,3,'약값',prefix=': ',suffix='')   # ★v29t 등식1: 약값 PPT 누락 수리
-    if g('MRI'): pv('TextBox 6',2,0,'MRI',prefix='MRI : ',suffix='')
-    if g('도수치료'): pv('TextBox 6',3,1,'도수치료',prefix=': ',suffix='')
-    if g('비급여주사'): pv('TextBox 6',4,1,'비급여주사',prefix=': ',suffix='')
-
-    if g('골절합산PPT'): pv('TextBox 7',0,1,'골절합산PPT',prefix=': ',suffix='')   # ★v30n 엑셀 골절 두 행 합산 표기
-    if g('화상진단비'): pv('TextBox 7',2,1,'화상진단비',prefix=': ',suffix='')
-    if g('깁스진단비'): pv('TextBox 7',5,1,'깁스진단비',prefix=': ',suffix='')
-    if g('응급실(응급)'): pv('TextBox 7',6,1,'응급실(응급)',prefix=': ',suffix='')
-    if g('일상배상책임'): pv('TextBox 5',0,1,'일상배상책임',prefix=': ',suffix='')
-    if g('대인'): pv('TextBox 9',0,1,'대인',prefix=': ',suffix='')
-    if g('대물'): pv('TextBox 9',1,1,'대물',prefix=': ',suffix='')
-    if g('합의금'): pv('TextBox 9',2,1,'합의금',prefix=': ',suffix='')
-    if g('6주미만'): pv('TextBox 9',3,2,'6주미만',prefix=': ',suffix='')
-    if g('변호사'): pv('TextBox 9',4,1,'변호사',prefix=': ',suffix='')
-    if g('자부상'): pv('TextBox 9',5,2,'자부상',prefix=': ',suffix='')
-    if g('질병일당'): pv('TextBox 22',0,1,'질병일당',prefix=': ',suffix=' / ')
-    if g('상해일당'): pv('TextBox 22',1,1,'상해일당',prefix=': ',suffix=' / ')
-    # ★★★★★v319 일당 박스 라벨·값 정본(지점장 지시 2026.08.01) — 지점장 원문 형태:
-    #   `질병일당 :   / 질병종합병원일당 : `  /  `상해일당 :   / 상해종합병원일당 : `
-    #   `간병인일당 :   / 요양병원 : `        /  `간호통합병동일당 :   / 간병인지원일당 : `
-    #   <b>구 템플릿 라벨은 `병원일당`</b>(질병·상해 구분이 없어 어느 쪽인지 알 수 없었다)이고
-    #   <b>값도 안 채워졌다</b> — 마스터 54·55행(v314 `종합병원 질병입원일당`·`종합병원 상해입원일당`)이
-    #   보장분석지 PPT에 <b>한 번도 나온 적이 없다</b>.
-    #   ★라벨은 템플릿에 박혀 있으므로 <b>코드가 라벨 run을 직접 덮어쓴다</b>.
-    def _lab(box,pi,ri,text):
-        try:
-            _p=by[box].text_frame.paragraphs[pi]
-            if ri < len(_p.runs): _p.runs[ri].text=text
-        except Exception: print('[PPT_MISS] 라벨 %s p%d r%d'%(box,pi,ri))
-    _lab('TextBox 22',0,2,'질병종합병원일당 ')
-    _lab('TextBox 22',1,2,'상해종합병원일당 ')
-    if g('종합병원 질병입원일당'): pv('TextBox 22',0,3,'종합병원 질병입원일당',prefix=': ',suffix='')
-    if g('종합병원 상해입원일당'): pv('TextBox 22',1,3,'종합병원 상해입원일당',prefix=': ',suffix='')
-    if g('1인실 상급병원'): pv('TextBox 22',3,2,'1인실 상급병원',prefix=': ',suffix='')
-    if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
-    if g('간병인'): pv('TextBox 22',7,1,'간병인',prefix=': ',suffix=' / ')
-    # ★v319: `간호통합병동일당 : 값 / 간병인지원일당 : 값` — 한 문단에 담보 2개.
-    #   `_seg`가 run을 복제해 색 조각을 만들므로 라벨·값을 색까지 정확히 나눠 넣을 수 있다.
-    _kh=totals.get('간호통합병동',0) or 0; _kj=totals.get('간병인지원일당',0) or 0
-    try:
-        _p8=by['TextBox 22'].text_frame.paragraphs[8]
-        if len(_p8.runs)>2:
-            _gk=_gensum.get('간호통합병동',0) or 0; _nk=_nonsum.get('간호통합병동',0) or 0
-            _gj=_gensum.get('간병인지원일당',0) or 0; _nj=_nonsum.get('간병인지원일당',0) or 0
-            _sg=[]
-            _sg.append((': ', None))
-            if _gk and _nk: _sg += [(f'{_gk:,}', _BLUE), (f'+{_nk:,}', _BLACK)]
-            elif _gk:       _sg.append((f'{_gk:,}', _BLUE))
-            elif _nk:       _sg.append((f'{_nk:,}', _BLACK))
-            elif _kh:       _sg.append((f'{_kh:,}', _BLACK))
-            _sg.append(('  / 간병인지원일당 : ', None))
-            if _gj and _nj: _sg += [(f'{_gj:,}', _BLUE), (f'+{_nj:,}', _BLACK)]
-            elif _gj:       _sg.append((f'{_gj:,}', _BLUE))
-            elif _nj:       _sg.append((f'{_nj:,}', _BLACK))
-            elif _kj:       _sg.append((f'{_kj:,}', _BLACK))
-            for _rr in _p8.runs[3:]: _rr.text=''    # ★v320 잉여 run 제거(중복 인쇄 방지)
-            _seg(_p8.runs[2], _sg)
-        else: print('[PPT_MISS] TextBox 22 p8 run수 %d'%len(_p8.runs))
-    except Exception as _e8: print('[PPT_MISS] 간호통합/간병인지원 (%s)'%str(_e8)[:60])
-    if g('크라운'): pv('TextBox 13',0,1,'크라운',prefix=': ',suffix='')
-    if g('임플란트'): pv('TextBox 13',1,1,'임플란트',prefix=': ',suffix='')
-
-    # ── 누락 슬롯 보충 (엑셀 합계 끌어오기) ──
-    if g('중입자치료비'): pv('TextBox 14',3,2,'중입자치료비',prefix=': ',suffix='')
-    if g('5대골절진단비'): pv('TextBox 7',1,3,'5대골절진단비',prefix=': ',suffix='')
-    if g('중증화상진단비'): pv('TextBox 7',3,1,'중증화상진단비',prefix=': ',suffix='')
-    if g('허혈성수술비'): pv('TextBox 17',6,2,'허혈성수술비',prefix=': ',suffix='')
-    if g('5대골절수술비'): pv('TextBox 19',5,3,'5대골절수술비',prefix=': ',suffix='')
-    if g('화상수술비'): pv('TextBox 19',6,1,'화상수술비',prefix=': ',suffix='')
-    if g('창상봉합술'): pv('TextBox 19',8,2,'창상봉합술',prefix=': ',suffix='')
-    if g('질병중환자실'): pv('TextBox 22',2,2,'질병중환자실',prefix=': ',suffix=' / ')
-    if g('상해중환자실'): pv('TextBox 22',2,5,'상해중환자실',prefix=': ',suffix='')
-    if g('1인실 상급병원'): pv('TextBox 22',3,2,'1인실 상급병원',prefix=': ',suffix='')
-    if g('1인실 종합병원'): pv('TextBox 22',4,2,'1인실 종합병원',prefix=': ',suffix='')
-
-    # ★v29t CI 담보값 노란 배경(§8.4·§11): 중대한 계열을 해당 칸에 표기 + 값 run만 노랑 하이라이트
-    from pptx.oxml.ns import qn as _ciqn
-    import copy as _cicopy
-    from pptx.text.text import _Run as _ciRunCls
-    _CIHL_AFTER=[_ciqn('a:uLnTx'),_ciqn('a:uLn'),_ciqn('a:uFillTx'),_ciqn('a:uFill'),_ciqn('a:latin'),_ciqn('a:ea'),
-               _ciqn('a:cs'),_ciqn('a:sym'),_ciqn('a:hlinkClick'),_ciqn('a:hlinkMouseOver'),_ciqn('a:rtl'),_ciqn('a:extLst')]
-    def _hl_yellow(run):
-        rPr=run._r.get_or_add_rPr()
-        for old in rPr.findall(_ciqn('a:highlight')): rPr.remove(old)
-        hl=rPr.makeelement(_ciqn('a:highlight'),{}); hl.append(rPr.makeelement(_ciqn('a:srgbClr'),{'val':'FFFF00'}))
-        ins=None
-        for ch in rPr:
-            if ch.tag in _CIHL_AFTER: ins=ch; break
-        if ins is not None: ins.addprevious(hl)
-        else: rPr.append(hl)
-    def _ci_run(box,pidx,std,sep):
-        v=totals.get(std,0)
-        if not v or box not in by: return
-        tf=by[box].text_frame
-        if pidx>=len(tf.paragraphs): return
-        p=tf.paragraphs[pidx]
-        if not p.runs: return
-        base=p.runs[-1]
-        nr_el=_cicopy.deepcopy(base._r); base._r.addnext(nr_el)
-        nr=_ciRunCls(nr_el,p); nr.text=f'{sep}{v:,}'
-        _hl_yellow(nr)
-    def _ci_split(box,label,ci_std,extra_std):
-        # ★v29t: 라벨줄 + [CI값(노랑)] + [+일반값] 을 별도 run으로 구성 — 개행 포함 run의 하이라이트 미표시(파워포인트) 방지
-        civ=totals.get(ci_std,0)
-        if not civ or box not in by: return
-        tf=by[box].text_frame; p=tf.paragraphs[0]
-        if not p.runs: return
-        base=p.runs[0]
-        for _r in list(p.runs[1:]): _r._r.getparent().remove(_r._r)
-        base.text=f'{label}\n'
-        el1=_cicopy.deepcopy(base._r); base._r.addnext(el1)
-        r1=_ciRunCls(el1,p); r1.text=f'{civ:,}'; _hl_yellow(r1)
-        exv=totals.get(extra_std,0)
-        if exv:
-            el2=_cicopy.deepcopy(base._r); el1.addnext(el2)
-            r2=_ciRunCls(el2,p); r2.text=f'+{exv:,}'
-            try: r2.font.color.rgb=(_BLUE if _gensum.get(extra_std) else _BLACK)
-            except: pass
-    # ★★★★★v243(지점장 지시 2026.07.25): <b>보장분석지 PPT 뇌 칸도 축을 따라간다</b>.
-    #   구 코드는 `중대한 뇌졸증`만 봐서, 축이 뇌출혈인 CI(신한·DB 실측)는 <b>PPT에 아무것도 안 찍혔다</b>.
-    #   → 끝열 합계에 <b>중대한 뇌출혈</b>이 있으면 그 축으로 라벨·값을 바꾼다.
-    if (totals.get('중대한 뇌출혈',0) or 0) > (totals.get('중대한 뇌졸증',0) or 0):
-        _ci_split('TextBox 47','뇌출혈','중대한 뇌출혈','뇌출혈진단비')
-    else:
-        _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
-    _ci_split('TextBox 55','급성심근','중대한 급성심근','급성심근경색')
-    _ci_run('TextBox 14',0,'중대한 암','+')
-    _ci_run('TextBox 10',3,'중대한CI적용','+')
-    _autofit_ppt(by)
-    prs.save(out); return True
-
-
-# ★v50(지점장 '다10'): 제목·날짜만 예외(18pt). 실손박스(59)도 10pt 대상으로 편입.
-_HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
-_SURGERY_BOXES={'TextBox 17','TextBox 19'}   # ★v29t: 질병수술·상해수술 9.0pt 고정(지점장 2026.07.02), 1~5종 줄만 축소 허용
+        return JSONResponse({'ok':False,'error':str(e)})
