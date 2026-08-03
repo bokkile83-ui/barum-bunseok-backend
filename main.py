@@ -477,7 +477,13 @@ def rule_extract(block_lines):
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
     dambo={}; names=[]; amts=[]; pend=None
+    # ★★★★★v345 [중복줄] 기록 — 지점장 지시 2026.08.02(영구).
+    #   v344로 「동일 담보명 2줄 = 대표(max)」가 기본이 됐지만, <b>몇 줄이었는지가 아무 데도 안 남았다</b>.
+    #   진짜 합산해야 할 담보가 나타나도 조용히 하나로 줄어든다 → <b>확인사항에 흔적을 남긴다</b>.
+    #   ★값은 건드리지 않는다(표시 전용).
+    _duplog={}
     def _add(_nm, _amt):
+        _duplog.setdefault(str(_nm), []).append(_amt)
         # ★v61 심뇌혈관수술비 라인단위 분해(지침 §8.3.1 · 지점장 2026.07.15 재확정):
         #   '심뇌혈관…수술' = 심장수술비 + 뇌혈관수술비 각 100% 동일액.
         #   ★중복줄(상해·질병 등 같은 3,000이 2줄) = 합산 아니라 대표(max) — 6,000 오합산 방지.
@@ -494,6 +500,26 @@ def rule_extract(block_lines):
             # ★★v227: `일반암직접치료 1,000`이 별첨에 <b>2줄</b> 인쇄되는데 합산하면 2,000이 된다.
             #   세부가입현황 정답은 <b>대표 1,000</b>(암수술 칸) → dambo 합산 이전에 max로 잡는다.
             dambo[_nm]=max(dambo.get(_nm,0), _amt)
+        elif any(k in _n for k in ('1-7종','1-8종','1-9종','1~7종','1~8종','1~9종')) and ('수술' in _n):
+            # ★★★★★v342 (지점장 지적 2026.08.02): <b>축 표기 없는 1-7/1-8/1-9종은 질병·상해 양쪽에 기재</b>한다.
+            #   지점장 원문: "1-7종 대표값 넣으라고했지만 <b>질병1-종 즉 1-8종에는 빠져있다</b>
+            #   엑셀의 오류로 진단서와 ppt 다 빠져있었다".
+            #   실측 = 미래에셋 `1-7종수술특약(급여)` 2,000이 <b>상해 1-8종에만</b> 들어가고 질병은 0이었다.
+            # ★★★★★v343 (지점장 지시 2026.08.02, 영구): "<b>1-7.1-8.1-9의 가장큰 대표값. 질병.상해에 각각넣어라</b>"
+            #   → 축 표기 유무와 <b>무관</b>하게 1-7·1-8·1-9종 담보 전체에서 <b>최댓값 1개</b>를 뽑아
+            #     <b>질병 종수술비(1-8종) · 상해 종수술비(1-8종) 두 행에 각각</b> 기재한다. <b>합산 금지</b>.
+            for _r in ('상해 종수술비(1-8종)[묶음]','질병 종수술비(1-8종)[묶음]'):
+                dambo[_r]=max(dambo.get(_r,0), _amt)
+        elif (('종수술' in _n) or re.search(r'1[-~][0-9]종', _n)) and re.search(r'\([0-9]\s*종\)', _n) \
+             and not any(k in _n for k in ('질병','상해','재해')):
+            # ★★★★★v341 예외사항(지점장 지시 2026.08.02): <b>질병/상해 표기 없는 종수술비가
+            #   한 계약에 두 벌 실리면 「질병 1벌 + 상해 1벌」이다 — 합산 금지·대표(max).</b>
+            #   지점장 원문: "미래에셋 1-5종이 질병or상해라고 기재안된채 2개가 기재되어있다
+            #   넌 그걸 <b>각각 더해서 2배</b>로 만들어놧다".
+            #   실측 = 미래에셋 `1-5종수술특약(1종)~(5종)` 20/40/300/1000/2000이 <b>두 벌</b>
+            #   → dambo 단계에서 합산돼 40/80/600/2000/4000이 됐다. 정답은 각 축 20/40/300/1000/2000.
+            #   ★축 표기가 있는 담보(질병1-5종수술비 등)는 종전대로 합산 — 이 예외에 안 걸린다.
+            dambo[_nm]=max(dambo.get(_nm,0), _amt)
         elif _n in _DUP_MAX_EXACT:
             # ★★★v234: 무수식어 담보(일반사망·입원 등) 2줄 = 질병축·상해축 각각 → 합산 금지·대표(max).
             #   합산하면 뒤의 종신 1:1 / 입원특약 양행기재 규칙과 겹쳐 금액이 2배가 된다.
@@ -504,7 +530,16 @@ def rule_extract(block_lines):
             #   심뇌혈관수술(v61)과 같은 원칙 — <b>중복 줄은 합산 금지·대표(max)</b>.
             dambo[_nm]=max(dambo.get(_nm,0), _amt)
         else:
-            dambo[_nm]=dambo.get(_nm,0)+_amt
+            # ★★★★★v344 기본값 전환 — 지점장 확정 2026.08.02(영구·최상위)
+            #   지점장 원문: "<b>똑같은 이름과패턴의 담보가 2개면 1개만 입력하자</b>".
+            #   구 기본값은 <b>합산(`+=`)</b>이었다 → 별첨에 <b>담보명이 완전히 같은 줄이 두 번</b> 실리면
+            #   금액이 그대로 <b>2배</b>가 됐다. 그동안 표적항암·합의금·암수술·간병인·심뇌혈관·결합담보처럼
+            #   <b>사고가 난 담보만 하나씩 예외 목록</b>에 넣어 땜질해 왔고, 목록에 없는 담보가 오면
+            #   또 2배가 됐다(실측 미래에셋 1-5종·1-7종). <b>원칙을 뒤집는다 — 기본이 대표(max)다.</b>
+            #   ★적용 범위 = <b>한 계약 안에서 담보명이 완전히 동일한 줄</b>. 담보명이 다르면(스쿨존 벌금 +
+            #     업무상과실 벌금 등) 종전대로 각각 잡혀 끝열에서 합산된다.
+            #   ★계약이 다르면 열이 다르므로 <b>끝열 가로 SUM은 그대로</b>다(계약 간 합산은 영향 없음).
+            dambo[_nm]=max(dambo.get(_nm,0), _amt)
     UNIT = r'(?:\s*(원|만원|만))?'
     NOISE = re.compile(r'지점|LP|☎|^\d{4}\.\d{2}\.\d{2}$|^\d+/\d+$|계약자|납입주기|보장기간|정상계약|상기 ?내용은|기준으로 ?분석|향후 ?계약사항|본 ?리포트|참조하시|제안서는|유의 ?사항')
     def _flush():
@@ -551,6 +586,7 @@ def rule_extract(block_lines):
     _flush()
     for i, nm in enumerate(names):
         _add(nm, (amts[i] if i < len(amts) else 0))   # 금액 미확보=0 → [확인] 경유, 증발 금지
+    dambo['__DUP__'] = {k:v for k,v in _duplog.items() if len(v) >= 2}
     return dambo
 
 def llm_extract(block_text):
@@ -1848,6 +1884,7 @@ def parse_txt(txt, filename=''):
         i = j
         # 추출: LLM 우선(깨진 별첨 복원), 키 없거나 실패 시 규칙 폴백
         dambo = llm_extract('\n'.join(block_lines)) or rule_extract(block_lines)
+        _dup = dambo.pop('__DUP__', {}) if isinstance(dambo, dict) else {}   # ★v345 중복줄 기록(표시 전용)
         # ★ CI/리빙케어/GI: 별첨이 전부 '주계약'으로 라벨없이 뭉침 → 개별 주계약 금액 수집(본체 80/50% 판별용)
         ci_jugye=[]
         if _isci_prod(product):
@@ -1970,7 +2007,7 @@ def parse_txt(txt, filename=''):
             #   사망보장금도 7,865 / 7,865 / <b>9,050</b>으로 다르다.
             #   → 별첨 헤더의 <b>계약자명</b>을 계약에 붙여 병합키에 넣는다.
             #   ★페이지 분할된 <b>같은</b> 계약은 계약자가 동일하게 인쇄되므로 병합은 그대로 유지된다(v257 무회귀).
-            contracts.append({'holder':_holder,'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
+            contracts.append({'dup':_dup,'holder':_holder,'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
                 'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye,'ci_sebu':_cs,'ci_lines':ci_lines})
     # ★★v100 단계약 사각지대: KB·메리츠 3열이 '계약 1건'이면 앵커가 1개뿐이라
@@ -3984,8 +4021,15 @@ def build_excel(data, out):
             if std in _BLUE_ROWS: blue = True
             # 수술비 1~5종 -> 종별 슬래시 누적
             if std == '종수술비공통' and 1 <= jong <= 5:   # ★v29q-12 상해/질병 미표기 → 상해·질병 양쪽 동일 기재
+                # ★★★★★v341 예외사항(지점장 지시 2026.08.02): <b>질병/상해 표기 없는 종수술비가
+                #   한 계약에 두 벌 실리면 그것은 「질병 1벌 + 상해 1벌」이지 합산 대상이 아니다.</b>
+                #   지점장 원문: "미래에셋 1-5종이 질병or상해라고 기재안된채 2개가 기재되어있다
+                #   넌 그걸 <b>각각 더해서 2배</b>로 만들어놧다".
+                #   실측 = 미래에셋 `1-5종수술특약(1~5종)` 20/40/300/1000/2000이 <b>두 벌</b>
+                #   → 앱이 40/80/600/2000/4000으로 부풀렸다. 정답은 <b>각 축 20/40/300/1000/2000</b>.
+                #   → 누적(`+=`)이 아니라 <b>대표(max)</b>로 넣는다. 한 벌만 있으면 종전처럼 양쪽 복제.
                 for _k in ('상해 종수술비(1-5종)','질병 종수술비(1-5종)'):
-                    jong_acc[_k][jong-1] += amt
+                    jong_acc[_k][jong-1] = max(jong_acc[_k][jong-1], amt)
                     if blue: jong_blue[_k] = True
                 surg_trace.append((ct['company'], raw, f'상해·질병 종수술 양쪽 {jong}종 슬롯', amt))   # ★v30g
                 continue
@@ -4845,6 +4889,34 @@ def build_excel(data, out):
     except Exception as _e9:
         print(f"[v277 검산] 실패 → 생략 ({_e9})")
 
+    # ★★★★★v345 [중복줄] — 지점장 지시 2026.08.02(영구). <b>「조용히 틀리는 것」을 보이게 만든다.</b>
+    #   v344로 「동일 담보명 2줄 = 대표(max)」가 <b>기본값</b>이 됐다. 값은 안전해졌지만
+    #   <b>원래 몇 줄이었고 각각 얼마였는지가 아무 데도 안 남는다</b> → 진짜 합산해야 할 담보가
+    #   나타나도 조용히 하나로 줄어든다. 그래서 <b>흔적을 확인사항에 강제 노출</b>한다.
+    #   ★값은 건드리지 않는다(표시 전용). 지점장이 보고 "이건 합산이다"라고 하면 그때 예외로 넣는다.
+    try:
+        _dup_rows=[]
+        for _ci,_c in enumerate(contracts):
+            for _nm,_vs in (_c.get('dup') or {}).items():
+                if len(set(_vs))==1 and len(_vs)>=2:
+                    _dup_rows.append((_c.get('company',''), _nm, len(_vs), '/'.join(str(x) for x in _vs), '동일액 반복 → 대표 1개'))
+                elif len(_vs)>=2:
+                    _dup_rows.append((_c.get('company',''), _nm, len(_vs), '/'.join(str(x) for x in _vs), '금액 상이 → 대표(max) — 합산 여부 확인'))
+        if _dup_rows:
+            _r2 = ws2.max_row + 3
+            _h = ws2.cell(_r2,1, f'[중복줄] 같은 계약에 담보명이 완전히 같은 줄이 2개 이상 — {len(_dup_rows)}건 (v344: 대표 1개만 기재)')
+            _h.font = Font(bold=True, size=12, color='7A5C00')
+            _r2 += 1
+            for _i,_t in enumerate(('회사','별첨 담보명','줄 수','각 줄 금액','처리')):
+                ws2.cell(_r2,_i+1,_t).font = Font(bold=True)
+            for _co,_nm,_n,_vv,_wy in _dup_rows:
+                _r2 += 1
+                for _i,_v in enumerate((_co,_nm,_n,_vv,_wy)): ws2.cell(_r2,_i+1,_v)
+            print(f"[v345 중복줄] {len(_dup_rows)}건 노출")
+    except Exception as _e45:
+        print(f"[v345 중복줄] 실패 → 생략 ({_e45})")
+
+
     # ★★★★★v312 <b>해석원칙을 산출물에 원문 그대로 박는다</b>(지점장 지시 "법률 같은 봇").
     #   내가 지침을 요약·재구성해도 <b>고객 엑셀에는 지점장 원문이 그대로 나가</b> 왜곡이 즉시 드러난다.
     #   ★출력 전용 — 값·행 배정은 건드리지 않는다. 위치는 확인사항 시트 맨 아래.
@@ -5368,9 +5440,14 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     # ★★★★★v337 (지점장 지적 2026.08.02 "왜 이걸 두개를 합친것이냐 다른 담보들인데"):
     #   구 코드는 폼의 `협심증 / 심부전 :` <b>한 칸</b>에 둘 중 큰 값만 넣었다 — <b>다른 담보를 합친 것</b>이다.
     #   → 폼을 `협심증 :   심부전 :` <b>두 칸</b>으로 나누고 <b>각각 기재</b>한다.
-    if g('협심증'): pvl('TextBox 4','협심증','협심증')
-    if g('심부전'): pvl('TextBox 4','심부전','심부전')
-    if g('부정맥'): pvl('TextBox 4','부정맥','부정맥')
+    # ★★★★★v338 (지점장 지시 2026.08.02 "ppt에 이렇게 줄여야한다 칸이 다 튀어나온다"):
+    #   구 폼은 `TextBox 4`(협심증·심부전·부정맥)가 <b>`TextBox 심장4종` 안에 완전히 겹쳐</b> 있어
+    #   글자가 같은 자리에 두 번 인쇄되고 칸 밖으로 넘쳤다(좌표 실측으로 확인).
+    #   → 심장 <b>6칸을 `TextBox 심장4종` 한 박스에 2줄</b>로 합치고 <b>7pt</b>로 줄였다.
+    #     1줄 = 빈맥·염증·심근병증·심장판막 / 2줄 = 협심증·심부전·부정맥. `TextBox 4`는 비웠다.
+    if g('협심증'): pvl('TextBox 심장4종','협심증','협심증')
+    if g('심부전'): pvl('TextBox 심장4종','심부전','심부전')
+    if g('부정맥'): pvl('TextBox 심장4종','부정맥','부정맥')
     # ★v337 1-7/1-8/1-9종 = 폼 `1~7종 수술비 :` 칸에 대표값(최댓값)
     if g('상해 종수술비(1-8종)'): pvl('TextBox 19','1~7종 수술비','상해 종수술비(1-8종)')
     if g('질병 종수술비(1-8종)'): pvl('TextBox 17','1~7종 수술비','질병 종수술비(1-8종)')
@@ -5565,6 +5642,15 @@ def _autofit_ppt(by):
             tf.word_wrap = False
             w_in = sh.width / 914400.0
         except: continue
+        # ★★★★★v338 (지점장 지시 2026.08.02 "ppt에 이렇게 줄여야한다 칸이 다 튀어나온다"):
+        #   심장 6칸(빈맥·염증·심근병증·심장판막 / 협심증·심부전·부정맥)을 한 박스 2줄로 합쳤다.
+        #   10pt로는 <b>칸 밖으로 넘친다</b> → 이 박스만 <b>8pt 고정</b>(지점장 지시 2026.08.02)(v50 '다10' 예외 3번째).
+        if _bn == 'TextBox 심장4종':
+            for p in tf.paragraphs:
+                for r in p.runs:
+                    try: r.font.size = Pt(8)
+                    except: pass
+            continue
         if _bn in _SURGERY_BOXES:
             # ★수술비 폰트(지점장 규정 2026.07.07): 1-5종 슬래시 줄만 6pt, 나머지 수술 줄은 9pt 고정(축소 금지)
             for p in tf.paragraphs:
@@ -5851,7 +5937,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v337-split-20260802',
+    return {'ok':True,'version':'v345-dupgate-20260802',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -5887,7 +5973,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v337-split-20260802'}
+    out = {'server_version': 'v345-dupgate-20260802'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -5982,7 +6068,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v337-split-20260802',
+    return {'version': 'v345-dupgate-20260802',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -5994,7 +6080,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v337-split-20260802'}
+    out = {'version': 'v345-dupgate-20260802'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
