@@ -4041,9 +4041,11 @@ def build_excel(data, out):
                 unmapped.append((col, ct['company'], raw, amt,
                                  f'[확인] 일당 행에 100만원 초과({amt}) — 진단비·수술비 오매핑 의심'))
                 continue
-            if std in ('골절(치아파절포함)','골절(치아파절제외)','화상진단비') and amt>=100:
-                unmapped.append((col, ct['company'], raw, amt, '등급별 100만↑ 제외'))  # 등급별 → 합산·기재 안 함
-                continue
+            # ★★★★★v353 (지점장 지시 2026.08.02, 영구): <b>골절·화상 「등급별 100만↑ 제외」 규칙 폐기</b>.
+            #   지점장 원문: 라이나 골절진단비II(치아파절포함) 1,000 · AXA 골절진단의료비용(치아파절제외) 1,000
+            #   · AIG 골절진단의료비용 500 · Ⅲ 250 · 화상진단의료비용 500 → "<b>넣어줘</b>".
+            #   구 규칙은 금액이 <b>100(만원) 이상이면 등급별로 보고 [확인]큐로 보내 기재하지 않았다</b>.
+            #   → 금액과 무관하게 <b>전부 기재</b>한다. 구 '등급별 100만↑ 제외' 조문은 완전 폐기.
             if std=='합의금' and amt>25000:   # 합의금 최대 2.5억, 초과는 불가 → [확인]
                 unmapped.append((col, ct['company'], raw, amt, '합의금 2.5억 초과(불가)'))
                 continue
@@ -5991,7 +5993,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v352-ndaename-20260802',
+    return {'ok':True,'version':'v353-goljeolall-20260802',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
 
@@ -6027,7 +6029,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v352-ndaename-20260802'}
+    out = {'server_version': 'v353-goljeolall-20260802'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -6122,7 +6124,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v352-ndaename-20260802',
+    return {'version': 'v353-goljeolall-20260802',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -6134,7 +6136,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v352-ndaename-20260802'}
+    out = {'version': 'v353-goljeolall-20260802'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
