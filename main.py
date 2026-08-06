@@ -197,7 +197,7 @@ def _is_silson_prod(company='', product=''):
     return '실손' in re.sub(r'\s', '', str(company) + str(product))
 
 
-def judge_renewal(product, expiry, pay_count, contract='', pay_period='', company=''):
+def judge_renewal(product, expiry, pay_count, contract='', pay_period='', company='', dambo=None):
     # 지침 §6 판정 (2026.07.09 개정: 240회 규칙 삭제 / 삼성화재 예외 / 납입==보장→갱신)
     # 0) ★★★실손은 비갱신이 없다 — 무조건 '갱신' (영구지침, 지점장 확정 2026.07.20 / v103)
     #    실손의료비는 제도상 갱신형만 존재한다. 만기 9999·납입!=보장 등 어떤 조건에도 우선한다.
@@ -221,7 +221,21 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
         cy = int(contract[:4]); ey = int(expiry[:4])
         if cy and ey: cov_y = ey - cy
     except: pass
-    if pay_y and cov_y and pay_y == cov_y: return '갱신'
+    if pay_y and cov_y and pay_y == cov_y:
+        # ★★★★★v354 전기납 예외 — 지점장 확정 2026.08.02(영구)
+        #   지점장 원문: "<b>전기납 이고 아래 담보들에 (갱신)이라고 표기 안된건 비갱신으로 표기해달라
+        #   / 삼성화재 + 2010년전 aia생명만 적용시키면 된다</b>".
+        #   [배경] `52년납/52년만기`(전기납)와 `20년납/20년만기`(갱신형)는 <b>형식이 완전히 같아</b>
+        #   ④만으로는 구분할 수 없다(메모리 [확인 대기] 사안). → <b>담보에 '갱신' 표기가 하나도 없으면
+        #   전기납으로 보고 비갱신</b>. ★<b>대상은 삼성화재 · 2010년 이전 가입 AIA생명 둘뿐</b> —
+        #   다른 회사는 종전대로 ④(납입==보장 → 갱신)를 그대로 따른다. 범위를 넓히지 않는다.
+        _co354 = re.sub(r'\s','',str(company or ''))
+        _aia10 = ('AIA' in _co354.upper()) and (str(contract or '')[:4].isdigit()) and (int(str(contract)[:4]) < 2010)
+        if ('삼성화재' in _co354) or _aia10:
+            _has_gen = any('갱신' in str(k) for k in (dambo or {}).keys())
+            if not _has_gen:
+                return '비갱신'
+        return '갱신'
     return '비갱신'
 
 def _has_nonpay3(dambo):
@@ -1294,6 +1308,15 @@ def parse_sebu_bycontract(lines):
         prem=[(m.start(), m.group(1)) for m in re.finditer(r'(\d[\d,]*)\s*원', l)]
         if len(prem) < 2:
             i+=1; continue
+        # ★★★★★v355b (이성준 실측 2026.08.02): <b>'보험료' 라벨이 있는 줄만 계약 블록 시작</b>으로 본다.
+        #   [구 결함] 「'원'이 2개 이상인 줄」이면 무조건 블록 시작이라
+        #   <b>2p 보유계약 리스트의 기납입보험료·잔여보험료</b>(959,200원 · 4,272,800원)까지
+        #   계약으로 잡혔다 → 계약 5건인데 <b>블록 6~7개</b>가 생기고 값이 옆 계약으로 밀렸다
+        #   (실측 NH 암수술 2,000 오기재 · 운전자 담보 전멸).
+        #   ★'계약별 가입정보' 표의 보험료 줄에는 <b>항상 '보험료' 라벨이 같은 줄(또는 바로 위 3줄)</b>에 있다.
+        _ctx355 = re.sub(r'\s','', ''.join(lines[max(0,i-3):i+1]))
+        if '보험료' not in _ctx355:
+            i+=1; continue
         cols=[]
         for st,v in prem:
             try: p=int(v.replace(',',''))
@@ -1313,8 +1336,15 @@ def parse_sebu_bycontract(lines):
         #   <b>맨 오른쪽 열 = 보험종기 날짜</b>를 금액으로 집어 <b>2079 · 22 · 14</b>가 담보값이 됐다
         #   (골절 2,079 / 상해사망 22 / 암수술 14). v260 접힘 사고와 <b>같은 계열</b>이다.
         #   → <b>다른 표가 시작되면 거기서 끊는다</b>. 종료 앵커가 없으면 종전대로 동작하므로 안전하다.
+        #   ★★★★★v355 (이성준 실측 2026.08.02): <b>[별첨]이 앵커에 없어 별첨 담보표까지 먹었다</b>.
+        #     실측 = 삼성 별첨 10p `［간편］상해 사망`의 <b>1</b>, KB 별첨 11p `상해 1〜5종수술비`의
+        #     <b>1·5</b>가 금액으로 잡혀 <b>롯데(69,115원) 열</b>에 들어갔다
+        #     → 질병수술비 100 + <b>5</b> = 105 · 상해수술비 100+1 · 상해사망 1,100+1.
+        #     v294 사고와 <b>완전히 같은 계열</b>(끝 앵커 부재 → 다음 표를 통째로 먹음).
         _END_ANCHOR = ('담보별 가입 현황','담보별가입현황','실효/해지','실효 / 해지',
-                       '가입담보상세','가입 담보 상세','보유 계약 리스트','보유계약리스트','전체 계약리스트')
+                       '가입담보상세','가입 담보 상세','보유 계약 리스트','보유계약리스트','전체 계약리스트',
+                       '[별첨]','［별첨］','정상계약 리스트','실효계약 리스트','안내 및 유의 사항',
+                       '계약별 가입정보','계약별가입정보')   # ★v356c 페이지가 바뀌면 새 표다 → 거기서 끊는다
         j=i+1; end=n
         while j < n:
             if len(re.findall(r'(\d[\d,]*)\s*원', lines[j]))>=2: end=j; break
@@ -1886,7 +1916,7 @@ def parse_txt(txt, filename=''):
         if is_excluded(company, product, contract_date, expiry_date, pay_period, pay_count):
             while i < n and '정상계약 리스트' not in lines[i] and '실효계약 리스트' not in lines[i]: i += 1
             continue
-        renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period, company)
+        renewal = judge_renewal(product, expiry_date, pay_count, contract_date, pay_period, company)   # ★v354: 이 시점엔 dambo 미생성 → 전기납 예외는 아래 2271행 재판정에서 적용
         # 담보 블록 텍스트 수집 (다음 '정상계약/실효계약 리스트'까지)
         # ★v333: 계약자명 — 별첨 헤더('계약자 이*영 …')는 <b>상품명 줄보다 앞</b>에 온다.
         _holder=''
@@ -2254,7 +2284,7 @@ def parse_txt(txt, filename=''):
         #   구 v44 규칙('3열은 총회차가 없으니 ④ 적용 금지')은 <b>폐기</b>. 3열에도 납입기간(20년납)과
         #   보험기간(2026.03.27~2046.03.27)이 그대로 인쇄돼 있어 ④ 판정에 필요한 값이 다 있다.
         #   실측 오류(양*선 KB): 삼성 운전자 20년납/20년만기 → 비갱신(오류) · New내돈내삼 54년납/54년만기 → 비갱신(오류).
-        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''))
+        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''), c.get('dambo'))
         # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
         if not c['expiry_date'].startswith('9999') and c['dambo']:
             _dk=list(c['dambo'].keys())
@@ -2931,7 +2961,7 @@ def resolve_kw(raw):
     #   ★★<b>6주미만이 먼저다</b> — `교통사고처리지원금(6주미만 진단)`은 6주미만 전용행이다.
     #     규칙을 앞으로 당기면서 이 순서를 놓쳐 합의금으로 갔다(단위검증에서 검출·수정).
     if has('6주'): return '6주미만',0
-    if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
+    if (has('처리지원금') or has('형사합의') or has('합의금')) and no('자전거'): return '합의금',0   # ★v356 자전거사고 제외
     if has('CI') and has('사망'): return '중대한CI적용',0
     if has('교통') and has('사망'): return '교통상해사망',0
     if (has('상해') or has('재해')) and has('사망'): return '상해사망',0
@@ -3066,10 +3096,16 @@ def resolve_kw(raw):
         if has('상해') or has('재해'): return '상해일당',0
 
     # ── 운전자 (지침 §운전자 매핑) ──
+    # ★★★★★v356 (지점장 확정 2026.08.02, 영구): "<b>자전거사고는 무관하다</b>".
+    #   NH `자전거사고 벌금담보` 2,000 · `자전거사고 교통사고처리지원금` 3,000이
+    #   <b>대인·합의금 칸에 산입</b>돼 한장표와 어긋났다(실측 합의금 20,000→23,000 · 대인 2,000→4,050).
+    #   → <b>담보명에 '자전거'가 있으면 운전자 칸에 넣지 않는다</b> → [확인]큐.
+    #   ★자동차 운전자 담보만 이 블록의 대상이다. 범위를 넓히지 않는다.
+    if has('자전거'): return None,0
     #  벌금(대인)→대인 / 벌금(대물)→대물 / 처리지원금(중상해포함)→합의금 / 처리지원금(6주미만)→6주미만
     #  변호사→변호사 / 자동차(사고)부상보장·부상위로→자부상
     if has('6주'): return '6주미만',0
-    if has('처리지원금') or has('형사합의') or has('합의금'): return '합의금',0
+    if (has('처리지원금') or has('형사합의') or has('합의금')) and no('자전거'): return '합의금',0   # ★v356 자전거사고 제외
     if has('벌금') and has('대물'): return '대물',0
     # ★★★★★v284 (지점장 확정 2026.07.31): <b>"과실치사는 삭제다. 대인벌금은 과실치사랑 다른 담보다"</b>
     #   → v283에서 내가 지점장 문구("표기 미이행 2가지")를 <b>반대로 해석</b>해 과실치사 계열을
@@ -3181,7 +3217,21 @@ def resolve2(raw):
     #   → 규칙마다 `has('재해')`를 덧붙이는 산발 대응을 폐기하고 <b>진입 시점에 한 번 정규화</b>한다.
     #   ★<b>'재해외'(재해 외 원인=질병)는 보호</b>한다 — 치환하면 `_dilqual` 제외어가 깨진다.
     raw_kw = re.sub(r'재해(?!\s*외)', '상해', raw_kw)
-    return resolve_kw(raw_kw)
+    _r2 = resolve_kw(raw_kw)
+    if _r2 and _r2[0]:
+        return _r2
+    # ★★★★★v357 (이성준 실측 2026.08.02): <b>전각 괄호 담보가 통째로 매핑 실패</b>했다.
+    #   실측 = 삼성화재 `［간편］상해 입원 수술비（당일입원 제외）` 100 → <b>None</b>
+    #          같은 담보를 반각으로 쓰면 `[간편]상해 입원 수술비(당일입원 제외)` → <b>상해수술비</b> ✓
+    #   삼성화재 리포트는 <b>모든 담보에 전각 `［간편］` 접두어</b>가 붙어 광범위하게 샜다.
+    #   → <b>1차 매칭이 실패했을 때만</b> 전각→반각으로 정규화해 <b>한 번 더</b> 시도한다.
+    #     (1차를 건드리지 않으므로 기존 매핑에 회귀가 없다.)
+    #   ★규칙은 그대로다 — `상해 수술비` + `상해수술비(***제외)`는 <b>담보명이 다르므로 종전대로 합산</b>.
+    _FW = str.maketrans('［］（）｛｝〔〕　', '[](){}[] ')
+    _alt = str(raw_kw).translate(_FW)
+    if _alt != raw_kw:
+        return resolve_kw(_alt)
+    return _r2
 
 def resolve(raw):
     return resolve2(raw)[0]
@@ -4441,6 +4491,9 @@ def build_excel(data, out):
             #   <b>삼성 리빙케어 일반사망 5,000이 소실</b>됐다(한장표 질병사망 −5,000).
             #   ★중대한CI적용은 검산식(질병사망=일반사망+질병사망(80세))에 들어가지 않으므로
             #     둘을 함께 기재해도 이중계산이 되지 않는다.
+            # ★v358 짝 행 — 하나라도 별첨 값이 있으면 세부보충 금지(별첨이 정본)
+            _SEBU_PAIR = {'골절(치아파절포함)':'골절(치아파절제외)',
+                          '골절(치아파절제외)':'골절(치아파절포함)'}
             _CIPAIR = {'일반암':'중대한 암', '뇌졸증진단비':'중대한 뇌졸증',
                        '뇌출혈진단비':'중대한 뇌출혈', '급성심근경색':'중대한 급성심근'}
             # ★★★★★v299-1 (주재현·심정자 실측 2026.07.31, 영구): 세부가입현황이 <b>직접 싣는</b>
@@ -4491,6 +4544,26 @@ def build_excel(data, out):
                         if ws.cell(_r2,_cl2).value not in (None, ''): continue  # 별첨 값 보존
                     _pr = nm2r.get(_CIPAIR.get(_tgt) or '')
                     if _pr and ws.cell(_pr,_cl2).value not in (None, ''): continue   # CI 본체 이미 기재
+                    # ★★★★★v358 (지점장 확정 2026.08.02, 영구): "<b>그건 보장분석지pdf안에 답이있어
+                    #   나한테 묻지말고 그거대로해라</b>" → <b>별첨이 정본이다. 세부보충이 만들어 넣지 않는다.</b>
+                    #   [실측] 삼성 별첨은 `［간편］골절 진단비（치아파절…제외）` 50 <b>하나뿐</b>인데
+                    #   세부가입현황엔 구분 없는 `골절진단비 50`만 있어 <b>포함 행에도 50</b>이 앉았다
+                    #   → 같은 담보가 두 행에 갈렸다.
+                    #   → <b>짝 행(포함↔제외) 중 하나라도 별첨 값이 있으면 세부보충을 하지 않는다.</b>
+                    #   ★별첨에 '치아제외' 표기가 <b>아예 없는</b> `골절진단비`는 종전대로 <b>포함 행</b>이다
+                    #     (resolve_kw 정본, v38c).
+                    _pr358 = nm2r.get(_SEBU_PAIR.get(_tgt) or '')
+                    if _pr358 and ws.cell(_pr358,_cl2).value not in (None, ''): continue
+                    # ★★★★★v358 (지점장 확정 2026.08.02, 영구): "<b>골절(치아파절제외) 삼성 50 ← 별첨 원문
+                    #   이게 맞다</b>". 세부가입현황은 <b>포함/제외 구분이 없는 표</b>라 `골절진단비 50`뿐이다.
+                    #   그런데 세부보충은 「빈 행이면 채운다」로만 동작해, 별첨이 <b>제외</b> 행을 채운 뒤에도
+                    #   <b>포함 행이 비었다는 이유로 또 50을 넣었다</b> → 같은 담보가 두 행에 갈려 앉았다.
+                    #   → <b>짝 행 중 하나라도 별첨 값이 있으면 세부보충 금지</b>(CI `_CIPAIR`와 같은 구조).
+                    #   ★대상은 <b>구분이 갈리는 짝</b>뿐이다. 다른 행은 종전대로 동작한다.
+                    _PAIR358 = {'골절(치아파절포함)':'골절(치아파절제외)',
+                                '골절(치아파절제외)':'골절(치아파절포함)'}
+                    _pr358 = nm2r.get(_PAIR358.get(_tgt) or '')
+                    if _pr358 and ws.cell(_pr358,_cl2).value not in (None, ''): continue
                 ws.cell(_r2,_cl2).value = _v2
                 _gen2 = ('비갱신' not in str(_c2.get('renewal') or '')) and ('갱신' in str(_c2.get('renewal') or ''))
                 ws.cell(_r2,_cl2).font  = BL if _gen2 else BK
