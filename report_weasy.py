@@ -81,8 +81,10 @@ _BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), 
 
 _BRAIN_TBL=[('grp','출혈성 뇌혈관 (I60~62)',None,None,None),('row','뇌출혈','I60~62','hem',[1,1,1]),('grp','허혈성 뇌혈관 (I63~66)',None,None,None),('row','뇌졸증·뇌경색','I63·65·66','infarct',[1,1,1]),('grp','기타 뇌혈관 (I64·67~69)',None,None,None),('row','기타 뇌혈관질환','I64·67·68·69','other',[1,1,1]),('grp','순환계 확장·선천',None,None,None),('row','뇌동맥류·정맥류','I71·72','aneur',[0,1,0]),('row','선천 뇌혈관기형','Q28.0~28.3','congen',[0,0,1]),('row','외상성 뇌출혈','S06','trauma',[0,0,1])]
 _HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','기타·만성 허혈','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','빈맥','I47·48','tachy',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
-def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None):
-    held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; ncol=len(headers)+1
+def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None, red=None):
+    # ★★★★★v371 (지점장 지적): 6p 담보별 보장범위 금액박스에 <b>제안=레드</b>가 없었다.
+    #   red = 레드로 찍을 슬롯 key 집합(엑셀 C00000이 유일 원천 — 결과값 동결 #9).
+    held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; red=set(red or []); ncol=len(headers)+1
     th=''.join('<th>'+h+'</th>' for h in headers)
     out=['<table class="scvt"><tr><th class="dl">질병 (코드)</th>'+th+'</tr>']
     for kind,label,code,key,cells in tbl:
@@ -98,7 +100,7 @@ def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None)
                 return ('<td><span class="on">●</span> <span class="mb amtbox specbox">'
                         + _html.escape(spec_amt) + '</span></td>')
             return '<td><span class="on">●</span></td>' if c else '<td><span class="off">○</span></td>'
-        _amtbox=' <span class="mb amtbox">'+(_html.escape(amt) if amt else '')+'</span>'
+        _amtbox=' <span class="mb amtbox'+(' rd' if key in red else '')+'">'+(_html.escape(amt) if amt else '')+'</span>'
         # ★CI 계약일 때만 유동 노출: 'CI' 미니칩 + 진단금액
         _ci = ci_amounts.get(key)
         _cibox=(' <span class="cichip">CI</span><span class="mb amtbox cibox">'+_html.escape(_ci)+'</span>') if _ci else ''
@@ -177,6 +179,25 @@ def _is_gen(rep, *names):
         t=_n(nm)
         if not t: continue
         for k in gm:
+            kn=_n(k)
+            if t==kn or (len(t)>=2 and (t in kn or kn in t)): return True
+    return False
+
+
+def _is_red(rep, *names):
+    """★★★★★v370 (지점장 확정 2026.08.09): <b>가입제안서 담보 = 레드</b>.
+    엑셀 글자색 C00000을 그대로 이어받는다 — 4대 산출물 색 연동(결과값 동결 #9)."""
+    rm=(rep or {}).get('red_map') or {}
+    if not rm: return False
+    import re as _r
+    def _n(x): return _r.sub(r'[\s·()\[\]/.]','',str(x))
+    for nm in names:
+        if nm and nm in rm: return True
+    for nm in names:
+        if not nm: continue
+        t=_n(nm)
+        if not t: continue
+        for k in rm:
             kn=_n(k)
             if t==kn or (len(t)>=2 and (t in kn or kn in t)): return True
     return False
@@ -570,7 +591,7 @@ def build_report_pdf(rep, out):
     def cov_card(cat):
         bt,bbg,bc=badge[cat['status']]
         items=''.join(
-            f'<span class="it {("bl" if it.get("blue") else "")} {("r" if it.get("none") else "")}">'
+            f'<span class="it {("bl" if it.get("blue") else "")} {("rd" if it.get("red") else "")} {("r" if it.get("none") else "")}">'
             f'{("" if it.get("none") else "<b>")}{_html.escape(it["t"])}{("" if it.get("none") else "</b>")}'
             f'{(" "+_html.escape(it["v"])) if it.get("v") else ""}</span>'
             for it in cat['items'])
@@ -1693,6 +1714,7 @@ body {{ color:{INK}; }}
 .fixnote .cap {{ color:#2E5A88; }}
 .fxrow {{ font-size:9pt; line-height:1.5; margin:1.5mm 0; color:#2B3A52; }}
 .fxrow b {{ color:#2E5A88; }}
+.p8 .wbox {{ height:13mm; line-height:13mm; }}   /* ★v375 8쪽 3블록(11행) 수용 — 24mm면 꼬리말 침범 */
 .wbox {{ flex:1; border:0.7pt solid {LINE}; border-radius:1mm; height:24mm; line-height:24mm; padding:0 3mm; font-size:9.5pt; font-weight:800; color:{NAVY}; background:#fff; text-align:right; white-space:nowrap; }}
 .wbox.wrap {{ white-space:normal; word-break:keep-all; line-height:1.3; height:auto; min-height:15mm; display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; padding:1.4mm 2.6mm; font-size:8pt; }}
 .dglist {{ flex:1; }}
@@ -1790,6 +1812,9 @@ body {{ color:{INK}; }}
 /* ★★★v147 (지점장 지적): 갱신 담보는 <b>담보명만</b> 파랑이고 <b>금액은 검정</b>이라
    허혈성 2,000만이 비갱신처럼 보였다 → 칩 전체(금액 포함)를 파랑으로. */
 .items .it.bl {{ color:{BLUE}; }}
+.scvt .amtbox.rd {{ color:#C00000; border-color:#C00000; }}   /* ★v371 6p 담보별 보장범위 = 제안 레드 */
+.items .it.rd {{ color:#C00000; }}          /* ★v370 가입제안서 = 레드 */
+.items .it.rd b {{ color:#C00000; }}
 /* ★v182 세부가입현황 미대조 경고 배너 */
 .bwarn {{ border:1pt solid {GAP}; background:#FDF2F2; border-radius:1.2mm; padding:1.2mm 1.8mm;
           margin:0 0 1.6mm; font-size:8.6pt; font-weight:800; color:{GAP}; text-align:center; }}
@@ -2007,9 +2032,9 @@ body {{ color:{INK}; }}
     _n9='<div class="hcnote">★ 삼성·메리츠는 허혈성심장질환을 6가지로 세분(급성기·후속·합병증·협심증·기타급성·만성). 롯데 특정심장Ⅰ=급성심근경색 / 흥국은 특정심혈관질환(기타부정맥제외)=협심·허혈·빈맥·심부전(급성심근 아님). 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>.</div>'
     _n8b='<div class="hcnote">★ 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     heart_chart = _fullpage(26,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
-                  _fullpage(25,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
-                  _fullpage(27,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
-                  _fullpage(28,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
+                  _fullpage(27,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
+                  _fullpage(28,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
+                  _fullpage(29,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
     _amt_brain={}; _amt_heart={}
@@ -2033,8 +2058,41 @@ body {{ color:{INK}; }}
     _cimap = rep.get('ci_amounts') or {}
     if str(rep.get('ci',{}).get('status'))!='ci': _cimap={}
     _spec = rep.get('spec_amounts') or {}
-    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap,_spec.get('brain'))
-    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap,_spec.get('heart'))
+    # ★v371 제안(레드) 슬롯 산출 — 위 두 매핑을 그대로 뒤집어 쓴다(새 경로 만들지 않는다).
+    _red_b=set(); _red_h=set()
+    for _t,_m in _AMTKEY.items():
+        _tgt=_amt_brain if _m[0]=='b' else _amt_heart
+        if _m[1] in _tgt and _is_red(rep,_t):
+            (_red_b if _m[0]=='b' else _red_h).add(_m[1])
+    for _k,_slot in _HD.items():
+        if _slot in _amt_heart and _is_red(rep,_k): _red_h.add(_slot)
+    # ★★★★★v376 8쪽 「주요치료비 세부」 값 산출 — 지점장 확정 2026.08.09
+    #   「그 담보의 대표값 하나라도 넣어라. 보통 중환자실은 대표값의 1/2이다」
+    #   대표값 = 엑셀 담보 행(암주요치료비 / 하이클래스(암) / 2대 주요치료비).
+    #   대표값이 없으면 그 블록은 통째로 빈칸 — 8쪽은 유동성(회사마다 칸이 없을 수 있다).
+    def _p8v(key):
+        _v = (rep.get('dambo') or {}).get(key)
+        if _v in (None, '', '0', '미가입'): return 0
+        _s = ''.join(ch for ch in str(_v) if ch.isdigit())
+        return int(_s) if _s else 0
+    def _p8t(n):
+        # ★값 문자열과 '만'을 분리해야 report_pptx의 _value_boxes가 좌표를 잡아
+        #   진단서 PPT에서 다른 칸과 똑같이 편집할 수 있다(지점장 지시 2026.08.09).
+        return (format(int(n), ',') + '<span class="dgu">만</span>') if n else ''
+    _p8_cam = _p8v('암주요치료비')          # ① 암 주요치료비
+    _p8_bgy = _p8v('비급여주요치료비')       # ② 비급여 암 주요치료비(=하이클래스)
+    _p8_sun = _p8v('2대주요치료비')          # ③ 순환계 주요치료비(=2대 주요치료비)
+    p8c1 = p8c2 = p8c3 = _p8t(_p8_cam)
+    p8c4 = _p8t(_p8_cam // 2)               # 중환자실 = 대표값 1/2
+    p8b1 = p8b2 = p8b3 = _p8t(_p8_bgy)      # 비급여 암은 중환자실 없음
+    p8s1 = p8s2 = p8s3 = _p8t(_p8_sun)
+    p8s4 = _p8t(_p8_sun // 2)               # 중환자실 = 대표값 1/2
+    # ★진단서 PPT 편집칸용 값 목록 — _valueset이 이 값들도 잡아야 8쪽에 텍스트박스가 생긴다
+    rep['_p8vals'] = [format(int(v), ',') for v in
+                      (_p8_cam, _p8_cam // 2, _p8_bgy, _p8_sun, _p8_sun // 2) if v]
+    print(f'[v376 8p] 암={_p8_cam} 비급여암={_p8_bgy} 순환계={_p8_sun} (중환자실=1/2) 편집칸값={rep["_p8vals"]}')
+    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap,_spec.get('brain'),_red_b)
+    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap,_spec.get('heart'),_red_h)
     # ★2026.07.11 실손 세대 자동판별(CI식) → 검출 세대 강조 표 + 세대별 맞춤 화법
     _sg=rep.get('silson_gen',{'status':'none'})
     # ★2026.07.11 지점장 확정 세분화: 2세대 3분할 / 1세대 생보·손보 구분(상해의료비)
@@ -2407,11 +2465,55 @@ body {{ color:{INK}; }}
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / {tpg}</span></div>
 </div>
 
+<!-- P8N: 주요치료비 세부 (v370 신설 · 지점장 지시 2026.08.09) -->
+<!-- ★★★★★v376 값 주입(지점장 확정 2026.08.09): 「그 담보의 대표값 하나라도 넣어라.
+     보통 중환자실은 대표값의 1/2이다」 / 「혈전제거는 회사마다 없을 수도 있다. 8페이지는 유동성이다」
+     → 대표값(엑셀 행)이 있으면 그 블록을 채우고, 없으면 블록 전체를 빈칸으로 둔다. -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE 보장분석</div>
+  <div class="nm">주요치료비 <b>세부</b></div>
+  <div class="pgn"><b>8</b>주요치료비 세부</div><div class="bar"></div></div>
+ <div class="body sbody p8">
+  <div class="sect2">① 암 주요치료비 <span>1개 담보가 4개로 나뉜다</span></div>
+  <table class="nht">
+   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+   <tr><td class="n">수술</td><td class="wbox">{p8c1}</td></tr>
+   <tr><td class="n">항암방사선</td><td class="wbox">{p8c2}</td></tr>
+   <tr><td class="n">항암약물</td><td class="wbox">{p8c3}</td></tr>
+   <tr><td class="n">중환자실</td><td class="wbox">{p8c4}</td></tr>
+  </table>
+
+  <div class="sect2">② 비급여 암 주요치료비 <span>1개 담보가 3개로 나뉜다 · 중환자실 없음</span></div>
+  <table class="nht">
+   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+   <tr><td class="n">암수술</td><td class="wbox">{p8b1}</td></tr>
+   <tr><td class="n">항암방사선</td><td class="wbox">{p8b2}</td></tr>
+   <tr><td class="n">항암약물</td><td class="wbox">{p8b3}</td></tr>
+  </table>
+
+  <div class="sect2">③ 순환계 주요치료비 <span>1개 담보가 4개로 나뉜다</span></div>
+  <table class="nht">
+   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
+   <tr><td class="n">수술비</td><td class="wbox">{p8s1}</td></tr>
+   <tr><td class="n">혈전용해</td><td class="wbox">{p8s2}</td></tr>
+   <tr><td class="n">혈전제거</td><td class="wbox">{p8s3}</td></tr>
+   <tr><td class="n">중환자실</td><td class="wbox">{p8s4}</td></tr>
+  </table>
+
+  <div class="cbx"><div class="cbh">왜 나눠서 보나 <span>엑셀은 대표값 1개</span></div>
+   <div class="cbl"><b>같은 담보다</b> 회사가 조건별로 4개 특약으로 쪼갠 것 — 엑셀 · 보장분석지에는 <b>대표값 1개</b>만 들어간다</div>
+   <div class="cbl"><b>여기서만</b> 조건별로 각각 적어 <b>어느 상황에 얼마가 나오는지</b> 보여준다</div>
+   <div class="cbl"><b class="r">주의</b> 조건이 안 맞으면 <b class="r">그 칸은 지급되지 않는다</b> — 수술은 됐는데 중환자실 입원이 없으면 그 칸은 0</div>
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / {tpg}</span></div>
+</div>
+
 <!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
-  <div class="pgn"><b>8</b>비갱신 추천</div><div class="bar"></div></div>
+  <div class="pgn"><b>9</b>비갱신 추천</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="ws3">
    <div class="wscol wsmain">
@@ -2443,13 +2545,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">● 바뀌지 않는 담보는 <b>비갱신</b>으로 가입하셔서 <b>은퇴 후</b>를 준비해야 합니다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / {tpg}</span></div>
 </div>
 <!-- P10: 운전자 · 간병 (병합) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">운전자 · 간병 <b>— 일상 리스크 대비</b></div>
-  <div class="pgn"><b>9</b>운전자·간병</div><div class="bar"></div></div>
+  <div class="pgn"><b>10</b>운전자·간병</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">■ 운전자보험 담보</div>
   <div class="ws2">
@@ -2483,13 +2585,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">● <b>간병인 사용일당</b> 사용 시 환자와 <b>24시간 동행</b>해야 인정됩니다.</div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / {tpg}</span></div>
 </div>
 <!-- P12: 재가보험 -->
 <div class="pg jgbig">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">재가보험 <b>— 장기요양 · 노후 돌봄</b></div>
-  <div class="pgn"><b>10</b>재가보험</div><div class="bar"></div></div>
+  <div class="pgn"><b>11</b>재가보험</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">■ 재가보험 · 장기요양</div>
   <div class="ws2">
@@ -2533,7 +2635,7 @@ body {{ color:{INK}; }}
   <div class="wstalk2"><b>■ 노치원(주야간보호)</b> — 어르신을 <b>낮 동안 시설에서 돌봄</b>(식사·목욕·재활·프로그램)하고 저녁엔 집으로 귀가. 가족은 낮에 생업·휴식이 가능하다. 복합재가 5종 중 하나로, 등급만 있으면 이용.</div>
   <div class="wstalk2"><b>■ 장기요양등급, 언제 신청?</b> — <b>만 65세 이상</b>은 소득 무관 누구나 신청. <b>65세 미만이라도</b> 치매·뇌혈관질환·파킨슨병 등 <b>노인성 질병</b>이 있으면 <b>의사소견서(진단서)</b> 첨부해 <b>미리 신청 가능</b>. 건강보험공단(■1577-1000)·앱·홈페이지 신청 → 방문조사 → 약 30일 내 등급 판정. 65세 전에 준비해 두면 은퇴 후 돌봄 공백을 막는다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / {tpg}</span></div>
 <!-- P-INFO: 보험 인포메이션 간지 -->
 <div class="pg infopg">
  <div class="top itop"><div class="eb">INSURANCE INFORMATION</div><div class="nm">보험 <b>인포메이션</b></div><div class="pgn"><b>·</b>참고자료</div><div class="bar"></div></div>
@@ -2546,32 +2648,32 @@ body {{ color:{INK}; }}
   <div class="irow">
    <div class="inum">01</div>
    <div class="itx"><div class="ih">국민건강보험공단 지원제도</div><div class="ip">산정특례 · 재난적의료비 · 상한제 · 검진 · 상병수당</div></div>
-   <div class="ipg">11 – 12</div>
+   <div class="ipg">12 – 13</div>
   </div>
   <div class="irow">
    <div class="inum">02</div>
    <div class="itx"><div class="ih">5세대 실손보험</div><div class="ip">급여 · 비급여 · 도수 · 체외충격파</div></div>
-   <div class="ipg">13 – 17</div>
+   <div class="ipg">14 – 18</div>
   </div>
   <div class="irow">
    <div class="inum">03</div>
    <div class="itx"><div class="ih">수술비</div><div class="ip">1~5종 · N대 · 종수술비 비교</div></div>
-   <div class="ipg">18</div>
+   <div class="ipg">19</div>
   </div>
   <div class="irow">
    <div class="inum">04</div>
    <div class="itx"><div class="ih">3대 주요치료비 변천사</div><div class="ip">비례형 → 정액형 → 비급여</div></div>
-   <div class="ipg">19</div>
+   <div class="ipg">20</div>
   </div>
   <div class="irow">
    <div class="inum">05</div>
    <div class="itx"><div class="ih">흥국화재 10억통장</div><div class="ip">[갱신형]플래티넘 건강 리셋월렛II</div></div>
-   <div class="ipg">20</div>
+   <div class="ipg">21</div>
   </div>
   <div class="irow">
    <div class="inum">06</div>
    <div class="itx"><div class="ih">MAKEONE LIFE PLAN</div><div class="ip">재무상태 · 미래가치 · 달러자산</div></div>
-   <div class="ipg">21 – 24</div>
+   <div class="ipg">22 – 25</div>
   </div>
   <div class="irow">
    <div class="inum">07</div>
@@ -2581,7 +2683,12 @@ body {{ color:{INK}; }}
   <div class="irow">
    <div class="inum">08</div>
    <div class="itx"><div class="ih">심혈관 담보 분류</div><div class="ip">보험사별 · 질병코드 기준</div></div>
-   <div class="ipg">25 – 28</div>
+   <div class="ipg">26 – 29</div>
+  </div>
+  <div class="irow">
+   <div class="inum">09</div>
+   <div class="itx"><div class="ih">암 · 뇌 · 심 치료 용어</div><div class="ip">관혈 · 비관혈 구분 · 수술 · 시술 · 약물</div></div>
+   <div class="ipg">30 – 31</div>
   </div>
   </div>
  </div>
@@ -2590,7 +2697,7 @@ body {{ color:{INK}; }}
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 건강보험 지원제도 (1/2)</div>
   <div class="nm">국민건강보험공단 <b>지원제도</b></div>
-  <div class="pgn"><b>11</b>산정특례 · 상한제</div><div class="bar"></div></div>
+  <div class="pgn"><b>12</b>산정특례 · 상한제</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="nhflow">
    <div class="nhf a"><b><i>1</i> 중증질환 산정특례제도</b><span>치료비 <u>줄이고</u></span></div>
@@ -2651,12 +2758,12 @@ body {{ color:{INK}; }}
    </table>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / {tpg}</span></div>
 </div>
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 건강보험 지원제도 (2/2)</div>
   <div class="nm">재난적 의료비 <b>· 실손 관계</b></div>
-  <div class="pgn"><b>12</b>재난적의료비 · 실손</div><div class="bar"></div></div>
+  <div class="pgn"><b>13</b>재난적의료비 · 실손</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="nhbox c2">
    <div class="nhbh"><span class="nhno c">3</span>재난적 의료비 지원제도</div>
@@ -2720,13 +2827,13 @@ body {{ color:{INK}; }}
     나라가 안 봐주는 <b>비급여</b>를 메우려면 <b>건강할 때 미리</b> 넣어두셔야 합니다."</div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / {tpg}</span></div>
 </div>
 <!-- P5c2: 건강보험 본인부담률 (v204 자료 4종 삽입) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">급여 통원 자기부담금 <b>— 기준은 '건강보험 본인부담률'</b></div>
-  <div class="pgn"><b>13</b>건보 본인부담률</div><div class="bar"></div></div>
+  <div class="pgn"><b>14</b>건보 본인부담률</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="nhbox a">
@@ -2769,13 +2876,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / {tpg}</span></div>
 </div>
 <!-- P5d: 5세대 쉽게 이해하기 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대 실손 <b>— 쉽게 딱 3가지만</b></div>
-  <div class="pgn"><b>14</b>5세대 쉽게</div><div class="bar"></div></div>
+  <div class="pgn"><b>15</b>5세대 쉽게</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="ezbox ez1">
@@ -2862,13 +2969,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 15 / {tpg}</span></div>
 </div>
 <!-- P5f: 중증 vs 비중증 (그림형) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">중증 vs 비중증 <b>— 기준은 '산정특례'다</b></div>
-  <div class="pgn"><b>15</b>중증·비중증</div><div class="bar"></div></div>
+  <div class="pgn"><b>16</b>중증·비중증</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="svdef">
@@ -2943,13 +3050,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 15 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 16 / {tpg}</span></div>
 </div>
 <!-- P5e: 5세대 도표 + 예시 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대는 <b>얼마나 불리해지나</b> — 한눈에</div>
-  <div class="pgn"><b>16</b>5세대 도표</div><div class="bar"></div></div>
+  <div class="pgn"><b>17</b>5세대 도표</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <table class="g4wrap">
@@ -3033,14 +3140,14 @@ body {{ color:{INK}; }}
    </table>
    <div class="ezsn" style="margin-top:0.5mm;font-size:6.4pt;line-height:1.3">※ <b>난임 치료</b> 계획이 있으면 4세대 이상이어야 급여 본인부담금이 보상됩니다(4세대는 가입 2년 이후). 1~3세대는 면책. <b>납입중지</b>는 3세대 단체실손 / 4세대는 해외 장기체류자까지 확대.</div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 16 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 17 / {tpg}</span></div>
 </div>
 <!-- P-SURG: 수술비 보상기준 + 1~5종 vs 1~7종 (신설) -->
 <!-- P5g: 도수·체외충격파 (세대별 부담) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">도수치료 · 체외충격파 <b>— 2026년 7월부터 달라집니다</b></div>
-  <div class="pgn"><b>17</b>도수·체외</div><div class="bar"></div></div>
+  <div class="pgn"><b>18</b>도수·체외</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <table class="dstab">
@@ -3128,13 +3235,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 17 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 18 / {tpg}</span></div>
 </div>
 <!-- P6: 주요치료비 변천사 (juyo_a4_v7 상세본) -->
 <div class="pg surgpg">
  <div class="top"><div class="eb">BARUM 보장분석 · 수술비</div>
   <div class="nm">수술비 <b>— 보상기준과 1~5종의 진실</b></div>
-  <div class="pgn"><b>18</b>수술비</div><div class="bar"></div></div>
+  <div class="pgn"><b>19</b>수술비</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sg2">
    <div class="sgcol">
@@ -3200,13 +3307,13 @@ body {{ color:{INK}; }}
    <div class="vsn"><b>★ 상담 한 줄</b> "1~5종은 <b>비급여까지</b> 나오지만 <b>수술이어야</b> 하고, 1~7종은 수술이 아니어도 코드만 맞으면 되지만 <b class="r">비급여가 안 나온다</b>."</div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 18 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 19 / {tpg}</span></div>
 </div>
 
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>19</b>주요치료비 변천사</div><div class="bar"></div></div>
+  <div class="pgn"><b>20</b>주요치료비 변천사</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">3대 주요치료비 담보의 변천사 <span>①비례형(구간) → ②정액형 → ③비급여 → 생활비 · 정액형 가입금액 100만원부터</span></div>
   <div class="jtalkfull"><span class="h">■ 상담 화법</span>"5세대 실손은 <b>비급여가 1천만원</b>으로 줄었고 <b>통원비는 20만원</b> 입니다."</div>
@@ -3262,7 +3369,7 @@ body {{ color:{INK}; }}
    </div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 19 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 20 / {tpg}</span></div>
 </div>
 </div>
 </div>
@@ -3270,7 +3377,7 @@ body {{ color:{INK}; }}
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
   <div class="nm">흥국화재 <b>10억통장</b></div>
-  <div class="pgn"><b>20</b>10억통장</div><div class="bar"></div></div>
+  <div class="pgn"><b>21</b>10억통장</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">[갱신형] 플래티넘 건강 리셋월렛II <span>보장한도 10억원 · 갱신마다 10억 리필(20년 갱신형)</span></div>
   <div class="r10wrap">
@@ -3305,50 +3412,267 @@ body {{ color:{INK}; }}
    </div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 20 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 21 / {tpg}</span></div>
 </div>
 
 <!-- FIN1: MAKEONE LIFE PLAN — 재무상태 설문지 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">재무상태 <b>설문지</b></div>
-  <div class="pgn"><b>21</b>재무상태 설문지</div><div class="bar"></div></div>
+  <div class="pgn"><b>22</b>재무상태 설문지</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_SURVEY}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 21 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 22 / {tpg}</span></div>
 </div>
 
 <!-- FIN2: MAKEONE LIFE PLAN — 미래가치 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">미래가치 <b>— Financial Life Timeline</b></div>
-  <div class="pgn"><b>22</b>미래가치</div><div class="bar"></div></div>
+  <div class="pgn"><b>23</b>미래가치</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_FUTURE}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 22 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 23 / {tpg}</span></div>
 </div>
 
 <!-- FIN3: MAKEONE LIFE PLAN — 달러자산 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">달러자산 <b>— 왜 지금 준비해야 할까요?</b></div>
-  <div class="pgn"><b>23</b>달러자산</div><div class="bar"></div></div>
+  <div class="pgn"><b>24</b>달러자산</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_DOLLAR}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 23 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 24 / {tpg}</span></div>
 </div>
 
 <!-- ★v214 24p: MAKEONE LIFE PLAN — 달러보험 2탄(달러 기준 최저임금). 그림 위 · 표 아래 -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">달러보험 2탄 <b>— 달러 기준 최저임금</b></div>
-  <div class="pgn"><b>24</b>달러보험 2탄</div><div class="bar"></div></div>
+  <div class="pgn"><b>25</b>달러보험 2탄</div><div class="bar"></div></div>
  <div class="body">
   <img class="dolimg a" src="data:image/jpeg;base64,{_DOL2_PIC}">
   <img class="dolimg b" src="data:image/jpeg;base64,{_DOL2_TBL}">
  </div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 24 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 25 / {tpg}</span></div>
 </div>
 
 {_ga_html}
 {heart_chart}
+<!-- P-CW1: 암 치료 용어 (2단 · 관혈/비관혈 · 전행 1줄) -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
+  <div class="nm">암 <b>치료 용어</b></div>
+  <div class="pgn"><b>30</b>암 — 관혈·비관혈</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="sg2">
+
+   <div class="sgcol">
+    <div class="sect2">① 수술 <span>절개해서 떼어낸다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">맘모톰</td><td class="o"><span class="smn">비관혈1종</span></td><td>유방에 바늘로 조직을 흡입</td></tr>
+     <tr><td class="n">다빈치로봇</td><td class="x"><span class="smn">관혈준용</span></td><td>로봇으로 암 부위 정밀 절제</td></tr>
+     <tr><td class="n">복강경</td><td class="x"><span class="smn">관혈준용3종</span></td><td>배에 구멍 내고 병변 제거</td></tr>
+     <tr><td class="n">흉강경</td><td class="x"><span class="smn">관혈준용</span></td><td>가슴에 구멍 내고 병변 제거</td></tr>
+     <tr><td class="n">EMR</td><td class="o"><span class="smn">비관혈3종</span></td><td>위 · 대장 점막층 병변 절제</td></tr>
+     <tr><td class="n">ESD</td><td class="o"><span class="smn">비관혈3종</span></td><td>점막 아래층까지 박리해 제거</td></tr>
+     <tr><td class="n">원추절제술</td><td class="x"><span class="smn">관혈</span></td><td>자궁경부를 원뿔로 절제</td></tr>
+     <tr><td class="n">림프절절제</td><td class="x"><span class="smn">관혈</span></td><td>전이 확인 · 림프절 제거</td></tr>
+    </table>
+
+    <div class="sect2">② 시술 · 정밀치료 <span>장비 · 에너지 중심</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">RFA</td><td class="o"><span class="smn">비관혈3종</span></td><td>전극 열로 암세포를 태운다</td></tr>
+     <tr><td class="n">TACE</td><td class="o"><span class="smn">비관혈3종</span></td><td>암 혈관 막고 항암제 주입</td></tr>
+     <tr><td class="n">스텐트삽입</td><td class="o"><span class="smn">비관혈3종</span></td><td>막힌 통로에 금속관 삽입</td></tr>
+     <tr><td class="n">담도배액술</td><td class="p"><span class="smn">확인</span></td><td>막힌 담즙 길을 뚫어 배출</td></tr>
+     <tr><td class="n">감마나이프</td><td class="p"><span class="smn">확인</span></td><td>뇌 병변에 고선량 집중</td></tr>
+     <tr><td class="n">사이버나이프</td><td class="p"><span class="smn">확인</span></td><td>로봇이 추적하며 정밀 조사</td></tr>
+     <tr><td class="n">냉동절제술</td><td class="o"><span class="smn">비관혈3종</span></td><td>얼려서 암세포를 파괴</td></tr>
+     <tr><td class="n">HIFU</td><td class="p"><span class="smn">확인</span></td><td>초음파를 한 점에 집중</td></tr>
+    </table>
+
+    <div class="sect2">③ 방사선치료 <span>수술이 아니다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">양성자치료</td><td class="p"><span class="smn">수술X</span></td><td>양성자 입자로 에너지 집중</td></tr>
+     <tr><td class="n">중입자치료</td><td class="p"><span class="smn">수술X</span></td><td>무거운 입자로 강한 에너지</td></tr>
+     <tr><td class="n">IMRT</td><td class="p"><span class="smn">수술X</span></td><td>세기를 부위별로 조절</td></tr>
+     <tr><td class="n">SBRT</td><td class="p"><span class="smn">수술X</span></td><td>몸통 작은 병변 단기 집중</td></tr>
+     <tr><td class="n">SRS</td><td class="p"><span class="smn">수술X</span></td><td>한 지점에 고선량 정밀 조사</td></tr>
+     <tr><td class="n">토모테라피</td><td class="p"><span class="smn">수술X</span></td><td>회전하며 나누어 조사</td></tr>
+     <tr><td class="n">브라키</td><td class="p"><span class="smn">수술X</span></td><td>방사선 물질을 병변에 삽입</td></tr>
+     <tr><td class="n">IGRT</td><td class="p"><span class="smn">수술X</span></td><td>영상으로 위치 확인하며 조사</td></tr>
+    </table>
+
+    <div class="cbx"><div class="cbh">관혈 / 비관혈 — 약관 정의 <span>여기서 금액이 갈린다</span></div>
+     <div class="cbl"><b>관혈수술</b> 피부를 <b>절개</b>해 병변을 <b>눈으로 직접 보며</b> 조작</div>
+     <div class="cbl"><b>비관혈수술</b> <b>내시경수술 · 카테터수술 · 신의료수술</b></div>
+     <div class="cbl"><b class="r">★ 준용</b> 대뇌내시경 · 복강경 · 흉강경은 <b class="r">관혈수술에 준해</b> 보상</div>
+     <div class="cbl"><b class="r">★ 축이 다르다</b> 관혈 · 비관혈과 <b>1~5종</b>은 별개 — 복강경은 <b>관혈 준용 + 3종</b></div>
+    </div>
+   </div>
+
+   <div class="sgcol">
+    <div class="sect2">④ 항암제 종류 <span>방식에 따라 이름이 다르다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+     <tr><td class="n">세포독성</td><td>빨리 자라는 세포를 공격하는 전통 항암제</td></tr>
+     <tr><td class="n">표적항암제</td><td>특정 유전자 변이 · 단백질만 겨냥</td></tr>
+     <tr><td class="n">면역항암제</td><td>내 면역세포가 암을 공격하도록 돕는다</td></tr>
+     <tr><td class="n">호르몬치료</td><td>호르몬으로 자라는 암의 성장 억제</td></tr>
+     <tr><td class="n">허가항암약물</td><td>식약처 허가 범위 안의 항암약물치료</td></tr>
+     <tr><td class="n">비급여항암</td><td>건보 미적용 — <b class="r">환자가 전액 부담</b></td></tr>
+     <tr><td class="n">유지요법</td><td>재발 · 진행을 늦추려 계속하는 치료</td></tr>
+     <tr><td class="n">보조항암</td><td>수술 후 남은 암세포를 줄이는 치료</td></tr>
+    </table>
+
+    <div class="sect2">⑤ 대표 치료제 <span>약제명까지 알면 설명이 쉽다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+     <tr><td class="n">CAR-T</td><td>T세포를 바꿔 암을 공격하게 만든다</td></tr>
+     <tr><td class="n">킴리아</td><td>대표적 CAR-T 치료제</td></tr>
+     <tr><td class="n">키트루다</td><td>대표적 면역항암제</td></tr>
+     <tr><td class="n">옵디보</td><td>대표적 면역항암제</td></tr>
+     <tr><td class="n">타그리소</td><td>EGFR 변이 폐암 표적항암제</td></tr>
+     <tr><td class="n">렉라자</td><td>EGFR 변이 폐암 표적항암제</td></tr>
+     <tr><td class="n">허셉틴</td><td>HER2 양성 유방암 표적치료제</td></tr>
+     <tr><td class="n">린파자</td><td>BRCA 변이 관련 암 표적치료제</td></tr>
+    </table>
+
+    <div class="sect2">⑥ 검사 · 바이오마커 <span>변이를 찾아 치료제를 고른다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:30%"><col style="width:70%"></colgroup>
+     <tr><td class="n">조직검사</td><td>조직을 떼어 암인지 확인</td></tr>
+     <tr><td class="n">생검</td><td>조직 · 세포를 채취해 질병 확인</td></tr>
+     <tr><td class="n">PET-CT</td><td>대사 활동으로 전이 · 병기 판단</td></tr>
+     <tr><td class="n">종양표지자</td><td>혈액에서 암 관련 수치 확인</td></tr>
+     <tr><td class="n">유전자검사</td><td>변이를 확인해 치료 방향 결정</td></tr>
+     <tr><td class="n">NGS 검사</td><td>여러 유전자를 한 번에 분석</td></tr>
+     <tr><td class="n">액체생검</td><td>혈액 속 암 유전자 조각 분석</td></tr>
+     <tr><td class="n">IHC</td><td>조직의 특정 단백질 발현 확인</td></tr>
+     <tr><td class="n">HER2</td><td>많으면 <b>허셉틴</b> 대상</td></tr>
+     <tr><td class="n">PD-L1</td><td>높으면 <b>면역항암제</b> 대상</td></tr>
+     <tr><td class="n">EGFR</td><td>변이 시 <b>타그리소 · 렉라자</b></td></tr>
+     <tr><td class="n">BRCA</td><td>변이 시 <b>린파자</b> 대상</td></tr>
+    </table>
+
+   </div>
+
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 30 / {tpg}</span></div>
+</div>
+
+<!-- P-CW2: 뇌·심 치료 방식 (2단 · 전행 1줄) -->
+<div class="pg">
+ <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
+  <div class="nm">뇌 · 심 <b>치료 방식</b></div>
+  <div class="pgn"><b>31</b>뇌·심 — 관혈·비관혈</div><div class="bar"></div></div>
+ <div class="body sbody">
+  <div class="sg2">
+
+   <div class="sgcol">
+    <div class="sect2">① 뇌 — 수술 · 시술 <span>터지면 / 막히면</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">기계적혈전제거</td><td class="o"><span class="smn">비관혈3종</span></td><td>카테터로 혈전을 꺼낸다</td></tr>
+     <tr><td class="n">혈전흡인술</td><td class="p"><span class="smn">확인</span></td><td>관으로 혈전을 빨아낸다</td></tr>
+     <tr><td class="n">스텐트삽입</td><td class="o"><span class="smn">비관혈3종</span></td><td>좁아진 혈관에 금속관</td></tr>
+     <tr><td class="n">풍선성형술</td><td class="o"><span class="smn">비관혈3종</span></td><td>좁은 뇌혈관을 풍선으로 넓힘</td></tr>
+     <tr><td class="n">코일색전술</td><td class="o"><span class="smn">비관혈3종</span></td><td>카테터로 코일 채워 막는다</td></tr>
+     <tr><td class="n">스텐트+코일</td><td class="o"><span class="smn">비관혈3종</span></td><td>입구 넓은 동맥류에 병용</td></tr>
+     <tr><td class="n">클립결찰술</td><td class="x"><span class="smn">관혈5종</span></td><td>머리 열고 동맥류 목을 집는다</td></tr>
+     <tr><td class="n">개두혈종제거</td><td class="x"><span class="smn">관혈5종</span></td><td>머리 열어 고인 피를 제거</td></tr>
+     <tr><td class="n">감압두개절제</td><td class="p"><span class="smn">확인</span></td><td>붓는 뇌 위해 뼈를 떼어 둔다</td></tr>
+     <tr><td class="n">뇌실외배액</td><td class="p"><span class="smn">확인</span></td><td>고인 물을 빼 뇌압을 낮춘다</td></tr>
+     <tr><td class="n">뇌실복강단락</td><td class="x"><span class="smn">관혈</span></td><td>관을 심어 뇌척수액을 배로</td></tr>
+     <tr><td class="n">경동맥내막절제</td><td class="x"><span class="smn">관혈</span></td><td>목 혈관 죽상판을 긁어낸다</td></tr>
+    </table>
+
+    <div class="sect2">② 심장 — 수술 · 시술 <span>좁아지면 / 막히면</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">관상동맥조영</td><td class="p"><span class="smn">수술X</span></td><td>조영제로 혈관을 촬영</td></tr>
+     <tr><td class="n">심장카테터</td><td class="o"><span class="smn">비관혈3종</span></td><td>관을 넣어 막힌 곳을 뚫는다</td></tr>
+     <tr><td class="n">풍선확장술</td><td class="o"><span class="smn">비관혈3종</span></td><td>좁은 부위를 풍선으로 넓힘</td></tr>
+     <tr><td class="n">스텐트삽입</td><td class="o"><span class="smn">비관혈3종</span></td><td>다시 좁아지지 않게 지지</td></tr>
+     <tr><td class="n">회전죽종절제</td><td class="o"><span class="smn">비관혈3종</span></td><td>굳은 석회를 갈아낸다</td></tr>
+     <tr><td class="n">전극도자절제</td><td class="o"><span class="smn">비관혈3종</span></td><td>부정맥 부위를 지진다</td></tr>
+     <tr><td class="n">인공심박기</td><td class="o"><span class="smn">비관혈3종</span></td><td>느린 맥을 기계로 잡는다</td></tr>
+     <tr><td class="n">삽입형제세동기</td><td class="p"><span class="smn">확인</span></td><td>위험한 부정맥을 전기로 멈춤</td></tr>
+     <tr><td class="n">TAVI</td><td class="o"><span class="smn">비관혈</span></td><td>관으로 인공판막을 넣는다</td></tr>
+     <tr><td class="n">판막치환술</td><td class="x"><span class="smn">관혈5종</span></td><td>가슴 열어 인공판막 교체</td></tr>
+     <tr><td class="n">CABG</td><td class="x"><span class="smn">관혈5종</span></td><td>가슴 열어 새 혈관 길을 낸다</td></tr>
+     <tr><td class="n">심장이식</td><td class="x"><span class="smn">관혈5종</span></td><td>말기 심부전에 심장 교체</td></tr>
+    </table>
+
+    <div class="cbx"><div class="cbh">수술의 정의 — 약관 원문 <span>이게 안 되면 수술비가 없다</span></div>
+     <div class="cbl"><b>수술</b> 기구를 사용해 생체에 <b>절단 · 적제 등의 조작</b>을 가하는 것 <span class="smn">신의료기술 인정 최신 기법 포함</span></div>
+     <div class="cbl"><b class="r">제외</b> <b class="r">흡인 · 천자 · 적제 · 신경차단(NERVE BLOCK)</b> — 약을 넣거나 빼는 조치는 수술이 아니다</div>
+    </div>
+
+    <div class="cbx nt"><div class="cbh">재발이 진짜 리스크 <span>1회성이 아니다</span></div>
+     <div class="cbl"><b>뇌경색</b> 1년 내 <b class="r">10%</b> · 5년 내 <b class="r">20~30%</b> 재발</div>
+     <div class="cbl"><b>급성심근경색</b> 1년 내 <b class="r">30%</b> · 3년 내 <b class="r">50%</b> 재발</div>
+     <div class="cbl"><b>산정특례</b> 뇌 · 심은 <b class="r">최대 30일</b>만 — 장기 치료비는 본인 몫</div>
+     <div class="cbl"><b>연간 1회</b> 산정특례대상 진단비는 <b class="g2">매년 반복 지급</b> 가능</div>
+    </div>
+   </div>
+
+   <div class="sgcol">
+    <div class="sect2">③ 약물 방식 <span>뇌 · 심 공통 — 수술이 아니다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:26%"><col style="width:14%"><col style="width:60%"></colgroup>
+     <tr><td class="n">혈전용해제</td><td class="p"><span class="smn">수술X</span></td><td>정맥 투여로 혈전을 녹인다</td></tr>
+     <tr><td class="n">항혈소판제</td><td class="p"><span class="smn">수술X</span></td><td>아스피린 · 클로피도그렐</td></tr>
+     <tr><td class="n">항응고제</td><td class="p"><span class="smn">수술X</span></td><td>와파린 · NOAC 혈전 예방</td></tr>
+     <tr><td class="n">스타틴</td><td class="p"><span class="smn">수술X</span></td><td>콜레스테롤↓ 죽상판 안정</td></tr>
+     <tr><td class="n">베타차단제</td><td class="p"><span class="smn">수술X</span></td><td>심박수↓ 심장 부담 감소</td></tr>
+     <tr><td class="n">ACE · ARB</td><td class="p"><span class="smn">수술X</span></td><td>혈압↓ 심부전 진행 억제</td></tr>
+     <tr><td class="n">니트로글리세린</td><td class="p"><span class="smn">수술X</span></td><td>협심증 흉통을 빠르게 완화</td></tr>
+     <tr><td class="n">이뇨제</td><td class="p"><span class="smn">수술X</span></td><td>고인 물을 빼 부종 감소</td></tr>
+    </table>
+
+    <div class="sect2">④ 치료 단계 → 담보 <span>어디서 무엇이 나오나</span></div>
+    <table class="nht">
+     <colgroup><col style="width:22%"><col style="width:30%"><col style="width:48%"></colgroup>
+     <tr><td class="n">1 응급실</td><td>응급 이송 · 처치</td><td>응급실내원 · 실손</td></tr>
+     <tr><td class="n">2 검사</td><td>CT · MRI로 판단</td><td>실손 · MRI 특약</td></tr>
+     <tr><td class="n">3 진단</td><td>뇌졸중 · 심근경색</td><td>진단비 · 산정특례</td></tr>
+     <tr><td class="n">4 약물</td><td>정맥 혈전용해제</td><td><b class="r">혈전용해치료비</b> <span class="smn">수술비X</span></td></tr>
+     <tr><td class="n">5 시술</td><td>혈전제거 · 스텐트</td><td>카테터수술비 · <b>3종</b></td></tr>
+     <tr><td class="n">6 수술</td><td>개두 · 개흉</td><td>뇌 · 심수술비 · N대 · <b>5종</b></td></tr>
+     <tr><td class="n">7 회복</td><td>중환자실 · 재활</td><td>중환자실 · 후유장해</td></tr>
+    </table>
+
+    <div class="sect2">⑤ 1~5종 종별 사례 <span>회사 · 가입시기별로 다르다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:14%"><col style="width:86%"></colgroup>
+     <tr><td class="n">1종</td><td>백내장 · 치핵 · 편도절제 · 하지정맥류 · 체외충격파 · <b class="r">대장용종(KB · 메리츠)</b></td></tr>
+     <tr><td class="n">2종</td><td><b class="g2">대장용종(현대 · 삼성 · DB)</b> · 위 용종 · 자궁근종 · 충수절제</td></tr>
+     <tr><td class="n">3종</td><td>녹내장 · 디스크 · 갑상선 관혈 · <b>뇌 · 심 내시경 · 경피적</b> · <b>인공심박조율장치</b> · 복강경</td></tr>
+     <tr><td class="n">4종</td><td>위 절제 · 식도 · 부신 절제 · 간장 · 췌장 · 직장 · 방광 · 요관 관혈</td></tr>
+     <tr><td class="n">5종</td><td><b>심장 내 관혈</b> · <b>두개 내 관혈</b> · 대동맥 · 관동맥 관혈 · <b>악성신생물 근치수술</b></td></tr>
+     <tr class="f"><td class="n">용종</td><td><b class="r">1종 메리츠 · KB</b> 「대장 용종 내시경적 절제술은 1종」 단서 조항 / <b class="g2">2종 현대 · 삼성 · DB</b> 복부장기 내시경 2종 명시<br><b>코드</b> Q7701~03 올가미 <span class="smn">수술 인정</span> / <b class="r">E7660 · N0041</b> 펀치 · 겸자 <span class="smn">생검 성격 → 확인</span><br><b class="r">주의</b> 1~5종 / 1~8종 / 1~9종 체계 상이 · <b class="g2">구분 없다</b> 질병 · 상해 · N대 · 암 · 뇌 · 심수술비 · <b class="r">1~5종 불가</b> 흡인 · 천자 · 배액술</td></tr>
+    </table>
+
+    <div class="sect2">⑥ 암 · 뇌 · 심 → 종별 <span>같은 부위도 방법 따라 갈린다</span></div>
+    <table class="nht">
+     <colgroup><col style="width:20%"><col style="width:80%"></colgroup>
+     <tr><td class="o">암 <b>3종</b></td><td>EMR · ESD 내시경 · <b>복강경 · 흉강경</b> · RFA · TACE</td></tr>
+     <tr><td class="x">암 <b>4 · 5종</b></td><td>위 절제 <b>4종</b> / <b>관혈적 악성신생물 근치수술 5종</b></td></tr>
+     <tr><td class="o">뇌 <b>3종</b></td><td>기계적 혈전제거 · 스텐트 · 코일색전 · 풍선성형</td></tr>
+     <tr><td class="x">뇌 <b>5종</b></td><td><b>두개 내 관혈</b> — 개두 혈종제거 · 클립결찰술</td></tr>
+     <tr><td class="o">심 <b>3종</b></td><td>카테터 PCI · 스텐트 · 전극도자 · <b>인공심박조율장치</b></td></tr>
+     <tr><td class="x">심 <b>5종</b></td><td><b>심장 내 · 관동맥 관혈</b> — 판막치환 · CABG · 심장이식</td></tr>
+    </table>
+
+   </div>
+
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 31 / {tpg}</span></div>
+</div>
 </body></html>'''
     if _PPT_MODE:
         import re as _re
@@ -3364,7 +3688,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v353-goljeolall-20260802</div>'
+    _VSTAMP = '<div class="vstamp">v377-p8val-20260809</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

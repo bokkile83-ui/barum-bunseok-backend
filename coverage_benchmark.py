@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v353-goljeolall-20260802 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v377-p8val-20260809 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -329,7 +329,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     #   엑셀 헤더 1행(회사\n상품\n[갱신])에 <b>'흥국' AND '리셋월렛'</b>이 둘 다 있으면 가입.
     # ★★★v139 갱신 색 원천(지점장 2026.07.21): 엑셀 값 글자색이 파랑(0070C0)이면 그 담보는 '갱신'.
     #   엑셀이 이미 정본이므로 색을 그대로 읽어 설명서·PPT에 전달한다(4대 산출물 연동).
-    _gen_map={}
+    _gen_map={}; _red_map={}   # ★v370 _red_map = 가입제안서(레드 C00000) 담보
     try:
         import openpyxl as _ox2
         _w2=_ox2.load_workbook(xlsx_path); _s2=_w2.active
@@ -340,8 +340,11 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             for _c2 in range(3,_s2.max_column):
                 _f2=_s2.cell(_r2,_c2).font
                 _rgb=(_f2.color.rgb if (_f2 and _f2.color and _f2.color.rgb) else '')
-                if _rgb and str(_rgb).upper().endswith('0070C0') and _s2.cell(_r2,_c2).value not in (None,'',0):
-                    _gen_map[_nm2]=True; break
+                _up2=str(_rgb).upper() if _rgb else ''
+                _hasv=_s2.cell(_r2,_c2).value not in (None,'',0)
+                if _up2.endswith('C00000') and _hasv: _red_map[_nm2]=True   # ★v370 가입제안서
+                if _up2.endswith('0070C0') and _hasv:
+                    _gen_map[_nm2]=True
         _w2.close()
     except Exception: pass
     # ★★★v182 (지점장 2026.07.22): 세부가입현황 미파싱 등 <b>수기 확인이 필요한 건</b>을
@@ -414,7 +417,8 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         #   갱신 담보인 '허혈성 진단비'(엑셀 글자색 0070C0)가 보장현황에서 검정으로 나왔다.
         #   → 담보별 gen_map(엑셀 글자색=원천)을 함께 본다. 4대 산출물 색 연동.
         items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),
-                **({'blue':True} if (blue or _gen_map.get(str(b).strip())) else {})} for b,v in top]
+                **({'blue':True} if (blue or _gen_map.get(str(b).strip())) else {}),
+         **({'red':True} if _red_map.get(str(b).strip()) else {})} for b,v in top]
         if not items or all(not it['v'] for it in items):
             items=[{'t':f'{cat} 없음','none':True}]
         coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
@@ -561,7 +565,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'warn_list':_warn,'warn_co':_warn_co,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,

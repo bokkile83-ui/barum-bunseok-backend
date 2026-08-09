@@ -65,6 +65,9 @@ def _valueset(rep):
         add(i.get('v'))
     add(rep.get('client'))
     add(rep.get('band_label'))
+    # ★★★★★v376 8쪽 「주요치료비 세부」 대표값 — 지점장 지시 「다른 칸처럼 수정 가능하게」
+    for _v in rep.get('_p8vals', []):
+        add(_v)
     return V
 
 
