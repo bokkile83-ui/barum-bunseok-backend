@@ -252,7 +252,31 @@ def _has_nonpay3(dambo):
         if ('MRI' in n) and (('검사' in n) or ('비급여' in n)): return True
     return False
 
-def silson_gen(contract_date, ipv=None, product='', nonpay3=False):
+def _has_drug(dambo):
+    """★v381 처방조제료(약값)가 통원과 별도로 잡혀 있는가 — 4세대 배제 판정용.
+       지점장 확정 2026.08.11: "4세대는 통원비 20만원만 있다"."""
+    for k in (dambo or {}):
+        n = re.sub(r'\s', '', str(k))
+        if ('처방조제' in n) or ('약제비' in n) or ('약값' in n): return True
+    return False
+
+
+# ★★★★★v382 「단독 5종」 판정을 <b>함수 하나로 단일화</b>한다(지점장 확정 2026.08.11 조문).
+#   뇌혈관진단비 · 허혈성진단비 · 급성심근경색진단비 · 뇌졸증진단비 · 뇌출혈진단비 = 전 회사 단독.
+#   단서: 등급 로마숫자 <b>Ⅰ·Ⅱ</b>가 붙으면 단독 예외에서 빼고 종전 회사별 표를 탄다(Ⅲ은 상품세대 표기라 단독 유지).
+#   ★인라인에 조건식을 박아두면 <b>셀프테스트가 그 로직을 검사할 수 없다</b> → 함수로 빼서
+#     `doctrine_selftest()`가 <b>실제로 쓰이는 바로 그 함수</b>를 매 배포 검사하게 한다.
+_SOLO5_KW   = ('허혈', '뇌혈관', '뇌졸', '뇌출혈', '급성심근')
+_BUNDLE_MK5 = ('특정', '6가지', '5대', '4대', '3대', '2대', '순환계')
+
+def is_solo5_name(rn):
+    rn = str(rn or '')
+    return (any(k in rn for k in _SOLO5_KW)
+            and not any(k in rn for k in _BUNDLE_MK5)
+            and _rmn(rn) not in (1, 2))
+
+
+def silson_gen(contract_date, ipv=None, product='', nonpay3=False, drug=False):
     """실손 세대 판별 — 5세대=2026.05부터(정본 확정). 4세대=2021.07~2026.04. 입원한도 3000=구형(1세대). 가입일 없으면 '' → [확인].
     ★v29v: 상품명 연도코드(YYMM 4자리, 예 '1804'=2018.04 출시)가 있으면 판정일로 우선 사용 —
     갱신 재가입일(계약일)로 세대를 오판(예 2018 실손을 4세대로)하는 것 차단.
@@ -264,7 +288,13 @@ def silson_gen(contract_date, ipv=None, product='', nonpay3=False):
     if _pm:
         _pym=2000*100+int(_pm.group(1))*100+int(_pm.group(2))
         ym=_pym if not ym else min(ym,_pym)
-    if not ym: return ''
+    if not ym:
+        # ★★★★★v381 (지점장 확정 2026.08.11, 영구): 가입일·상품코드가 없어도 <b>담보 구조로 판정</b>한다.
+        #   지점장 원문 = "<b>4세대는 통원비 20만원만 있다</b>".
+        #   3대비급여 특약 분리(2017.04~ 신설) → 3세대 이상 / 그중 <b>처방조제료(약값)가 별도</b>면 3세대,
+        #   통원만 있고 약값이 없으면 4세대. coverage_benchmark `_gen_of`와 <b>같은 규칙</b>(결과값 동결).
+        if nonpay3: return '3세대' if drug else '4세대'
+        return ''
     # ★★★v250 3대비급여 하한 — 상품코드가 실손이 아닌 주계약 코드일 때의 오판을 막는다.
     if nonpay3 and ym < 201704:
         print(f'[v250 3대비급여] 실손 세대 하한 고정 {ym} → 201704(3세대) · 근거=도수/비급여주사/비급여MRI 특약 분리')
@@ -863,6 +893,91 @@ def silson_selftest():
     return bad
 
 
+# ★★★★★v382 <b>조문 자가진단</b> — 지점장이 확정한 지침이 <b>매 배포마다 코드로 강제</b>되게 한다.
+#   [왜 만드나] 2026.08.11 점검 실측: 오늘 확정된 조문 5개(단독5종·Ⅰ/Ⅱ 단서·종수술 1-5종·
+#   실손 세대·실손 행 게이트) 중 <b>배포 게이트에 걸린 것이 0건</b>이었다.
+#   기존 게이트 4개는 전부 <b>런타임(값)</b> 검사라 한장표에 칸이 없는 담보(협심증·1~5종)는
+#   영원히 통과한다 — 실제로 v377 검산은 26/27이었는데 협심증 오기재도 종수술 3건 실종도 다 통과했다.
+#   지침 위반은 <b>값이 아니라 코드 작성 시점</b>에 생긴다 → 담보명→기대행을 직접 대조한다.
+#   ★master.xlsx는 건드리지 않는다(원본 cmp 동일 = 정본 판정 기준 유지).
+_DOCTRINE_SELFTEST = [
+    # (담보명, 기대 마스터행 / None=기재금지)  ── 조문: 단독 5종(#27)
+    ('허혈성심장질환진단비',                 '허혈성 진단비'),
+    ('심장허혈성진단비',                     '허혈성 진단비'),
+    ('갱신형 허혈성심장진단비',              '허혈성 진단비'),
+    ('허혈심장질환진단특약ⅢUT(무배당,무해약환급금형)_간편고지3.10.5', '허혈성 진단비'),
+    # ★v384 특정심장Ⅰ = 묶음 → <b>협심증</b>(허혈성은 협심증의 종류). 허혈성 행은 단독 담보 전용.
+    ('특정심장질환진단비Ⅰ',                   '협심증'),
+    ('특정심장질환진단비Ⅱ',                   '급성심근경색'),
+    ('뇌혈관질환진단비',                     '뇌혈관진단비'),
+    ('뇌졸중진단비',                         '뇌졸증진단비'),
+    ('뇌출혈진단비',                         '뇌출혈진단비'),
+    ('급성심근경색진단비',                   '급성심근경색'),
+    # 조문: CI 변환·별도 행은 단독 가드에 먹히지 않아야 한다
+    ('중대한급성심근경색진단비',             '중대한 급성심근'),
+    ('외상성뇌출혈진단비',                   '외상성뇌출혈'),
+    # 조문: 진단 전용(v325·v326b) — 수술·입원은 마스터에 행이 없다
+    ('뇌출혈수술급부금',                     None),
+    ('급성심근경색증수술급부금',             None),
+    # 조문: 「종수술」=1~5종(v378) — 종번호가 없어도 그 행으로
+    ('질병종수술',                           '질병 종수술비(1-5종)'),
+    ('상해종수술',                           '상해 종수술비(1-5종)'),
+    ('無파워수술보장(본인)',                 '종수술비공통'),
+    ('재해종수술비(1-5종)',                  '상해 종수술비(1-5종)'),
+]
+
+# (담보명, 단독이어야 하나) ── 조문: Ⅰ·Ⅱ 등급은 단독 예외에서 뺀다
+_SOLO5_SELFTEST = [
+    ('허혈성심장질환진단비',   True),
+    ('뇌혈관진단비',           True),
+    ('허혈심장질환진단특약ⅢUT(무배당,무해약환급금형)_간편고지3.10.5', True),
+    ('뇌혈관진단비Ⅰ',          False),   # 등급 Ⅰ → 지침대로(회사별 표)
+    ('뇌혈관진단비Ⅱ',          False),
+    ('특정허혈심장질환진단비',  False),   # 묶음 수식어 → 회사별 표
+    ('4대순환계질환진단비',     False),
+]
+
+# (가입일, 3대비급여, 처방조제, 기대세대) ── 조문: 실손 세대(#15) "4세대는 통원비 20만원만 있다"
+_GEN_SELFTEST = [
+    ('',           True,  True,  '3세대'),
+    ('',           True,  False, '4세대'),
+    ('',           False, False, ''),
+    ('2019.05.01', True,  True,  '3세대'),
+    ('2022.05.01', True,  False, '4세대'),
+    ('2026.05.06', False, False, '5세대'),
+]
+
+# ★v384 (담보명, 기대행) — `_dedup_std` 경로 전용. 심장Ⅰ/Ⅱ·뇌질환Ⅰ/Ⅱ는 resolve2가 아니라
+#   이 함수와 인라인 묶음 블록이 처리하므로 <b>여기서 따로 검사</b>한다.
+_DEDUP_SELFTEST = [
+    ('심장질환진단비Ⅰ',   '협심증'),          # 묶음Ⅰ → 협심증(허혈성 아님)
+    ('심장질환진단비Ⅱ',   '급성심근경색'),
+    ('뇌질환진단비Ⅰ',     '뇌혈관진단비'),
+    ('뇌질환진단비Ⅱ',     '뇌졸증진단비'),
+]
+
+def doctrine_selftest():
+    """지점장 확정 조문이 코드에 살아 있는지 매 배포 검사."""
+    bad=[]
+    for nm, exp in _DEDUP_SELFTEST:
+        try: got = _dedup_std(nm)
+        except Exception as _e: bad.append(f'[dedup] {nm} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[dedup] {nm} → {got}(기대 {exp})')
+    for nm, exp in _DOCTRINE_SELFTEST:
+        try: got = resolve2(nm)[0]
+        except Exception as _e: bad.append(f'{nm} → ERR {_e}'); continue
+        if got != exp: bad.append(f'{nm} → {got}(기대 {exp})')
+    for nm, exp in _SOLO5_SELFTEST:
+        try: got = is_solo5_name(nm)
+        except Exception as _e: bad.append(f'[단독5종] {nm} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[단독5종] {nm} → {got}(기대 {exp})')
+    for cd, np3, drug, exp in _GEN_SELFTEST:
+        try: got = silson_gen(cd, None, '', np3, drug)
+        except Exception as _e: bad.append(f'[실손세대] {cd} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[실손세대] {cd}/np3={np3}/약값={drug} → {got or "공란"}(기대 {exp or "공란"})')
+    return bad
+
+
 def ci_selftest():
     """CI 판정 4곳이 <b>같은 로직</b>인지 + 케이스 16건을 통과하는지 검사. 실패 목록을 돌려준다."""
     bad=[]
@@ -882,6 +997,7 @@ def ci_selftest():
         pass
     bad += ['[선지급률] '+x for x in ci_rate_selftest()]
     bad += ['[실손소스] '+x for x in silson_selftest()]
+    bad += ['[조문] '+x for x in doctrine_selftest()]   # ★v382 지침 조문 강제
     return bad
 
 
@@ -2311,7 +2427,8 @@ def parse_txt(txt, filename='', extra=None):
     #   "묶음 진단비는 보장 구성질환의 마스터 행에 동일 금액을 각각 기재한다."
     #   회사마다 '특정Ⅰ/Ⅱ'의 뜻이 다르다 → 라벨 말고 회사별 질병코드 기준으로 분해.
     #   ★2026.07.13 지점장 확정 3건:
-    #     (1) KB 특정Ⅰ = 협심증+허혈성+빈맥+심부전 <b>+염증</b> (구 정본 '염증X' 폐기)
+    #     (1) KB 특정Ⅰ = 협심증+빈맥+심부전 <b>+염증</b> (구 정본 '염증X' 폐기)
+    #         ★v384: 구 주석의 '허혈성'은 <b>협심증</b>으로 표기한다(허혈성은 협심증의 종류).
     #     (2) KB 심장판막질환에서 염증(심내막염 I33) 삭제 → 판막만
     #     (3) 현대 특정Ⅰ = <b>협심증</b>+빈맥+심부전 (구 빈맥+심부전)
     #   끝열은 행별 가로 SUM이라 세로 중복합산 없음. 원천 분해 → 4대 산출물 자동 연동.
@@ -2639,6 +2756,37 @@ def parse_txt(txt, filename='', extra=None):
     try: _sbc271 = parse_sebu_bycontract(lines)
     except Exception as _e271:
         _sbc271 = {}; print('[v271 sebu] 파서 실패:', _e271)
+    # ★★★★★v383 [중복줄 = 세부가입현황이 정본] — 지점장 확정 2026.08.11.
+    #   지점장 원문: "요건 각각이니까 <b>합산</b>내야지" / "<b>세부내역을 보면 답이 나오는데?</b>"
+    #   [배경] v344(2026.08.02)가 「같은 담보명 2줄 = 대표(max)」를 기본으로 만들었는데,
+    #     진짜 별개 담보 2건이 오면 <b>조용히 하나가 사라진다</b>.
+    #     실측(한정환) = 신한 `급성심근경색진단 3,000` 2줄 → 3,000만 기재 → 한장표 13,400과 <b>-3,000</b>.
+    #     DB `질병사망 3,000/2,000` → 3,000만 → <b>-2,000</b>. DB `암진단 2,400/3,000` → <b>-2,400</b>.
+    #   [왜 「무조건 합산」이 아닌가] 같은 파일에 <b>합산하면 안 되는 반례</b>가 있다.
+    #     메트 `일반사망 6,000` 2줄 = 세부에서 <b>질병사망 6,000 · 상해사망 6,000</b>(축이 다른 한 쌍)이고,
+    #     `입원 3` 2줄 = 질병일당 3 · 상해일당 3이다. 합치면 2배가 된다.
+    #   → <b>세부가입현황(계약별 가입정보)의 그 마스터행 값을 그대로 쓴다.</b> 합산이냐 대표냐를 따지지 않는다.
+    #     신한 급성심근 = 세부 6,000 / DB 질병사망 = 세부 5,000 / DB 암 = 세부 5,400 →전부 정답.
+    #     메트 `일반사망`은 세부에 그 이름의 행이 없다(질병사망·상해사망으로 갈림) → <b>손대지 않는다</b>.
+    #   ★세부에 그 마스터행이 없으면 건드리지 않는다(추측 기재 금지 · 종전 대표값 유지).
+    if _sbc271:
+        _dupfix = []
+        for _ct383 in contracts:
+            try: _sv383 = _sbc271.get(int(_ct383.get('premium') or 0)) or {}
+            except Exception: _sv383 = {}
+            if not _sv383: continue
+            for _dn383, _dvs383 in (_ct383.get('dup') or {}).items():
+                if len(_dvs383) < 2: continue
+                try: _std383 = resolve2(_dn383)[0]
+                except Exception: _std383 = None
+                if not _std383 or _std383 not in _sv383: continue
+                _new383 = _sv383[_std383]
+                _cur383 = _ct383['dambo'].get(_dn383)
+                if _cur383 is None or _new383 == _cur383: continue
+                _ct383['dambo'][_dn383] = _new383
+                _dupfix.append(f"{_ct383.get('company','')}/{_dn383} {_cur383}→{_new383}({'/'.join(str(x) for x in _dvs383)})")
+        if _dupfix:
+            print('[v383 중복줄·세부정본] ' + ' | '.join(_dupfix[:8]))
     _hj279 = parse_hanjang(lines)
     # ★v295: KB 3열은 한장보장표가 없다 → 2~3p '전체 보장 현황'을 <b>검산 전용</b> 앵커로 확보한다.
     #   ★세부보충 차단(v293) 판정에는 쓰지 않는다 — 그건 원래 한장표만 본다(오염 재발 방지).
@@ -2904,6 +3052,17 @@ def resolve_kw(raw):
         if any(k in _n78 for k in ('1-7종','1-8종','1-9종','1~7종','1~8종','1~9종')):
             if has('질병'): return '질병 종수술비(1-8종)', jong
             return '상해 종수술비(1-8종)', jong
+        # ★★★★★v378 (지점장 지시 2026.08.10): <b>「종수술」은 1~5종 수술비다</b>.
+        #   지점장 원문 — "파워수술보장(본인) = 1-5종 수술비고 <b>생명보험사는 질병,상해 둘다 기재</b>되어야 한다
+        #   / <b>질병종수술 = 질병1-5종 . 상해종수술=상해1-5종</b> 인데 미기재다 오류다".
+        #   [구 결함] 아래 두 줄이 <b>종번호(jong)를 요구</b>해, 종번호 없이 <b>단일금액</b>으로만 실린
+        #   삼성생명 `질병종수술` 500 · `상해종수술` 500 · `無파워수술보장(본인)` 500이
+        #   resolve2에서 <b>None</b>으로 떨어져 통째로 [확인]큐로 사라졌다(실측 구본칠).
+        #   → 종번호가 없어도 1-5종 행으로 보낸다(jong=0 = 종별 분해 없는 단일금액).
+        if (('종수술' in _n78) or ('파워수술보장' in _n78)) and ('각종' not in _n78):
+            if has('질병'): return '질병 종수술비(1-5종)', jong
+            if has('상해') or has('재해'): return '상해 종수술비(1-5종)', jong
+            return '종수술비공통', jong   # 축 미표기(파워수술보장 등) → 질병·상해 양쪽
         if has('상해') and jong: return '상해 종수술비(1-5종)', jong
         if has('질병') and jong: return '질병 종수술비(1-5종)', jong
         # ★v215 (지점장 확정 2026.07.25): <b>'중대상해수술비' = '중대한상해수술비'</b>(같은 담보, '한' 한 글자 차이).
@@ -3152,8 +3311,9 @@ def resolve_kw(raw):
         _rr=str(raw)
         _is2 = ('Ⅱ' in _rr) or ('특정 II' in _rr) or ('특정II' in _rr) or ('특정 2' in _rr) or ('특정2' in _rr) or ('(특정 II)' in _rr) or ('（특정 II）' in _rr)
         _is1 = ('Ⅰ' in _rr) or ('특정 I' in _rr) or ('특정I' in _rr) or ('특정 1' in _rr) or ('특정1' in _rr) or ('(특정 I)' in _rr) or ('（특정 I）' in _rr)
+        # ★v384 특정심장Ⅰ 묶음 = 협심증(허혈성은 협심증의 종류) — 지점장 확정 2026.08.11
         if _is2 and not _is1: return '급성심근경색',0
-        if _is1 and not _is2: return '허혈성 진단비',0
+        if _is1 and not _is2: return '협심증',0
         return '급성심근경색',0   # 구분 불가 시 급성심근경색(보수적)
     if has('일당') and (has('허혈') or has('협심') or has('심부전') or has('부정맥') or has('빈맥') or has('뇌혈관') or has('심뇌')): return None,0   # ★v30b 질환별 입원일당 ≠ 진단비 → [확인] (조성래 허혈일당 오합산 수리)
     if has('협심'): return '협심증',0
@@ -3465,8 +3625,9 @@ def _dedup_std(raw):
     if '진단' in _rn and '수술' not in _rn and '주요치료' not in _rn:
         if ('심장질환진단' in _rn) and ('허혈' not in _rn) and ('급성심근' not in _rn):
             _mn=_rmn(_rn)
+            # ★v384 심장Ⅰ 묶음 = 협심증(허혈성은 협심증의 종류) — 지점장 확정 2026.08.11
             if _mn==2: return '급성심근경색'
-            if _mn==1: return '허혈성 진단비'
+            if _mn==1: return '협심증'
         if '뇌질환진단' in _rn:
             _mn=_rmn(_rn)
             if _mn==2: return '뇌졸증진단비'
@@ -3648,7 +3809,7 @@ def _fix_silson(contracts):
         _ym=None
         _mm=re.search(r'(\d{4})\.(\d{2})',cd)
         if _mm: _ym=int(_mm.group(1))*100+int(_mm.group(2))
-        _gen=silson_gen(cd, ipw, prod, _has_nonpay3(d))   # ★v250 3대비급여 하한(d=이 계약 dambo)
+        _gen=silson_gen(cd, ipw, prod, _has_nonpay3(d), _has_drug(d))   # ★v250 3대비급여 하한(d=이 계약 dambo)
         if _gen in ('4세대','5세대') or (_ym and _ym>=202107):
             # ★★★★★v246 영구지침(지점장 확정 2026.07.25): <b>실손은 [별첨] 상품별 보장현황이 답이다</b>.
             #   구 코드는 `_tw<=20`이 아니면 <b>20으로 덮어썼다</b> → 별첨 명시값이 20 초과면 잘렸다.
@@ -3980,6 +4141,9 @@ def build_excel(data, out):
         jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
         trio_acc = [0,0,0]   # ★v29y MRI/도수치료/비급여주사
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
+        # ★v378 종번호 없는 단일금액 종수술(질병종수술·상해종수술·파워수술보장 등) 수집칸.
+        #   슬래시 칸(jong_acc)과 <b>같은 행</b>을 쓰므로 둘이 동시에 차면 [확인]큐로 보낸다(조용한 덮어쓰기 차단).
+        jong_lump = {'상해 종수술비(1-5종)':0, '질병 종수술비(1-5종)':0}
 
         # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
         #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
@@ -4178,19 +4342,46 @@ def build_excel(data, out):
                 #   <b>산정특례심장은 0</b>이 됐다(급성심근경색 8,000 = 정답 7,000 + 오배정 1,000).
                 #   `_HB` 후처리 테이블에는 이미 산정특례 제외가 있었는데 <b>이 인라인 블록에만 빠져 있었다</b>.
                 # ★v30o 고정(메리츠, 지점장 2026.07.03): 심장질환진단비Ⅰ→허혈성 진단비 / 심장질환진단비Ⅱ→급성심근경색
-                if ('심장질환진단' in _rn) and ('허혈' not in _rn) and ('급성심근' not in _rn):
+                # ★★★★★v379 (지점장 재확정 2026.08.10, 영구·최상위 — "원래 처음부터 있던 지침"):
+                #   <b>모든 회사에서 「허혈성진단비 · 허혈성심장진단비 · 심장허혈성진단비」는 단독이다.</b>
+                #   → 회사 분기보다 <b>먼저</b> 판정한다. 어느 회사든 분해(협심증·급성심근 동반) 금지.
+                #   [구 결함] 회사별 분기 안에서만 단독 판정을 해서 <b>삼성·현대 경로가 협심증을 함께 찍었다</b>
+                #   (실측 구본칠 — `허혈심장질환진단특약ⅢUT…` 1,000 → 협심증 1,000 신규 발생).
+                #   ★묶음 수식어(특정·6가지·n대·순환계)가 붙은 담보만 회사별 표를 탄다.
+                # ★★★★★v380 (지점장 재확정 2026.08.11, 영구·최상위 — "전부 다 단독이다"):
+                #   <b>뇌혈관진단비 · 허혈성진단비 · 급성심근경색진단비 · 뇌졸증진단비 · 뇌출혈진단비
+                #   = 5종 전부 단독</b>. 어느 회사든 <b>묶음 분해 금지</b>(협심증·빈맥·심부전 동반 금지).
+                #   [구 결함] v379는 <b>허혈성 한 종류만</b> 전역 처리하고 나머지 4종은 회사 분기에 남겨 뒀다.
+                #   ★구현 = 여기서 값을 강제로 찍지 않고 <b>묶음 블록 자체를 건너뛴다</b>.
+                #     resolve2가 각 담보를 자기 행 하나로 보내므로(실측), 이렇게 해야
+                #     <b>CI 변환(중대한OO)·일당 상한 가드·[확인]큐</b> 등 하류 규칙이 전부 살아 있다.
+                #   ★묶음 수식어(특정·6가지·n대·순환계)가 붙은 담보만 회사별 표를 탄다.
+                #   ★★★단서(지점장 2026.08.11): <b>「뇌혈관Ⅰ · 뇌혈관Ⅱ」처럼 등급 Ⅰ·Ⅱ가 붙은 것은 다르다</b>
+                #     → 단독 예외에서 <b>빼고 종전 지침(회사별 표·Ⅰ/Ⅱ 분기)대로</b> 처리한다.
+                #     ※Ⅲ·특약Ⅲ 등 상품세대 표기(`허혈심장질환진단특약ⅢUT…`)는 등급 Ⅰ·Ⅱ가 아니므로 단독 유지.
+                _is_solo5 = is_solo5_name(_rn)
+                if _is_solo5:
+                    pass                                   # 단독 5종 — 묶음 분기 진입 금지
+                elif ('심장질환진단' in _rn) and ('허혈' not in _rn) and ('급성심근' not in _rn):
                     # ★양예서/메리츠 어린이: 심장질환진단비Ⅱ→급성심근경색 / Ⅰ→허혈성 진단비 (별첨값 앵커: Ⅰ=600 허혈성, Ⅱ=3000 급성심근)
                     _mn=_rmn(_rn)
+                    # ★★★★★v384 (지점장 확정 2026.08.11, 영구·최상위):
+                    #   지점장 원문 = "<b>심장Ⅰ·Ⅱ에 허혈성이 들어가 있다면 그건 다 협심증이다.
+                    #   협심증의 종류가 허혈성이다. 그래서 다 협심증으로 표기해라</b>".
+                    #   → 「허혈성 진단비」 행은 <b>담보명이 허혈성진단비·허혈성심장질환진단비인 단독 담보 전용</b>이다.
+                    #     심장Ⅰ/특정심장Ⅰ 같은 <b>묶음</b>이 허혈성을 품고 있으면 <b>협심증 행</b>으로 표기한다.
+                    #   [구 결함] 아래 3곳이 묶음(Ⅰ)을 그대로 허혈성 행에 넣고 있었다 — `_HB` 주석
+                    #     「묶음은 이 행에 절대 안 넣는다. I20·I24·I25는 협심증 행으로 표현」을 정면 위반.
                     if _mn==2: _heart_bundle=['급성심근경색']
-                    elif _mn==1: _heart_bundle=['허혈성 진단비']
+                    elif _mn==1: _heart_bundle=['협심증']
                 # ★뇌질환진단비Ⅰ/Ⅱ (메리츠 어린이 등): Ⅱ→뇌졸증(넓음) / Ⅰ→뇌혈관진단비
-                if _heart_bundle is None and ('뇌질환진단' in _rn):
+                if (not _is_solo5) and _heart_bundle is None and ('뇌질환진단' in _rn):
                     _mn=_rmn(_rn)
                     if _mn==2: _heart_bundle=['뇌졸증진단비']
                     elif _mn==1: _heart_bundle=['뇌혈관진단비']
                 # ★v30z4 성인병진단금(생보·AIA·AIG·라이나·우체국 등) = 급성심근경색(100% 확정) + 뇌졸증/뇌출혈(세부가입 판별).
                 #   지점장 반복 확정: [확인] HOLD 폐기. 뇌축 = 계약에 뇌출혈 담보 있으면 뇌출혈, 없으면 뇌졸증(세부가입 뇌혈관 표기도 뇌졸증계로 해석).
-                if _heart_bundle is None and ('성인병' in _rn):
+                if (not _is_solo5) and _heart_bundle is None and ('성인병' in _rn):
                     _brain = '뇌출혈진단비' if any('뇌출혈' in str(_k) for _k in dambo.keys()) else '뇌졸증진단비'
                     _heart_bundle = ['급성심근경색', _brain]
                 # ★v29w 심장 범위 재점검(지점장 2026.07.02, 6사 정본 대조):
@@ -4200,7 +4391,7 @@ def build_excel(data, out):
                 #   그런데 아래 `elif '순환계' in _rn` 이 <b>같은 담보를 또 잡아</b> 심부전·부정맥이 <b>2배</b>가 되고
                 #   빈맥·급성심근까지 얹혔다(실측 박O정: 심부전 500 → 1,000 · 빈맥 0 → 500).
                 #   → <b>4대순환계 계열은 인라인 블록에서 제외</b>한다. 규칙은 하나만 잡는다.
-                if _heart_bundle is None and '4대순환계' in _rn:
+                if (not _is_solo5) and _heart_bundle is None and '4대순환계' in _rn:
                     _heart_bundle = []          # _HB가 처리 완료 — 여기서 중복 적용 금지
                 elif _heart_bundle is None and '순환계' in _rn and '5종' in _rn:
                     _heart_bundle = ['급성심근경색','뇌졸증진단비']
@@ -4215,66 +4406,62 @@ def build_excel(data, out):
                     if ('DB' in _co) or ('디비' in _co):
                         _heart_bundle = ['급성심근경색','빈맥','부정맥','심부전']   # DB 순환계3대=심장정지I46.0·부정맥I47~49·심부전I50
                     else:
-                        _heart_bundle = ['협심증','급성심근경색','허혈성 진단비','뇌혈관진단비']
+                        _heart_bundle = ['협심증','급성심근경색','뇌혈관진단비']
                 # ===== BARUM 10사 질병코드 분류표 정본(2026.07.05 지점장 확정): 특정Ⅰ/Ⅱ 라벨=회사마다 다름 → 회사별 표대로 =====
-                elif any(_k in _rn for _k in ('심혈관','심장','허혈','부정맥','빈맥','심부전','심근병','판막','협심','전도','방실')):
+                elif (not _is_solo5) and any(_k in _rn for _k in ('심혈관','심장','허혈','부정맥','빈맥','심부전','심근병','판막','협심','전도','방실')):
                     _t=_rmn(_rn)
                     _i49excl=('제외' in _rn) and (('I49' in _rn) or ('부정맥' in _rn))   # ★(기타심장부정맥제외)=Ⅰ에서 I49 뺀 묶음(부정맥 담보 아님)
                     _i49=(not _i49excl) and (('I49' in _rn) or ('기타부정맥' in _rn) or ('기타심장부정맥' in _rn))
-                    # 흥국·롯데: 특정Ⅰ=급성심근 / 특정Ⅱ=협심증+허혈+염증 / 롯데 15대=판막·심근병·빈맥·심부전
+                    # 흥국·롯데: 특정Ⅰ=급성심근 / 특정Ⅱ=협심증+염증 / 롯데 15대=판막·심근병·빈맥·심부전
+                    #   ★v384 구 주석 '허혈'은 협심증으로 표기(묶음은 허혈성 행에 안 넣는다).
                     if ('흥국' in _co) or ('롯데' in _co):
-                        if _i49excl: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # 흥국 특정심혈관질환(기타심장부정맥제외)=협심·허혈·빈맥·심부전(별표70)
+                        if _i49excl: _heart_bundle=['협심증','빈맥','심부전']   # 흥국 특정심혈관질환(기타심장부정맥제외)=협심·허혈·빈맥·심부전(별표70)
                         elif _i49: _heart_bundle=['부정맥']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif '15대' in _rn: _heart_bundle=['심장판막','심근병증','빈맥','심부전']
                         elif ('방실' in _rn) or ('전도' in _rn): pass   # 전용행無→[확인]
                         elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)) or ('심낭' in _rn): _heart_bundle=['염증']
                         elif _t==1: _heart_bundle=['급성심근경색']
-                        elif _t==2: _heart_bundle=['협심증','허혈성 진단비','염증']
+                        elif _t==2: _heart_bundle=['협심증','염증']
                     # ★DB(정본 재수정): 특정Ⅰ=협심증·허혈·염증 / 특정Ⅱ=급성심근 / 특정Ⅲ=판막·빈맥·심부전 / 심근병증
                     elif ('DB' in _co) or ('디비' in _co):
                         if _t==2: _heart_bundle=['급성심근경색']
                         elif _t==3: _heart_bundle=['심장판막','빈맥','심부전']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif _i49: _heart_bundle=['부정맥']
-                        elif _t==1: _heart_bundle=['협심증','허혈성 진단비','염증']
-                    # 한화·NH농협: Ⅰ=협심증+허혈+빈맥+부정맥+심부전 / Ⅱ=급성심근 / (I49제외)=부정맥 뺀 묶음 / 심근병증
+                        elif _t==1: _heart_bundle=['협심증','염증']
+                    # 한화·NH농협: Ⅰ=협심증+빈맥+부정맥+심부전 / Ⅱ=급성심근 / (I49제외)=부정맥 뺀 묶음 / 심근병증
+                    #   ★v384 구 주석의 '허혈'은 <b>협심증</b>으로 표기(묶음은 허혈성 행에 안 넣는다).
                     elif ('한화' in _co) or ('농협' in _co) or ('NH' in _co):
-                        if _i49excl: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # Ⅰ에서 I49(부정맥) 제외 묶음
+                        if _i49excl: _heart_bundle=['협심증','빈맥','심부전']   # Ⅰ에서 I49(부정맥) 제외 묶음
                         elif _t==2: _heart_bundle=['급성심근경색']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)): _heart_bundle=['염증']
                         elif _i49: _heart_bundle=['부정맥']
-                        elif '특정질환' in _rn: _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']   # 한화 심혈관특정질환=Ⅰ에서 I49제외
-                        elif _t==1: _heart_bundle=['협심증','허혈성 진단비','빈맥','부정맥','심부전']
-                    # KB: 특정Ⅰ=협심증+허혈+빈맥+심부전(염증X·부정맥X) / Ⅱ=급성심근 / 심장판막=판막+염증 / I49=부정맥(빈맥X)
+                        elif '특정질환' in _rn: _heart_bundle=['협심증','빈맥','심부전']   # 한화 심혈관특정질환=Ⅰ에서 I49제외
+                        elif _t==1: _heart_bundle=['협심증','빈맥','부정맥','심부전']
+                    # KB: 특정Ⅰ=협심증+빈맥+심부전 / Ⅱ=급성심근 / 심장판막=판막+염증 / I49=부정맥(빈맥X)
+                    #   ★v384 구 주석 '허혈'은 협심증으로 표기. ★염증은 `_HB`가 정본(KB 특정1에 주요심장염증 포함).
                     elif ('KB' in _co) or ('케이비' in _co):
                         if _t==2: _heart_bundle=['급성심근경색']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif '판막' in _rn: _heart_bundle=['심장판막','염증']
                         elif _i49: _heart_bundle=['부정맥']
-                        elif _t==1 or ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn): _heart_bundle=['협심증','허혈성 진단비','빈맥','심부전']
-                    # 현대(정본 재수정, 6가지): 허혈성심장=협심증+허혈 / 특정허혈=급성심근 / 특정Ⅰ=빈맥+심부전 / 특정Ⅱ=급성심근 / 주요염증 / 특정2대+I49=부정맥
+                        elif _t==1 or ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn): _heart_bundle=['협심증','빈맥','심부전']
+                    # 현대(정본 재수정): 허혈성심장질환진단비=<b>단독</b>(허혈성 행) / 특정허혈=급성심근 /
+                    #   특정Ⅰ=협심증+빈맥+심부전 / 특정Ⅱ=급성심근 / 주요염증 / 특정2대+I49=부정맥
+                    #   ★v384 구 주석 '협심증+허혈' 폐기 — 담보명이 허혈성이면 단독, 묶음이면 협심증.
                     elif '현대' in _co:
                         if '특정허혈' in _rn: _heart_bundle=['급성심근경색']
-                        elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['협심증','허혈성 진단비']
+                        elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['협심증']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)): _heart_bundle=['염증']
                         elif ('특정2대' in _rn) or ('방실' in _rn) or ('전도' in _rn) or _i49: _heart_bundle=['부정맥']   # 특정2대+기타부정맥(I49) 병합→부정맥(전도장애 전용행無)
                         elif _t==2: _heart_bundle=['급성심근경색']   # ★현대 특정Ⅱ=급성심근경색(정본 재수정)
                         elif _t==1 or '심혈관' in _rn: _heart_bundle=['빈맥','심부전']
-                    # 삼성·메리츠: 허혈성심장질환 6가지 → 급성심근+협심증+허혈성 (메리츠는 기존 심장질환진단Ⅰ/Ⅱ와 병존)
-                    elif ('삼성' in _co) or ('메리츠' in _co):
-                        # ★★단독담보 원칙(지점장 확정 2026.07.14, 최상위 · 2026.07.25 재확정): 회사담보명이 '허혈성심장질환진단비'
-                        #   단독이면 어느 회사든 분해 금지 → '허혈성 진단비' 행 단독. 묶음 수식어가 붙은 것만 분해.
-                        # ★★★v206 (2026.07.25 양*선 KB리포트 실측 회귀수정): 판정이 `^...$` 완전일치라
-                        #   회사담보명 앞에 <b>'갱신형 '</b>이 붙은 '갱신형 허혈성심장질환진단비'가 _solo=False로 떨어져
-                        #   급성심근+협심증+허혈성 3행으로 <b>분해</b>됐다(실측: 협심증 1,000 신규발생 · 급성심근 2,000→3,000).
-                        #   → 접두 수식어(갱신형·비갱신형·정액·실손·무배당·[건강] 등)를 떼고 판정한다.
-                        _rn_core = re.sub(r'^(?:갱신형|비갱신형|무배당|정액|실손|\[[^\]]*\])+', '', re.sub(r'\s', '', _rn))
-                        _solo = bool(re.match(r'^허혈(성)?심장질환진단(비)?$', _rn_core))
-                        if _solo: pass
-                        elif ('허혈성심장' in _rn) or ('허혈심장' in _rn): _heart_bundle=['급성심근경색','협심증','허혈성 진단비']
+                    # ★v379 삼성·메리츠 별도 단독판정 <b>폐기</b> — 위 v379 전역 가드가 전 회사를 처리한다.
+                    #   구 코드는 여기서만 단독을 봐서 <b>회사가 삼성·메리츠가 아니면 분해</b>됐다.
+                    #   (v206 '갱신형' 접두 · v378 접미 수식어 회귀도 전역 가드가 함께 흡수한다.)
             if _heart_bundle:
                 for _bt in _heart_bundle:
                     _br = nm2r.get(_bt)
@@ -4356,6 +4543,18 @@ def build_excel(data, out):
                     if blue: jong_blue[_k] = True
                 surg_trace.append((ct['company'], raw, f'상해·질병 종수술 양쪽 {jong}종 슬롯', amt))   # ★v30g
                 continue
+            # ★v378 종번호 없는 단일금액 종수술 — 축 미표기는 질병·상해 양쪽(대표 max), 축 표기는 그 행만.
+            if std == '종수술비공통' and not jong:
+                for _k in ('상해 종수술비(1-5종)','질병 종수술비(1-5종)'):
+                    jong_lump[_k] = max(jong_lump[_k], amt)
+                    if blue: jong_blue[_k] = True
+                surg_trace.append((ct['company'], raw, '상해·질병 종수술 단일금액(종번호 없음)', amt))
+                continue
+            if std in jong_acc and not jong:
+                jong_lump[std] = max(jong_lump[std], amt)
+                if blue: jong_blue[std] = True
+                surg_trace.append((ct['company'], raw, f'{std} 단일금액(종번호 없음)', amt))
+                continue
             if std in jong_acc and 1 <= jong <= 5:
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
@@ -4431,6 +4630,18 @@ def build_excel(data, out):
                     cancer_trace.append((ct['company'], raw, std, amt))   # ★v30h 암 기재 근거
 
         for nm, vals in jong_acc.items():     # 종수술비 슬래시 기재(§6)
+            # ★v378 종번호 없는 단일금액 — 슬래시 칸이 비었을 때만 그 행에 숫자 그대로.
+            #   둘이 동시에 차면 어느 쪽이 정본인지 지침에 없다 → 임의 병합 금지, [확인]큐.
+            if jong_lump.get(nm):
+                if any(vals):
+                    unmapped.append((col, ct['company'], f'{nm}(종번호 없는 단일금액)', jong_lump[nm],
+                                     '[확인] 같은 계약에 종별 슬래시와 단일금액이 동시 존재 — 병합 규칙 없음'))
+                else:
+                    _rl = nm2r.get(nm)
+                    if _rl:
+                        ws.cell(_rl,col).value = jong_lump[nm]
+                        ws.cell(_rl,col).font = BL if (gen or jong_blue[nm]) else BK
+                    continue
             if any(vals):
                 # ★v29v (지점장 2026.07.02): 6~8종 값이 있으면 그 계약의 종수술은 8단계 → (1-8종) 행에 8칸 슬래시,
                 #   아니면 기존대로 (1-5종) 행에 5칸 슬래시.
@@ -4577,13 +4788,13 @@ def build_excel(data, out):
             def _ym(d):
                 try: return int(str(d)[:4])*100+int(str(d)[5:7])
                 except: return 0
-            _g4=(silson_gen(ct.get('contract_date',''), None, ct.get('product',''), _has_nonpay3(ct.get('dambo'))) in ('4세대','5세대'))   # ★v29v 상품코드 반영
+            _g4=(silson_gen(ct.get('contract_date',''), None, ct.get('product',''), _has_nonpay3(ct.get('dambo')), _has_drug(ct.get('dambo'))) in ('4세대','5세대'))   # ★v29v 상품코드 반영
             _guhy=(_ipv==3000)                            # 입원한도 3,000=구형
             _twc=ws.cell(_rtw,col).value if _rtw else None
             _ykc=ws.cell(_ryk,col).value if _ryk else None
             # ★v215: 통원 디폴트 판정에도 1세대(가입일 기준)를 포함한다. 구 코드는 입원한도 3,000(_guhy)일
             #   때만 10을 넣어, 가입일이 2009.09 이전인데 입원한도가 3,000이 아닌 1세대는 25/20이 됐다.
-            _g1a=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))).startswith('1세대')
+            _g1a=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')), _has_drug(ct.get('dambo')))).startswith('1세대')
             if _rtw and not isinstance(_twc,(int,float)):  # ① 별첨 통원 없을 때만 디폴트
                 _twd = 10 if (_guhy or _g1a) else (20 if _g4 else (20 if _life else 25))
                 ws.cell(_rtw,col).value=_twd; ws.cell(_rtw,col).font=BL
@@ -4594,7 +4805,7 @@ def build_excel(data, out):
             #     (지점장 지적 "보장진단서 오류"의 원인). → `.startswith('1세대')`로 수정.
             #     ②구 코드는 '별첨에 약값이 없을 때만' 0으로 뒀다 → 별첨에 약값이 인쇄돼 있으면 그대로 들어갔다.
             #     → 1세대는 <b>별첨 명시값이 있어도 약값 칸을 지운다</b>(강제).
-            _g1=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))).startswith('1세대')   # ★v215 (구 v41 == '1세대' 버그)
+            _g1=str(silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')), _has_drug(ct.get('dambo')))).startswith('1세대')   # ★v215 (구 v41 == '1세대' 버그)
             if _ryk and _g1:                               # ★v215 1세대=약값 없음(강제 미기재)
                 if isinstance(_ykc,(int,float)) and _ykc:
                     silson_trace.append((ct['company'], ct.get('contract_date',''), '1세대 약값삭제', f'{_ykc}→0'))
@@ -4603,7 +4814,7 @@ def build_excel(data, out):
                 _ykd = 0 if _g4 else (10 if _life else 5)
                 if _ykd: ws.cell(_ryk,col).value=_ykd; ws.cell(_ryk,col).font=BL   # 4세대 약0=미기재
             # ★ 실손 세대 자동판별 → 헤더에 라벨 기재
-            _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')))
+            _sg = silson_gen(ct.get('contract_date',''), _ipv, ct.get('product',''), _has_nonpay3(ct.get('dambo')), _has_drug(ct.get('dambo')))
             _pm0=re.search(r'(?<!\d)(0[9]|1[0-9]|2[0-6])(0[1-9]|1[0-2])(?!\d)', str(ct.get('product','')))
             silson_trace.append((ct['company'], ct.get('contract_date',''), (_pm0.group(0) if _pm0 else '없음'), _sg or '판정불가'))   # ★v29z 세대 근거
             if _sg:
@@ -4769,6 +4980,19 @@ def build_excel(data, out):
                 _tgt = '일반사망' if (_jong and _nm2=='질병사망(80세)') else _nm2
                 _r2 = nm2r.get(_tgt)
                 if not _r2: continue
+                # ★★★★★v381 (지점장 지적 2026.08.11 "한화생명에 어디서 실손이 있냐", 영구):
+                #   <b>실손 계약이 아닌 계약에는 실손 행을 세부보충하지 않는다.</b>
+                #   [구 결함] 세부가입현황(계약별 가입정보)은 계약이 가로로 늘어선 표라
+                #   <b>인접 계약의 실손 값이 옆 칸으로 밀려</b> 들어온다. 실측(구본칠) =
+                #   삼성 실손 계약의 `입원 5,000`이 <b>한화생명 CI 계약</b>에 앉았고
+                #   → ①한화가 실손 보유로 잡혀 <b>실손 세대가 한화 가입일(2007)로 판정=1세대</b>
+                #   → ②한장표 검산 `입원 5,000 vs 엑셀 10,000` 불일치.
+                #   실손은 상품 자체가 실손이어야 존재한다 — 별첨·상품명으로 판별해 게이트한다.
+                if _tgt in ('입원','통원','약값','상해의료비','MRI/도수치료/비급여주사'):
+                    if not _is_silson_like(_c2.get('company',''), _c2.get('product',''), _c2.get('dambo')):
+                        unmapped.append((_cl2, str(_cn2), f'세부보충 {_tgt}', _v2,
+                                         '[확인] 실손 계약이 아닌데 세부가입현황에 실손 값 — 옆 계약 값 밀림 의심 → 기재 안 함'))
+                        continue
                 if _partial:
                     if _tgt not in _SEBU_WIN and not (_tgt in _SEBU_DEATH and not _ci_on):
                         if ws.cell(_r2,_cl2).value not in (None, ''): continue  # 별첨 값 보존
@@ -4880,6 +5104,15 @@ def build_excel(data, out):
                     except: pass
         sc = ws.cell(r, last_col)
         if is_slash and any(slash_t):
+            # ★★v378 종수술 행 한정 — 같은 행에 <b>종별 슬래시</b>와 <b>종번호 없는 단일금액</b>이 섞이면
+            #   구 코드는 슬래시만 더하고 <b>숫자 칸을 통째로 버렸다</b>(끝열이 조용히 작아진다).
+            #   단일금액은 1~5종 어느 종이든 그 금액이므로 <b>모든 종 칸에 가산</b>한다.
+            #   ※이 해석은 지점장 확정 대기 항목이다(다른 슬래시 행에는 적용하지 않는다).
+            if has_num and '종수술비' in str(ws.cell(r,2).value or ''):
+                _lump = sum(v for v in (ws.cell(r,c).value for c in range(3,last_col))
+                            if isinstance(v,(int,float)))
+                if _lump:
+                    for k in range(slash_n or 5): slash_t[k] += _lump
             sc.value = '/'.join(str(x) for x in slash_t[:(slash_n or 5)])
             sc.font = BL if str(ws.cell(r,2).value).strip() in _BLUE_ROWS else BK   # 슬래시 행은 §3 SUM 예외
         else:
@@ -5962,7 +6195,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     실손가입일=min((c['contract_date'] for c in 실손_cts), default='___________')
     _실손상품=next((c.get('product','') for c in 실손_cts if c['contract_date']==실손가입일), '')
     _np3=any(_has_nonpay3(c.get('dambo')) for c in 실손_cts)   # ★v250 3대비급여 하한
-    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품, _np3)   # ★실손 세대 자동판별(상품명 연도코드 반영)
+    _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품, _np3, bool(totals.get('약값')))   # ★실손 세대 자동판별(상품명 연도코드 반영)
     by['TextBox 59'].text_frame.word_wrap=False
     by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
     by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
@@ -6393,6 +6626,10 @@ document.addEventListener("DOMContentLoaded",function(){
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
+    # ★v382 조문 자가진단을 /health에 <b>따로</b> 노출한다(CI 카운트에 묻히지 않게).
+    _dtb = doctrine_selftest()
+    _DTN = len(_DOCTRINE_SELFTEST)+len(_SOLO5_SELFTEST)+len(_GEN_SELFTEST)+len(_DEDUP_SELFTEST)
+    _STN = len(_CI_SELFTEST)+len(_CI_RATE_SELFTEST)+len(_SILSON_SELFTEST)
     # ★★★v309 감사 2종을 /health에서도 즉시 돌린다 — 지점장이 링크 한 번으로 확인.
     try:
         import openpyxl as _ox
@@ -6403,9 +6640,10 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v377-p8val-20260809',
+    return {'ok':True,'version':'v384b-sync-20260811',
             'audit': _audit,
-            'ci_selftest': ('PASS %d/%d' % (len(_CI_SELFTEST)-len(_cib), len(_CI_SELFTEST))) if not _cib else ('FAIL: '+' | '.join(_cib[:6]))}
+            'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
+            'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -6439,7 +6677,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v377-p8val-20260809'}
+    out = {'server_version': 'v384b-sync-20260811'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -6534,7 +6772,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v377-p8val-20260809',
+    return {'version': 'v384b-sync-20260811',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -6546,7 +6784,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v377-p8val-20260809'}
+    out = {'version': 'v384b-sync-20260811'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

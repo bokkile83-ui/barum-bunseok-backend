@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v377-p8val-20260809 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v384b-sync-20260811 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -238,6 +238,10 @@ def load_excel(path):
                                           or ('체외충격파' in str(ws.cell(r,2).value))
                                           or ('증식' in str(ws.cell(r,2).value)))]
     load_excel._np3_rows=_np3_rows
+    # ★v381 처방조제료(약값) 행 — 지점장 확정 "4세대는 통원비 20만원만 있다".
+    #   약값이 통원과 별도로 잡혀 있으면 4세대가 아니다(3세대).
+    load_excel._drug_rows=[r for r in range(6, ws.max_row+1)
+                           if str(ws.cell(r,2).value or '').strip() in ('약값','처방조제료')]
     _sil_rows=[]
     for _i in range(len(bounds)-1):
         _r0,_nm=bounds[_i]; _r1=bounds[_i+1][0]
@@ -291,8 +295,10 @@ def load_excel(path):
         # ★v89: 헤더에 '(3세대 실손)'처럼 세대가 적혀 있으면 힌트로 보관(가입일이 비었을 때 사용)
         _gh=re.search(r'\((\d)\s*세대', _raw)
         _np3=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_np3_rows',[]))
+        _drug=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_drug_rows',[]))
         headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,
-                        'co':_co_,'prod':_pr_,'np3':_np3,'genhint':(int(_gh.group(1)) if _gh else None)})
+                        'co':_co_,'prod':_pr_,'np3':_np3,'drug':_drug,
+                        'genhint':(int(_gh.group(1)) if _gh else None)})
     total_prem=int(_man(ws.cell(2,last).value))
     return grp_rows, headers, total_prem
 
@@ -673,7 +679,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         if _cca: _ciamt['__cancer__']=_fmt(_cca)
     rep['ci_amounts']=_ciamt
     # ★2026.07.11 실손 세대 자동판별(CI식 3상태): 실손 계약 가입일 → 세대
-    def _gen_of(js, comp='', prod='', np3=False):
+    def _gen_of(js, comp='', prod='', np3=False, drug=False):
         import re as _r
         m=_r.search(r'(\d{4})\D+(\d{1,2})(?:\D+(\d{1,2}))?', str(js))
         from datetime import date
@@ -693,7 +699,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             #   main.py `silson_gen`에만 넣고 여기(설명서·진단서 경로)에 빠뜨려
             #   '무배당 한화실손의료보험(갱신형)(실손전환용)<b>2301</b>'이 '확인불가'로 떴다.
             #   정규식·경계는 main.py `silson_gen`과 동일해야 한다(4대 산출물 연동).
-            if not _pm0: return None
+            if not _pm0:
+                # ★★★★★v381 (지점장 확정 2026.08.11, 영구): <b>가입일·상품코드가 둘 다 없어도
+                #   담보 구조로 세대를 판정한다.</b> 지점장 원문 = "<b>4세대는 통원비 20만원만 있다</b>".
+                #   → ①3대비급여(도수·주사·MRI) 특약이 분리돼 있으면 <b>3세대 이상</b>(2017.04~ 신설).
+                #     ②그중 <b>처방조제료(약값)가 통원과 별도로</b> 있으면 4세대가 아니다 → <b>3세대</b>.
+                #     ③통원만 있고 약값이 없으면 <b>4세대</b>.
+                #   [구 결함] 날짜가 없으면 무조건 None → 그 계약은 세대 [확인]이 되고,
+                #   대표 계약이 <b>다른 계약</b>으로 넘어가 세대가 통째로 오판됐다(실측 구본칠 = 1세대).
+                if np3:
+                    return {'gen':(3 if drug else 4),'sub':'','date':'','src':'dambo'}
+                return None
             y=2000+int(_pm0.group(1)); mo=int(_pm0.group(2)); d=1; _bycode=True
         try: dt=date(y,mo,d)
         except Exception: return None
@@ -736,17 +752,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         #   → 가입일이 있는 계약 중에서 고르고, 전부 비었을 때만 첫 계약을 쓴다.
         _dated=[h for h in _sil if str(h.get('join','')).strip()]
         if not _dated:   # ★v200 가입일이 전부 비면 상품코드로 세대가 나오는 계약을 대표로
-            _dated=[h for h in _sil if _gen_of('', h.get('nm',''), h.get('prod',''), h.get('np3',False))]
+            _dated=[h for h in _sil if _gen_of('', h.get('nm',''), h.get('prod',''), h.get('np3',False), h.get('drug',False))]
         _sh=min(_dated, key=lambda h:str(h.get('join',''))) if _dated else _sil[0]
         _cnm=_sh.get('nm','')
-        _g=_gen_of(_sh.get('join'), _cnm, _sh.get('prod',''), _sh.get('np3',False))
+        _g=_gen_of(_sh.get('join'), _cnm, _sh.get('prod',''), _sh.get('np3',False), _sh.get('drug',False))
         # 실손 계약 전체 목록(회사·상품명·가입일·보험료)
         # ★v79 실손은 2개 이상일 수 있다(지점장 확정 2026.07.18).
         #   예) 상해의료비 가입 후 실손을 추가로 드는 경우 / DB손보 2006년형 특수 실손 등.
         #   → 계약을 합치지 말고 <b>각각</b> 표기하고, 세대도 <b>계약별로 각각</b> 판정한다.
         _sillist=[]
         for _h in sorted(_sil, key=lambda x:str(x.get('join',''))):
-            _gh=_gen_of(_h.get('join'), _h.get('nm',''), _h.get('prod',''), _h.get('np3',False))
+            _gh=_gen_of(_h.get('join'), _h.get('nm',''), _h.get('prod',''), _h.get('np3',False), _h.get('drug',False))
             if not _gh and _h.get('genhint'):
                 _gh={'gen':_h['genhint'],'sub':'','date':''}   # ★가입일이 비면 헤더 표기 세대 사용
             _sillist.append({'co':str(_h.get('co',''))[:14],

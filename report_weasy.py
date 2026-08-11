@@ -2189,8 +2189,11 @@ body {{ color:{INK}; }}
         _g=_sg['gen']; _sub=_sg.get('sub',''); _t=_GEN_TALK[_talkkey(_g,_sub)]
         _lbl=(f"{_g}세대 ({_sub})" if (_g==1 and _sub) else (_sub+'세대' if _g==2 and _sub else f'{_g}세대'))
         _silverd=(f'<div class="silverd g{_g}"><div class="svhead">● 고객님 실손 = <b>{_html.escape(_lbl)}</b>'
-                  f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} · 가입 {_html.escape(str(_sg.get("date","")))} (자동 판별)</span></div>'
-                  f'<div class="svbody"><b>{_t[0]}</b><br>{_t[1]}<br><span class="svtx">■ {_t[2]}</span></div></div>')
+                  # ★v381 가입일이 없어 담보 구조로 판별한 경우 근거를 그대로 표시(빈 '가입 ' 방지)
+                  + (f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} · 가입 {_html.escape(str(_sg.get("date","")))} (자동 판별)</span></div>'
+                     if str(_sg.get("date","")).strip() else
+                     f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} · 가입일 미표기 — 담보 구성(3대비급여·처방조제)으로 판별</span></div>')
+                  + f'<div class="svbody"><b>{_t[0]}</b><br>{_t[1]}<br><span class="svtx">■ {_t[2]}</span></div></div>')
     elif _sg.get('status')=='check':
         _silverd=('<div class="silverd chk"><div class="svhead">■ 실손 세대 — 확인 필요'
                   f'<span class="svmeta">{_html.escape(str(_sg.get("company","")))} 실손 보유 · 가입일 미확정</span></div>'
@@ -3688,7 +3691,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v377-p8val-20260809</div>'
+    _VSTAMP = '<div class="vstamp">v384b-sync-20260811</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
