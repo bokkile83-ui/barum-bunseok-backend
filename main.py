@@ -3590,8 +3590,14 @@ def resolve_kw(raw):
     if has('갑상선암') and has('진단') and no('유사암','소액암','주요치료','수술','일당'): return None,0
     # ★★★★★v320 <b>통합암 = 마스터 16행</b>(지점장이 직접 넣음 2026.08.01).
     #   지침 §8.2 「통합암·통합전이암 = <b>대표금액 1개</b>」가 정본. ★순서 주의: <b>통합전이암이 먼저</b>다.
-    if has('통합') and has('전이암') and no('주요치료','수술','통원','일당'): return '통합전이암',0
-    if has('통합') and has('암') and no('전이','간호','간병','주요치료','수술','통원','일당','보험료'):
+    # ★★★★★v398 (지점장 확정 2026.08.12, 영구): <b>통합암은 그 문구가 앞에 나온다</b>.
+    #   지점장 원문: 「`암진단비(유사암제외)(<b>통합</b>간편가입형)` ← 이라고 통합암에 기재가 된다.
+    #     <b>아니다. 이건 암진단비다 / 통합암은 그 문구가 앞에 나온다. 지침오류다</b>」
+    #   ★구 조건 `has('통합') and has('암')`은 <b>'통합'이 담보명 어디에 있든</b> 걸렸다 —
+    #     `(통합간편가입형)`·`(통합간편가입Ⅱ)` 같은 <b>가입유형 수식어</b>의 '통합'까지 통합암으로 보냈다(실측).
+    #   → <b>'통합암'·'통합전이암'이 한 덩어리로 붙어 있을 때만</b> 그 행이다. 그 외 '통합'은 무시한다.
+    if has('통합전이암') and no('주요치료','수술','통원','일당'): return '통합전이암',0
+    if has('통합암') and no('전이','간호','간병','주요치료','수술','통원','일당','보험료'):
         return '통합암',0   # ★v320 통합암 단독 = 대표금액 1개   # ★v30z 통합전이암=개별담보·대표금액 1개(§8.2, PPT·보장설명지 반드시 반영)
     if has('전이암') and no('통합'): return '__무시__',0   # ★v30z 전이암진단비 단독=무시(지점장 2026.07.05)
     if has('암') and has('주요치료') and no('비급여','순환계','2대','유사암'): return '암주요치료비',0   # ★v260c 지침 §8.2 = 비급여는 하이클래스(암)가 우선(리터럴 '암주요치료비'는 위 2034행이 먼저 잡는다)
@@ -6203,7 +6209,17 @@ def build_excel(data, out):
                     _cel = _ws0.cell(_r, _pc)
                     if _cel.value not in (None, ''):
                         _cel.font = _RD
-            print(f'[JEAN 색] 제안 열 {[3+i for i in _pidx]} → 헤더 주황ED7D31/블랙 · 값 레드C00000')
+            # ★★★★★v398 (지점장 지적 2026.08.12): <b>제안 합계 열의 1~5종 슬래시가 계속 블랙</b>이었다.
+            #   원인: 종수술비 슬래시 행은 `=SUM()` 수식이 아니라 <b>문자열을 직접 써 넣는 별도 경로</b>라
+            #     위 루프(제안 <b>계약</b> 열만 순회)에 걸리지 않았다. 다른 행은 수식이라 레드가 잘 먹었다.
+            #   → 헤더가 <b>'제안 합계'</b>인 열도 값이 있으면 레드로 확정한다(v388 조문: 제안 합계 글자=레드).
+            _sumred = 0
+            for _c8 in range(3, _ws0.max_column+1):
+                if str(_ws0.cell(1,_c8).value or '').strip() != '제안 합계': continue
+                for _r8 in range(2, _ws0.max_row+1):
+                    if _ws0.cell(_r8,_c8).value not in (None,''):
+                        _ws0.cell(_r8,_c8).font = _RD; _sumred += 1
+            print(f'[JEAN 색] 제안 열 {[3+i for i in _pidx]} → 헤더 주황ED7D31/블랙 · 값 레드C00000 · 제안합계열 레드 {_sumred}셀')
     except Exception as _ej:
         print('[JEAN 색] 실패:', str(_ej)[:80])
     _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
@@ -7176,7 +7192,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v397-hiclass-20260812',
+    return {'ok':True,'version':'v398-tonghab-20260812',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
@@ -7213,7 +7229,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v397-hiclass-20260812'}
+    out = {'server_version': 'v398-tonghab-20260812'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -7308,7 +7324,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v397-hiclass-20260812',
+    return {'version': 'v398-tonghab-20260812',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -7320,7 +7336,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v397-hiclass-20260812'}
+    out = {'version': 'v398-tonghab-20260812'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
