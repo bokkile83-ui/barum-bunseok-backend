@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
 from fastapi import FastAPI, UploadFile, File, Form
+from typing import List          # ★v385 제안서 복수(최대 3건) 업로드용
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -269,11 +270,27 @@ def _has_drug(dambo):
 _SOLO5_KW   = ('허혈', '뇌혈관', '뇌졸', '뇌출혈', '급성심근')
 _BUNDLE_MK5 = ('특정', '6가지', '5대', '4대', '3대', '2대', '순환계')
 
+# ★★★★★v387 (지점장 확정 2026.08.12): 「<b>허혈성 이라는 키워드가 앞에 있으면 무조건 단독이다</b>」
+#   계기 = 「<b>허혈성심질환진단비Ⅱ — 이건 심장Ⅱ가 아니라 허혈성심질환진단비니까 허혈성 단독이다</b>」
+#   ⇒ <b>허혈</b>이 담보명 <b>맨 앞</b>에 오면 뒤에 붙은 Ⅰ·Ⅱ는 <b>상품 표기</b>이므로 등급 예외를 타지 않는다.
+#   ⇒ 앞에 다른 말이 붙은 것(`특정허혈…`·`5대혈관…`)은 <b>묶음</b>이므로 종전대로 회사별 표.
+#   ★<b>이 완화는 「허혈」에만 적용한다</b> — 지점장이 허혈성 하나를 말씀하셨다.
+#     `뇌혈관진단비Ⅰ/Ⅱ` 등 나머지 4종의 등급 예외는 <b>손대지 않는다</b>(0f: 하나를 말했으면 하나만).
+#   ★v386은 이걸 `_hl_bund`로 <b>우연히</b> 막았을 뿐 이 함수는 여전히 단독에서 빼고 있었다 → 근본을 여기서 고친다.
+_SOLO5_PREFIX = ('[', ']', '(', ')', '（', '）', '무배당', '갱신형', '무', '신', ' ')
+
+def _solo5_head_is_haehyeol(rn):
+    """담보명 <b>맨 앞</b>이 '허혈'인가 — 접두 표기([갱신형]·(무배당) 등)는 걷어내고 본다."""
+    t = re.sub(r'\s', '', str(rn or '')).replace('（','(').replace('）',')')
+    t = re.sub(r'^(?:\[[^\]]*\]|\([^)]*\)|무배당|갱신형)+', '', t)   # 접두 표기 제거
+    return t.startswith('허혈')
+
 def is_solo5_name(rn):
     rn = str(rn or '')
-    return (any(k in rn for k in _SOLO5_KW)
-            and not any(k in rn for k in _BUNDLE_MK5)
-            and _rmn(rn) not in (1, 2))
+    if any(k in rn for k in _BUNDLE_MK5): return False       # 묶음 수식어가 있으면 회사별 표
+    if _solo5_head_is_haehyeol(rn):       return True        # ★v387 허혈이 앞 = 등급 무관 단독
+    if not any(k in rn for k in _SOLO5_KW): return False
+    return _rmn(rn) not in (1, 2)
 
 
 def silson_gen(contract_date, ipv=None, product='', nonpay3=False, drug=False):
@@ -515,9 +532,14 @@ _SHORT_OK = {'입원','통원','수술','사망','장해','골절','화상','간
 #   <b>합산이 아니라 최고값 1개</b>가 정답이다. → 완전일치 집합에 '실손입원의료비'를 넣는다.
 _DUP_MAX_EXACT = {'일반사망','입원','입원특약','재해입원','실손입원의료비'}
 
-def rule_extract(block_lines):
-    block_lines=_unfold_cols(block_lines)                # ★v225 담보명 접힘 복원(성공 시 '이름  금액' 1줄 형태)
-    block_lines=_split_cols(_reflow_cols(block_lines))   # ★v133 접힘 3열 재조립 → 기존 다열 분해
+def rule_extract(block_lines, prefolded=False):
+    # ★★★★★v390b (2026.08.12 흥국 제안서 실측): <b>가입제안서 경로는 이미 「담보명  금액」
+    #   1담보 1줄</b>로 만들어져 들어온다(parse_jean). 여기에 별첨용 접힘 복원을 다시 걸면
+    #   금액 끝좌표가 우연히 두 무리로 갈려 <b>2열로 오판</b>하고(실측 경계 [38,63]) 담보명이
+    #   서로 뭉쳐 <b>20건 → 16건</b>이 됐다. 이미 접힌 게 없는 입력에는 복원을 걸지 않는다.
+    if not prefolded:
+        block_lines=_unfold_cols(block_lines)                # ★v225 담보명 접힘 복원(성공 시 '이름  금액' 1줄 형태)
+        block_lines=_split_cols(_reflow_cols(block_lines))   # ★v133 접힘 3열 재조립 → 기존 다열 분해
     block_lines=[l for l in block_lines if not (('표준금액' in str(l)) or ('권장금액' in str(l)) or ('적정금액' in str(l)))]  # ★표준금액 줄 제외
     """★v29t: 같은줄 우선 + 분리줄(코드/이름랩/금액뭉치) 순서 페어링(누락0). 김진구.txt 6계약 회귀검증 완료."""
     dambo={}; names=[]; amts=[]; pend=None
@@ -933,6 +955,10 @@ _SOLO5_SELFTEST = [
     ('허혈심장질환진단특약ⅢUT(무배당,무해약환급금형)_간편고지3.10.5', True),
     ('뇌혈관진단비Ⅰ',          False),   # 등급 Ⅰ → 지침대로(회사별 표)
     ('뇌혈관진단비Ⅱ',          False),
+    # ★v387 지점장 확정 2026.08.12 「허혈성 키워드가 앞에 있으면 무조건 단독」
+    ('허혈성심질환진단비Ⅱ',    True),
+    ('[갱신형]허혈성심질환진단비Ⅱ(통합간편가입형)(갱신형_20년)', True),
+    ('허혈성심장질환진단비Ⅰ',  True),
     ('특정허혈심장질환진단비',  False),   # 묶음 수식어 → 회사별 표
     ('4대순환계질환진단비',     False),
 ]
@@ -1880,26 +1906,69 @@ def _repair_anchor(lines):
 #   소스 = 제안서 <b>「가입담보요약」 표</b>(No. / 가입담보 / 가입금액 / 보험료(원) / 납기·만기).
 #   ★금액: 한글단위(3천만원→3,000) · <b>원 단위는 뒤 4자리 절삭</b>(79,822원→7, 지점장 확정).
 #   ★회사명: 표지 로고는 이미지라 안 읽힌다 → <b>전 페이지에서 `○○손해보험/생명` 스캔</b>(고정 쪽 금지).
-_JN_AMT  = re.compile(r'(\d+(?:,\d{3})*)\s*(천만원|백만원|십만원|만원|원)')
-_JN_TERM = re.compile(r'\d+년\s*/\s*\d+년(?:\([^)]*\))?|\d+년\s*/\s*\d+세')
+_JN_AMT  = re.compile(r'(\d+(?:,\d{3})*)\s*(억원|천만원|백만원|십만원|만원|원)')
+# ★★★★★v386 (지점장 지적 2026.08.12 「흥국을 못읽어낸다」): 구 _JN_TERM은 <b>슬래시형만</b> 잡았다.
+#   흥국 제안서 기간칸은 <b>`20년갱신 100세만기`</b>(슬래시 없음) → 담보 <b>전량 0건</b>이 됐다(실측).
+#   DB `20년만기20년납`도 같은 이유로 폴백 경로에서만 잡혔다. 두 형태를 정본에 추가한다.
+# ★★★★★v389 (지점장 지시 2026.08.12 「다 읽혀야한다」): 기간칸 형태가 3개뿐이라
+#   <b>현대 `20년납90세만기`·`전기납10년만기갱신(최대90세)`, 삼성 `10년납 10년만기`,
+#   한화 `100세만기 / 20년납`이 전부 미매칭</b>이었다. 기간을 못 찾으면 그 담보는
+#   조용히 사라진다(실측 현대 9/19 · 삼성 4/20+). 5형태 → 7형태.
+_JN_TERM = re.compile(r'\d+년\s*/\s*\d+년(?:\([^)]*\))?|\d+년\s*/\s*\d+세'
+                      r'|\d+년\s*갱신\s*\d+\s*[세년]\s*만기'
+                      r'|\d+년\s*만기\s*\d+\s*년\s*납'
+                      r'|(?:전기납|\d+\s*년\s*납)\s*\d+\s*[세년]\s*만기(?:갱신)?(?:\([^)]*\))?'
+                      r'|\d+\s*[세년]\s*만기\s*/\s*(?:전기납|\d+\s*년\s*납)')
 _JN_CO   = re.compile(r'([가-힣A-Za-z]{2,10}(?:손해보험|화재해상보험|화재|생명보험|생명|손보))')
 
 # ★★★★★v371: '1백50만원' 같은 <b>복합 한글단위</b>. 구 _JN_AMT는 '50만원'만 잡아 150→50이 됐다.
 _JN_AMT2 = re.compile(r'(\d+)\s*(천|백|십)\s*(\d+)?\s*만원')
+# ★★v389e 복합단위 2형태 — 실측 DB `1천6백만원`이 <b>6백만원=600</b>(정답 1,600),
+#   삼성 `1억5,000만원`이 <b>5,000</b>(정답 15,000)으로 읽혔다.
+_JN_AMT2B = re.compile(r'(\d+)\s*억\s*([\d,]+)\s*만원')
+_JN_AMT2C = re.compile(r'(\d+)\s*천\s*(\d+)\s*백\s*만원')
+# ★★★v389i `13만8,000원`(롯데 2번 보험료납입지원) — '만' 뒤에 원 단위가 붙는 형태.
+#   구 규칙은 '8,000원'만 금액으로 잡아 <b>담보명이 '13만'이라는 가짜 행</b>이 생겼다(실측).
+_JN_AMT2D = re.compile(r'(\d+)\s*만\s*[\d,]+\s*원')
 # ★v371 제안서 총보험료 — 담보별 합산은 파싱이 한 건이라도 새면 틀린다. 명시값을 1순위로 쓴다.
-_JN_PREM = re.compile(r'(?:할인후초회보험료|합계보험료|보장합계|1회\s*보험료|월\s*보험료)\D{0,12}?([\d][\d,]{3,})')
+_JN_NOISE = re.compile(r'계약사항|납입보험료|적립보험료|보장보험료|합계보험료|할인후|보험가격지수|해약환급|가입담보|담보가입')
+_JN_PREM = re.compile(r'(?:할인후초회보험료|합계보험료|보장합계|1회\s*보험료|월\s*보험료|보장보험료\s*합계)\D{0,40}?([\d][\d,]{3,})')
+
+def _jn_in_paren(s, pos):
+    """★v389 pos가 괄호 안인가. 담보명 안의 한도 금액을 가입금액으로 오인하는 것을 막는다."""
+    d = 0
+    for ch in (s or '')[:pos]:
+        if ch in '(（[': d += 1
+        elif ch in ')）]': d = max(0, d-1)
+    return d > 0
 
 def _jn_amt_at(s):
-    """문자열에서 첫 금액(만원 환산)을 찾는다 → (값, start, end) / 없으면 None."""
-    m2 = _JN_AMT2.search(s or '')
-    m1 = _JN_AMT.search(s or '')
-    if m2 and (not m1 or m2.start() <= m1.start()):
-        base = {'천':1000,'백':100,'십':10}[m2.group(2)]
-        v = int(m2.group(1))*base + (int(m2.group(3)) if m2.group(3) else 0)
-        return v, m2.start(), m2.end()
-    if m1:
-        return _jn_won(m1.group(1), m1.group(2)), m1.start(), m1.end()
-    return None
+    """문자열에서 첫 금액(만원 환산)을 찾는다 → (값, start, end) / 없으면 None.
+    ★★v389: <b>괄호 안 금액은 건너뛴다</b>. 실측 한화 459
+    `유방,갑상선…통합치료비(연간1천만원한도)(간편)  1,000만원  940원`에서 담보명 안의
+    <b>'1천만원'</b>을 가입금액으로 잡아 담보명이 '…통합치료비(연간'으로 잘리고
+    보험료가 <b>1,000</b>(정답 940)이 됐다."""
+    s = s or ''
+    cands = []
+    for m in _JN_AMT2B.finditer(s):
+        cands.append((m.start(), m.end(), int(m.group(1))*10000 + int(m.group(2).replace(',',''))))
+    for m in _JN_AMT2C.finditer(s):
+        cands.append((m.start(), m.end(), int(m.group(1))*1000 + int(m.group(2))*100))
+    for m in _JN_AMT2D.finditer(s):
+        cands.append((m.start(), m.end(), int(m.group(1))))
+    for m in _JN_AMT2.finditer(s):
+        base = {'천':1000,'백':100,'십':10}[m.group(2)]
+        v = int(m.group(1))*base + (int(m.group(3)) if m.group(3) else 0)
+        cands.append((m.start(), m.end(), v))
+    for m in _JN_AMT.finditer(s):
+        cands.append((m.start(), m.end(), _jn_won(m.group(1), m.group(2))))
+    if not cands: return None
+    cands.sort(key=lambda x: (x[0], -x[1]))
+    for st, en, v in cands:
+        if _jn_in_paren(s, st): continue
+        return v, st, en
+    st, en, v = cands[0]
+    return v, st, en
 
 def _jn_total_prem(txt):
     m = _JN_PREM.search(txt or '')
@@ -1909,11 +1978,67 @@ def _jn_total_prem(txt):
 
 def _jn_won(num, unit):
     n = int(str(num).replace(',',''))
+    if unit=='억원':   return n*10000        # ★v386 흥국 '10억원' → 100,000만원
     if unit=='천만원': return n*1000
     if unit=='백만원': return n*100
     if unit=='십만원': return n*10
     if unit=='만원':   return n
     return n//10000          # ★'원' 단위 = 뒤 4자리 절삭
+
+# ★★★★★v386 흥국 제안서 = 표 왼쪽에 <b>구분 2열</b>('선택  치료')이 붙는다.
+#   구 코드는 이걸 담보명으로 읽어 <b>모든 담보명이 '선택치료'</b>가 되거나, 접힘 판정
+#   (`한글이 없으면 접힘`)이 <b>한글이 있어서</b> 안 걸려 윗줄 담보명을 못 붙였다.
+# ★★★v389i 구 패턴은 `^기본\s*`만으로도 매칭돼 <b>담보명 `기본계약`의 '기본'을 먹었다</b>
+#   (실측 현대 001번 → `계약(상해사망…)`). 구분 2열은 항상 <b>뒤에 공백</b>이 있다(흥국 `선택 치료`).
+#   → `\s+`를 필수로 해 붙어 있는 담보명은 건드리지 않는다.
+_JN_GUBUN = re.compile(r'^(?:기본|선택)\s+(?:기본|선택|납입면제|진단|치료|수술|입원|통원|일당|사망|후유장해|배상|비용|간병|실손|재물|운전자|기타)?\s*')
+def _jn_strip_gubun(x):
+    return _JN_GUBUN.sub('', x or '').strip()
+def _jn_hasname(x):
+    t = re.sub(r'[\s\[\]()·,]', '', x or '')
+    return bool(re.search(r'[가-힣]', t)) and len(t) >= 2
+
+def _jn_frag(l):
+    """★★★v391a 담보명이 여러 줄로 접힌 표에서 <b>이어지는 조각 줄</b>인가.
+    조각 = 금액도 기간도 없고, 한글이 있고, 짧고, 표 머리·설명문이 아닌 줄."""
+    t = (l or '').strip()
+    if not t: return False
+    if _jn_amt_at(l): return False
+    # ★v391a2 한화는 조각 줄에 <b>기간칸이 같이</b> 찍힌다(`…(연간1회한)(   100세만기 / 20년납`).
+    #   기간만 보고 잘라내면 담보가 통째로 사라진다(실측 이진림 2건) — 기간·번호를 지운 뒤 판정한다.
+    core = _jn_frag_txt(l)
+    if not _jn_hasname(core) or len(core) > 60: return False
+    if _JN_NOISE.search(core): return False
+    if re.search(r'경우|한도로|받고|받은|말합니다|하여야|보장개시|피보험자', t): return False
+    return True
+
+def _jn_frag_txt(l):
+    t = (l or '').replace('┖',' ').strip()
+    # ★v391a2 구 `^\d+\s*[.)]?\s*`는 `1회한)`의 <b>1을 먹었다</b>(실측 현대 `(연간1회한)`→`(연간회한)`).
+    #   순번은 <b>마침표/괄호</b>가 붙거나 <b>공백</b>이 뒤따른다 — 그때만 지운다.
+    t = re.sub(r'^\s*\d+\s*[.)]\s*|^\s*\d+\s+','', t)
+    t = re.sub(r'^\([^)]*\)\s*(?=[가-힣])','', t).strip()
+    t = _JN_TERM.sub('', _jn_strip_gubun(t)).strip()
+    return re.sub(r'\s+','', t)
+
+def _jn_depth_bad(nm):
+    """왼쪽이 잘렸는가 = 닫는 괄호가 먼저 오거나 조각 문자로 시작."""
+    if not nm: return True
+    if nm[0] in ')ⅠⅡⅢⅣⅤ·,': return True
+    d = 0
+    for ch in nm:
+        if ch == '(': d += 1
+        elif ch == ')':
+            d -= 1
+            if d < 0: return True
+    return False
+
+def _jn_depth_open(nm):
+    d = 0
+    for ch in (nm or ''):
+        if ch == '(': d += 1
+        elif ch == ')': d -= 1
+    return d > 0
 
 def _jn_scope(txt):
     """★v371 담보 표 구간만 자른다(지점장 정본: 담보 소스 = 「가입담보요약」 표).
@@ -1921,7 +2046,9 @@ def _jn_scope(txt):
     lines = (txt or '').split('\n'); s=None; e=None
     for i,l in enumerate(lines):
         if s is None and '가입담보' in l: s=i
-        elif s is not None and e is None and ('가입설계' in l or '주의사항' in l): e=i
+        elif s is not None and e is None and ('가입설계' in l or '주의사항' in l
+             or re.sub(r'\s','',l).startswith('보장보험료합계')      # ★v386 흥국 표 끝
+             or re.sub(r'\s','',l).startswith('보장합계')): e=i
     if s is None: return lines, False
     return lines[s:(e if e is not None else len(lines))], True
 
@@ -1929,49 +2056,216 @@ def _jn_rows_tbl(lines):
     """★★★★★v371: 담보 행 = <b>금액 + 납입|보험기간이 같은 줄</b>에 있는 행.
     KB는 줄머리가 `2 일반상해사망…`(마침표 없음)·`┖ …`(번호 없음)이라 구 `\\d+\\.` 규칙이
     표를 통째로 건너뛰었다(실측 52건 → 1건). 번호 유무·마침표 유무에 의존하지 않는다."""
+    # ★★v389g 금액 <b>단위가 다음 줄로 밀린</b> 표가 있다(KB `가입78,101` / 다음 줄 `원`).
+    #   단위가 없으면 금액으로 인정되지 않아 담보가 통째로 사라진다(실측 KB 1건).
+    _lx=[]
+    for _i,_l in enumerate(lines):
+        _nx=(lines[_i+1].strip() if _i+1<len(lines) else '')
+        if _nx in ('원','만원','억원','천만원','백만원','십만원') and re.search(r'\d', _l):
+            _l = _l.rstrip()+_nx
+        _lx.append(_l)
+    lines = _lx
     rows=[]
+    # ★★★v389i 삼성 재물형은 <b>같은 담보가 건물1·건물2에 각각</b> 있고 담보명·금액이
+    #   완전히 같다(`화재(폭발포함)배상책임Ⅱ(대물1사고당) 20억원`). 구 중복제거 키가
+    #   (담보명,금액)이라 <b>건물2 3건이 통째로 삭제</b>됐다(실측 20/23). 섹션 라벨을
+    #   키에 넣어 <b>다른 섹션이면 보존</b>한다. 흥국(같은 표 2회 게재)은 섹션도 같아 종전대로 제거.
+    _sec = ''
+    _used = set()      # ★v391a 이미 다른 담보가 흡수한 조각 줄(재사용 금지)
     for i,l in enumerate(lines):
+        _sm = re.match(r'\s*([가-힣]{2,8}\(\d+/\d+\))', l)
+        if _sm: _sec = _sm.group(1)
+        # ★★v391c2 담보표가 아닌 <b>안내·예시·비교표</b> 줄 차단(실측 한화 p7 `특약 안내사항: …(연간1천만원한도)`
+        #   → `…통합치료비(연간` 이라는 <b>잘린 유령 담보</b>가 생겼다).
+        if re.search(r'안내사항|예시표|가격지수|보험료\s*비교|비교표', l): continue
         am=_jn_amt_at(l)
-        if not am: continue
+        # ★★v389h 금액칸이 <b>다른 줄로 흩어진</b> 담보(KB 6번 `가입78,101`은 윗줄, `원`은 아랫줄).
+        #   금액이 없어도 <b>줄머리 번호 + 기간</b>이 둘 다 있으면 담보행으로 인정하고
+        #   금액은 None으로 둔다 → 값은 안 들어가고 <b>[확인]큐에 뜬다</b>(조용히 사라지지 않는다).
+        if not am:
+            if _JN_TERM.search(l) and re.match(r'\s*\d+\s*[.)]?\s', l):
+                _nm0=_JN_TERM.sub('', re.sub(r'^\s*\d+\s*[.)]?\s*','',l)).strip()
+                _nm0=re.sub(r'[\d,]+\s*$','',_nm0).strip()
+                _nm0=re.sub(r'\s+','',_jn_strip_gubun(_nm0))
+                _nm0=re.sub(r'[\d,.]+$','',_nm0)
+                if _jn_hasname(_nm0) and not _JN_NOISE.search(_nm0) \
+                   and not re.search(r'경우|한도로|받고|받은|말합니다|하여야', _nm0):
+                    rows.append({'no':0,'name':_nm0,'amt':None,'prem':0,'term':''})
+            continue
         tm=_JN_TERM.search(l)
         if not tm:
             # ★v371 갱신형은 기간칸이 2줄이라 `10년/10년갱신`이 <b>다음 줄로 밀린다</b>
             #   (실측 KB 갱신 담보 9건 = 3,668원이 통째로 빠졌다). 아래 2줄까지만 본다.
+            # ★★★v389c 삼성 재물형은 <b>한 번호 아래 담보명이 여러 줄</b>이고 기간·보험료는
+            #   그중 <b>한 줄에만</b> 있다(`20억원` 줄엔 번호도 기간도 없다). 구 코드는 다음
+            #   금액 줄을 만나면 즉시 break해 그 줄들을 통째로 버렸다(실측 4/20+).
+            #   → 기간 검사를 break보다 <b>먼저</b> 한다.
             for _j in range(i+1, min(i+5, len(lines))):
-                if _jn_amt_at(lines[_j]): break        # 다음 담보 행이면 중단
                 tm=_JN_TERM.search(lines[_j])
                 if tm: break
+                if _jn_amt_at(lines[_j]): break        # 다음 담보 행이면 중단
         # ★v371: pdftotext는 <b>페이지 경계에서 기간칸을 다른 쪽으로 흘린다</b>(실측 갱신형 6건).
         #   기간이 없어도 <b>줄머리가 번호 또는 ┖</b>이면 표의 담보 행으로 인정한다.
         #   반대로 `계약자|청약번호 … 185,602원` 류는 줄머리가 한글이라 여기서 걸러진다.
-        _head = re.match(r'\s*(?:\d+\s|┖)', l)
+        # ★★v389 줄머리 번호 뒤에 <b>마침표</b>가 오는 표(현대 `186.` `425.`)가 있다.
+        #   구 `\d+\s`는 이걸 못 잡아, 기간칸까지 미매칭이면 담보가 통째로 사라졌다(실측 10건).
+        _head = re.match(r'\s*(?:\d+\s*[.)]?\s|┖)', l)
         if not tm and not _head: continue
         amt, st, en = am
         after=l[en:]
-        pm=re.search(r'([\d,]+)', after)
-        prem=int(pm.group(1).replace(',','')) if pm else 0
+        # ★★★v389 보험료 = 금액 뒤 첫 숫자였는데, 롯데는 `1,000만원 20년/20년 갱신 61,800`
+        #   순서라 <b>'20년'의 20</b>을 보험료로 집었다(전 행 20 → 합계 860, 정답 283,966).
+        #   → 기간 토큰을 먼저 지우고 남은 첫 숫자를 쓴다.
+        _aft = _JN_TERM.sub(' ', after)
+        _aft = re.sub(r'\d+\s*(?:년|세|개월|회|일)', ' ', _aft)
+        pm=re.search(r'(\d[\d,]*)', _aft)           # ★v386 구 `[\d,]+`는 쉼표만 잡아 int() 크래시(실측 DB)
+        try: prem=int(pm.group(1).replace(',','')) if pm else 0
+        except Exception: prem=0
+        # ★★v389 가입금액칸이 '보장내용 참조'인 담보(한화 4번)는 <b>보험료가 첫 금액</b>으로
+        #   잡혀 amt='1,791원'→0, prem=0이 됐다. 원 단위 + 뒤에 숫자 없음 = 그 값이 보험료다.
+        # ★★★v391c 담보표가 아니라 <b>보험료 비교표</b>인 줄(한화 p9 간편↔일반 비교)이
+        #   담보로 잡혀 <b>잘린 유령 담보</b>가 생겼다(실측 이진림 1건). 금액 뒤 숫자칸이
+        #   4개 이상이면 담보 행이 아니라 비교·예시표다.
+        if len(re.findall(r'\d[\d,]*', _aft)) >= 4: continue
+        if prem == 0 and amt == 0 and re.match(r'\s*[\d,]+\s*원', l[st:en]):
+            try: prem = int(re.sub(r'[^\d]', '', l[st:en]))
+            except Exception: prem = 0
         nm=re.sub(r'^\s*\d+\s*[.)]?\s*','', l[:st].replace('┖','')).strip()
         nm=re.sub(r'^\([^)]*\)','',nm).strip()   # ★v371b 상품 접두어 `(맞춤_간편고지Ⅱ)` 제거 —
         #   구 v370에 있던 규칙을 새 파서가 빠뜨려 <b>DB 상해수술비 50·질병수술비 20이 소실</b>됐다(실측).
-        if not re.search(r'[가-힣]', nm):      # 접힘: 담보명이 윗줄(+아랫줄)에 있다
-            pre=re.sub(r'^\s*\d+\s*[.)]?\s*','', (lines[i-1] if i>0 else '').replace('┖','')).strip()
-            pre=re.sub(r'^\([^)]*\)','',pre).strip()   # ★v371b 접힘 경로에도 동일 적용
-            nxt=(lines[i+1] if i+1<len(lines) else '').strip()
-            if re.search(r'[가-힣]', pre):
-                nm=pre
-                if nxt and not _jn_amt_at(nxt) and len(nxt)<40 and re.search(r'[가-힣)]', nxt):
-                    nm=nm+nxt
+        nm=_jn_strip_gubun(nm)                # ★v386 흥국 구분 2열('선택 치료') 제거
+        nm=_JN_TERM.sub('', nm).strip()       # ★v386 기간칸이 금액 <b>앞</b>에 오는 표(흥국) — 담보명에서 제거.
+        #   안 지우면 담보명이 '…20년갱신100세만기'로 오염되고, 접힘 행은 기간만 남아 접힘 판정이 안 된다.
+        # ★★★v389i 담보명이 <b>번호 줄에서 잘려 내려온</b> 표(삼성 `48   붕괴·` / 다음 줄
+        #   `침강 및 사태손해(실손)  8,000만원 …`). 담보명이 `침강및사태손해`로 오염돼
+        #   매핑이 어긋난다. 현재 줄에 번호가 없고 <b>윗줄이 번호+짧은 조각(금액 없음)</b>일 때만
+        #   앞에 붙인다. 윗줄에 금액이 있으면 그건 별개 담보라 건드리지 않는다.
+        if not re.match(r'\s*(?:\d+\s*[.)]?\s|┖)', l):
+            _pv = lines[i-1] if i>0 else ''
+            _pm = re.match(r'\s*\d+\s+(\S.{0,18})\s*$', _pv)
+            # ★v389i 윗줄이 <b>보험료+기간칸</b>이면 담보명 조각이 아니다(실측 삼성 `620 10년납 10년만기`
+            #   가 담보명 앞에 붙었다). 기간 토큰이 있으면 건너뛴다.
+            if _pm and _JN_TERM.search(_pv): _pm = None
+            if _pm and not _jn_amt_at(_pv) and re.search(r'[가-힣]', _pm.group(1)):
+                nm = _pm.group(1).strip() + nm
+                _used.add(i-1)   # ★v391a2 v391a 위흡수가 <b>같은 줄을 또</b> 붙이던 것 차단(실측 삼성 `붕괴·붕괴·`)
+        # ★★★v391a 담보명이 <b>여러 줄로 접힌</b> 표(롯데: 번호줄 위 3줄 + 아래 1줄).
+        #   구 코드는 위 1줄·아래 1줄만 봐서 `유사암진단비)(간편맞춤형Ⅱ)`처럼 <b>앞이 잘린 이름</b>이
+        #   그대로 매핑에 들어갔다(실측 롯데 3건 — 순번 2·7·59).
+        #   ─ 위로: 이름이 없거나 <b>왼쪽이 잘린</b> 동안 올라간다.
+        #   ─ 아래로: 괄호가 <b>안 닫힌</b> 동안 내려간다.
+        #   ─ 흡수한 줄은 `_used`에 넣어 <b>다음 담보가 다시 쓰지 못하게</b> 한다(앞 담보 꼬리 오염 차단).
+        nm = re.sub(r'\s+','', nm)
+        _wasfold = not _jn_hasname(nm)
+        _k = i-1
+        while _k >= 0 and (i-_k) <= 5 and _k not in _used and _jn_frag(lines[_k]):
+            _fr = _jn_frag_txt(lines[_k])
+            if not _fr: break
+            # ★v391a2 윗줄이 `·`·`,`·`(`·`및`로 <b>끝나면</b> 아랫줄로 이어지는 조각이다
+            #   (롯데 순번 7 `갑상선암·` / `기타피부암·`). 괄호 깊이만으로는 안 잡힌다.
+            if not (_jn_depth_bad(nm) or _fr[-1] in '·,(/' or _fr.endswith('및')): break
+            nm = _fr + nm; _used.add(_k); _k -= 1
+        _k = i+1; _first_down = True
+        while _k < len(lines) and (_k-i) <= 4 and _k not in _used and (
+                _jn_frag(lines[_k]) or
+                # ★v391a2 `형)` 같은 <b>한 글자 닫는 조각</b>은 _jn_hasname(2자 이상) 미달이라
+                #   흡수가 안 돼 담보명이 `…(갱신`으로 끝났다(실측 롯데 순번 59).
+                (_jn_depth_open(nm) and len(lines[_k].strip()) <= 8 and ')' in lines[_k]
+                 and not _jn_amt_at(lines[_k]))):
+            _fr = _jn_frag_txt(lines[_k])
+            if not _fr: break
+            # 아래로: 괄호가 안 닫혔거나, 접힘 행의 <b>첫 아랫줄이 괄호로 시작</b>(롯데 `(갱신형)`)
+            if not (_jn_depth_open(nm) or (_first_down and _wasfold and _fr[0] in '([')): break
+            nm = nm + _fr; _used.add(_k); _k += 1; _first_down = False
+        _used.add(i)
         nm=re.sub(r'\s+','',nm)
-        if not nm or not re.search(r'[가-힣]', nm): continue
-        rows.append({'no':0,'name':nm,'amt':amt,'prem':prem,
+        if not _jn_hasname(nm): continue
+        # ★v389e 표 헤더·합계 줄이 담보로 잡히던 것 차단(실측 DB `계약사항:01종…납입보험료`,
+        #   `만기/납기납입보험료`, `적립보험료`). 담보명 `보험료납입면제`·`보험료납입지원`은 안전.
+        if _JN_NOISE.search(nm): continue
+        # ★v389f 담보 상세 설명문이 담보행으로 잡히던 것 차단(실측 DB 3건).
+        #   서술어가 있거나 금액 표기가 2회 이상이면 담보명이 아니라 문장이다.
+        if re.search(r'경우|한도로|받고|받은|말합니다|하여야', nm) or nm.count('만원') >= 2: continue
+        rows.append({'no':0,'name':nm,'amt':amt,'prem':prem,'sec':_sec,
                      'term':(tm.group(0).replace(' ','') if tm else '')})
-    return rows
+    # ★★v386 같은 담보 표가 문서에 두 번 실리는 제안서(흥국: 「가입담보 리스트」+「보장사항」)가 있다.
+    #   중복이 그대로 합류하면 보험료·담보가 <b>2배</b>가 된다 → (담보명, 금액) 기준 첫 건만 남긴다.
+    _seen=set(); _uq=[]
+    for x in rows:
+        _k=(x['name'], x['amt'], x.get('sec',''))
+        if _k in _seen: continue
+        _seen.add(_k); _uq.append(x)
+    if len(_uq)!=len(rows): print(f'[JEAN] 중복 담보행 {len(rows)-len(_uq)}건 제거 → {len(_uq)}건')
+    return _uq
+
+def _jn_scopes(txt):
+    """★★★v389d 담보 표가 <b>여러 블록</b>인 제안서가 있다(삼성 재물 = 건물1 / 피보험자 /
+    건물2, 블록마다 `보장보험료 합계`로 끝난다). 구 `_jn_scope`는 <b>첫 합계에서 끊어</b>
+    뒤 블록을 통째로 버렸다(실측 12건, 정답 20+). → 시작~종료 구간을 <b>전부</b> 모은다."""
+    lines = (txt or '').split('\n'); segs=[]; s=None
+    for i,l in enumerate(lines):
+        t = re.sub(r'\s','',l)
+        if s is None:
+            # ★v389e `보장(보상)내용` 열이 있는 표는 <b>담보 상세 설명 블록</b>이다(DB 8~9p).
+            #   요약표와 같은 담보를 다시 싣고 설명문에서 가짜 행이 나온다(실측 5건).
+            if ('가입담보' in t or '담보가입' in t) and '보장내용' not in t and '보상)내용' not in t: s=i
+        elif ('가입설계' in t or '주의사항' in t
+              or '보장보험료합계' in t or '보장합계' in t):
+            segs.append((s,i)); s=None
+    if s is not None: segs.append((s,len(lines)))
+    if not segs: return [lines], False
+    return [lines[a:b] for a,b in segs], True
 
 def parse_jean(txt):
     """가입제안서 텍스트 → [{'name','amt','prem','term'}] 리스트.
     ★v371: 신규 표 파서를 먼저 쓰고, 결과가 빈약하면 구 `\\d+\\.` 규칙으로 폴백한다."""
-    _ls,_sc = _jn_scope(txt)
-    _new = _jn_rows_tbl(_ls)
+    _segs,_sc = _jn_scopes(txt)
+    _new = []
+    for _bi,_ls in enumerate(_segs):
+        _rr = _jn_rows_tbl(_ls)
+        for _r in _rr: _r['blk'] = _bi
+        _new += _rr
+    _sn=set(); _u=[]
+    for x in _new:                       # ★v389d 구간을 합친 뒤 다시 한 번 중복 제거
+        # ★★★v389i 블록(섹션)이 다르면 같은 담보라도 <b>별개 계약 대상</b>이다
+        #   (삼성 재물 건물1·건물2에 화재배상책임 3줄이 각각 존재 — 구 키는 3건을 삭제했다).
+        k=(x['name'], x['amt'], x.get('sec',''), x.get('blk',0))
+        if k in _sn: continue
+        _sn.add(k); _u.append(x)
+    # ★★★★★v390a (2026.08.12 흥국 실측): 같은 담보 표가 문서에 <b>두 번</b> 실리는데
+    #   두 번째 표에서는 담보명이 줄바꿈으로 <b>잘려 있다</b>(`…(통합간편가입형)(갱신형_20년)`
+    #   ↔ `…(통합간`). 이름이 달라 구 중복제거를 통과해 <b>20건 → 40건</b>이 됐고, 그 40줄이
+    #   뒤 단계에서 서로 뭉쳐 담보가 오배정됐다.
+    #   → <b>금액·보험료·기간이 모두 같고 한쪽 이름이 다른 쪽의 접두</b>면 같은 담보로 본다.
+    #     남기는 것은 <b>긴 이름</b>(온전한 쪽)이다.
+    #   ★★v391d 상세 보장내용 표는 <b>보험료·기간칸이 없다</b>(한화 p3~6 `459. …(연간1천만원한도)`
+    #     → 이름만 `…통합치료비(연간`으로 잘려 <b>유령 담보</b>가 남았다. 실측 이진림 1건).
+    #     → <b>금액이 같고</b> 보험료·기간이 <b>같거나 한쪽이 비었으면</b> 같은 묶음으로 본다.
+    _grp={}
+    for x in _u: _grp.setdefault(x['amt'], []).append(x)
+    for _g in list(_grp.values()):
+        pass
+    _drop=set()
+    for _g in _grp.values():
+        if len(_g) < 2: continue
+        _srt=sorted(_g, key=lambda y: -len(y['name']))
+        _keep=[]
+        for y in _srt:
+            # ★v390a 이름이 <b>완전히 같은</b> 건은 대상이 아니다 — 삼성 재물 건물1·건물2처럼
+            #   같은 담보명이 섹션별로 각각 존재하는 정상 케이스를 죽인다(v389i 회귀 방지).
+            def _compat(k, y):
+                if k['name'] == y['name'] or not k['name'].startswith(y['name']): return False
+                _p1,_p2 = k.get('prem',0), y.get('prem',0)
+                _t1,_t2 = k.get('term',''), y.get('term','')
+                if _p1 and _p2 and _p1 != _p2: return False
+                if _t1 and _t2 and _t1 != _t2: return False
+                return True
+            if any(_compat(k, y) for k in _keep): _drop.add(id(y))
+            else: _keep.append(y)
+    if _drop:
+        _u=[x for x in _u if id(x) not in _drop]
+        print(f'[JEAN] v390a 잘린 중복 담보명 {len(_drop)}건 제거 → {len(_u)}건')
+    _new = _u
     _old = _parse_jean_dot(txt)
     if len(_new) >= max(3, len(_old)): return _new
     return _old if _old else _new
@@ -2016,13 +2310,40 @@ def _jn_cover_word(txt):
         return m.group(1) if m else ''
     return ''
 
+# ★★★★★v389 정본 회사키 = `_hbkey`가 쓰는 목록 그대로다(새 표를 만들지 않는다).
+#   `let:` = 롯데(#2 정본: 2열 = 롯데(let:)).
+_JN_CO2 = (('KB','KB'),('한화','한화'),('농협','NH농협'),('NH','NH농협'),('DB','DB'),
+           ('현대해상','현대해상'),('흥국','흥국'),('롯데','롯데'),('let:','롯데'),
+           ('삼성','삼성화재'),('메리츠','메리츠'))
+
+def _jn_is_customer(w, txt):
+    """★v389 표지 1번 단어가 <b>고객 이름</b>인가. 롯데는 로고가 이미지라 '최구갑님을',
+    현대는 '정현주'가 회사명으로 들어갔다. 회사명이 틀리면 `_hbkey`가 None이 되어
+    <b>심장 정본표 분해가 통째로 죽는다</b>."""
+    if not w: return False
+    t = txt or ''
+    if re.search(re.escape(w) + r'\s*님', t): return True
+    if re.search(r'(?:계약자|피보험자)\s*[:：]?\s*' + re.escape(w), t): return True
+    return False
+
 def jean_company(txt):
-    """제안서 회사명. ①전문에 '○○손해보험/생명' 글자가 있으면 그것 → ②표지 1번 단어 → ③도메인."""
+    """제안서 회사명. ①전문 '○○손해보험/생명' → ②정본 회사키 스캔 → ③표지 1번 단어
+    (고객명이면 거부) → ④도메인."""
     for m in _JN_CO.finditer(txt or ''):
         c = m.group(1)
         if '고객상담' in c or '홈페이지' in c: continue
         return c
+    # ★★v389b 스캔 범위 = <b>표지 1페이지</b>. 전문을 훑으면 오탐이 난다 —
+    #   실측: 현대 발행자코드 `4BKB27` → <b>KB</b>, 롯데 본문 문장 → <b>한화</b>.
+    _t = re.sub(r'\s', '', (txt or '').split('\f')[0])
+    for _k, _co in _JN_CO2:
+        if _k in _t:
+            print(f'[JEAN 회사] 표지 정본 회사키 = {_k!r} → {_co}')
+            return _co
     _w = _jn_cover_word(txt)
+    if _w and _jn_is_customer(_w, txt):
+        print(f'[JEAN 회사] 표지 1번 단어 {_w!r} = 고객명 → 거부')
+        _w = ''
     if _w:
         print(f'[JEAN 회사] 표지 1번 단어 = {_w!r}')
         return _w
@@ -2058,8 +2379,26 @@ def build_proposal_contract(pdf_bytes, fname=''):
     term = max(_tm, key=_tm.get) if _tm else ''
     _pp  = term.split('/')[0] if '/' in term else ''
     # 담보 dict = 기존 엔진(rule_extract)에 그대로 태운다
-    blk  = [f"{x['name']}  {x['amt']}" for x in rows if x['amt'] is not None]
-    dambo= rule_extract(blk)
+    # ★★★v391b 삼성 재물형은 <b>건물1·건물2에 같은 이름의 담보</b>가 각각 있다.
+    #   blk가 담보명 키 dict로 들어가 <b>뒤엣것이 앞엣것을 덮어 6건이 조용히 사라졌다</b>(실측 17/23).
+    #   → 같은 이름이면 <b>섹션 라벨을 붙여 둘 다 남긴다</b>(합산은 지점장 확정 전이라 하지 않는다).
+    #   ★[확인 대기] 건물1·건물2 동명 담보를 합산할지·분리할지·대표만 쓸지 — 지점장 확정 필요.
+    _agg = {}; _ord = []; _mg = []
+    for x in rows:
+        if x['amt'] is None: continue
+        k = x['name']
+        if k in _agg:
+            # ★v391b2 <b>합산하지 않는다</b>(20억+20억=40억은 내가 만들어낸 값이다).
+            #   섹션 라벨을 붙여 <b>둘 다 남기고</b> 확인큐에서 지점장이 판정한다.
+            _sfx = x.get('sec') or '2'
+            k2 = '%s[%s]' % (k, _sfx); _n = 2
+            while k2 in _agg: _n += 1; k2 = '%s[%s#%d]' % (k, _sfx, _n)
+            _mg.append(k2); _agg[k2] = x['amt']; _ord.append(k2)
+        else:
+            _agg[k] = x['amt']; _ord.append(k)
+    if _mg: print('[JEAN 동명담보 분리] %d건 — %s' % (len(_mg), ' | '.join(_mg[:8])))
+    blk  = ["%s  %s" % (k, _agg[k]) for k in _ord]
+    dambo= rule_extract(blk, prefolded=True)   # ★v390b 접힘 복원 재적용 금지
     dambo.pop('__DUP__', None)          # ★내부 로그 키 — 계약 dambo에 남으면 확인큐 기재에서 터진다
     print(f'[JEAN] 회사={co} 담보={len(rows)}건 매핑입력={len(blk)} 보험료={prem:,} 납기/만기={term}')
     return {'dup':0,'holder':'','company':co,'ipwon':{},'ci_extra':0,
@@ -2581,6 +2920,22 @@ def parse_txt(txt, filename='', extra=None):
             _kk = re.sub(r'\s', '', str(_k))
             if '[확인]' in _kk: continue
             if not ('사망' in _kk and '후유장해' in _kk): continue      # 결합담보만
+            # ★★★★★v392 (2026.08.12 하소망 실측 — 지점장 지시):
+            #   별첨 담보명이 <b>`특약명 : 담보명`</b> 형태인 회사가 있다(새마을금고).
+            #   `화재상해사망후유장해특약 : <b>화상수술비</b>` — 사망·후유장해는 <b>콜론 앞 특약명</b>에만 있고
+            #   진짜 담보는 뒤의 `화상수술비`인데, v46이 특약명만 보고 <b>상해사망 + 상해후유장해로 오배정</b>했다
+            #   (실측: 화상진단비 50 · 화상수술비 100이 마스터 97·75행에 안 들어가고 사망·후유장해에 가산).
+            #   → <b>콜론 뒤가 실담보명</b>이다. 그 뒤에 사망도 후유장해도 <b>없으면</b> 결합담보가 아니다 —
+            #     분해하지 않고 <b>키를 실담보명으로 바꿔</b> 정상 매핑에 넘긴다.
+            #   ★회귀 0 설계: 콜론 뒤에 사망 또는 후유장해가 <b>하나라도 있으면</b> 종전대로 분해한다
+            #     (`…특약 : 일반상해사망공제금` · `…특약 :화재상해고도후유장해공제금[80%이상]` 등 불변).
+            _tail = re.split(r'[:：]', str(_k))[-1].strip() if re.search(r'[:：]', str(_k)) else ''
+            _tk = re.sub(r'\s', '', _tail)
+            if _tk and ('사망' not in _tk) and ('후유장해' not in _tk):
+                _v0 = _c['dambo'].pop(_k)
+                _c['dambo'][_tail] = _c['dambo'].get(_tail, 0) + _v0
+                print(f"[v392 특약접두] {_c.get('company','')} '{_k}' {_v0} → 실담보명 '{_tail}' (결합분해 안 함)")
+                continue
             _v = _c['dambo'][_k]
             _ax = '질병' if '질병' in _kk else '상해'                    # 축: 질병 / 상해
             # 등급: '80%이상' 또는 '고도' 명시 → 80% 행 / 명시 없으면 3% 행 (담보명 문자 그대로, 추측 금지)
@@ -2901,6 +3256,24 @@ import re
 # 마스터 82행 전부 키워드로 잡는 사전 엔진. (predicate, std, jong)
 # 순서 = 구체 우선. 앞에서 잡히면 끝.
 def _norm(s): return re.sub(r'\s+','',s)
+
+# ★★★★★v386 (지점장 확정 2026.08.12): 「<b>116대는 6개로 다 찍어내야한다 · 1-5종처럼</b>」
+#   구 코드는 n대수술비를 <b>대표(max) 1개</b>로만 찍어 KB 116대 Ⅰ~Ⅵ(500·200·100·60·30·10)이
+#   <b>500 하나</b>로 뭉갰다(실측). → 1-5종과 같은 <b>등급별 슬래시 6칸</b>으로 기재한다.
+_NDAE_G = (('Ⅵ',6),('Ⅴ',5),('Ⅳ',4),('Ⅲ',3),('Ⅱ',2),('Ⅰ',1),
+           ('III',3),('VI',6),('IV',4),('II',2),('V',5),('I',1),
+           ('6종',6),('5종',5),('4종',4),('3종',3),('2종',2),('1종',1))
+def _ndae_grade(nm):
+    """'116대질병수술비Ⅳ' → 4 / 등급 없으면 0. ★'대' 뒤쪽만 본다(상품명 로마숫자 오독 차단)."""
+    import re as _re
+    t = _re.sub(r'\s','', str(nm or '')).replace('（','(').replace('）',')')
+    t = _re.sub(r'\([^)]*\)','', t)                 # (간편가입)·(갱신형) 등 제거
+    m = _re.search(r'(?<!\d)\d{2,3}대', t)
+    if not m: return 0
+    tail = t[m.end():]
+    for k,g in _NDAE_G:
+        if k in tail: return g
+    return 0
 
 def _rmn(s):
     """담보명 등급 로마숫자/숫자 판별 → 3/2/1/0. 괄호 속(건강맞춤형Ⅱ 등)은 제외."""
@@ -3676,7 +4049,7 @@ def inject_sum_cache(path):
         for r in range(2, ws.max_row+1):
             f = ws.cell(r,last).value
             if not (isinstance(f,str) and f.startswith('=')): continue
-            nums = [ws.cell(r,c).value for c in range(3,last) if isinstance(ws.cell(r,c).value,(int,float))]
+            nums = [ws.cell(r,c).value for c in _data_cols(ws,last) if isinstance(ws.cell(r,c).value,(int,float))]   # ★v388 합산 열 제외
             s = sum(nums)
             if f.startswith('=MIN('):
                 m = re.search(r',\s*(\d+)\s*\)\s*$', f); v = min(s, int(m.group(1))) if m else s
@@ -3687,6 +4060,26 @@ def inject_sum_cache(path):
             else:
                 v = s
             vals[ws.cell(r,last).coordinate] = v
+        # ★★v388b 보유 합계·제안 합계 열에도 <b>같은 캐시</b>를 박는다.
+        #   구 코드는 끝열만 캐시해서 <b>폰·미리보기에서 두 열이 빈칸으로 보였다</b>(수식만 있고 값이 없음).
+        for c in range(3, last):
+            if str(ws.cell(1,c).value or '').strip() not in ('보유 합계','제안 합계'): continue
+            for r in range(2, ws.max_row+1):
+                f2 = ws.cell(r,c).value
+                if not (isinstance(f2,str) and f2.startswith('=')): continue
+                m2 = re.search(r'([A-Z]+)(\d+):([A-Z]+)(\d+)', f2)
+                if not m2: continue
+                c0 = openpyxl.utils.column_index_from_string(m2.group(1))
+                c1 = openpyxl.utils.column_index_from_string(m2.group(3))
+                _ns2 = [v for v in (ws.cell(r,cc).value for cc in range(c0, c1+1))
+                        if isinstance(v,(int,float))]
+                _s2 = sum(_ns2)
+                if f2.startswith('=MIN('):
+                    _m3 = re.search(r',\s*(\d+)\s*\)\s*$', f2)
+                    _s2 = min(_s2, int(_m3.group(1))) if _m3 else _s2
+                elif f2.startswith('=IF(COUNT'):
+                    _s2 = max(_ns2) if _ns2 else 0
+                vals[ws.cell(r,c).coordinate] = _s2
         if not vals: return False
         zin = zipfile.ZipFile(path,'r')
         # 보장분석 시트 XML 경로 확인 (workbook.xml 순서 + rels)
@@ -4138,7 +4531,8 @@ def build_excel(data, out):
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
 
         dambo = ct['dambo']
-        jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
+        jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}
+        ndae_acc = [0]*6      # ★v386 116대/120대 수술비 = 등급 Ⅰ~Ⅵ 슬래시 6칸   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
         trio_acc = [0,0,0]   # ★v29y MRI/도수치료/비급여주사
         jong_blue = {'상해 종수술비(1-5종)':False, '질병 종수술비(1-5종)':False}
         # ★v378 종번호 없는 단일금액 종수술(질병종수술·상해종수술·파워수술보장 등) 수집칸.
@@ -4415,14 +4809,21 @@ def build_excel(data, out):
                     # 흥국·롯데: 특정Ⅰ=급성심근 / 특정Ⅱ=협심증+염증 / 롯데 15대=판막·심근병·빈맥·심부전
                     #   ★v384 구 주석 '허혈'은 협심증으로 표기(묶음은 허혈성 행에 안 넣는다).
                     if ('흥국' in _co) or ('롯데' in _co):
+                        # ★★★★★v386 (지점장 지적 2026.08.12 「흥국을 못읽어낸다」 실측 후속):
+                        #   흥국 <b>허혈성심질환진단비Ⅱ</b> 500이 <b>협심증·염증으로 분해</b>됐다.
+                        #   원인 = 아래 `_t==2 → 협심증·염증`(롯데 특정심장Ⅱ 규칙)이 <b>묶음 수식어 없이 등급만</b>
+                        #   붙은 단독 담보까지 잡았기 때문. 같은 계약의 `뇌혈관질환진단비Ⅱ`는 뇌 경로라
+                        #   <b>단독으로 정상 기재</b>돼 비대칭이 드러났다(#27 단독 5종 위반).
+                        #   → 등급 분기는 <b>묶음 수식어가 있을 때만</b> 탄다. 없으면 resolve가 자기 행으로 보낸다.
+                        _hl_bund = any(_k in _rn for _k in ('특정','15대','심혈관','대심장','순환계'))
                         if _i49excl: _heart_bundle=['협심증','빈맥','심부전']   # 흥국 특정심혈관질환(기타심장부정맥제외)=협심·허혈·빈맥·심부전(별표70)
                         elif _i49: _heart_bundle=['부정맥']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
                         elif '15대' in _rn: _heart_bundle=['심장판막','심근병증','빈맥','심부전']
                         elif ('방실' in _rn) or ('전도' in _rn): pass   # 전용행無→[확인]
                         elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)) or ('심낭' in _rn): _heart_bundle=['염증']
-                        elif _t==1: _heart_bundle=['급성심근경색']
-                        elif _t==2: _heart_bundle=['협심증','염증']
+                        elif _t==1 and _hl_bund: _heart_bundle=['급성심근경색']
+                        elif _t==2 and _hl_bund: _heart_bundle=['협심증','염증']
                     # ★DB(정본 재수정): 특정Ⅰ=협심증·허혈·염증 / 특정Ⅱ=급성심근 / 특정Ⅲ=판막·빈맥·심부전 / 심근병증
                     elif ('DB' in _co) or ('디비' in _co):
                         if _t==2: _heart_bundle=['급성심근경색']
@@ -4555,6 +4956,12 @@ def build_excel(data, out):
                 if blue: jong_blue[std] = True
                 surg_trace.append((ct['company'], raw, f'{std} 단일금액(종번호 없음)', amt))
                 continue
+            if std == 'n대수술비':                       # ★v386 116대 6칸 슬래시
+                _ndg = _ndae_grade(raw)
+                if _ndg:
+                    ndae_acc[_ndg-1] = max(ndae_acc[_ndg-1], amt)
+                    surg_trace.append((ct['company'], raw, f'n대수술비 {_ndg}등급 슬롯', amt))
+                    continue
             if std in jong_acc and 1 <= jong <= 5:
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
@@ -4653,6 +5060,15 @@ def build_excel(data, out):
                 if r:
                     ws.cell(r,col).value = '/'.join(str(x) for x in use)
                     ws.cell(r,col).font = BL if (gen or jong_blue[nm]) else BK
+
+        if any(ndae_acc):   # ★v386 116대 수술비 등급 슬래시 기재
+            _rnd = nm2r.get('n대수술비') or nm2r.get('120대수술비')
+            if _rnd:
+                _cur = ws.cell(_rnd,col).value
+                if isinstance(_cur,(int,float)) and _cur:      # 등급 없는 단일금액이 이미 있으면 전 칸에 가산
+                    for _k in range(6): ndae_acc[_k] += int(_cur)
+                ws.cell(_rnd,col).value = '/'.join(str(x) for x in ndae_acc)
+                ws.cell(_rnd,col).font = BL if gen else BK
 
         if any(trio_acc):   # ★v29y MRI/도수/주사 슬래시 기재(실손 계열=항상 파랑)
             _rt=nm2r.get('MRI/도수치료/비급여주사')
@@ -5066,7 +5482,20 @@ def build_excel(data, out):
         print(f"[v272 1-3종] {_cn3} {_c3.get('contract_date')} 수술보장 대표 {_mx3:,.0f} → 질병·상해 종수술비(1-3종)")
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
-    last_col = 3 + n_ct
+    # ★★★★★v388 (지점장 확정 2026.08.12): 「<b>엑셀은 각각 / 보장분석지·보장진단서는 합산.
+    #   그래서 엑셀은 헷갈릴 수 있으니 따로 합산라인 추가해라 — 보유 합계 | 제안 합계 둘 다.
+    #   보유합계 글자색 = 블랙 or 블루 / 제안합계 = 레드</b>」
+    #   배치 = [보유 계약들][제안 계약들] <b>[보유 합계][제안 합계]</b> [합계]
+    #   ★<b>합계 열을 계속 맨 끝에 둔다</b> — `ws.max_column`을 끝열로 쓰는 코드가 8곳(PPT·설명서·진단서·캐시)
+    #     이라 순서를 바꾸면 4대 산출물이 통째로 다른 열을 읽는다.
+    #   ★<b>기존 합계 수식은 손대지 않는다</b> — 범위가 `C..마지막 계약열`이라 새 2열을 포함하지 않는다.
+    #   ★<b>제안 계약이 없으면 2열을 만들지 않는다</b>(종전 구조 그대로 = 회귀 0). 헷갈릴 일이 없기 때문.
+    _own_n = sum(1 for _c in contracts if not _c.get('proposal'))
+    _jn_n  = n_ct - _own_n
+    _has_jn = _jn_n > 0
+    own_sum_col  = (3 + n_ct) if _has_jn else 0
+    jean_sum_col = (4 + n_ct) if _has_jn else 0
+    last_col = (5 + n_ct) if _has_jn else (3 + n_ct)
     # ★★★v230 (지점장 지시 2026.07.25, 영구): <b>유사암 자동유도(일반암×10%)는 완전 폐기</b>.
     #   지점장 원문 = <b>"유사암 적힌 것만 넣어라"</b>. 별첨에 유사암 담보가 없으면 <b>그 계약은 공란</b>이다 —
     #   일반암 금액으로 유추해 넣지 않는다. 구 v30q 자동유도가 없는 담보를 만들어냈다.
@@ -5075,9 +5504,17 @@ def build_excel(data, out):
     #   ★구 v213 '명시액이 하나도 없을 때만 유도' 게이트 방식도 함께 폐기(지점장 'no').
 
     first_L = get_column_letter(3)
-    last_ct_L = get_column_letter(last_col-1) if n_ct>0 else first_L
+    last_ct_L = get_column_letter(2 + n_ct) if n_ct>0 else first_L   # ★v388 마지막 <b>계약</b> 열(합산 2열 제외)
     hc = ws.cell(1, last_col)
     hc.value = '합계'; hc.font = W; hc.fill = FILL_SUM; hc.alignment = AL
+    if _has_jn:                                  # ★v388 보유 합계 · 제안 합계 헤더
+        _oh = ws.cell(1, own_sum_col)
+        _oh.value = '보유 합계'; _oh.font = W; _oh.fill = FILL_SUM; _oh.alignment = AL
+        _jh = ws.cell(1, jean_sum_col)
+        _jh.value = '제안 합계'
+        _jh.font = Font(color='000000', name='맑은 고딕', size=9, bold=True)
+        _jh.fill = PatternFill('solid', fgColor='ED7D31')     # 제안 열과 같은 주황
+        _jh.alignment = AL
     # 보험료 합계 = 숫자만 표기(§3): 수식 아닌 계산된 숫자값. 글자 검정(흰바탕)
     # ★v128 지점장 확정 2026.07.21: 월보험료 합계 = 잔여보험료 > 0(납입 진행중) 계약만.
     #   납입완료(회차 a>=b) 계약은 계약열에는 남기되 합계에서는 뺀다.
@@ -5089,10 +5526,17 @@ def build_excel(data, out):
         #   ★캐시: inject_sum_cache가 숫자 셀만 합산해 같은 값을 박으므로 설명서·PPT가 0원으로 읽지 않는다.
         ws.cell(2, last_col).value = f'=SUM(C2:{last_ct_L}2)'
         ws.cell(2, last_col).font = BK
+        if _has_jn:                              # ★v388 보험료도 보유/제안 분리
+            _oL = get_column_letter(2 + _own_n)
+            _jF = get_column_letter(3 + _own_n)
+            ws.cell(2, own_sum_col).value  = f'=SUM(C2:{_oL}2)'
+            ws.cell(2, own_sum_col).font   = BK
+            ws.cell(2, jean_sum_col).value = f'=SUM({_jF}2:{last_ct_L}2)'
+            ws.cell(2, jean_sum_col).font  = Font(color='C00000', name='맑은 고딕', size=9)
 
     for r in range(6, ws.max_row+1):
         slash_t=[0]*8; slash_n=0; is_slash=False; has_num=False   # ★v29v 1-8종·v29y 트리오: 실제 칸수 따름
-        for col in range(3, last_col):
+        for col in range(3, 3 + n_ct):        # ★v388 데이터(계약) 열만 — 합산 2열 제외
             v = ws.cell(r,col).value
             if isinstance(v,(int,float)): has_num=True
             elif isinstance(v,str) and '/' in v:
@@ -5109,7 +5553,7 @@ def build_excel(data, out):
             #   단일금액은 1~5종 어느 종이든 그 금액이므로 <b>모든 종 칸에 가산</b>한다.
             #   ※이 해석은 지점장 확정 대기 항목이다(다른 슬래시 행에는 적용하지 않는다).
             if has_num and '종수술비' in str(ws.cell(r,2).value or ''):
-                _lump = sum(v for v in (ws.cell(r,c).value for c in range(3,last_col))
+                _lump = sum(v for v in (ws.cell(r,c).value for c in range(3, 3 + n_ct))   # ★v388
                             if isinstance(v,(int,float)))
                 if _lump:
                     for k in range(slash_n or 5): slash_t[k] += _lump
@@ -5125,7 +5569,7 @@ def build_excel(data, out):
             if _bnm=='입원': sc.value = f'=SUM({_rng})'
             elif _bnm=='자부상': sc.value = f'=MIN(SUM({_rng}),80)'          # ★지점장 2026.07.02: 자부상 최대 80만 캡
             elif _bnm=='120대수술비':                                       # ★v30k n대수술비=계약별 값 가로 슬래시(합산·최댓값 금지, 지점장 2026.07.03)
-                _nd=[ws.cell(r,c).value for c in range(3,last_col)]
+                _nd=[ws.cell(r,c).value for c in range(3, 3 + n_ct)]   # ★v388
                 _nd=[str(int(x)) for x in _nd if isinstance(x,(int,float)) and x>0]
                 sc.value = '/'.join(_nd) if _nd else f'=SUM({_rng})'
             elif _bnm in ('간병인','중입자치료비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자=전 계약 대표 최댓값 1건
@@ -5135,6 +5579,49 @@ def build_excel(data, out):
             #   계약 셀은 파랑인데 <b>끝열 합계만 검정</b>이었다(`sc.font = BK` 고정).
             #   §10 정본 = <b>실손(입원·통원·약값) + 일상배상책임은 항상 파랑</b> → 끝열도 파랑이어야 한다.
             sc.font = BL if _bnm in _BLUE_ROWS else BK
+
+        # ★★★★★v388 보유 합계 · 제안 합계 (지점장 확정 2026.08.12)
+        #   ・슬래시 행은 SUM이 안 되므로 <b>구간별로 직접 합산해 문자열</b>로 넣는다(끝열과 같은 방식).
+        #   ・대표(max)·캡 행은 구간 SUM만 넣는다 — <b>끝열의 MIN/MAX 값이 정본</b>이고 이 두 열은 참고용이다.
+        #   ・색: 보유합계 = 끝열과 동일 규칙(파랑/검정) / 제안합계 = <b>레드 C00000</b>.
+        if _has_jn:
+            _bnm2 = str(ws.cell(r,2).value).strip()
+            _RD2  = Font(color='C00000', name='맑은 고딕', size=9)
+            _oL2  = get_column_letter(2 + _own_n)
+            _jF2  = get_column_letter(3 + _own_n)
+            for _sc2, _rng2, _c0, _c1, _isj in (
+                    (ws.cell(r, own_sum_col),  f'C{r}:{_oL2}{r}',            3,          3 + _own_n, False),
+                    (ws.cell(r, jean_sum_col), f'{_jF2}{r}:{last_ct_L}{r}',  3 + _own_n, 3 + n_ct,   True)):
+                _sl = [0]*8; _sn = 0; _any = False
+                for _c2 in range(_c0, _c1):
+                    _v2 = ws.cell(r,_c2).value
+                    if isinstance(_v2,str) and '/' in _v2:
+                        _any = True
+                        _ps2 = _v2.split('/')[:8]; _sn = max(_sn, len(_ps2))
+                        for _k2,_p2 in enumerate(_ps2):
+                            try: _sl[_k2] += int(_p2)
+                            except: pass
+                # ★v388b 끝열과 <b>같은 규칙</b>을 적용해야 「보유+제안 = 합계」가 눈으로 맞는다.
+                #   v378: 종수술 행에 종별 슬래시와 단일금액이 섞이면 단일금액을 <b>전 종 칸에 가산</b>.
+                #   이 규칙을 빼먹어 실측에서 보유 `30/0/0/0/0`인데 합계 `1080/1110/...`로 어긋났다.
+                if _any and any(_sl) and '종수술비' in _bnm2:
+                    _lp2 = sum(v for v in (ws.cell(r,_c2).value for _c2 in range(_c0,_c1))
+                               if isinstance(v,(int,float)))
+                    if _lp2:
+                        for _k3 in range(_sn or 5): _sl[_k3] += _lp2
+                if _any and any(_sl):
+                    _sc2.value = '/'.join(str(x) for x in _sl[:(_sn or 5)])
+                elif _bnm2 == '자부상':
+                    # ★★v388b 캡·대표(max) 행은 <b>끝열과 같은 수식</b>을 쓴다(결과값 동결).
+                    #   단순 SUM으로 두면 실측처럼 <b>보유 30 + 제안 600 인데 합계 80</b>이 되어
+                    #   지점장이 없애려던 그 헷갈림이 그대로 남는다. 각 칸이 「그 구간의 실제 보장액」이 되게 한다.
+                    #   ※이 행들은 합이 아니라 캡·대표이므로 「보유+제안 = 합계」가 원래 성립하지 않는다.
+                    _sc2.value = f'=MIN(SUM({_rng2}),80)'
+                elif _bnm2 in ('간병인','중입자치료비','간호통합병동'):
+                    _sc2.value = f'=IF(COUNT({_rng2})=0,0,MAX({_rng2}))'
+                else:
+                    _sc2.value = f'=SUM({_rng2})'
+                _sc2.font = _RD2 if _isj else (BL if _bnm2 in _BLUE_ROWS else BK)
 
     ws.column_dimensions['B'].width = 22
     for c in range(3, last_col+1):
@@ -5656,6 +6143,8 @@ def build_excel(data, out):
         for _r9 in range(6, _ws0.max_row+1):
             if str(_ws0.cell(_r9,2).value or '').strip() in _BLUE_ROWS:
                 for _c9 in range(3, _lc0+1):
+                    # ★v388 제안 합계 열은 <b>레드가 정본</b>(지점장 확정) — 실손 파랑 강제에서 제외
+                    if str(_ws0.cell(1,_c9).value or '').strip() == '제안 합계': continue
                     if _ws0.cell(_r9,_c9).value not in (None,''):
                         _ws0.cell(_r9,_c9).font = BL
     except Exception as _e9:
@@ -5720,6 +6209,17 @@ def _force_nocalc_xml(path):
             pass
         return False
 
+# ★★★★★v388 합산 열(보유 합계·제안 합계·합계) 판정 — `ws.max_column`을 끝열로 쓰는 코드가
+#   <b>데이터 열을 순회할 때</b> 새로 생긴 합산 2열을 포함하면 <b>이중 계산</b>이 된다.
+#   헤더 글자로 판정한다(고정 열 번호를 박지 않는다 — 구조 가정 금지 #11).
+def _is_sumcol(ws, c):
+    h = str(ws.cell(1, c).value or '').strip()
+    return h in ('합계', '보유 합계', '제안 합계')
+
+def _data_cols(ws, last):
+    """3 ~ last-1 중 <b>계약 열</b>만 (합산 열 제외)."""
+    return [c for c in range(3, last) if not _is_sumcol(ws, c)]
+
 def read_excel_totals(path):
     """완성 엑셀에서 담보명->합계 읽음. 등식2: PPT는 이것만 본다.
        ★★★v218 (지점장 지시 2026.07.25, 영구): <b>PPT 합계는 엑셀 끝열과 '반드시' 같아야 한다</b>.
@@ -5737,7 +6237,7 @@ def read_excel_totals(path):
 
     def _fallback(r):
         """끝열 캐시가 없을 때 — 엑셀 끝열 수식과 <b>같은 규칙</b>으로 계산한다."""
-        nums = [ws.cell(r,c).value for c in range(3,last) if isinstance(ws.cell(r,c).value,(int,float))]
+        nums = [ws.cell(r,c).value for c in _data_cols(ws,last) if isinstance(ws.cell(r,c).value,(int,float))]   # ★v388 합산 열 제외
         s = sum(nums)
         f = wsf.cell(r,last).value
         if isinstance(f,str) and f.startswith('='):
@@ -5767,7 +6267,7 @@ def read_excel_totals(path):
         #   엑셀의 100은 <b>갱신 계약 값이라 파랑</b>이어야 한다. 역방향도 동일하게 발생.
         #   → <b>엑셀 데이터셀의 글자색(파랑 0070C0 = 갱신)을 그대로 읽어</b> 분할한다. 이중 계산 폐기.
         _cells=[]
-        for c in range(3, last):
+        for c in _data_cols(ws, last):        # ★v388 합산 열 제외(이중 계산 방지)
             _v = ws.cell(r,c).value
             if not isinstance(_v,(int,float)) or not _v: continue
             try: _rgb = str(wsf.cell(r,c).font.color.rgb or '')
@@ -6499,7 +6999,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   </div>
   <div class="bar">
     <label class="up" id="upp">📑 <span id="upplabel">보장분석 PDF 선택</span></label>
-    <label class="up" id="up">📑 <span id="uplabel">가입제안서 PDF</span></label>
+    <label class="up" id="up">📑 <span id="uplabel">가입제안서 PDF (최대 3건)</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
   <div class="qlbl" id="qlbl">📋 분석된 보장분석지에 대해 질문하세요</div>
@@ -6509,7 +7009,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   </div>
   <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v32-ocrpdf</b></footer>
 </div>
-<input type="file" id="fi" accept=".pdf,application/pdf" style="display:none">
+<input type="file" id="fi" accept=".pdf,application/pdf" multiple style="display:none">
 <input type="file" id="fp" accept=".pdf,application/pdf" style="display:none">
 <script>
 const $=s=>document.querySelector(s);let ACCESS='';
@@ -6519,11 +7019,11 @@ async function unlock(){const v=$("#pw").value;$("#gerr").textContent="확인 �
   catch(e){$("#gerr").textContent="서버 연결 실패";}}
 function fail(){$("#gerr").textContent="비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
 $("#go").onclick=unlock;$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>$("#pw").focus());
-const chat=$("#chat");let file=null;let pdfFile=null;
+const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 제안서 최대 3건 */
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
 $("#up").onclick=()=>$("#fi").click();
 $("#upp").onclick=()=>$("#fp").click();
-$("#fi").onchange=e=>{file=e.target.files[0]||null;$("#uplabel").textContent=file?file.name:"가입제안서 PDF";_syncSend();};
+$("#fi").onchange=e=>{/* ★v385 제안서 복수선택 최대 3건 */files=Array.from(e.target.files||[]).slice(0,3);if((e.target.files||[]).length>3){alert("가입제안서는 최대 3건까지입니다. 앞의 3건만 사용합니다.");}file=files[0]||null;$("#uplabel").textContent=files.length?(files.length>1?(files[0].name+" 외 "+(files.length-1)+"건"):files[0].name):"가입제안서 PDF (최대 3건)";_syncSend();};
 $("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"보장분석 PDF 선택";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
@@ -6542,9 +7042,10 @@ $("#send").onclick=async()=>{
   const timer=setInterval(()=>{si=Math.min(si+1,steps.length-1);const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과";if(mm)mm.textContent=steps[si];},8000);
   const fd=new FormData();
 /* v370 role fix: server file=bojang(pdfFile) / file2=jean(file) */
-if(pdfFile&&file){fd.append("file",pdfFile);fd.append("file2",file);}
-else if(pdfFile){fd.append("file",pdfFile);}
-else{fd.append("file2",file);}   /* ★v373 자리 고정: 제안서만이면 오른쪽(file2)으로 보낸다 */
+/* ★v385: 제안서는 같은 이름 file2로 <b>여러 번</b> append한다(최대 3건). 칸은 그대로 하나다. */
+const _jn=(files&&files.length?files:(file?[file]:[]));
+if(pdfFile){fd.append("file",pdfFile);}
+_jn.slice(0,3).forEach(f=>fd.append("file2",f));
   fd.append("pw",ACCESS);
   let j=null;
   try{
@@ -6595,7 +7096,7 @@ else{fd.append("file2",file);}   /* ★v373 자리 고정: 제안서만이면 �
         `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 저장</span></a>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
-  file=null;$("#uplabel").textContent="가입제안서 PDF";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  file=null;files=[];$("#uplabel").textContent="가입제안서 PDF (최대 3건)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
   if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
   if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 PDF를 올리면 이어서 분석합니다.',"bot");}
@@ -6640,7 +7141,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v384b-sync-20260811',
+    return {'ok':True,'version':'v392-tail-20260812',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
@@ -6677,7 +7178,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v384b-sync-20260811'}
+    out = {'server_version': 'v392-tail-20260812'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -6772,7 +7273,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v384b-sync-20260811',
+    return {'version': 'v392-tail-20260812',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -6784,7 +7285,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v384b-sync-20260811'}
+    out = {'version': 'v392-tail-20260812'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -6832,7 +7333,7 @@ def home(): return INDEX_HTML
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
 
 @app.post('/analyze')
-async def analyze(file:UploadFile=File(None), file2:UploadFile=File(None), pw:str=Form('')):
+async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
     # ★★★★★v373 (지점장 확정 2026.08.09 「자리 정해라」): <b>칸의 뜻을 고정한다</b>.
     #   <b>왼쪽 file = 보장분석지 / 오른쪽 file2 = 가입제안서</b> — 상황과 무관하게 항상 같다.
@@ -6841,7 +7342,19 @@ async def analyze(file:UploadFile=File(None), file2:UploadFile=File(None), pw:st
     #     그래서 보장분석지를 오른쪽에·제안서를 왼쪽에 올리면 오류도 안 나고
     #     <b>엉뚱한 산출물이 조용히 나왔다</b>. 자리를 고정해 그 경로를 없앤다.
     _base_f = file  if (file  is not None and (getattr(file ,'filename','') or '')) else None
-    _prop_f = file2 if (file2 is not None and (getattr(file2,'filename','') or '')) else None
+    # ★★★★★v385 (지점장 확정 2026.08.12): <b>가입제안서 = 한 칸에 복수 선택 · 최대 3건</b>.
+    #   지점장 원문: 「제안서 하나의 칸에 복수선택 3개까지」.
+    #   ★칸은 그대로 <b>오른쪽(file2) 하나</b>다 — 칸을 늘리지 않는다(v373 자리 고정 유지).
+    #   FastAPI가 같은 이름의 파일을 여러 개 받으려면 <b>List[UploadFile]</b>이어야 한다.
+    _prop_fs = []
+    if file2 is not None:
+        _f2list = file2 if isinstance(file2, (list, tuple)) else [file2]
+        _prop_fs = [_f for _f in _f2list if _f is not None and (getattr(_f,'filename','') or '')]
+    _JEAN_MAX = 3
+    if len(_prop_fs) > _JEAN_MAX:
+        print(f'[JEAN] 제안서 {len(_prop_fs)}건 → 상한 {_JEAN_MAX}건까지만 사용')
+        _prop_fs = _prop_fs[:_JEAN_MAX]
+    _prop_f = _prop_fs[0] if _prop_fs else None      # 기존 참조 호환(파일명·단독모드 판정용)
     if not _base_f and not _prop_f:
         return JSONResponse({'ok':False,'error':'파일이 없습니다. 왼쪽 칸에 보장분석지 PDF, 오른쪽 칸에 가입제안서 PDF를 올려주세요.'})
     _bn = ((_base_f.filename if _base_f else '') or '').lower()
@@ -6860,15 +7373,19 @@ async def analyze(file:UploadFile=File(None), file2:UploadFile=File(None), pw:st
 
     # ★★★★★v370 가입제안서 계약을 <b>먼저</b> 만든다 — parse_txt에 extra로 넘겨
     #   보장분석지와 <b>같은 후처리</b>(_HB 심장 묶음 · 세부보충 · 대표값)를 타게 하기 위함.
+    #   ★v385: 최대 3건을 <b>올린 순서 그대로</b> 각각 계약으로 만든다(합치지 않는다).
     _prop_cts = []
-    if _prop_f is not None:
+    for _pi, _pf in enumerate(_prop_fs, 1):
         try:
-            _pb = await _prop_f.read()
-            _pct = build_proposal_contract(_pb, _prop_f.filename)
-            if _pct: _prop_cts.append(_pct)
-            else:    print('[JEAN] 제안서 파싱 실패 — 열 추가 안 함')
+            _pb = await _pf.read()
+            _pct = build_proposal_contract(_pb, _pf.filename)
+            if _pct:
+                _prop_cts.append(_pct)
+                print(f'[JEAN] 제안서 {_pi}/{len(_prop_fs)} 계약 생성 — {_pf.filename}')
+            else:
+                print(f'[JEAN] 제안서 {_pi}/{len(_prop_fs)} 파싱 실패 — 열 추가 안 함 ({_pf.filename})')
         except Exception as _je:
-            print('[JEAN] 제안서 처리 예외', type(_je).__name__, _je)
+            print(f'[JEAN] 제안서 {_pi} 처리 예외', type(_je).__name__, _je)
 
     # ★OCR PDF 우선(2026.07.07 지점장 정답): PDF 있으면 pdftotext 직독을 주 소스. 깨지면 txt 폴백.
     src_note=''
