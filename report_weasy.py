@@ -2473,55 +2473,18 @@ body {{ color:{INK}; }}
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 7 / {tpg}</span></div>
 </div>
 
-<!-- P8N: 주요치료비 세부 (v370 신설 · 지점장 지시 2026.08.09) -->
-<!-- ★★★★★v376 값 주입(지점장 확정 2026.08.09): 「그 담보의 대표값 하나라도 넣어라.
-     보통 중환자실은 대표값의 1/2이다」 / 「혈전제거는 회사마다 없을 수도 있다. 8페이지는 유동성이다」
-     → 대표값(엑셀 행)이 있으면 그 블록을 채우고, 없으면 블록 전체를 빈칸으로 둔다. -->
-<div class="pg">
- <div class="top"><div class="eb">MAKEONE 보장분석</div>
-  <div class="nm">주요치료비 <b>세부</b></div>
-  <div class="pgn"><b>8</b>주요치료비 세부</div><div class="bar"></div></div>
- <div class="body sbody p8">
-  <div class="sect2">① 암 주요치료비 <span>1개 담보가 4개로 나뉜다</span></div>
-  <table class="nht">
-   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
-   <tr><td class="n">수술</td><td class="wbox">{p8c1}</td></tr>
-   <tr><td class="n">항암방사선</td><td class="wbox">{p8c2}</td></tr>
-   <tr><td class="n">항암약물</td><td class="wbox">{p8c3}</td></tr>
-   <tr><td class="n">중환자실</td><td class="wbox">{p8c4}</td></tr>
-  </table>
+<!-- ★★★★★v399 (지점장 확정): 8p 「주요치료비 세부」 블록 삭제.
+     지점장 원문: 「없앴던 8페이지가 다시 생겼다」
+     ★그 12칸은 엑셀 행값을 <b>3분할 복제</b>하고 <b>중환자실=대표값÷2</b>로 만든 <b>파생값</b>이었다 —
+       엑셀 어디에도 없는 숫자라 <b>결과값 동결·「엑셀에 없는 건 하지 마라」 위반</b>이었다.
+     ★v376 조문(「대표값 하나라도 넣어라 / 중환자실은 대표값의 1/2」)은 <b>폐기</b>. -->
 
-  <div class="sect2">② 비급여 암 주요치료비 <span>1개 담보가 3개로 나뉜다 · 중환자실 없음</span></div>
-  <table class="nht">
-   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
-   <tr><td class="n">암수술</td><td class="wbox">{p8b1}</td></tr>
-   <tr><td class="n">항암방사선</td><td class="wbox">{p8b2}</td></tr>
-   <tr><td class="n">항암약물</td><td class="wbox">{p8b3}</td></tr>
-  </table>
-
-  <div class="sect2">③ 순환계 주요치료비 <span>1개 담보가 4개로 나뉜다</span></div>
-  <table class="nht">
-   <colgroup><col style="width:38%"><col style="width:62%"></colgroup>
-   <tr><td class="n">수술비</td><td class="wbox">{p8s1}</td></tr>
-   <tr><td class="n">혈전용해</td><td class="wbox">{p8s2}</td></tr>
-   <tr><td class="n">혈전제거</td><td class="wbox">{p8s3}</td></tr>
-   <tr><td class="n">중환자실</td><td class="wbox">{p8s4}</td></tr>
-  </table>
-
-  <div class="cbx"><div class="cbh">왜 나눠서 보나 <span>엑셀은 대표값 1개</span></div>
-   <div class="cbl"><b>같은 담보다</b> 회사가 조건별로 4개 특약으로 쪼갠 것 — 엑셀 · 보장분석지에는 <b>대표값 1개</b>만 들어간다</div>
-   <div class="cbl"><b>여기서만</b> 조건별로 각각 적어 <b>어느 상황에 얼마가 나오는지</b> 보여준다</div>
-   <div class="cbl"><b class="r">주의</b> 조건이 안 맞으면 <b class="r">그 칸은 지급되지 않는다</b> — 수술은 됐는데 중환자실 입원이 없으면 그 칸은 0</div>
-  </div>
- </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / {tpg}</span></div>
-</div>
 
 <!-- P8: 바뀌지 않는 담보 — 비갱신 추천 -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">바뀌지 않는 담보 <b>— 은퇴 후에도 평생</b></div>
-  <div class="pgn"><b>9</b>비갱신 추천</div><div class="bar"></div></div>
+  <div class="pgn"><b>8</b>비갱신 추천</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="ws3">
    <div class="wscol wsmain">
@@ -2553,13 +2516,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">● 바뀌지 않는 담보는 <b>비갱신</b>으로 가입하셔서 <b>은퇴 후</b>를 준비해야 합니다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 8 / {tpg}</span></div>
 </div>
 <!-- P10: 운전자 · 간병 (병합) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">운전자 · 간병 <b>— 일상 리스크 대비</b></div>
-  <div class="pgn"><b>10</b>운전자·간병</div><div class="bar"></div></div>
+  <div class="pgn"><b>9</b>운전자·간병</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">■ 운전자보험 담보</div>
   <div class="ws2">
@@ -2593,13 +2556,13 @@ body {{ color:{INK}; }}
   </div>
   <div class="note24">● <b>간병인 사용일당</b> 사용 시 환자와 <b>24시간 동행</b>해야 인정됩니다.</div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 9 / {tpg}</span></div>
 </div>
 <!-- P12: 재가보험 -->
 <div class="pg jgbig">
  <div class="top"><div class="eb">BARUM 보장분석 · 평생 지키는 준비</div>
   <div class="nm">재가보험 <b>— 장기요양 · 노후 돌봄</b></div>
-  <div class="pgn"><b>11</b>재가보험</div><div class="bar"></div></div>
+  <div class="pgn"><b>10</b>재가보험</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="wscap n2 wsectcap">■ 재가보험 · 장기요양</div>
   <div class="ws2">
@@ -2643,7 +2606,7 @@ body {{ color:{INK}; }}
   <div class="wstalk2"><b>■ 노치원(주야간보호)</b> — 어르신을 <b>낮 동안 시설에서 돌봄</b>(식사·목욕·재활·프로그램)하고 저녁엔 집으로 귀가. 가족은 낮에 생업·휴식이 가능하다. 복합재가 5종 중 하나로, 등급만 있으면 이용.</div>
   <div class="wstalk2"><b>■ 장기요양등급, 언제 신청?</b> — <b>만 65세 이상</b>은 소득 무관 누구나 신청. <b>65세 미만이라도</b> 치매·뇌혈관질환·파킨슨병 등 <b>노인성 질병</b>이 있으면 <b>의사소견서(진단서)</b> 첨부해 <b>미리 신청 가능</b>. 건강보험공단(■1577-1000)·앱·홈페이지 신청 → 방문조사 → 약 30일 내 등급 판정. 65세 전에 준비해 두면 은퇴 후 돌봄 공백을 막는다.</div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 10 / {tpg}</span></div>
 <!-- P-INFO: 보험 인포메이션 간지 -->
 <div class="pg infopg">
  <div class="top itop"><div class="eb">INSURANCE INFORMATION</div><div class="nm">보험 <b>인포메이션</b></div><div class="pgn"><b>·</b>참고자료</div><div class="bar"></div></div>
@@ -2705,7 +2668,7 @@ body {{ color:{INK}; }}
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 건강보험 지원제도 (1/2)</div>
   <div class="nm">국민건강보험공단 <b>지원제도</b></div>
-  <div class="pgn"><b>12</b>산정특례 · 상한제</div><div class="bar"></div></div>
+  <div class="pgn"><b>11</b>산정특례 · 상한제</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="nhflow">
    <div class="nhf a"><b><i>1</i> 중증질환 산정특례제도</b><span>치료비 <u>줄이고</u></span></div>
@@ -2766,12 +2729,12 @@ body {{ color:{INK}; }}
    </table>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 11 / {tpg}</span></div>
 </div>
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 건강보험 지원제도 (2/2)</div>
   <div class="nm">재난적 의료비 <b>· 실손 관계</b></div>
-  <div class="pgn"><b>13</b>재난적의료비 · 실손</div><div class="bar"></div></div>
+  <div class="pgn"><b>12</b>재난적의료비 · 실손</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="nhbox c2">
    <div class="nhbh"><span class="nhno c">3</span>재난적 의료비 지원제도</div>
@@ -2835,13 +2798,13 @@ body {{ color:{INK}; }}
     나라가 안 봐주는 <b>비급여</b>를 메우려면 <b>건강할 때 미리</b> 넣어두셔야 합니다."</div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 12 / {tpg}</span></div>
 </div>
 <!-- P5c2: 건강보험 본인부담률 (v204 자료 4종 삽입) -->
 <div class="pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">급여 통원 자기부담금 <b>— 기준은 '건강보험 본인부담률'</b></div>
-  <div class="pgn"><b>14</b>건보 본인부담률</div><div class="bar"></div></div>
+  <div class="pgn"><b>13</b>건보 본인부담률</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="nhbox a">
@@ -2884,13 +2847,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 13 / {tpg}</span></div>
 </div>
 <!-- P5d: 5세대 쉽게 이해하기 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대 실손 <b>— 쉽게 딱 3가지만</b></div>
-  <div class="pgn"><b>15</b>5세대 쉽게</div><div class="bar"></div></div>
+  <div class="pgn"><b>14</b>5세대 쉽게</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="ezbox ez1">
@@ -2977,13 +2940,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 15 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 14 / {tpg}</span></div>
 </div>
 <!-- P5f: 중증 vs 비중증 (그림형) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">중증 vs 비중증 <b>— 기준은 '산정특례'다</b></div>
-  <div class="pgn"><b>16</b>중증·비중증</div><div class="bar"></div></div>
+  <div class="pgn"><b>15</b>중증·비중증</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <div class="svdef">
@@ -3058,13 +3021,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 16 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 15 / {tpg}</span></div>
 </div>
 <!-- P5e: 5세대 도표 + 예시 -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">5세대는 <b>얼마나 불리해지나</b> — 한눈에</div>
-  <div class="pgn"><b>17</b>5세대 도표</div><div class="bar"></div></div>
+  <div class="pgn"><b>16</b>5세대 도표</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <table class="g4wrap">
@@ -3148,14 +3111,14 @@ body {{ color:{INK}; }}
    </table>
    <div class="ezsn" style="margin-top:0.5mm;font-size:6.4pt;line-height:1.3">※ <b>난임 치료</b> 계획이 있으면 4세대 이상이어야 급여 본인부담금이 보상됩니다(4세대는 가입 2년 이후). 1~3세대는 면책. <b>납입중지</b>는 3세대 단체실손 / 4세대는 해외 장기체류자까지 확대.</div>
   </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 17 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 16 / {tpg}</span></div>
 </div>
 <!-- P-SURG: 수술비 보상기준 + 1~5종 vs 1~7종 (신설) -->
 <!-- P5g: 도수·체외충격파 (세대별 부담) -->
 <div class="pg ez5pg">
  <div class="top"><div class="eb">BARUM 보장분석 · 5세대 실손</div>
   <div class="nm">도수치료 · 체외충격파 <b>— 2026년 7월부터 달라집니다</b></div>
-  <div class="pgn"><b>18</b>도수·체외</div><div class="bar"></div></div>
+  <div class="pgn"><b>17</b>도수·체외</div><div class="bar"></div></div>
  <div class="body sbody">
 
   <table class="dstab">
@@ -3243,13 +3206,13 @@ body {{ color:{INK}; }}
   </div>
 
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 18 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 17 / {tpg}</span></div>
 </div>
 <!-- P6: 주요치료비 변천사 (juyo_a4_v7 상세본) -->
 <div class="pg surgpg">
  <div class="top"><div class="eb">BARUM 보장분석 · 수술비</div>
   <div class="nm">수술비 <b>— 보상기준과 1~5종의 진실</b></div>
-  <div class="pgn"><b>19</b>수술비</div><div class="bar"></div></div>
+  <div class="pgn"><b>18</b>수술비</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sg2">
    <div class="sgcol">
@@ -3315,13 +3278,13 @@ body {{ color:{INK}; }}
    <div class="vsn"><b>★ 상담 한 줄</b> "1~5종은 <b>비급여까지</b> 나오지만 <b>수술이어야</b> 하고, 1~7종은 수술이 아니어도 코드만 맞으면 되지만 <b class="r">비급여가 안 나온다</b>."</div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 19 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 18 / {tpg}</span></div>
 </div>
 
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보장분석 리포트</div>
   <div class="nm">{cust} <b>고객님</b> 보장 진단서</div>
-  <div class="pgn"><b>20</b>주요치료비 변천사</div><div class="bar"></div></div>
+  <div class="pgn"><b>19</b>주요치료비 변천사</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">3대 주요치료비 담보의 변천사 <span>①비례형(구간) → ②정액형 → ③비급여 → 생활비 · 정액형 가입금액 100만원부터</span></div>
   <div class="jtalkfull"><span class="h">■ 상담 화법</span>"5세대 실손은 <b>비급여가 1천만원</b>으로 줄었고 <b>통원비는 20만원</b> 입니다."</div>
@@ -3377,7 +3340,7 @@ body {{ color:{INK}; }}
    </div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 20 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 19 / {tpg}</span></div>
 </div>
 </div>
 </div>
@@ -3385,7 +3348,7 @@ body {{ color:{INK}; }}
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
   <div class="nm">흥국화재 <b>10억통장</b></div>
-  <div class="pgn"><b>21</b>10억통장</div><div class="bar"></div></div>
+  <div class="pgn"><b>20</b>10억통장</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sect">[갱신형] 플래티넘 건강 리셋월렛II <span>보장한도 10억원 · 갱신마다 10억 리필(20년 갱신형)</span></div>
   <div class="r10wrap">
@@ -3420,46 +3383,46 @@ body {{ color:{INK}; }}
    </div>
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 21 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 20 / {tpg}</span></div>
 </div>
 
 <!-- FIN1: MAKEONE LIFE PLAN — 재무상태 설문지 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">재무상태 <b>설문지</b></div>
-  <div class="pgn"><b>22</b>재무상태 설문지</div><div class="bar"></div></div>
+  <div class="pgn"><b>21</b>재무상태 설문지</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_SURVEY}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 22 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 21 / {tpg}</span></div>
 </div>
 
 <!-- FIN2: MAKEONE LIFE PLAN — 미래가치 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">미래가치 <b>— Financial Life Timeline</b></div>
-  <div class="pgn"><b>23</b>미래가치</div><div class="bar"></div></div>
+  <div class="pgn"><b>22</b>미래가치</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_FUTURE}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 23 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 22 / {tpg}</span></div>
 </div>
 
 <!-- FIN3: MAKEONE LIFE PLAN — 달러자산 (원본) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">달러자산 <b>— 왜 지금 준비해야 할까요?</b></div>
-  <div class="pgn"><b>24</b>달러자산</div><div class="bar"></div></div>
+  <div class="pgn"><b>23</b>달러자산</div><div class="bar"></div></div>
  <div class="body finpg"><img class="finimg" src="data:image/png;base64,{_FIN_DOLLAR}"></div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 24 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 23 / {tpg}</span></div>
 </div>
 
 <!-- ★v214 24p: MAKEONE LIFE PLAN — 달러보험 2탄(달러 기준 최저임금). 그림 위 · 표 아래 -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE LIFE PLAN</div>
   <div class="nm">달러보험 2탄 <b>— 달러 기준 최저임금</b></div>
-  <div class="pgn"><b>25</b>달러보험 2탄</div><div class="bar"></div></div>
+  <div class="pgn"><b>24</b>달러보험 2탄</div><div class="bar"></div></div>
  <div class="body">
   <img class="dolimg a" src="data:image/jpeg;base64,{_DOL2_PIC}">
   <img class="dolimg b" src="data:image/jpeg;base64,{_DOL2_TBL}">
  </div>
- <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 25 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · 24 / {tpg}</span></div>
 </div>
 
 {_ga_html}
@@ -3468,7 +3431,7 @@ body {{ color:{INK}; }}
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
   <div class="nm">암 <b>치료 용어</b></div>
-  <div class="pgn"><b>30</b>암 — 관혈·비관혈</div><div class="bar"></div></div>
+  <div class="pgn"><b>29</b>암 — 관혈·비관혈</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sg2">
 
@@ -3568,14 +3531,14 @@ body {{ color:{INK}; }}
 
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 30 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 29 / {tpg}</span></div>
 </div>
 
 <!-- P-CW2: 뇌·심 치료 방식 (2단 · 전행 1줄) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>
   <div class="nm">뇌 · 심 <b>치료 방식</b></div>
-  <div class="pgn"><b>31</b>뇌·심 — 관혈·비관혈</div><div class="bar"></div></div>
+  <div class="pgn"><b>30</b>뇌·심 — 관혈·비관혈</div><div class="bar"></div></div>
  <div class="body sbody">
   <div class="sg2">
 
@@ -3679,7 +3642,40 @@ body {{ color:{INK}; }}
 
   </div>
  </div>
- <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 31 / {tpg}</span></div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 30 / {tpg}</span></div>
+</div>
+
+<!-- INFO-TBL 통합치료비 ① -->
+<div class="pg infopg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 통합치료비 세부보장항목</div><div class="nm">① <b>암 통합치료비Plus(기본형)</b></div><div class="pgn"><b>31</b>통합치료비 ①</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
+  <div style="font-size:2.4mm;color:#345;margin:1.5mm 0 1.2mm">KB 고당지 맞춤 간편건강보험(세만기)(무배당)(26.07) — <b>암통합치료비Plus(기본형) 특별약관</b> 세부보장항목</div>
+  <table style="font-family:inherit;border-collapse:collapse;width:100%;font-size:2.25mm;line-height:1.25"><tr><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:15%">구분</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">보장항목</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:14%">보장항목별<br>대상질병</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:9%">지급방식</th><th colspan="3" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">기준 지급금액</th></tr><tr><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>5천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>1억원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>1억5천만원</b></th></tr><tr><td rowspan="8" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(검사)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 자기공명영상(MRI)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외) 및 유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 양전자방출단층촬영(PET)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 전산화단층촬영(CT)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 초음파(Ultrasonography)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 내시경검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 특정단일유전자검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암 특정생검조직병리검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">20만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">20만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">특정NGS유전자패널검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외), 기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td></tr><tr><td rowspan="11" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(주요치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암(유사암제외) 수술</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">유사암 수술</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">300만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암(유사암제외) 항암방사선치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">유사암 항암방사선치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">300만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암(유사암제외) 항암약물치료(항암호르몬약물치료제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">유사암 항암약물치료(항암호르몬약물치료제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">300만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암(유사암제외) 항암호르몬약물치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">150만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">유사암 항암호르몬약물치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">20만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">30만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암(유사암제외) 중입자실치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">250만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">750만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">유사암 중입자실치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">유사암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">150만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">항암세기조절방사선치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외), 기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">750만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td rowspan="8" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(비급여(전액본인부담 포함)<br>특정 주요치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 다빈치로봇 암수술(갑상선암및전립선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(갑상선암및전립선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 다빈치로봇 암수술(갑상선암및전립선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">갑상선암 및 전립선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 표적항암약물허가치료(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 표적항암약물허가치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 특정면역항암약물허가치료(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 특정면역항암약물허가치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암양성자방사선치료(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암양성자방사선치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr><tr><td rowspan="1" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(통증완화치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">암특정통증완화치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">30만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">40만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td></tr><tr><td rowspan="2" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(재활치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">입원 암재활치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(유사암제외), 기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간30회한<br>(각각 1일1회)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">통원 암재활치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td></tr></table>
+  <div style="font-size:2.1mm;color:#8a2a2a;line-height:1.4;margin-top:1.2mm">주1) 보험금 지급 예시 및 보험금 지급 세부규정 등에 관한 보다 상세한 내용은 약관을 필히 확인하시기 바랍니다.<br>주2) 위 표는 <b>최초계약일부터 1년이상</b>의 계약 및 갱신된 계약의 기준 지급금액입니다. 1년 미만 지급비율은 가입상품·특별약관별로 다르므로 보험증권 가입내용 및 해당 약관을 확인하시기 바랍니다. <b>보험가입금액은 연간 총 지급한도</b>이며 개별 치료항목별 지급금액과 다릅니다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">참고자료 · 31 / {tpg}</span></div>
+</div>
+
+<!-- INFO-TBL 통합치료비 ② -->
+<div class="pg infopg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 통합치료비 세부보장항목</div><div class="nm">② <b>비급여(전액본인부담 포함) 암 통합치료비Plus</b></div><div class="pgn"><b>32</b>통합치료비 ②</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
+  <div style="font-size:2.4mm;color:#345;margin:1.5mm 0 1.2mm">KB 고당지 맞춤 간편건강보험(세만기)(무배당)(26.07) — <b>비급여(전액본인부담 포함) 암 통합치료비Plus 특별약관</b> 세부보장항목</div>
+  <table style="font-family:inherit;border-collapse:collapse;width:100%;font-size:2.25mm;line-height:1.25"><tr><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:15%">구분</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">보장항목</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:14%">보장항목별<br>대상질병</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:9%">지급방식</th><th colspan="3" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">기준 지급금액</th></tr><tr><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>4천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>8천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:13%">보험가입금액<br><b>1억원</b></th></tr><tr><td rowspan="6" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(비급여(전액본인부담 포함)<br>주요치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 암수술(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 암수술(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암방사선치료(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암방사선치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암약물치료(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암약물치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td rowspan="8" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">암 통합치료<br>(비급여(전액본인부담 포함)<br>특정 주요치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 다빈치로봇 암수술(갑상선암및전립선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(갑상선암및전립선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 다빈치로봇 암수술(갑상선암및전립선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">갑상선암 및 전립선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 표적항암약물허가치료(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 표적항암약물허가치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 특정면역항암약물허가치료(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 특정면역항암약물허가치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암양성자방사선치료(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">암(기타피부암및갑상선암제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">3,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">비급여(전액본인부담 포함) 항암양성자방사선치료(기타피부암및갑상선암)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">기타피부암 및 갑상선암</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">400만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">600만원</td></tr></table>
+  <div style="font-size:2.1mm;color:#8a2a2a;line-height:1.4;margin-top:1.2mm">주1) 보험금 지급 예시 및 보험금 지급 세부규정 등에 관한 보다 상세한 내용은 약관을 필히 확인하시기 바랍니다.<br>주2) 위 표는 <b>최초계약일부터 1년이상</b>의 계약 및 갱신된 계약의 기준 지급금액입니다. 1년 미만 지급비율은 가입상품·특별약관별로 다르므로 보험증권 가입내용 및 해당 약관을 확인하시기 바랍니다. <b>보험가입금액은 연간 총 지급한도</b>이며 개별 치료항목별 지급금액과 다릅니다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">참고자료 · 32 / {tpg}</span></div>
+</div>
+
+<!-- INFO-TBL 통합치료비 ③ -->
+<div class="pg infopg">
+ <div class="top"><div class="eb">BARUM 보장분석 · 통합치료비 세부보장항목</div><div class="nm">③ <b>신특정순환계질환 통합치료비Plus</b></div><div class="pgn"><b>33</b>통합치료비 ③</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
+  <div style="font-size:2.4mm;color:#345;margin:1.5mm 0 1.2mm">KB 고당지 맞춤 간편건강보험(세만기)(무배당)(26.07) — <b>신특정순환계질환 통합치료비Plus 특별약관</b> 세부보장항목</div>
+  <table style="font-family:inherit;border-collapse:collapse;width:100%;font-size:2.25mm;line-height:1.25"><tr><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:15%">구분</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">보장항목</th><th rowspan="2" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:9%">지급방식</th><th colspan="5" style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700">기준 지급금액</th></tr><tr><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:8%">보험가입금액<br><b>1천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:8%">보험가입금액<br><b>3천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:8%">보험가입금액<br><b>5천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:8%">보험가입금액<br><b>8천만원</b></th><th style="border:0.2mm solid #9aa;background:#F5EFE0;padding:0.5mm 0.6mm;text-align:center;font-weight:700;width:8%">보험가입금액<br><b>1억원</b></th></tr><tr><td rowspan="3" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">신특정순환계질환<br>통합치료(검사)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">자기공명영상(MRI)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">10만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">전산화단층촬영(CT)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">양전자방출단층촬영(PET)검사(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">5만원</td></tr><tr><td rowspan="9" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">신특정순환계질환<br>통합치료(주요치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">지속적신대체요법(CRRT)(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">300만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">인공호흡기(12시간초과)치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">150만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">저체온요법치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">에크모치료(체외순환막형산화요법)(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">수술(혈전제거술 제외)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">700만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">혈전제거술</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">수술1회당</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">200만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">700만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">뇌혈관질환 혈전용해치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">700만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">허혈성심장질환 및 기타순환계질환 혈전용해치료</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">700만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2,000만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">종합병원 중환자실치료 (주3)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">350만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">500만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">750만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">1,000만원</td></tr><tr><td rowspan="2" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">신특정순환계질환<br>통합치료(재활치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">입원 신특정순환계질환 재활치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간20회한<br>(각각 1일1회)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">통원 신특정순환계질환재활치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center"></td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">2만원</td></tr><tr><td rowspan="2" style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;background:#FAF6EC;text-align:center;font-weight:700">신특정순환계질환<br>통합치료(약물치료)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">항응고제주사치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td></tr><tr><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm">항혈소판제주사치료(급여)</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:center">연간1회한</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">50만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td><td style="border:0.2mm solid #bbc;padding:0.5mm 0.6mm;text-align:right">100만원</td></tr></table>
+  <div style="font-size:2.1mm;color:#8a2a2a;line-height:1.4;margin-top:1.2mm">주1) 보험금 지급 예시 및 보험금 지급 세부규정 등에 관한 보다 상세한 내용은 약관을 필히 확인하시기 바랍니다.<br>주2) 위 표는 <b>최초계약일부터 1년이상</b>의 계약 및 갱신된 계약의 기준 지급금액입니다. 1년 미만 지급비율은 가입상품·특별약관별로 다르므로 보험증권 가입내용 및 해당 약관을 확인하시기 바랍니다. <b>보험가입금액은 연간 총 지급한도</b>이며 개별 치료항목별 지급금액과 다릅니다.<br>주3) 단, 신특정순환계질환 통합치료비Plus(상급종합병원 및 권역심뇌혈관질환센터) 특별약관의 경우 "상급종합병원" 또는 "권역심뇌혈관질환센터"에서 받은 중환자실치료를 말합니다.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">참고자료 · 33 / {tpg}</span></div>
 </div>
 </body></html>'''
     if _PPT_MODE:
@@ -3696,7 +3692,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v398-tonghab-20260812</div>'
+    _VSTAMP = '<div class="vstamp">v401-infotbl-20260812</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

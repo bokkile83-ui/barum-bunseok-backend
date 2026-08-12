@@ -6345,15 +6345,33 @@ def read_excel_totals(path):
             if len(_pv0)==2: _pv0=(_pv0[0],_pv0[1],0)
             splits[nm] = (max(_pv0[0], _gs), max(_pv0[1], _ns), max(_pv0[2], _ps))
         # 수술비 1~5종: 끝열 슬래시 문자열(수식 아님, 항상 존재)
+        # ★★★★★v400 (지점장 지적 2026.08.12): <b>보장분석지 PPT의 1~5종 슬래시가 블랙</b>이었다.
+        #   실측: 그 run의 color가 <b>None</b>(폼 기본색 상속)이었다 — 다른 값은 전부 C00000이 잘 들어갔다.
+        #   원인: 슬래시 줄은 `rsl()`이 <b>줄 전체를 통째로 교체</b>하는 별도 경로라 색 지정이 없었다.
+        #   → 그 행의 <b>계약 열 슬래시 셀 폰트색</b>을 보고 <b>전부 제안(C00000)이면 레드</b>로 표시한다.
+        #     (v398에서 고친 것은 <b>엑셀</b> 제안합계 열이고, 이번은 <b>PPT</b>다 — 서로 다른 곳이다.)
+        def _slash_src(_r):
+            _red=_any=False
+            for _c in _data_cols(ws, last):
+                _v = ws.cell(_r,_c).value
+                if not isinstance(_v,str) or '/' not in _v: continue
+                _any=True
+                try: _rg=str(wsf.cell(_r,_c).font.color.rgb or '').upper()
+                except Exception: _rg=''
+                if _rg.endswith('C00000'): _red=True
+                else: return False
+            return _red and _any
         if nm == '상해 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
             for k,p in enumerate(endv.split('/')[:5]):
                 try: ss[k]=int(p)
                 except: pass
+            if _slash_src(r): splits['__SS_RED__']=(0,0,1)
             continue
         if nm == '질병 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
             for k,p in enumerate(endv.split('/')[:5]):
                 try: sq[k]=int(p)
                 except: pass
+            if _slash_src(r): splits['__SQ_RED__']=(0,0,1)
             continue
         if nm == 'MRI/도수치료/비급여주사' and isinstance(endv,str) and '/' in endv:   # ★v29y 트리오 분해
             _ps=endv.split('/')
@@ -6568,7 +6586,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         elif gs:      segs=[(f'{head} {gs:,}',_BLUE),(tail,None)]
         else:         segs=[(f'{head} {ns:,}',_BLACK),(tail,None)]
         _seg(p.runs[ri], segs)
-    def rsl(box, label_line, text):
+    def rsl(box, label_line, text, red=False):
         """라벨 없이 슬래시 괄호줄 같은 <b>줄 전체</b>를 교체(1~5종 수술비 칸)."""
         if box not in by: return False
         for p in by[box].text_frame.paragraphs:
@@ -6576,6 +6594,9 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
             if label_line in full and p.runs:
                 p.runs[0].text=text
                 for _rr in p.runs[1:]: _rr.text=''
+                if red:                      # ★v400 제안분 슬래시 = 레드 C00000
+                    try: p.runs[0].font.color.rgb = RGBColor(0xC0,0x00,0x00)
+                    except Exception: pass
                 return True
         print(f'[PPT_MISS] 줄없음 box={box} pat={label_line!r}'); return False
     def _setcol(run,std):
@@ -6732,11 +6753,11 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     if g('10억 플랜'):     pvl('TextBox 57','10억통장','10억 플랜')
 
     if g('질병수술비'): pvl('TextBox 17','질병수술','질병수술비')
-    if any(surg_q): rsl('TextBox 17','/     /', '(%s)'%'/'.join(str(x) for x in surg_q))
+    if any(surg_q): rsl('TextBox 17','/     /', '(%s)'%'/'.join(str(x) for x in surg_q), red=bool((splits or {}).get('__SQ_RED__')))
     if g('뇌혈관수술비'): pvl('TextBox 17','뇌혈관수술','뇌혈관수술비')
     if g('심장수술비'): pvl('TextBox 17','심장 수술','심장수술비')
     if g('상해수술비'): pvl('TextBox 19','상해수술','상해수술비')
-    if any(surg_s): rsl('TextBox 19','/      /', '(%s)'%'/'.join(str(x) for x in surg_s))
+    if any(surg_s): rsl('TextBox 19','/      /', '(%s)'%'/'.join(str(x) for x in surg_s), red=bool((splits or {}).get('__SS_RED__')))
     if g('골절수술비'): pvl('TextBox 19','골절수술','골절수술비')
 
     _ys=totals.get('양성자치료',0); _sgj=totals.get('세기조절치료',0)   # ★v29v (지점장 2026.07.02) 양성자·세기조절 → 암 박스
@@ -7192,7 +7213,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v398-tonghab-20260812',
+    return {'ok':True,'version':'v401-infotbl-20260812',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
@@ -7229,7 +7250,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v398-tonghab-20260812'}
+    out = {'server_version': 'v401-infotbl-20260812'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -7324,7 +7345,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v398-tonghab-20260812',
+    return {'version': 'v401-infotbl-20260812',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -7336,7 +7357,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v398-tonghab-20260812'}
+    out = {'version': 'v401-infotbl-20260812'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)

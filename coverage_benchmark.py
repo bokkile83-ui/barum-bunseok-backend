@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v398-tonghab-20260812 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v401-infotbl-20260812 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -624,8 +624,16 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     def _any(*subs):
         return any(any(s in nm for s in subs) for nm in _allnm)
     scope_brain=[]   # 보유 행 key
-    if _any('뇌출혈','뇌혈관진단','중대한 뇌졸증','뇌졸증진단'): scope_brain.append('hem')
-    if _any('뇌경색','뇌졸증진단','뇌혈관진단'): scope_brain.append('infarct')
+    # ★★★★★v399 (지점장 지적 2026.08.12): <b>「보유」는 그 이름의 담보를 실제로 가졌을 때만</b>.
+    #   지점장 원문: 「<b>여긴 뇌졸증이 없는데 왜 계속 뇌졸증이 나오냐 진단서에</b>」
+    #   ★실측: 사공호는 KB `뇌혈관질환진단비Ⅲ` 하나뿐인데 6p 질병코드표의
+    #     <b>뇌출혈·뇌졸증·기타뇌혈관 세 행이 전부 노란행+「보유」</b>로 찍혔다.
+    #     구 조건이 `뇌혈관진단`을 hem·infarct에도 넣었기 때문이다.
+    #   → <b>뇌출혈·뇌졸증 행은 그 이름의 담보가 있을 때만 보유</b>.
+    #     `other`(기타 뇌혈관질환)는 뇌혈관진단비 <b>그 자체</b>이므로 종전대로 둔다.
+    #   ★심장 쪽은 지시 범위 밖 — 손대지 않았다(확인 대기).
+    if _any('뇌출혈','중대한 뇌졸증'): scope_brain.append('hem')
+    if _any('뇌경색','뇌졸증진단'): scope_brain.append('infarct')
     if _any('뇌혈관진단'): scope_brain.append('other')
     if _any('외상성뇌출혈','외상성 뇌출혈'): scope_brain.append('trauma')
     if _any('산정특례뇌','산정특례(뇌'): scope_brain.append('brain_snjt')
