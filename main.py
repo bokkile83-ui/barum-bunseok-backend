@@ -559,7 +559,12 @@ def rule_extract(block_lines, prefolded=False):
         #   글자가 끼면 탈락</b>해 [확인]큐로 사라졌다(실측). → <b>'심뇌' + '혈관' + '수술'</b>로 완화.
         #   커버: 심뇌혈관수술비 · 주요심뇌5대혈관수술비 · 심뇌 5대혈관 수술 등.
         _n=re.sub(r'\s','',str(_nm))
-        if '심뇌' in _n and '혈관' in _n and '수술' in _n and '[확인]' not in _n:
+        # ★★★★★v397 (지점장 확정 2026.08.12): <b>'주요치료'가 붙으면 수술 분해를 하지 않는다</b>.
+        #   지점장 원문: 「심뇌혈관질환주요치료비 -> 2대주요치료비다」
+        #   실측: 현대 `심뇌혈관질환<b>주요치료비</b>(…)(<b>수술</b>및혈전용해치료)` 500이 괄호 수식어의
+        #     '수술' 글자 때문에 <b>심장수술비 500 + 뇌혈관수술비 500</b>으로 쪼개졌다.
+        #   ★`주요심뇌5대혈관수술비`·`심뇌혈관수술비`는 '주요치료'가 없으므로 <b>종전대로 분해</b>한다.
+        if '심뇌' in _n and '혈관' in _n and '수술' in _n and '주요치료' not in _n and '[확인]' not in _n:
             for _r in ('심장수술비[묶음]','뇌혈관수술비[묶음]'):   # ★태그 '뇌혈관' 금지→[묶음]
                 dambo[_r]=max(dambo.get(_r,0), _amt)
         elif ('직접치료' in _n) and ('암' in _n) and ('일당' not in _n) and ('입원' not in _n):
@@ -2901,7 +2906,12 @@ def parse_txt(txt, filename='', extra=None):
             _kk = re.sub(r'\s', '', str(_k))
             if '[확인]' in _kk: continue
             # ★v217: '심뇌<u>5대</u>혈관'처럼 사이에 글자가 끼는 표기도 잡는다(구 '심뇌혈관' 연속 조건 완화).
-            if '심뇌' not in _kk or '혈관' not in _kk or '수술' not in _kk: continue
+            # ★★★★★v397 (지점장 확정 2026.08.12): <b>'주요치료'가 붙으면 수술 분해를 하지 않는다</b>.
+            #   지점장 원문: 「심뇌혈관질환주요치료비 -> 2대주요치료비다」
+            #   실측: 현대 `심뇌혈관질환<b>주요치료비</b>(…)(<b>수술</b>및혈전용해치료)` 500이 괄호 수식어의
+            #     '수술' 글자 때문에 <b>심장수술비 500 + 뇌혈관수술비 500</b>으로 쪼개졌다.
+            #   ★`주요심뇌5대혈관수술비`·`심뇌혈관수술비`는 '주요치료'가 없으므로 <b>종전대로 분해</b>한다.
+            if '심뇌' not in _kk or '혈관' not in _kk or '수술' not in _kk or '주요치료' in _kk: continue
             _v = _c['dambo'].pop(_k)
             for _r in ('심장수술비', '뇌혈관수술비'):
                 _nk = f'{_r}[묶음]'   # ★태그에 '뇌혈관' 금지(resolve 오인 방지)
@@ -3362,6 +3372,14 @@ def resolve_kw(raw):
     has = lambda *ks: all(_norm(k) in n for k in ks)
     no  = lambda *ks: not any(_norm(k) in n for k in ks)
     # ★v30z 혈전용해치료비 우선(급성심근·뇌졸중 흡수 방지): '혈전용해' 포함시 전용행
+    # ★★★★★v397 (지점장 확정 2026.08.12, 영구): <b>심뇌혈관질환주요치료비 = 2대 주요치료비</b>.
+    #   지점장 원문: 「<b>심뇌혈관질환주요치료비 -> 2대주요치료비다 / 진단서는 2대주요치료비에 넣어라</b>」
+    #   ★실측(v396): 현대 `심뇌혈관질환주요치료비(…)(<b>수술및혈전용해치료</b>)` 500이 담보명 안의
+    #     '혈전용해' 글자에 먼저 걸려 <b>혈전용해치료비</b>로 갔다. (같은 담보의 `(중환자실입원)` 변형은
+    #     이미 2대 주요치료비로 정상 도착 — <b>한 담보가 괄호 수식어에 따라 두 행으로 갈리고 있었다</b>.)
+    #   → <b>'심뇌'+'주요치료'면 괄호 안 수식어와 무관하게 2대 주요치료비</b>. 혈전용해 판정보다 앞에 둔다.
+    #   ★`뇌졸중 혈전용해치료비`·`특정심장질환 혈전용해치료비`처럼 '주요치료'가 없는 담보는 종전대로 혈전용해치료비.
+    if has('심뇌') and has('주요치료'): return '2대 주요치료비',0
     if has('혈전용해') and has('치료'): return '혈전용해치료비',0
     # ★철심제거·핀제거·내고정물제거 = 골절수술비 아님(별개 처치) → [확인]
     if (has('철심') or has('핀제거') or has('내고정물')) and has('수술'): return None,0
@@ -3519,13 +3537,22 @@ def resolve_kw(raw):
     #   ★'암직접치료<b>입원일당</b>'은 위 일당 블록에서 이미 암일당으로 갔다(여기 안 온다).
     if has('암') and has('직접치료') and no('일당','입원','통원','방사선','약물','표적','양성자','세기','중입자','유사암'):
         return '암수술',0
-    # ── 암 치료비 ── (지점장 2026.07.09 최종확정: '암주요치료비' 명시 > 하이클래스 > 유사암무시)
+    # ── 암 치료비 ──
+    # ★★★★★v396 (지점장 확정 2026.08.12, 영구) — <b>구 조문 「2026.07.09 '암주요치료비' 명시 > 하이클래스」는 폐기</b>.
+    #   지점장 원문: 「<b>하이클래스암주요치료비 or 비급여암주요치료비 = 둘다 엑셀+ppt 2건 모두에 "하이클래스"에 기재하라</b>」
+    #   → 이름에 <b>'하이클래스'</b> 또는 <b>'비급여'</b>가 붙은 암주요치료비는 <b>하이클래스(암) 23행</b>이다.
+    #   ★왜 필요했나: 현대·롯데 제안서 담보명이 `하이클래스 암주요치료비`처럼 <b>두 단어가 한 이름에</b> 붙어 있어
+    #     구 조문대로면 전부 21행으로 가고 <b>23행이 영영 공란</b>이 됐다. 그 결과 보장진단서 8쪽
+    #     「비급여 암 주요치료비」 칸도 계속 0이었다(v393에서 키 오타를 고쳐도 값이 없으니 그대로 0).
+    #   ★실손 3종(도수·MRI·비급여주사)은 이 지점보다 <b>앞</b>에서 이미 잡히므로 '비급여' 단독 오인 위험 없음.
     # ★★★v258b(2026.07.27): 지침 §8.2 원문에 <b>「암(유사암제외)주요치료비 → 암주요치료비」</b>가
     #   명시돼 있는데, 구 조건 `has('유사암')`이 <b>'유사암<u>제외</u>'의 '유사암' 글자</b>에 걸려
     #   <b>__무시__</b>로 보냈다(실측). '유사암제외'는 유사암을 <b>빼는</b> 담보 = 일반암 계열이다.
     if has('유사암') and no('유사암제외') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
-    if has('암주요치료비') and no('유사암'): return '암주요치료비',0   # ★②담보명에 '암주요치료비' 있으면 하이클래스보다 우선→암주요치료비행 (하이클래스 암주요치료비형)
-    if has('하이클래스'): return '하이클래스(암)',0   # ③암주요치료비 없는 하이클래스(항암약물형 등)→하이클래스(암)행. 2건이면 합산
+    if has('암주요치료비') and no('유사암','하이클래스','비급여'): return '암주요치료비',0   # ②순수 암주요치료비만 21행 (v396: 하이클래스·비급여는 아래 23행으로)
+    #   ★v396 `비급여암주요치료비`는 '하이클래스' 글자가 없어 아래 조건만으로는 안 걸린다 — 명시 추가.
+    if has('하이클래스') or (has('비급여') and has('암') and has('주요치료')):
+        return '하이클래스(암)',0   # ③하이클래스 / 비급여 암주요치료비 → 하이클래스(암) 23행. 2건이면 합산
     # ★★★★★v258 (지점장 지침 개정 2026.07.27, 영구): 지침 §8.2 원문 =
     #   <b>「(키워드 : 암+주요치료비 / 그외 는 다 아님)」</b>
     #   → 담보명에 <b>'암'과 '주요치료비'가 둘 다</b> 있어야 암주요치료비 행이다. 그 외는 전부 아니다.
@@ -5012,6 +5039,14 @@ def build_excel(data, out):
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 # ★v320 통합암·10억 플랜도 <b>대표금액 1개</b>
                 _rep1 = _rep1 or (std in ('통합암','10억 플랜'))
+                # ★★★★★v394 (지점장 확정 2026.08.12, 영구):
+                #   지점장 원문: 「<b>암입원일당(1-180)</b> 과 <b>암입원일당(요양병원)</b>은 <b>큰값 1개만</b> 입력해주면 된다」
+                #   → 마스터 <b>암일당(30행)</b>은 <b>대표(max)</b>다. 합산 금지.
+                #   근거: 두 담보는 <b>같은 입원을 요양병원이냐 아니냐로 나눠 놓은 것</b>이라
+                #     동시에 받는 담보가 아니다 — 간병인지원일당·1인실·간호통합병동과 같은 <b>택일 대표</b> 원칙.
+                #   ★구 기본값(합산)이면 `10 + 10 = 20`으로 <b>2배</b>가 됐다.
+                #   ★v344 기본 대표(max)는 <b>담보명이 완전히 같은 줄</b>에만 걸려서 이 둘(이름이 다르다)은 안 걸렸다.
+                _rep1 = _rep1 or (std == '암일당')
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
@@ -7141,7 +7176,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v392-tail-20260812',
+    return {'ok':True,'version':'v397-hiclass-20260812',
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
@@ -7178,7 +7213,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v392-tail-20260812'}
+    out = {'server_version': 'v397-hiclass-20260812'}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -7273,7 +7308,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v392-tail-20260812',
+    return {'version': 'v397-hiclass-20260812',
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -7285,7 +7320,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v392-tail-20260812'}
+    out = {'version': 'v397-hiclass-20260812'}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
