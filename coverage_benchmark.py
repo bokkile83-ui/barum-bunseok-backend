@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v401-infotbl-20260812 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v410-coverage-20260812 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -639,7 +639,14 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     if _any('산정특례뇌','산정특례(뇌'): scope_brain.append('brain_snjt')
     scope_heart=[]
     if _any('급성심근','중대한 급성심근'): scope_heart.append('ami')
-    if _any('허혈성 진단비','허혈심장','허혈성진단'): scope_heart+=['angina','chronic']
+    # ★★★★★v402 (지점장 확정 2026.08.12, 영구): <b>허혈성은 단독이다</b>.
+    #   지점장 원문: 「<b>허헐성은 허혈성단독이라고</b>」 — 제「단독 5종」 조문과 동일.
+    #   ★구 코드는 허혈성진단비 하나로 <b>협심증(angina)</b>까지 보유로 찍었다.
+    #     제25조(「보유는 그 이름의 담보가 있을 때만」)를 심장에도 그대로 적용한다.
+    #   → <b>협심증 행은 협심증 담보(또는 묶음 분해분)가 있을 때만</b> 보유.
+    #     `chronic`(기타·만성 허혈 I24·25)은 <b>허혈성진단비 그 자체</b>이므로 종전대로 둔다
+    #     (뇌의 `other`(기타 뇌혈관질환)와 같은 자리).
+    if _any('허혈성 진단비','허혈심장','허혈성진단'): scope_heart.append('chronic')
     if _any('협심증'): scope_heart.append('angina')      # ★v50 심장 묶음 분해분(단독 보유)
     if _any('부정맥'): scope_heart.append('arrhy')
     if _any('심부전'): scope_heart.append('hf')

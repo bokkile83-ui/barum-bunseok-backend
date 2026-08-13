@@ -15,6 +15,13 @@ import copy as _copy
 from pptx.oxml.ns import qn as _qn
 from pptx.text.text import _Run
 
+# ★★★★★v407 (지점장 지시 2026.08.12): <b>각인은 한 곳에서만 정의한다.</b>
+#   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
+#   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
+#   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
+VSTAMP = 'v410-coverage-20260812'
+
+
 app = FastAPI(title="BARUM 보장분석 v7")
 PW   = "0101"   # ★★v334 대문 비번 고정(지점장 지시 2026.08.02). Railway Variables의 ACCESS_PW/BARUM_PW(=1009)가 코드 기본값을 이기고 있어 환경변수 참조를 제거했다.
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -987,25 +994,196 @@ _DEDUP_SELFTEST = [
     ('뇌질환진단비Ⅱ',     '뇌졸증진단비'),
 ]
 
+
+
+# ★★★★★v410 (지점장 지시 2026.08.12 「지금 해라 절대 미루지 마라」):
+#   조문 커버리지 19% → 끌어올린다. <b>파일 구조·상수·존재 여부로 검사 가능한 조문</b>을 전부 건다.
+#   (조문, 파일, 정규식, True=있어야 / False=없어야)
+_STRUCT_SELFTEST = [
+    ('제1조 엑셀기준',   'main.py',            r'마스터무행|마스터 무행', True),
+    ('제2조 결과값동결', 'main.py',            r'_data_cols', True),
+    ('제7조 합계',       'main.py',            r'=SUM\(', True),
+    ('제11조 게이트',    'main.py',            r'PPT_MISS', True),
+    ('제12조 배포9파일', 'main.py',            r"ZIP9 = \['main\.py'", True),
+    ('제17조 dambo키',   'report_weasy.py',    r"_p8v\('하이클래스암'\)", True),
+    ('제19조 인포고객명','report_weasy.py',    r'def _info_strip_cust\(', True),   # ★v410e 접두 일치로 뚫렸다(`_DISABLED`)
+    ('제19조 만든이삭제','ga_tables.py',       r'최은혜', False),
+    ('제23조 제안합계레드','main.py',          r"'제안 합계'", True),
+    ('제24조 8페이지삭제','report_weasy.py',   r'<!-- P8N: 주요치료비 세부', False),
+    # ★v410f 제26조는 <b>「있나」가 아니라 「3장인가」</b>다 — 유무 검사는 2장이어도 통과했다(뮤테이션 실측).
+    ('제26조 자료3장',   'report_weasy.py',    r'(?s)INFO-TBL.*INFO-TBL.*INFO-TBL', True),
+    ('제27조 PPT슬래시레드','main.py',         r'__SS_RED__', True),
+    ('제30조 여백폰트',  'report_weasy.py',    r'font-size:2\.5mm', True),
+    ('제33조 실행마다정독','main.py',          r'_doc_read\(tag=.analyze.\)', True),
+    ('제34조 각인1곳',   'main.py',            r"^VSTAMP = 'v\d", True),
+    ('제35조 zip검증',   'main.py',            r'def zip_selfcheck', True),
+    # ★v410b 구 패턴 `\[v\d\d\d `는 <b>기존 기능 이력 라벨 수백 건</b>까지 잡아 거짓경보를 냈다.
+    #   제36조의 대상은 <b>각인을 찍는 로그</b>(`[지침]`·`[zip검증]`)뿐이다 → 그 둘만 검사한다.
+    # ★v410c 주석 안의 <b>예시 문구</b>까지 걸렸다 → `print(` 줄로 한정한다.
+    ('제36조 라벨무버전','main.py',            r"print\([^\n]*\[v\d\d\d (지침|zip검증)\]", False),
+    # ★v410d 나머지 조문 — 파일 구조로 검사 가능한 것 전수
+    ('제0조 서열',       'main.py',            r'BARUM_DOCTRINE\.md', True),
+    ('제4조 제외7종',    'main.py',            r'농업인', True),
+    ('제5조 갱신판정',   'main.py',            r'9999', True),
+    ('제5조 색 0070C0',  'main.py',            r'0070C0', True),
+    ('제6조 사망배정',   'main.py',            r'일반사망', True),
+    ('제8조 슬래시',     'main.py',            r'종수술비\(1-5종\)', True),
+    ('제10조 제안서',    'main.py',            r'def build_proposal_contract', True),
+    ('제13조 검산',      'main.py',            r'한장표\] 검산', True),
+    ('제15조 마스터동적', 'main.py',           r'nm2r', True),
+    ('제29조 묻지않는다', 'BARUM_DOCTRINE.md', r'지침에 있는 건 묻지 않는다', True),
+    ('제31조 조문=테스트','main.py',           r'_JOMUN_SELFTEST', True),
+    ('제32조 전문정독',  'BARUM_DOCTRINE.md',  r'분석지 실행마다 이 파일을 전문 정독한다', True),
+    ('제14조 응대',      'BARUM_DOCTRINE.md',  r'팩폭', True),
+    # ★v410f 제37조(커버리지 100%) 자신에게 검사가 없어 97%였다 — <b>조문을 만들면 그 조문도 검사한다.</b>
+    ('제37조 커버리지',  'main.py',            r'_STRUCT_SELFTEST', True),
+    ('제37조 미결3부',   'BARUM_DOCTRINE.md',  r'A\. 지점장 확정이 필요한 것', True),
+]
+
+# ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
+_JOMUN_SELFTEST = [
+    # (담보명, 기대 마스터행, 조문)
+    ('상급종합병원Ⅲ하이클래스암주요치료비(연간1회한,진단후10년)', '하이클래스(암)', '제20조 하이클래스'),
+    ('하이클래스암주요치료비Ⅱ(상급종합병원(국립암센터포함))',      '하이클래스(암)', '제20조 하이클래스'),
+    ('비급여암주요치료비',                                        '하이클래스(암)', '제20조 하이클래스'),
+    ('암주요치료비Ⅲ(상급종합병원)(유사암제외)(연간1회한)(주요치료)', '암주요치료비',   '제20조 하이클래스'),
+    ('심뇌혈관질환주요치료비(연간1회한)(수술및혈전용해치료)',        '2대 주요치료비', '제21조 심뇌혈관'),
+    ('심뇌혈관질환주요치료비(연간1회한)(중환자실입원)',              '2대 주요치료비', '제21조 심뇌혈관'),
+    ('신특정순환계질환통합치료비ⅢPlus',                            '2대 주요치료비', '제21조 심뇌혈관'),
+    ('뇌졸중 혈전용해치료비(1회한)',                                '혈전용해치료비', '제21조 심뇌혈관'),
+    ('통합암진단비',                                              '통합암',         '제22조 통합암'),
+    ('통합전이암진단비',                                          '통합전이암',     '제22조 통합암'),
+    ('암진단비(유사암제외)(통합간편가입형)',                        '일반암',         '제22조 통합암'),
+    ('통합간편가입Ⅱ암진단비',                                     '일반암',         '제22조 통합암'),
+    ('암입원일당(1-180)',                                         '암일당',         '제18조 암일당'),
+    ('암입원일당(요양병원)',                                       '암일당',         '제18조 암일당'),
+    ('화재상해사망후유장해특약 : 화상수술비',                        '화상수술비',     '제16조 콜론뒤'),
+    ('화재상해사망후유장해특약 : 화상진단비',                        '화상진단비',     '제16조 콜론뒤'),
+]
+
+_RULE_SELFTEST = [
+    # (담보명, 기대키 또는 '__NOSPLIT__', 조문)
+    ('심뇌혈관질환주요치료비(연간1회한)(수술및혈전용해치료)담보', '__NOSPLIT__', '제21조 심뇌혈관'),
+    ('심뇌혈관수술비',                                          '심장수술비[묶음]', '제21조 심뇌혈관'),
+]
+
+
+# ★★★★★v410 (지점장 지시 2026.08.12 「지금 해라 절대 미루지 마라」): 조문 커버리지 확장.
+#   제31조(조문=테스트)를 만들어놓고 <b>내가 만든 새 조문 6개에는 검사를 안 넣었다</b> — 커버리지가 22%→19%로 떨어졌다.
+#   여기 있는 것은 전부 <b>기계로 확인 가능한</b> 조문이다. 확인 불가한 조문(응대·절차)은 표 아래에 사유를 적는다.
+_JOMUN2_SELFTEST = [
+    # (담보명, 기대 마스터행, 조문)
+    ('실효',                       None,            '제4조 제외7종'),
+    ('농업인NH안전보험',            None,            '제4조 제외7종'),
+    ('상해 종수술비(1-5종)',        '상해 종수술비(1-5종)', '제8조 슬래시'),
+    ('일반상해사망',               '상해사망',       '제6조 사망'),
+    ('암진단비(유사암제외)',        '일반암',         '제22조 통합암'),
+    ('유사암진단비',               '유사암(갑.기.경.제)', '제1조 엑셀기준'),
+    ('일상생활중배상책임',          '일상배상책임',    '제2조 산출물범위'),
+    ('비급여주사료',               '비급여주사',      '제9조 실손'),
+    ('비급여MRI검사비',            'MRI',            '제9조 실손'),
+    ('3대비급여(도수치료,체외충격파,증식치료)', '도수치료', '제9조 실손'),
+]
+
+def _jomun2_check():
+    """제4·6·8·9·22조 — 담보 배치 조문 실측."""
+    bad=[]
+    for nm, exp, cho in _JOMUN2_SELFTEST:
+        try: got = resolve2(nm)[0]
+        except Exception as e: bad.append(f'[{cho}] {nm} → ERR {e}'); continue
+        if got != exp: bad.append(f'[{cho}] {nm} → {got}(기대 {exp})')
+    return bad
+
+def _file_check():
+    """★v410e 제34조 — main.py 각인 <b>리터럴 개수</b>. 이건 정규식 유무 검사로는 못 잡는다(개수 문제).
+    나머지 파일·구조 조문은 `_STRUCT_SELFTEST`가 정본이다(중복 제거)."""
+    import os as _o, re as _r
+    bad=[]; base=_o.path.dirname(_o.path.abspath(__file__)) or '.'
+    try:
+        with open(_o.path.join(base,'main.py'),encoding='utf-8',errors='replace') as h: mn=h.read()
+    except Exception as e: return [f'[제34조] main.py 읽기 실패 {e}']
+    _lit = len(_r.findall(r"'v\d{3}[a-z]*-[a-z0-9]+-\d{8}'", mn))
+    if _lit != 1: bad.append(f'[제34조] main.py 각인 리터럴이 {_lit}곳 — VSTAMP 한 곳이어야 한다')
+    for _f in ZIP9:
+        if not _o.path.exists(_o.path.join(base,_f)): bad.append(f'[제12조] 배포파일 없음 {_f}')
+    return bad
+
 def doctrine_selftest():
     """지점장 확정 조문이 코드에 살아 있는지 매 배포 검사."""
     bad=[]
     for nm, exp in _DEDUP_SELFTEST:
         try: got = _dedup_std(nm)
-        except Exception as _e: bad.append(f'[dedup] {nm} → ERR {_e}'); continue
-        if got != exp: bad.append(f'[dedup] {nm} → {got}(기대 {exp})')
+        except Exception as _e: bad.append(f'[제3조 dedup] {nm} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[제3조 dedup] {nm} → {got}(기대 {exp})')
     for nm, exp in _DOCTRINE_SELFTEST:
         try: got = resolve2(nm)[0]
         except Exception as _e: bad.append(f'{nm} → ERR {_e}'); continue
         if got != exp: bad.append(f'{nm} → {got}(기대 {exp})')
     for nm, exp in _SOLO5_SELFTEST:
         try: got = is_solo5_name(nm)
-        except Exception as _e: bad.append(f'[단독5종] {nm} → ERR {_e}'); continue
-        if got != exp: bad.append(f'[단독5종] {nm} → {got}(기대 {exp})')
+        except Exception as _e: bad.append(f'[제3조 단독5종] {nm} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[제3조 단독5종] {nm} → {got}(기대 {exp})')
+    # ★★★★★v404 (지점장 지시 2026.08.12 「지침이 길어서 안 읽힌다 — 대책」):
+    #   <b>조문 = 테스트.</b> 문서는 안 읽히지만 <b>테스트는 매 배포마다 돈다.</b>
+    #   구 셀프테스트는 `resolve2`·`is_solo5_name`만 봤다 — 그래서 2026.08.12에 터진 위반을
+    #   <b>단 한 건도 못 잡았다</b>(전부 다른 파일·다른 함수에 있었다).
+    #   ★이제 조문을 새로 넣을 때는 <b>여기 검사를 같이 넣는다. 검사 없는 조문은 지침이 아니다.</b>
+    for _nm, _exp, _cho in _JOMUN_SELFTEST:
+        try: _got = resolve2(_nm)[0]
+        except Exception as _e: bad.append(f'[{_cho}] {_nm} → ERR {_e}'); continue
+        if _got != _exp: bad.append(f'[{_cho}] {_nm} → {_got}(기대 {_exp})')
+    # 제16조 담보명은 콜론 뒤 / 제21조 심뇌혈관주요치료비는 수술 분해 금지
+    for _nm, _must, _cho in _RULE_SELFTEST:
+        try: _d = rule_extract([_nm+'  100'], prefolded=True); _d.pop('__DUP__', None)
+        except Exception as _e: bad.append(f'[{_cho}] {_nm} → ERR {_e}'); continue
+        _ks = list(_d.keys())
+        if _must == '__NOSPLIT__':
+            if any('[묶음]' in k for k in _ks): bad.append(f'[{_cho}] {_nm} → 묶음분해됨 {_ks}')
+        elif _must not in _ks:
+            bad.append(f'[{_cho}] {_nm} → {_ks}(기대 {_must} 포함)')
+    # 제25·28조 「보유는 그 이름의 담보가 있을 때만」 — coverage_benchmark 실측
+    try:
+        import coverage_benchmark as _cb2, re as _re9
+        _src = open(_cb2.__file__, encoding='utf-8', errors='replace').read()
+        _i = _src.index('    scope_heart=[]'); _j = _src.index("    if _any('산정특례심장'", _i)
+        _hb = _src[_i:_j]
+        _i2 = _src.index('    scope_brain=[]'); _j2 = _src.index("    if _any('산정특례뇌'", _i2)
+        _bb = _src[_i2:_j2]
+        def _runsc(blk, key, names):
+            _ns = {'_any': (lambda *ks: any(k in n for n in names for k in ks))}
+            exec(blk.replace('    ', ''), _ns); return _ns[key]
+        if 'angina' in _runsc(_hb, 'scope_heart', ['허혈성 진단비']):
+            bad.append('[제28조 허혈성단독] 허혈성진단비만 있는데 협심증(angina)이 보유로 찍힌다')
+        if 'infarct' in _runsc(_bb, 'scope_brain', ['뇌혈관진단비']):
+            bad.append('[제25조 보유] 뇌혈관진단비만 있는데 뇌졸증(infarct)이 보유로 찍힌다')
+        if 'hem' in _runsc(_bb, 'scope_brain', ['뇌혈관진단비']):
+            bad.append('[제25조 보유] 뇌혈관진단비만 있는데 뇌출혈(hem)이 보유로 찍힌다')
+    except Exception as _e:
+        bad.append(f'[제25·28조] 검사 불가 {_e}')
+    # ★v410 파일 구조로 검사 가능한 조문 전수
+    import os as _os10, re as _re10
+    _base = _os10.path.dirname(_os10.path.abspath(__file__)) or '.'
+    _cache = {}
+    for _cho, _fn, _pat, _want in _STRUCT_SELFTEST:
+        if _fn not in _cache:
+            _t = ''
+            for _d in (_base, '.'):
+                try:
+                    with open(_os10.path.join(_d, _fn), encoding='utf-8', errors='replace') as _h: _t = _h.read()
+                    break
+                except Exception: continue
+            _cache[_fn] = _t
+        _t = _cache[_fn]
+        if not _t: bad.append(f'[{_cho}] {_fn} 읽기 실패'); continue
+        _hit = bool(_re10.search(_pat, _t, flags=_re10.M))
+        if _hit != _want:
+            bad.append(f'[{_cho}] {_fn} — ' + ('있어야 하는데 없다' if _want else '없어야 하는데 있다') + f' ({_pat})')
+    bad += _jomun2_check()      # ★v410 제4·6·8·9·22조
+    bad += _file_check()        # ★v410 제12·15·19·24·26·34·36조
     for cd, np3, drug, exp in _GEN_SELFTEST:
         try: got = silson_gen(cd, None, '', np3, drug)
-        except Exception as _e: bad.append(f'[실손세대] {cd} → ERR {_e}'); continue
-        if got != exp: bad.append(f'[실손세대] {cd}/np3={np3}/약값={drug} → {got or "공란"}(기대 {exp or "공란"})')
+        except Exception as _e: bad.append(f'[제9조 실손세대] {cd} → ERR {_e}'); continue
+        if got != exp: bad.append(f'[제9조 실손세대] {cd}/np3={np3}/약값={drug} → {got or "공란"}(기대 {exp or "공란"})')
     return bad
 
 
@@ -7213,7 +7391,7 @@ def health():
                  else ('FAIL %d건 | ' % _a['fail']) + ' | '.join(_a['detail'][:4])
     except Exception as _e:
         _audit = 'ERROR ' + str(_e)[:80]
-    return {'ok':True,'version':'v401-infotbl-20260812',
+    return {'ok':True,'version':VSTAMP,
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
@@ -7250,7 +7428,7 @@ def version_bot():
     RAW = 'https://raw.githubusercontent.com/bokkile83-ui/barum-bunseok-backend/main/'
     NEED = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
             'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml']
-    out = {'server_version': 'v401-infotbl-20260812'}
+    out = {'server_version': VSTAMP}
     rows = []; same = 0; diff = []; err = []
     for fn in NEED:
         p = os.path.join(HERE, fn)
@@ -7345,7 +7523,7 @@ def doctrine_bot():
         cov['FAIL'] = _bad
     except Exception as e:
         cov['검사'] = 'ERR ' + str(e)[:40]
-    return {'version': 'v401-infotbl-20260812',
+    return {'version': VSTAMP,
             '지침정본': _DOCTRINE_SRC,
             '해석원칙_출처': _PRINCIPLES_SRC,
             '해석원칙': [p[0] for p in (_PRINCIPLES or [])],
@@ -7357,7 +7535,7 @@ def doctrine_bot():
 @app.get('/diag')
 def diag():
     import subprocess, shutil
-    out = {'version': 'v401-infotbl-20260812'}
+    out = {'version': VSTAMP}
     out['pdftotext_path'] = shutil.which('pdftotext') or '없음(★범인)'
     try:
         r = subprocess.run(['pdftotext', '-v'], capture_output=True, text=True, timeout=20)
@@ -7404,9 +7582,132 @@ def home(): return INDEX_HTML
 @app.post('/check')
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
 
+
+# ★★★★★v408 (지점장 지시 2026.08.12 — 3대 원칙 ①): <b>zip 발행 자체를 코드가 검증한다.</b>
+#   지점장 원문: 「1. zip에 지침·메모리 항상 최신본 / 2. 무조건 읽고 분석하기 / 3. 지침이 법이고 엑셀이 기준이다」
+#   ①은 그동안 <b>손으로</b> 확인했다 — 그래서 2026.08.12에 <b>제0조 6항 본문이 빠진 채</b> 나갈 뻔했다.
+#   → 이 함수 하나가 zip 10파일·4파일 각인 일치·지침 조문·핵심 조문 수록·셀프테스트를 <b>전부</b> 찍는다.
+ZIP9 = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py','ga_tables.py',
+        'master.xlsx','Dockerfile','nixpacks.toml','ppt_form.pptx']
+DOC_MUST = ['단독 5종','심장 묶음','제외 7종','결과값 동결','엑셀에 없는 건','제0조 6',
+            '배포 9파일','PC ↔ 폰','미결','조문 = 테스트']
+
+def zip_selfcheck(d=''):
+    """zip 발행 전 필수 검증(제0조 6항·제12조). 실패 목록을 돌려준다. 빈 리스트여야 발행 가능."""
+    import os as _os, re as _re
+    bad=[]; base=d or _os.path.dirname(_os.path.abspath(__file__)) or '.'
+    for _f in ZIP9 + ['BARUM_DOCTRINE.md']:
+        if not _os.path.exists(_os.path.join(base,_f)): bad.append(f'파일 없음 {_f}')
+    stamps={}
+    for _f in ('main.py','coverage_benchmark.py','report_weasy.py','BARUM_DOCTRINE.md'):
+        _fp=_os.path.join(base,_f)
+        try:
+            with open(_fp,encoding='utf-8',errors='replace') as _h: _c=_h.read()
+        except Exception as _e: bad.append(f'읽기 실패 {_f} {_e}'); continue
+        _al=_re.findall(r'v\d{3}[a-z]*-[a-z0-9]+-\d{8}', _c)
+        stamps[_f]=_al[-1] if _al else '없음'
+    if len(set(stamps.values()))>1:
+        bad.append('각인 불일치 ' + ' / '.join(f'{k}={v}' for k,v in stamps.items()))
+    try:
+        with open(_os.path.join(base,'BARUM_DOCTRINE.md'),encoding='utf-8',errors='replace') as _h: _doc=_h.read()
+    except Exception: _doc=''
+    if _doc:
+        _jo=len(set(_re.findall(r'^## .*?제(\d+)조', _doc, flags=_re.M)))
+        if _jo < 30: bad.append(f'지침 조문 {_jo}개 — 30 미만이면 잘린 파일 의심')
+        for _k in DOC_MUST:
+            if _k not in _doc: bad.append(f'지침에 핵심 조문 누락: {_k}')
+        # ★v410e 조문이 「[확인 대기]는 제3부에만」이라고 <b>설명하는 문장</b>까지 걸려 거짓양성이 났다.
+        #   → <b>목록 항목(`- ` / `1. `)으로 적힌 미결</b>만 위반으로 본다. 설명문은 제외.
+        _k3=_doc.find('# 제3부')
+        if _k3>0:
+            _viol=[_l for _l in _doc[:_k3].split('\n')
+                   if '[확인 대기]' in _l and _re.match(r'\s*(?:[-*]|\d+\.)\s', _l)]
+            if _viol:
+                bad.append(f'본문에 미결 {len(_viol)}건 잔존 — 제33조: 미결은 제3부에만 / 예: {_viol[0].strip()[:60]}')
+    else:
+        bad.append('BARUM_DOCTRINE.md를 읽지 못했다')
+    mn2 = rd_main = ''
+    try:
+        with open(_os.path.join(base,'main.py'),encoding='utf-8',errors='replace') as _h: mn2=_h.read()
+    except Exception: mn2=''
+    try: bad += ['조문검사 '+x for x in doctrine_selftest()]
+    except Exception as _e: bad.append(f'조문검사 실행 불가 {_e}')
+    # ★★★★★v410 제37조 — <b>조문 커버리지를 매번 숫자로 찍는다.</b>
+    #   지점장 지시 「지금 해라 절대 미루지 마라」. 커버리지가 떨어지면 그 자리에서 보인다.
+    _cvg = '?'
+    try:
+        _i2 = min(mn2.index('_STRUCT_SELFTEST'), mn2.index('_JOMUN_SELFTEST'))
+        _j2 = mn2.index('def ci_selftest')
+        _cov = set(int(x) for x in _re.findall(r'제(\d+)조', mn2[_i2:_j2]))
+        _joset = set(int(x) for x in _re.findall(r'^## .*?제(\d+)조', _doc, flags=_re.M))
+        _miss = sorted(_joset - _cov)
+        _cvg = '%d/%d=%d%%' % (len(_joset)-len(_miss), len(_joset),
+                               100*(len(_joset)-len(_miss))//max(1,len(_joset)))
+        if _miss: bad.append('[제37조] 검사 없는 조문 %s' % _miss)
+    except Exception as _e:
+        bad.append(f'[제37조] 커버리지 측정 불가 {_e}')
+    print('[zip검증] 각인 ' + (list(stamps.values())[0] if stamps else '?') +
+          f' · 조문 {_jo if _doc else 0}개 · 커버리지 {_cvg} · 실패 {len(bad)}건')
+    for _b in bad[:15]: print('   ★', _b)
+    return bad
+
+# ★★★★★v406 지침 정독 강제 (지점장 지시 2026.08.12 · 법)
+_DOC_PATHS = ('BARUM_DOCTRINE.md', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'BARUM_DOCTRINE.md'))
+
+def _doc_read(tag=''):
+    # ★v409 로그 라벨에 <b>버전 번호를 박지 않는다</b>. v406→v407→v408로 올리며
+    #   라벨만 옛 번호로 남아 <b>각인과 어긋났다</b>(실측: 각인 v408인데 로그는 `[v407 지침]`).
+    #   각인은 `VSTAMP` 한 곳뿐이다 — 로그에 버전을 쓰려면 그 상수를 쓴다.
+    """분석 실행마다 지침 전문을 읽고 조문 검사를 돌린다. 안 읽히면 그 사실을 시끄럽게 남긴다."""
+    _txt = ''
+    for _p in _DOC_PATHS:
+        try:
+            with open(_p, encoding='utf-8', errors='replace') as _f: _txt = _f.read()
+            if _txt: break
+        except Exception: continue
+    if not _txt:
+        print(f'[지침] ★★ BARUM_DOCTRINE.md를 읽지 못했다 — zip에 빠졌거나 배포 누락 (제0조 6항 위반) [{tag}]')
+        return {'ok': False, 'chars': 0, 'jomun': 0, 'fail': ['지침 파일 없음']}
+    import re as _re6
+    _jo = len(set(_re6.findall(r'^## .*?제(\d+)조', _txt, flags=_re6.M)))
+    _st = _re6.search(r'v\d{3}[a-z]*-[a-z0-9]+-\d{8}', _txt)
+    _stamp = _st.group(0) if _st else '없음'
+    try: _fail = doctrine_selftest()
+    except Exception as _e: _fail = [f'검사 실행 불가 {_e}']
+    print(f'[지침] 정독 {len(_txt):,}자 · 조문 {_jo}개 · 각인 {_stamp} · 조문검사 실패 {len(_fail)}건 [{tag}]')
+    for _x in _fail[:12]: print(f'   ★조문위반 {_x}')
+    if _stamp != VSTAMP:
+        print(f'[지침] ★★ 각인 불일치 — 코드 {VSTAMP} ≠ 지침 {_stamp} (제0조 6항: 그 zip은 불량이다)')
+    # ★★★★★v407: <b>3파일 각인이 서로 같은지</b>도 검사한다.
+    #   한 파일만 옛 각인이면 그 파일은 <b>옛 코드</b>다 — 「배포했는데 안 바뀐다」의 진짜 원인이 여기다.
+    _mis = []
+    for _fn in ('coverage_benchmark.py', 'report_weasy.py'):
+        for _d in ('', os.path.dirname(os.path.abspath(__file__))):
+            _fp = os.path.join(_d, _fn) if _d else _fn
+            try:
+                # ★v407b 각인은 파일 <b>끝쪽</b>에 있을 수 있다(report_weasy.py는 6.1MB 중 6,174,604번째).
+                #   앞 400KB만 읽었더니 <b>정상인데도 「불일치」</b>가 떴다 — 검사가 거짓말을 했다.
+                #   ★검사가 틀리면 진짜 결함보다 나쁘다. 사람이 경고를 무시하게 만든다. → <b>전문을 읽는다.</b>
+                with open(_fp, encoding='utf-8', errors='replace') as _f2: _c = _f2.read()
+            except Exception: continue
+            _all = _re6.findall(r'v\d{3}[a-z]*-[a-z0-9]+-\d{8}', _c)
+            _v2 = _all[-1] if _all else '없음'
+            if _v2 != VSTAMP: _mis.append(f'{_fn}={_v2}')
+            break
+    if _mis:
+        print(f'[지침] ★★ 파일 각인 불일치 — 코드 {VSTAMP} ≠ ' + ' / '.join(_mis))
+    return {'ok': not _fail, 'chars': len(_txt), 'jomun': _jo, 'stamp': _stamp, 'fail': _fail}
+
+
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
+    # ★★★★★v406 (지점장 지시 2026.08.12, 최상위·영구):
+    #   지점장 원문: 「<b>지침은 분석지 실행마다 무조건 읽어라. 법이다. 리딩시간 늘려도 된다.</b>」
+    #   → 분석 <b>매 실행마다</b> `BARUM_DOCTRINE.md`를 실제로 읽고 조문 검사를 돌린다.
+    #     읽는 것을 <b>내 기억이 아니라 코드가 강제</b>한다.
+    #   ★조문 위반이 있으면 <b>로그로 시끄럽게</b> 남긴다(제11조 「조용히 틀리는 것을 시끄럽게」).
+    _doc_read(tag='analyze')
     # ★★★★★v373 (지점장 확정 2026.08.09 「자리 정해라」): <b>칸의 뜻을 고정한다</b>.
     #   <b>왼쪽 file = 보장분석지 / 오른쪽 file2 = 가입제안서</b> — 상황과 무관하게 항상 같다.
     #   ・Ⅰ 보장분석지만 = 왼쪽만  ・Ⅱ 둘 다 = 왼쪽+오른쪽  ・Ⅲ 제안서만 = <b>오른쪽만</b>
