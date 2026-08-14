@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v410-coverage-20260812 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v420-audit-20260814 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -25,6 +25,17 @@ BENCHMARK = {
     '40s': {'사망·후유':15000,'암':10000, '뇌혈관':5000, '심장':3000},
     '50s': {'사망·후유':10000,'암':10000, '뇌혈관':5000, '심장':4000},
     '60s': {'사망·후유':5000, '암':8000,  '뇌혈관':5000, '심장':4000},
+}
+# ★★★★★v418 담보명 기준 벤치마크 (지점장 지시 2026.08.13 「담보이름으로」)
+#   충족률의 「보유」 = <b>A열 그룹 세로합이 아니라 B열 담보명 하나의 값</b>.
+#   출처: 뇌·심 4종 = <b>바름 교육자료(26년 바름 교육 2607) 「고객 진단비/치료비 보장 점검」</b> 권장액 실측.
+#         암·사망 = 롯데 리포트 「한장보장현황」 표준금액 + 지점장 지시 「기준점을 높여라」.
+#   ★담보가 2개인 카테고리는 <b>낮은 쪽</b>을 본다 — 충족률은 「어디가 비었나」를 보는 지표다.
+NAMED_BENCH = {
+    '뇌혈관':    [('뇌혈관진단비', 5000)],                      # 바름 교육 5,000
+    '심장':      [('허혈성 진단비', 5000), ('급성심근경색', 5000)],  # 바름 교육 각 5,000
+    '암':        [('일반암', 5000)],                            # 바름 교육 「암 진단비 5천~1억」 하단
+    '사망·후유': [('상해사망', 20000)],                          # 롯데 표준 20,000
 }
 # 비금액(presence) 카테고리: 핵심담보 보유개수 / 기준개수
 PRESENCE = {
@@ -261,8 +272,23 @@ def load_excel(path):
             _sil_rows.append(_r)
     # 헤더(계약 메타)
     headers=[]
+    # ★★★★★v419 (지점장 지적 2026.08.13 「2번페이지도 새로가입하는건에대해 다 블랙이다」)
+    #   구 루프는 `range(2,last)`라 <b>합산 열(보유 합계·제안 합계)까지 계약으로 셌다</b>.
+    #   실측: 계약 21건(실제 19건) · 보험료 막대에 「보유 2,852,227원」「제안 119,572원」 막대가
+    #   계약인 척 서 있었다 · 표지도 21건. v417은 <b>색만</b> 고치고 계약 판정은 그대로였다 — 내 누락.
+    #   ★<b>「계약이냐」는 판정은 한 곳에서만 한다</b>: 헤더 1행이 합산 라벨인 열은 계약이 아니다.
+    _SUMHDR=('보유 합계','제안 합계','합계','보유합계','제안합계')
+    _propcols=set()
+    for _c in range(2,last+1):
+        _h1=str(ws.cell(1,_c).value or '').strip()
+        if _h1 in _SUMHDR and _h1.replace(' ','')=='제안합계':
+            # 제안 합계 열 <b>왼쪽</b>이 제안 계약 열이다(엑셀 합산 2열 구조 v388c)
+            for _p in range(_c-1,1,-1):
+                if str(ws.cell(1,_p).value or '').strip() in _SUMHDR: continue
+                _propcols.add(_p); break
     for c in range(2,last):  # 마지막=합계 제외
         nm=ws.cell(1,c).value; pr=_man(ws.cell(2,c).value)
+        if str(nm or '').strip() in _SUMHDR: continue     # ★v419 합산 열은 계약이 아니다
         if nm is None and pr==0: continue
         _raw=str(nm or '')                                       # ★원본(회사\n상품\n[갱신])
         _rl=[x.strip() for x in _raw.split('\n') if x.strip()]
@@ -297,6 +323,7 @@ def load_excel(path):
         _np3=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_np3_rows',[]))
         _drug=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_drug_rows',[]))
         headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,
+                        'prop':(c in _propcols),                      # ★v419 가입제안서 계약 = 레드
                         'co':_co_,'prod':_pr_,'np3':_np3,'drug':_drug,
                         'genhint':(int(_gh.group(1)) if _gh else None)})
     total_prem=int(_man(ws.cell(2,last).value))
@@ -336,14 +363,28 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     # ★★★v139 갱신 색 원천(지점장 2026.07.21): 엑셀 값 글자색이 파랑(0070C0)이면 그 담보는 '갱신'.
     #   엑셀이 이미 정본이므로 색을 그대로 읽어 설명서·PPT에 전달한다(4대 산출물 연동).
     _gen_map={}; _red_map={}   # ★v370 _red_map = 가입제안서(레드 C00000) 담보
+    _own_amt={}; _prop_amt={}  # ★v417 담보별 보유합계 / 제안합계(2줄 분리 표기용)
     try:
         import openpyxl as _ox2
         _w2=_ox2.load_workbook(xlsx_path); _s2=_w2.active
+        # ★★★★★v417 (지점장 지적 2026.08.13 「6페이지는 다 레드로 나온다」) — 근본 원인:
+        #   구 코드는 `range(3, max_column)`으로 <b>합산 열까지 훑었다</b>. 엑셀 합산 라인 2열(v388c)의
+        #   <b>제안 합계 열은 글자색이 레드 C00000이고 값이 `=SUM(...)` 수식 문자열</b>이라
+        #   <b>모든 담보 행에서 항상 참</b>이 된다 → `_red_map`에 <b>담보 99개 전부</b>가 들어가
+        #   설명서·진단서가 <b>통째로 레드</b>로 찍혔다(실측 99/99).
+        #   → <b>색은 실제 계약 열에서만 읽는다.</b> 합산 3열(보유 합계·제안 합계·합계)은 제외.
+        _SUMHDR=('보유 합계','제안 합계','합계','보유합계','제안합계')
+        _datac=[_c for _c in range(3,_s2.max_column+1)
+                if str(_s2.cell(1,_c).value or '').strip() not in _SUMHDR]
+        _sumc={}
+        for _c in range(3,_s2.max_column+1):
+            _h=str(_s2.cell(1,_c).value or '').strip()
+            if _h in _SUMHDR: _sumc[_h.replace(' ','')]=_c
         for _r2 in range(6,_s2.max_row+1):
             _nm2=_s2.cell(_r2,2).value
             if not _nm2: continue
             _nm2=str(_nm2).strip()
-            for _c2 in range(3,_s2.max_column):
+            for _c2 in _datac:
                 _f2=_s2.cell(_r2,_c2).font
                 _rgb=(_f2.color.rgb if (_f2 and _f2.color and _f2.color.rgb) else '')
                 _up2=str(_rgb).upper() if _rgb else ''
@@ -352,7 +393,21 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                 if _up2.endswith('0070C0') and _hasv:
                     _gen_map[_nm2]=True
         _w2.close()
-    except Exception: pass
+        # ★v417 보유/제안 금액 분리(캐시값) — 진단서 2줄 표기의 유일 원천은 엑셀이다(결과값 동결 #9).
+        if _sumc.get('보유합계') and _sumc.get('제안합계'):
+            _w3=_ox2.load_workbook(xlsx_path, data_only=True); _s3=_w3.active
+            for _r3 in range(6,_s3.max_row+1):
+                _nm3=_s3.cell(_r3,2).value
+                if not _nm3: continue
+                _nm3=str(_nm3).strip()
+                _ov=_s3.cell(_r3,_sumc['보유합계']).value
+                _pv=_s3.cell(_r3,_sumc['제안합계']).value
+                if isinstance(_ov,(int,float)) and _ov: _own_amt[_nm3]=_ov
+                if isinstance(_pv,(int,float)) and _pv: _prop_amt[_nm3]=_pv
+            _w3.close()
+        print(f'[v417 색원천] 계약열 {len(_datac)}개 · 합산열 제외 {len(_sumc)}개 · red_map {len(_red_map)} · gen_map {len(_gen_map)} · 제안금액 {len(_prop_amt)}건')
+    except Exception as _e417:
+        print(f'[v417 색원천] 실패 {_e417}')
     # ★★★v182 (지점장 2026.07.22): 세부가입현황 미파싱 등 <b>수기 확인이 필요한 건</b>을
     #   확인사항 시트에서 모아 보장진단서에 <b>빨간 경고 배너</b>로 띄운다(방치 출고 차단).
     _warn=[]
@@ -399,9 +454,43 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     _badj=_bundle_adjust(xlsx_path)   # ★v30e 묶음 전개 중복 차감(심장·뇌 보유합)
     client=settings.get('client','고객')
 
-    coverage=[]; donut_map={}; detail_map={}
+    # ★★★★★v418 (지점장 지시 2026.08.13 「담보이름으로」) — 충족률 「보유」를 <b>담보명 기준</b>으로.
+    #   구 방식은 A열 <b>구분 그룹의 세로합</b>이었다. 이영태 뇌혈관 8,000만 =
+    #   뇌혈관진단비 2,500 + 뇌졸증진단비 1,500 + <b>중대한 뇌졸증(CI) 4,000</b>.
+    #   ★<b>세로로 더한 숫자는 고객이 한 번에 받는 돈이 아니다.</b> 지점장 원문 「뇌혈관 다 해도 2천인데」.
+    #   CI는 중대성 요건을 통과해야 나오는 별개 담보라 표준 컬럼에 더하지 않는다(지침 원칙).
+    #   ★담보가 2개면 <b>낮은 쪽</b>을 본다 — 충족률은 「어디가 비었나」를 보는 지표다.
+    def _amt_of(nm):
+        for rows in grp_rows.values():
+            for b,v in rows:
+                if str(b).strip()==nm: return v or 0
+        return 0
+    def _named(cat):
+        spec=NAMED_BENCH.get(cat)
+        if not spec: return None
+        out=[]
+        for nm,rec in spec:
+            a=_amt_of(nm)
+            out.append({'nm':nm,'amt':a,'rec':rec,'pct':(round(a/rec*100) if rec else 0)})
+        return min(out, key=lambda x:x['pct'])
+    coverage=[]; donut_map={}; detail_map={}; named_map={}
     for cat in CATEGORY_GROUPS:
         p,total,top=pct_for(cat,grp_rows,age_band)
+        _nb=_named(cat)
+        if _nb:
+            p=_nb['pct']; named_map[cat]=_nb
+            donut_map[cat]=p
+            detail_map[cat]={'have':(_fmt(_nb['amt']) or '0'),'rec':_fmt(_nb['rec']),
+                             'unit':'만','base':_nb['nm']}
+            status='full' if p>=70 else ('part' if p>=40 else 'gap')
+            _disp=getattr(load_excel,'_disp',{})
+            items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),
+                    **({'blue':True} if (cat in ('실손·일배책',) or _gen_map.get(str(b).strip())) else {}),
+                    **({'red':True} if _red_map.get(str(b).strip()) else {})} for b,v in top]
+            if not items or all(not it['v'] for it in items):
+                items=[{'t':f'{cat} 없음','none':True}]
+            coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
+            continue
         if cat in ('심장','뇌혈관') and _badj.get(cat):
             total=max(0,total-_badj[cat])
             rec=BENCHMARK[age_band].get(cat)
@@ -435,10 +524,13 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     weak=[{'h':c,'d':f'충족률 {p}% — 보강 필요'} for c,p in ranked if p<40][:4]
     gap_count=sum(1 for _,p in ranked if p<40)
 
-    renew_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원"} for h in headers if h['renew']]
-    nonren_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원"} for h in headers if not h['renew']]
+    # ★v419 제안 계약은 목록·막대에서 레드(C00000)로 구분한다 — 보유와 섞이면 「새로 가입하는 건」이 안 보인다
+    renew_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원",**({'prop':True} if h.get('prop') else {})}
+                for h in headers if h['renew']]
+    nonren_list=[{'nm':h['nm'][:18],'v':f"{h['amt']:,}원",**({'prop':True} if h.get('prop') else {})}
+                 for h in headers if not h['renew']]
     _co=lambda nm:(nm.split(' ')[0] if ' ' in nm else nm[:6])
-    bars=sorted([{'nm':_co(h['nm']),'amt':h['amt'],'renew':h['renew']} for h in headers],
+    bars=sorted([{'nm':_co(h['nm']),'amt':h['amt'],'renew':h['renew'],'prop':bool(h.get('prop'))} for h in headers],
                 key=lambda x:-x['amt'])
     donuts=[{'name':('심장' if c=='심장' else c.split('·')[0] if c in('실손·일배책','입원·일당','응급실·독감','골절·화상','사망·후유') else c),
              'pct':min(100,donut_map[c])} for c in DONUT_ORDER]
@@ -571,13 +663,16 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'warn_list':_warn,'warn_co':_warn_co,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'own_amt':_own_amt,'prop_amt':_prop_amt,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,
         'premium_bars':bars,'donuts':donuts,
         'donut_detail':[{'name':label.get(c,c),'have':detail_map[c]['have'],
-                         'rec':detail_map[c]['rec'],'pct':min(100,donut_map[c]),
+                         'base':detail_map[c].get('base',''),
+                         # ★v418 표는 <b>실제치</b>(주석 「상한 없음·실제치, 2026.07.12 지점장 확정」 복원).
+                         #   도넛 링은 물리적으로 100%가 끝이라 링만 min(100)을 유지한다.
+                         'rec':detail_map[c]['rec'],'pct':donut_map[c],
                          'raw':_raw.get(c,0),'over':_raw.get(c,0)>100} for c in DONUT_ORDER],
         'band_label':{'20s':'20대','30s':'30대','40s':'40대','50s':'50대','60s':'60대'}.get(age_band,age_band),
         'chiryo':chiryo,

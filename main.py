@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v410-coverage-20260812'
+VSTAMP = 'v420-audit-20260814'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1037,6 +1037,9 @@ _STRUCT_SELFTEST = [
     ('제14조 응대',      'BARUM_DOCTRINE.md',  r'팩폭', True),
     # ★v410f 제37조(커버리지 100%) 자신에게 검사가 없어 97%였다 — <b>조문을 만들면 그 조문도 검사한다.</b>
     ('제37조 커버리지',  'main.py',            r'_STRUCT_SELFTEST', True),
+    # ★v412 제38조는 [기각] — 열 배치가 <b>현행 그대로</b>인지 검사한다(누가 다시 바꾸면 잡힌다).
+    ('제38조 열배치현행','main.py',            r"own_sum_col  = \(3 \+ n_ct\)", True),
+    ('제39조 자부상80',  'main.py',            r'_new413 = round\(amt / 80\)', True),
     ('제37조 미결3부',   'BARUM_DOCTRINE.md',  r'A\. 지점장 확정이 필요한 것', True),
 ]
 
@@ -2362,6 +2365,14 @@ def _jn_rows_tbl(lines):
             nm = nm + _fr; _used.add(_k); _k += 1; _first_down = False
         _used.add(i)
         nm=re.sub(r'\s+','',nm)
+        # ★★★v416 제안서 담보명 <b>꼬리 오염</b>(실측 KB 26.07 간병인지원 3건).
+        #   접힘 아랫줄 `신형)`에 <b>우측 열 `(갱신종료:90세)`가 같이 찍혀</b> 담보명에 붙었고,
+        #   `(갱`+`갱신`+`신형)` 결합으로 <b>`갱갱신신형`</b>이 됐다.
+        #   → v391 영구조항(「담보명이 조용히 바뀐다」) 위반이라 그 자리에서 정화한다.
+        #   `(갱신종료:…)`는 <b>기간칸</b>이지 담보명이 아니다.
+        nm=re.sub(r'\(갱신종료[^)]*\)', '', nm)
+        nm=re.sub(r'갱갱신신형', '갱신형', nm)
+        nm=re.sub(r'(?:갱신){2,}형', '갱신형', nm)
         if not _jn_hasname(nm): continue
         # ★v389e 표 헤더·합계 줄이 담보로 잡히던 것 차단(실측 DB `계약사항:01종…납입보험료`,
         #   `만기/납기납입보험료`, `적립보험료`). 담보명 `보험료납입면제`·`보험료납입지원`은 안전.
@@ -5087,6 +5098,26 @@ def build_excel(data, out):
             #   Haiku가 간병인·암주요치료비·하이클래스 등 확정담보를 가로채 누락시키던 문제 차단.
             std, jong = resolve2(raw)
             jong = jong or get_종번호(raw)
+            # ★★★★★v413 (지점장 확정 2026.08.12): <b>자부상은 가입금액이 아니라 12~14급(경상) 지급액이다.</b>
+            #   지점장 원문: 「<b>디비손보 운전자보험 2400 = 30 이다</b> / <b>1600=20 800=10</b>」
+            #   → 실측 비율 <b>÷80</b> (2400/80=30 · 1600/80=20 · 800/80=10).
+            #   원문 지급표와 일치: DB `자동차부상치료비Ⅱ` 1,600 → 「1급 1천600만원 … <b>12~14급 20만원</b>」.
+            #   ★왜 필요했나: 가입금액 1,600은 <b>1급(중상) 한도</b>다. 자부상 칸은 <b>경상 때 얼마 나오나</b>를
+            #     보는 자리이고 한장표 표준금액도 30만원이다 — 1,600을 그대로 넣으면 <b>53배 과대표시</b>다.
+            #   ★적용 범위: <b>DB손해보험</b> + 급수 밴드가 <b>1~14급</b>인 담보만. 다른 회사는 손대지 않는다
+            #     (등급표 비율이 회사마다 같다는 근거가 없다 — 확인되면 그때 넓힌다).
+            if std == '자부상' and isinstance(amt, (int, float)) and amt:
+                # ★v413b (지점장 확정 2026.08.12): 「<b>방금 건 DB손보 운전자 전용 지침이다</b>」
+                #   → 회사 DB + <b>상품명에 '운전자'</b>가 있을 때만. 다른 DB 상품엔 적용하지 않는다.
+                _cmp413 = str(ct.get('company') or '')
+                _prd413 = str(ct.get('product') or '')
+                if ('DB' in _cmp413 or '디비' in _cmp413) and ('운전자' in _prd413):
+                    _b413 = re.search(r'(\d+)\s*~\s*(\d+)\s*급', raw)
+                    _is14 = (int(_b413.group(2)) >= 14) if _b413 else True   # 밴드 표기 없으면 DB 1~14급형
+                    if _is14 and amt >= 80:
+                        _new413 = round(amt / 80)
+                        print(f"[v413 자부상] {ct['company']} '{raw}' {amt} → {_new413} (12~14급 경상 지급액 = 가입금액÷80)")
+                        amt = _new413
             if not std:                       # 규칙이 못 잡은 것만 LLM 폴백
                 # ★v30m 수술·일당은 resolve_kw(+DMAP)가 최종 판정. resolve_kw가 [확인](None)으로 보낸 변형을
                 #   Haiku가 질병/상해수술비·상해/질병일당 base 행으로 되끌어와 합산하던 문제 차단 → 변형은 그대로 [확인].
@@ -7055,11 +7086,25 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         base.text=f'{label}\n'
         el1=_cicopy.deepcopy(base._r); base._r.addnext(el1)
         r1=_ciRunCls(el1,p); r1.text=f'{civ:,}'; _hl_yellow(r1)
-        exv=totals.get(extra_std,0)
-        if exv:
-            el2=_cicopy.deepcopy(base._r); el1.addnext(el2)
-            r2=_ciRunCls(el2,p); r2.text=f'+{exv:,}'
-            try: r2.font.color.rgb=(_BLUE if _gensum.get(extra_std) else _BLACK)
+        # ★v417 CI 값 색도 엑셀 글자색 근거(구 코드는 base run 색을 그대로 물려받아 파랑이 됐다)
+        try:
+            r1.font.color.rgb=(_RED if _propsum.get(ci_std) else (_BLUE if _gensum.get(ci_std) else _BLACK))
+        except: pass
+        # ★★★★★v417 (지점장 지적 2026.08.13 「급성심근경색 → 기존것과 합쳐져 다 블루로 나온다」)
+        #   구 코드는 일반 담보를 <b>끝열 합계 한 숫자</b>로 찍고 색도 `_gensum` 유무만 봐서
+        #   <b>보유+제안이 뭉쳐 통째로 파랑</b>이 됐다(실측 `4,000`+`+2,500` 둘 다 0000FF).
+        #   ★ pv()는 이미 3분할(갱신·비갱신·제안)을 하는데 _ci_split이 그 위를 <b>덮어써서</b>
+        #     제안 레드가 사라졌다 — 여기서도 splits를 그대로 쓴다(제40조 재현 완료).
+        _g2=_gensum.get(extra_std,0); _n2=_nonsum.get(extra_std,0); _p2=_propsum.get(extra_std,0)
+        if not (_g2 or _n2 or _p2):
+            _ex0=totals.get(extra_std,0)
+            if _ex0: _n2=_ex0
+        _prev=el1
+        for _v2,_c2 in ((_g2,_BLUE),(_n2,_BLACK),(_p2,_RED)):
+            if not _v2: continue
+            _e2=_cicopy.deepcopy(base._r); _prev.addnext(_e2); _prev=_e2
+            _r2=_ciRunCls(_e2,p); _r2.text=f'+{_v2:,}'
+            try: _r2.font.color.rgb=_c2
             except: pass
     # ★★★★★v243(지점장 지시 2026.07.25): <b>보장분석지 PPT 뇌 칸도 축을 따라간다</b>.
     #   구 코드는 `중대한 뇌졸증`만 봐서, 축이 뇌출혈인 CI(신한·DB 실측)는 <b>PPT에 아무것도 안 찍혔다</b>.
@@ -7640,7 +7685,12 @@ def zip_selfcheck(d=''):
         _j2 = mn2.index('def ci_selftest')
         _cov = set(int(x) for x in _re.findall(r'제(\d+)조', mn2[_i2:_j2]))
         _joset = set(int(x) for x in _re.findall(r'^## .*?제(\d+)조', _doc, flags=_re.M))
-        _miss = sorted(_joset - _cov)
+        # ★v411c [보류]·[미결] 조문은 아직 구현이 없으므로 검사 대상이 아니다.
+        #   제목에 「[보류]」가 붙은 조문은 커버리지에서 뺀다 — 대신 그 사실을 로그에 남긴다.
+        # ★v412 [보류]·[기각] 조문은 구현이 없으므로 커버리지 대상이 아니다.
+        _hold = set(int(x) for x in _re.findall(r'^## .*?제(\d+)조 — \[(?:보류|기각|미해결)\]', _doc, flags=_re.M))
+        _miss = sorted(_joset - _cov - _hold)
+        if _hold: print(f'[zip검증] [보류·기각·미해결] 조문 {sorted(_hold)} — 커버리지 제외')
         _cvg = '%d/%d=%d%%' % (len(_joset)-len(_miss), len(_joset),
                                100*(len(_joset)-len(_miss))//max(1,len(_joset)))
         if _miss: bad.append('[제37조] 검사 없는 조문 %s' % _miss)
@@ -7983,6 +8033,78 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                     response['report_pptx_name']=f'보장진단서_{cust}.pptx'
             except Exception as _pe:
                 response['report_pptx_error']=str(_pe)
+        # ★★★★★v420 REPORT_AUDIT — 산출물 게이트 (지점장 지시 2026.08.14 「다해」)
+        #   지적 30건을 되짚으면 원인은 셋뿐이었고 그 중 첫째가
+        #   <b>게이트가 엑셀만 보고 산출물은 열어보지 않는다</b>였다.
+        #   검산 27/27·감사 58/58을 통과하면서 6페이지가 통째로 레드였고,
+        #   계약이 21건으로 세어졌고, 7페이지 레드가 0건이었다.
+        #   ★<b>값이 맞나</b>가 아니라 <b>보이는 게 맞나</b>를 만든 직후에 검사한다.
+        #   ★실패해도 산출은 막지 않는다 — <b>조용히 틀리는 것을 시끄럽게 틀리는 것으로</b> 바꾼다.
+        try:
+            _aud=[]; _rep=locals().get('rep') or {}
+            # ①계약 수 = 엑셀 계약 열 수(합산 열 제외)
+            try:
+                _ncol=len(_rep.get('renew_list') or [])+len(_rep.get('nonrenew_list') or [])
+                if _rep.get('n_contract') and _ncol and _rep['n_contract']!=_ncol:
+                    _aud.append(f"계약수 불일치 n_contract={_rep['n_contract']} vs 목록={_ncol}")
+                for _l in (_rep.get('renew_list') or [])+(_rep.get('nonrenew_list') or []):
+                    if str(_l.get('nm','')).strip() in ('보유 합계','제안 합계','합계'):
+                        _aud.append(f"합산 열이 계약으로 세어짐: {_l.get('nm')}")
+            except Exception: pass
+            # ②red_map 오염(제안 담보 수를 넘지 않는다)
+            try:
+                _rm=len(_rep.get('red_map') or {}); _pa=len(_rep.get('prop_amt') or {})
+                if _pa and _rm > _pa*3:
+                    _aud.append(f"red_map 오염 의심 red={_rm} vs 제안금액={_pa}")
+            except Exception: pass
+            # ③충족률이 전 항목 동일값이면 변별력 0
+            try:
+                _p=[d.get('pct') for d in (_rep.get('donut_detail') or []) if d.get('pct') is not None]
+                if len(_p)>=5 and len(set(_p))==1:
+                    _aud.append(f"충족률 전 항목 동일값 {_p[0]}% — 변별력 0")
+            except Exception: pass
+            # ④진단서 PPT: 제안 담보가 있는데 레드가 0건인 슬라이드
+            try:
+                if os.path.exists(rpx) and (_rep.get('prop_amt') or {}):
+                    from pptx import Presentation as _PR
+                    _pp=_PR(rpx); _nred=0; _nsl=0
+                    for _s in _pp.slides:
+                        _nsl+=1
+                        for _sh in _s.shapes:
+                            if not _sh.has_text_frame: continue
+                            for _pa2 in _sh.text_frame.paragraphs:
+                                for _r2 in _pa2.runs:
+                                    try:
+                                        if str(_r2.font.color.rgb)=='C00000': _nred+=1
+                                    except Exception: pass
+                    if _nred==0:
+                        _aud.append('진단서 PPT 레드 0건 — 제안 담보가 있는데 색이 안 실렸다')
+                    response['audit_slides']=_nsl; response['audit_red']=_nred
+            except Exception: pass
+            # ⑤설명서 푸터: 연속성·분모
+            try:
+                if os.path.exists(rpdf):
+                    import subprocess as _sp, re as _re3
+                    _t=_sp.run(['pdftotext',rpdf,'-'],capture_output=True).stdout.decode('utf-8','replace')
+                    # ★v420b 본문 표에도 'N / M'이 나온다 → <b>페이지별 마지막 1건</b>만,
+                    #   그리고 <b>분모가 일정한 것</b>만 푸터로 본다(오탐 2건 실측 후 수정).
+                    _pages=_t.split('\f'); _nums=[]; _dens=[]
+                    for _pg in _pages:
+                        _mm=_re3.findall(r'(\d+)\s*/\s*(\d+)',_pg)
+                        if _mm: _nums.append(int(_mm[-1][0])); _dens.append(int(_mm[-1][1]))
+                    from collections import Counter as _Ct
+                    if _dens:
+                        _den=_Ct(_dens).most_common(1)[0][0]
+                        _nums=[n for n,d in zip(_nums,_dens) if d==_den]
+                    if _nums:
+                        if len(_nums)!=len(set(_nums)): _aud.append('설명서 푸터 번호 중복')
+                        if _nums!=sorted(_nums): _aud.append('설명서 푸터 번호 역순')
+                        if max(_nums)>_den: _aud.append(f'설명서 푸터 번호가 분모 초과 {max(_nums)}>{_den}')
+            except Exception: pass
+            response['audit']=_aud
+            print(f"[v420 REPORT_AUDIT] 실패 {len(_aud)}건" + (' :: '+' | '.join(_aud) if _aud else ' (통과)'))
+        except Exception as _ae:
+            print('[v420 REPORT_AUDIT] 검사 자체 실패:', _ae)
         # ★★★★★v316 모바일 다운로드 근본 수정(지점장 실측 2026.08.01 "삼성폰에서 저장됨은
         #   뜨는데 「내 파일」→다운로드 폴더에도 없다")
         #   <b>원인</b>: 프론트가 blob 다운로드를 <b>5개나 0.8~3초 간격으로 연속 발사</b>했다.
