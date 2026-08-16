@@ -8,6 +8,8 @@ aptPkgs = [
   "libpangocairo-1.0-0",
   "libgdk-pixbuf2.0-0",
   "libffi-dev",
+  "fonts-nanum",
+  "fonts-nanum-extra",
   "fonts-noto-cjk",
   "fonts-noto-color-emoji"
 ]

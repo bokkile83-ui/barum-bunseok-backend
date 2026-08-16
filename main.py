@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v420-audit-20260814'
+VSTAMP = 'v425-guard-20260816'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1041,6 +1041,43 @@ _STRUCT_SELFTEST = [
     ('제38조 열배치현행','main.py',            r"own_sum_col  = \(3 \+ n_ct\)", True),
     ('제39조 자부상80',  'main.py',            r'_new413 = round\(amt / 80\)', True),
     ('제37조 미결3부',   'BARUM_DOCTRINE.md',  r'A\. 지점장 확정이 필요한 것', True),
+    # ★v422g 제42조 — ④ 리모델링 비교
+    ('제42조 리모델링',   'main.py',            r"@app\.post\('/remodel'\)", True),
+    ('제42조 모듈',       'remodel.py',         r'def remodel_all', True),
+    ('제42조 배포10파일', 'main.py',            r"'ppt_form\.pptx','remodel\.py'", True),
+    # ★v424 제44~46조 — 일시납 · 연금 · 재무 페이지 · 작업순서
+    ('제44조 일시납보관',  'main.py',         r'lump_sum = pv', True),
+    ('제44조 헤더기재',    'main.py',         r'일시납\)', True),
+    ('제44조 합계방어',    'remodel.py',      r"'일시납' in s", True),
+    ('제44조 계약판별',    'remodel.py',      r'def contract_kinds', True),
+    ('제45조 재무페이지',  'report_pages.py', r'def p8\(', True),
+    ('제45조 진단서이식',  'report_weasy.py', r'P-ASSET', True),
+    ('제45조 동적생성',    'report_weasy.py', r'def _asset_body', True),
+    ('제45조 값박기금지',  'report_weasy.py', r'메트라이프생명 무배당', False),
+    ('제48조 설명서제외',  'main.py',         r'v424 설명서', True),
+    ('제48조 10건상한',    'report_pages.py', r'MAXROW = 10', True),
+    ('제48조 비갱신가입율','report_pages.py', r'비갱신 가입율', True),
+    ('제48조 저축연금화재','report_pages.py', r"'저축', '연금', '화재'", True),
+    ('제48조 마스터불변',  'main.py',         r'max_row.*106|106행|MASTER_ROWS', True),
+    ('제49조 빈페이지금지','report_weasy.py', r'v425 .재무 생성 실패', True),
+    ('제49조 잘림금지',    'report_pages.py', r'v425 다장', True),
+    ('제49조 상한자르기금지','report_pages.py', r'\[:MAXROW\]', False),
+    ('제49조 설명서경고',  'main.py',         r'v425 .설명서', True),
+    ('제49조 회사금액매칭','report_weasy.py', r'_amt_s in _hay', True),
+    ('제49조 일시납주기',  'main.py',         r'v425 주기 우선', True),
+    ('제50조 이미지분리',  'report_weasy.py', r'from assets_b64 import', True),
+    ('제50조 거대상수금지','report_weasy.py', r"_FIN_SURVEY = 'iVBOR", False),
+    ('제50조 번호하드코딩','report_weasy.py', r'<div class="pgn"><b>\d+</b>', False),
+    ('제50조 재무맨뒤',    'report_weasy.py', r'재무상태 설문지', True),
+    ('제45조 쪽번호없음',  'report_pages.py', r'자산 · 재무</span>', False),
+    ('제46조 넘침감지',    'remodel.py',      r'REPORT_OVERFLOW', True),
+    ('제47조 페이지반복',  'report_pages.py', r'position:fixed;top:0', True),
+    ('제47조 높이고정금지','report_pages.py', r'min-height:1\d\dmm', False),
+    ('제47조 다장대응',    'report_pages.py', r'position:fixed;left:0;right:0', True),
+    # ★★★★★v422 제41조(삼성 병합셀·특정치료비) — 구조 검사 3종. 하나라도 지워지면 잡힌다.
+    ('제41조 대괄호담보행','main.py',           r'┖\|\\\[\[\^', True),
+    ('제41조 특정치료비',  'main.py',            r"has\('특정치료비'\)", True),
+    ('제41조 삼성자료',    'report_weasy.py',    r'INFO-TBL 통합치료비 4', True),
 ]
 
 # ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
@@ -1062,6 +1099,16 @@ _JOMUN_SELFTEST = [
     ('암입원일당(요양병원)',                                       '암일당',         '제18조 암일당'),
     ('화재상해사망후유장해특약 : 화상수술비',                        '화상수술비',     '제16조 콜론뒤'),
     ('화재상해사망후유장해특약 : 화상진단비',                        '화상진단비',     '제16조 콜론뒤'),
+    # ★★★★★v422 (지점장 확정 2026.08.15) — 삼성 특정치료비. 제31조: 조문을 넣으면 검사 한 줄을 같이 넣는다.
+    ('[건강]종합병원암(유사암Ⅱ제외)특정치료비Ⅲ(수술(회당),항암방사선,항암약물)', '암주요치료비', '제41조 특정치료비'),
+    # ★v422d 지점장 「1-8이 한 세트야」 — 6·7·8종은 1-8종 세트(대표 max)
+    ('[간편]상해8종수술비(시술포함)',        '상해 종수술비(1-8종)', '제41조 1-8종세트'),
+    ('[간편]질병6종수술비(시술포함)(1년50%)', '질병 종수술비(1-8종)', '제41조 1-8종세트'),
+    ('[간편]상해1~5종수술비(5종)',          '상해 종수술비(1-5종)', '제41조 1-8종세트'),
+    ('[건강]종합병원유사암Ⅱ특정치료비Ⅲ(수술(회당),항암방사선,항암약물)',        '__무시__',     '제41조 특정치료비'),
+    ('[건강]종합병원암전액본인부담(비급여포함)통합치료비(표준형,연간1억원한도)', '하이클래스(암)','제41조 특정치료비'),
+    ('비급여(전액본인부담 포함) 암 통합치료비Plus(암중점치료기관(상급종합병원 포함))', '하이클래스(암)','제41조 특정치료비'),
+    ('[건강]종합병원특정순환계질환통합치료비(표준형,연간1억원한도)',            '2대 주요치료비','제41조 특정치료비'),
 ]
 
 _RULE_SELFTEST = [
@@ -1590,9 +1637,20 @@ _KB_SUM_MAP = {
     '교통사고처리지원금':'합의금', '변호사선임비용':'변호사', '자동차사고부상':'자부상',
 }
 def _kb_amt(tok):
-    """'4,000만' '1억' '-' → 만원 float. 해석 불가면 None."""
+    """'4,000만' '1억' '1억 7,600만' '-' → 만원 float. 해석 불가면 None."""
     t = str(tok).strip()
     if t in ('-', '', '_'): return 0.0
+    # ★★★★★v421 (지점장 지적 2026.08.14 박미정 검산 불일치 — <b>게이트 오탐의 진짜 원인</b>)
+    #   KB 한장표는 <b>'1억 7,600만'</b>처럼 억과 만을 <b>같이</b> 쓴다.
+    #   구 파서는 `([\d,]+)\s*억` 하나만 봐서 <b>'1억'만 읽고 7,600만을 버렸다</b> → 10,000.
+    #   엑셀은 17,600(정답)인데 <b>기준값이 틀려</b> 「불일치」가 떴다.
+    #   실측 3건: 상해사망 10,000≠17,600 · 상해후유3% 10,000≠10,100 · 뇌출혈 0≠1,000.
+    #   ★<b>「불일치」가 뜨면 엑셀만 의심하지 말고 기준값도 의심한다</b>(검사 자체의 오탐도 결함).
+    m = re.fullmatch(r'([\d,]+)\s*억\s*([\d,]+)\s*만?', t)
+    if m:
+        try:
+            return float(m.group(1).replace(',', '')) * 10000.0 + float(m.group(2).replace(',', ''))
+        except Exception: return None
     m = re.fullmatch(r'([\d,]+)\s*억', t)
     if m:
         try: return float(m.group(1).replace(',', '')) * 10000.0
@@ -1612,9 +1670,13 @@ def parse_kb_summary(lines):
         _l = l.strip()
         if not _l: continue
         for _kb, _std in _KB_SUM_MAP.items():
-            m = re.match(r'^' + re.escape(_kb) + r'(?![가-힣])\s+(\S+)', _l)
+            # ★★★★★v421 (지점장 지적 2026.08.14 박미정) — KB 한장표는 <b>'1억 7,600만'</b>처럼
+            #   억과 만 사이에 <b>공백</b>이 있다. 구 코드는 `(\S+)` 한 토큰만 잡아 <b>'1억'</b>만 읽었다.
+            #   → 앵커 10,000, 엑셀 17,600 → 「검산 불일치」가 <b>오탐</b>으로 떴다(제출 금지 유발).
+            #   ★<b>금액은 토큰 하나가 아니다</b> — 억 뒤에 만이 오면 같이 읽는다.
+            m = re.match(r'^' + re.escape(_kb) + r'(?![가-힣])\s+([\d,]+\s*억(?:\s*[\d,]+\s*만?)?|\S+)', _l)
             if not m: continue
-            v = _kb_amt(m.group(1))
+            v = _kb_amt(re.sub(r'\s+', ' ', m.group(1)).strip())
             if v is None: continue
             # 골절진단비는 마스터 2행 합산이라 검산식 쪽에서 합친다 → 전용 키로 보관
             res[_std] = max(res.get(_std, 0.0), v)
@@ -1969,7 +2031,7 @@ def parse_sinjeong(lines):
         block = lines[idx:end]
         _SJC['c'] = company; _SJC['p'] = product     # ★v98 _sj_fixname 컨텍스트
         ht = ' '.join(block[:12])
-        contract_date = expiry_date = pay_period = ''; premium = 0
+        contract_date = expiry_date = pay_period = ''; premium = 0; lump_sum = 0
         md = re.search(r'(\d{4})[-.](\d{2})[-.](\d{2})\s*~\s*(\d{4})[-.](\d{2})[-.](\d{2})', ht)
         if md:
             contract_date = f'{md.group(1)}.{md.group(2)}.{md.group(3)}'
@@ -1979,7 +2041,12 @@ def parse_sinjeong(lines):
         if mp:
             try:
                 pv = int(mp.group(1).replace(',', ''))
+                # ★★★★★v424: 상한 500만은 <b>월보험료</b> 기준이다. 일시납(1,100만 등)이 여기서 버려졌다.
+                #   월보험료(premium)와 <b>일시납(lump_sum)을 분리</b>해 담는다 — 합계에 섞이면 안 된다.
                 if 1000 < pv < 5000000: premium = pv
+                elif '일시' in re.sub(r'\\s','',str(pay_period or '')): lump_sum = pv   # ★v425 주기 우선
+                elif 5000000 <= pv < 10**10: lump_sum = pv        # ★v424 금액 2순위
+                elif pv >= 5000000 and '일시' in re.sub(r'\s','',str(pay_period or '')): lump_sum = pv
             except: pass
         mper = re.search(r'(?:월납|매월납)\s*/\s*(\d+)\s*년', ht)
         if mper: pay_period = f'{mper.group(1)}년납'
@@ -2039,7 +2106,7 @@ def parse_sinjeong(lines):
                         if 0 < v2 <= 200000: ci_jugye.append(v2)
                     except: pass
         contracts.append({'company': company, 'product': product, 'contract_date': contract_date,
-                          'expiry_date': expiry_date, 'premium': premium, 'pay_period': pay_period,
+                          'expiry_date': expiry_date, 'premium': premium, 'lump_sum': lump_sum, 'pay_period': pay_period,
                           'pay_count': '', 'renewal': renewal, 'dambo': dambo,
                           'ci_jugye': ci_jugye, 'ci_extra': [], 'ipwon': [], '_sj': True,
                           'ci_lines': ci_lines, 'ci_sebu': (_SJ_SEBU or {}).get(re.sub(r'\s','',str(company or '')))})
@@ -2295,7 +2362,14 @@ def _jn_rows_tbl(lines):
         #   반대로 `계약자|청약번호 … 185,602원` 류는 줄머리가 한글이라 여기서 걸러진다.
         # ★★v389 줄머리 번호 뒤에 <b>마침표</b>가 오는 표(현대 `186.` `425.`)가 있다.
         #   구 `\d+\s`는 이걸 못 잡아, 기간칸까지 미매칭이면 담보가 통째로 사라졌다(실측 10건).
-        _head = re.match(r'\s*(?:\d+\s*[.)]?\s|┖)', l)
+        # ★★★★★v422 (삼성 조승우 실측 2026.08.15): 삼성 요약표는 <b>한 번호 아래 담보명이 여러 줄</b>이고
+        #   보험료·기간은 그 그룹의 <b>대표 줄 하나에만</b> 있는데, 그 대표 줄이 담보명 줄들 <b>사이</b>에 끼어 온다
+        #   (`344 … 269 20년납 90세만기`가 6종과 7종 사이). 구 코드는 기간을 <b>아래로만</b> 찾고
+        #   다음 금액 줄에서 break해, 대표 줄이 위에 있는 형제 담보를 통째로 버렸다.
+        #   실측 소실 9건 — 상해 4·5·7·8종 / 질병 1·3·4·5·7종 수술비(시술포함), 53건 중 44건만 파싱.
+        #   → 줄머리 <b>대괄호 태그</b>(`[간편]` 등)도 `┖`와 같은 <b>담보 행 마커</b>로 인정한다.
+        #   ★특정 글자를 박지 않는다(구조 가정 금지) — 대괄호 형태만 본다.
+        _head = re.match(r'\s*(?:\d+\s*[.)]?\s|┖|\[[^\[\]]{1,10}\])', l)
         if not tm and not _head: continue
         amt, st, en = am
         after=l[en:]
@@ -2526,6 +2600,10 @@ def jean_company(txt):
     for m in _JN_CO.finditer(txt or ''):
         c = m.group(1)
         if '고객상담' in c or '홈페이지' in c: continue
+        # ★★★★★v422 (삼성 조승우 실측 2026.08.15): 상품명이 회사명으로 시작하는 제안서에서
+        #   <b>상품 수식어까지 회사명으로</b> 잡혔다(`무배당삼성화재간편365…` → 회사 `무배당삼성화재`).
+        #   정본 회사명은 <b>삼성화재</b>다. 접두 수식어만 벗긴다(회사표를 새로 만들지 않는다).
+        c = re.sub(r'^(?:무배당|유배당|무|유)(?=[가-힣A-Za-z]{2,})', '', c)
         return c
     # ★★v389b 스캔 범위 = <b>표지 1페이지</b>. 전문을 훑으면 오탐이 난다 —
     #   실측: 현대 발행자코드 `4BKB27` → <b>KB</b>, 롯데 본문 문장 → <b>한화</b>.
@@ -2563,6 +2641,17 @@ def build_proposal_contract(pdf_bytes, fname=''):
     for l in full.split('\n')[:40]:
         t=l.strip()
         if len(t)>=10 and ('보험' in t) and ('가입' not in t) and ('준법' not in t):
+            prod = t; break
+    # ★★★★★v422 (삼성 조승우 실측 2026.08.15): 상품명에 <b>'보험' 글자가 없는</b> 제안서가 있다
+    #   (`무배당삼성화재간편365당당한새로고침100세(2604.1)`). 구 규칙이 이 줄을 건너뛰고
+    #   <b>피보험자 줄</b>(`조승우 (42세 / 남 / … / 보험나이변경일 : 매년`)을 상품명으로 집었다
+    #   → 엑셀 헤더 1행 상품명 칸이 고객 신상으로 오염된다(v29c (1) 헤더 3줄 표기 위반).
+    #   ★<b>오염된 경우에만</b> 표지 첫 실질 줄로 대체한다 — 기존 통과 회사(KB·현대·롯데…)는 건드리지 않는다.
+    if (not prod) or re.search(r'피보험자|계약자|보험나이변경일|\d+\s*세\s*/', prod):
+        for l in full.split('\n')[:20]:
+            t=l.strip()
+            if len(t) < 8: continue
+            if re.search(r'님을?\s*위한|가입제안서|상품제안서|계약자|피보험자|고객님', t): continue
             prod = t; break
     # ★v371 총보험료 = <b>제안서 명시값 1순위</b>(할인후초회보험료 등), 없으면 담보별 합.
     #   담보별 합은 한 건만 새도 틀린다(실측 KB 185,602 → 357).
@@ -2682,7 +2771,7 @@ def parse_txt(txt, filename='', extra=None):
                 _hdr.append(_lk); _k += 1
             _ht = ' '.join(_hdr).replace('\t',' ')
             i = _k+1 if (_k<n and ('가입금액' in lines[_k] or 'Chtd' in lines[_k] or '담보명' in lines[_k])) else _k
-            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
+            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0; lump_sum = 0
             _md = re.search(r'(\d{4}\.\d{2}\.\d{1,2})\s*[-~（卜\s]+(\d{4}\.\d{2}\.\d{1,2})', _ht)
             if _md: contract_date=_md.group(1); expiry_date=_md.group(2)
             _mp = re.search(r'보험료\s*([\d,\.]+)\s*원', _ht)
@@ -2690,6 +2779,8 @@ def parse_txt(txt, filename='', extra=None):
                 try:
                     _pv=int(_mp.group(1).replace(',','').replace('.',''))
                     if 1000 < _pv < 5000000: premium=_pv
+                    elif 5000000 <= _pv < 10**10: lump_sum = _pv
+                    elif _pv >= 5000000 and '일시' in re.sub(r'\s','',str(pay_period or '')): lump_sum=_pv
                 except: pass
             _mper = re.search(r'월납\s*/?\s*(\d+)\s*년', _ht)
             if _mper: pay_period=f"{_mper.group(1)}년납"
@@ -2726,7 +2817,7 @@ def parse_txt(txt, filename='', extra=None):
             # ── 정상형 (기존, '가입금액' 헤더 없이 회사→상품→계약자줄→담보) ──
             _head = lines[i].strip()          # ★v44 롯데: 이 줄에 '회사명 상품명'이 한 줄로 붙어 온다
             company = _head; i += 1
-            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0
+            contract_date = expiry_date = pay_period = pay_count = ''; premium = 0; lump_sum = 0
             for _j in range(i, min(i+5, n)):
                 _l = lines[_j]
                 _m = re.search(r'(\d{4}\.\d{2}\.\d{2})\s*~\s*(\d{4}\.\d{2}\.\d{2})', _l)
@@ -2738,6 +2829,8 @@ def parse_txt(txt, filename='', extra=None):
                     try:
                         _v = int(_m3.group(1).replace(',','').replace('.',''))
                         if 1000 < _v < 5000000: premium = _v
+                        elif 5000000 <= _v < 10**10: lump_sum = _v
+                        elif _v >= 5000000 and '일시' in re.sub(r'\s','',str(pay_period or '')): lump_sum = _v
                     except: pass
                 _m5 = re.search(r'월납\s*/?\s*(\d+)\s*년', _l)
                 if _m5 and not pay_period: pay_period = f"{_m5.group(1)}년납"
@@ -2899,7 +2992,7 @@ def parse_txt(txt, filename='', extra=None):
             #   → 별첨 헤더의 <b>계약자명</b>을 계약에 붙여 병합키에 넣는다.
             #   ★페이지 분할된 <b>같은</b> 계약은 계약자가 동일하게 인쇄되므로 병합은 그대로 유지된다(v257 무회귀).
             contracts.append({'dup':_dup,'holder':_holder,'company':company,'ipwon':ipwon,'ci_extra':ci_extra,'product':product,'contract_date':contract_date,
-                'expiry_date':expiry_date,'premium':premium,'pay_period':pay_period,
+                'expiry_date':expiry_date,'premium':premium,'lump_sum':lump_sum,'pay_period':pay_period,
                 'pay_count':pay_count,'renewal':renewal,'dambo':dambo,'ci_jugye':ci_jugye,'ci_sebu':_cs,'ci_lines':ci_lines})
     # ★★v100 단계약 사각지대: KB·메리츠 3열이 '계약 1건'이면 앵커가 1개뿐이라
     #   sinjeong_detect(>=2)를 못 넘겨 2열 파서로 가고 계약 0건이 된다(양예서형 단계약 고객).
@@ -3498,6 +3591,16 @@ def resolve_kw(raw):
     _v370 = re.sub(r'\s', '', str(raw or ''))
     # ★★★★★v372 (지점장 확정 2026.08.09): <b>「신특정순환계질환 통합치료비」도 2대 주요치료비</b>.
     #   구 조문은 '주요치료'만 봐서 KB `신특정순환계질환 통합치료비ⅢPlus` 5,000이 어느 행에도 못 갔다(실측).
+    # ★★★★★v421e (지점장 확정 2026.08.14) — <b>「신특정순환계질환 주요치료비」는 순환계다</b>.
+    #   지점장 원문: 「<b>신특정순환계질환주요치료비ⅢPlus → 진단서만 유일하게 순환계고 /
+    #   뇌혈관심장주요치료비 or 뇌혈관허혈성심장주요치료비는 2대주요치료비다 // 진단서 7페이지 전용이다</b>」
+    #   ・<b>순환계 + 주요치료비</b> → 진단서 7p <b>순환계 주요치료비 칸 전용</b>(마스터 행 없음 → 엑셀 미기재).
+    #   ・<b>통합치료비</b>는 v372 지점장 확정대로 <b>2대 주요치료비</b> 유지.
+    #   ・<b>뇌혈관+심장 조합 이름</b>은 2대 주요치료비(아래 규칙).
+    # ★★★★★v421f (지점장 확정 2026.08.14 「<b>엑셀+보장분석지에는 2대주요치료비</b> / 진단서 7페이지에만
+    #   순환계 주요치료비」 「<b>지금 내가 얘기하는건 진단서 전용이야 섞지마</b>」)
+    #   → <b>엑셀 판정은 종전대로 2대</b>. 진단서 전용 칸은 `rep['p7_only']`로 따로 싣는다.
+    #   ★한때 `__P7_CIRC__`로 엑셀에서 빼냈다가 <b>2대 칸이 비는 후퇴</b>가 났다 — 엑셀은 건드리지 않는다.
     if ('순환계' in _v370) and ('주요치료' in _v370 or '통합치료' in _v370):
         return '2대 주요치료비', 100
 
@@ -3506,8 +3609,30 @@ def resolve_kw(raw):
     #   실측 — KB `암 통합치료비Plus(암중점치료기관(상급종합병원 포함))(고급형)` 5,000이
     #   <b>통합암</b> 행으로 갔다. 암주요치료비는 `_rep1` 대표(max) 1개라 500 → 5,000이 된다.
     #   ★'순환계 통합치료비'는 위 조문이 먼저 잡는다. 전이암·유사암 변형은 각자 행으로 두고 넓히지 않는다.
+    #   ★★★★★v422c (지점장 확정 2026.08.15): 「<b>암 전액본인부담 통합치료비 ㅡ 엑셀·보장분석지ppt ㅡ 하이클래스</b>」
+    #   → 제20조(「'비급여'가 붙은 암주요치료비는 하이클래스(암) 23행」)와 v421e 정본표
+    #   (「비급여 암 통합치료비 | 하이클래스(암) | 비급여주요치료비 | 비급여 암 통합치료비 칸」)를 그대로 이행한다.
+    #   ★구 코드는 <b>통합치료비에만 이 갈래가 없어</b> 비급여 건까지 21행으로 갔다(조문 미이행).
+    if ('암' in _v370) and ('통합치료' in _v370) and ('비급여' in _v370 or '전액본인' in _v370) \
+       and not any(x in _v370 for x in ('순환계','전이암','유사암','뇌혈관','심장')):
+        return '하이클래스(암)', 0
     if ('암' in _v370) and ('통합치료' in _v370) and not any(
-            x in _v370 for x in ('순환계','전이암','유사암','뇌혈관','심장')):
+            x in _v370 for x in ('순환계','전이암','유사암','뇌혈관','심장','비급여','전액본인')):
+        return '암주요치료비', 0
+
+    # ★★★★★v422 (지점장 확정 2026.08.15): <b>암 특정치료비Ⅲ = 암주요치료비</b>.
+    #   지점장 원문: 「암(유사암Ⅱ제외) 특정치료비Ⅲ(수술·항암방사선·항암약물) ㅡ 암주요치료비」.
+    #   실측(삼성 양예슬) — `[건강]종합병원암(유사암Ⅱ제외)특정치료비Ⅲ(수술(회당),항암방사선,항암약물)` 1,000이
+    #   이름 안의 <b>'수술'</b> 때문에 <b>암수술</b> 행으로 갔다.
+    #   ★★<b>「유사암Ⅱ제외」는 유사암 담보가 아니다</b> — 이름 안에 '유사암'이 들어 있어도
+    #     뒤에 '제외'가 붙으면 <b>암 본체</b>다. 단순 `'유사암' in` 배제는 이 담보를 죽인다.
+    #   ★<b>유사암Ⅱ 특정치료비Ⅲ</b>(제외 없음)는 지점장 「패스」 → 종전대로 [확인]큐.
+    #   ★★★★★v422c 최종 (지점장 확정 2026.08.15): 「<b>암(유사암Ⅱ제외) 특정치료비 ㅡ 엑셀·보장분석지ppt ㅡ 암주요치료비</b>」
+    #   → <b>엑셀 21행에 기재한다</b>(v422b의 `__무시__`는 폐기). 7p 암 주요치료비 칸은 이 엑셀 값을 그대로 읽는다.
+    _yx = bool(re.search(r'유사암[ⅠⅡⅢIV0-9]{0,3}제외', _v370))
+    if ('암' in _v370) and ('특정치료비' in _v370) \
+       and not any(x in _v370 for x in ('순환계','전이암','뇌혈관','심장')) \
+       and (('유사암' not in _v370) or _yx):
         return '암주요치료비', 0
 
     # ★★★★★v298-A (심정자 실측 2026.07.31): 전각 ％(U+FF05) 때문에 v222 후유장해
@@ -3574,7 +3699,10 @@ def resolve_kw(raw):
     if (has('철심') or has('핀제거') or has('내고정물')) and has('수술'): return None,0
     # 종번호
     jong = 0
-    for i,k in enumerate(['1종','2종','3종','4종','5종'],1):
+    # ★★★★★v422d (지점장 확정 2026.08.15 「1-8이 한 세트야」): 구 코드는 <b>1~5종만</b> 읽었다.
+    #   삼성 `상해6·7·8종수술비(시술포함)`는 jong=0으로 떨어져 <b>1-5종 행에 종번호 없이</b> 들어갔다
+    #   → 슬래시 5칸 어디에도 안 앉아 <b>200·300·500이 조용히 사라졌다</b>(실측 조승우).
+    for i,k in enumerate(['1종','2종','3종','4종','5종','6종','7종','8종','9종'],1):
         if k in n or f'({i}종)' in r: jong = i; break
 
     # 비담보성(보험료 납입면제·일시납입지원) → 매핑 안 함(자부상 등 오매핑 차단)
@@ -3632,6 +3760,16 @@ def resolve_kw(raw):
         if any(k in _n78 for k in ('1-7종','1-8종','1-9종','1~7종','1~8종','1~9종')):
             if has('질병'): return '질병 종수술비(1-8종)', jong
             return '상해 종수술비(1-8종)', jong
+        # ★★★★★v422d (지점장 확정 2026.08.15 「<b>1-8이 한 세트야</b>」) — 삼성 실측.
+        #   삼성은 종을 <b>한 줄씩 따로</b> 쓴다(`상해1종수술비(시술포함)` … `상해8종수술비(시술포함)`).
+        #   담보명에 `1~8종` 같은 <b>세트 표기가 없어</b> 구 코드가 전부 <b>1-5종 행</b>으로 보냈고,
+        #   1-5종 슬래시는 5칸뿐이라 <b>6·7·8종(200·300·500)이 앉을 자리가 없어 소실</b>됐다(실측 조승우).
+        #   → <b>종번호가 6 이상이면 그 담보는 1-8종 세트</b>다. v343 조문대로 <b>대표(max) 1개</b>로 간다.
+        #   ★1~5종이 <b>명시된</b> 세트(`상해1~5종수술비(3종)`)는 위 분기에 안 걸리므로 <b>종전 그대로</b>.
+        if jong and jong >= 6:
+            if has('질병'): return '질병 종수술비(1-8종)', 0
+            if has('상해') or has('재해'): return '상해 종수술비(1-8종)', 0
+            return '종수술비공통', 0
         # ★★★★★v378 (지점장 지시 2026.08.10): <b>「종수술」은 1~5종 수술비다</b>.
         #   지점장 원문 — "파워수술보장(본인) = 1-5종 수술비고 <b>생명보험사는 질병,상해 둘다 기재</b>되어야 한다
         #   / <b>질병종수술 = 질병1-5종 . 상해종수술=상해1-5종</b> 인데 미기재다 오류다".
@@ -3737,7 +3875,11 @@ def resolve_kw(raw):
     # ★★★v258b(2026.07.27): 지침 §8.2 원문에 <b>「암(유사암제외)주요치료비 → 암주요치료비」</b>가
     #   명시돼 있는데, 구 조건 `has('유사암')`이 <b>'유사암<u>제외</u>'의 '유사암' 글자</b>에 걸려
     #   <b>__무시__</b>로 보냈다(실측). '유사암제외'는 유사암을 <b>빼는</b> 담보 = 일반암 계열이다.
-    if has('유사암') and no('유사암제외') and has('주요치료'): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
+    # ★★★★★v422b (지점장 정정 2026.08.15): 「<b>유사암Ⅱ 특정치료비Ⅲ 이걸 패스하라는거다 · 원래 지침이다</b>」
+    #   → 새 규칙이 아니다. <b>①유사암 주요치료비 = 무시</b> 조문 그대로이고, 삼성이 같은 담보를
+    #   <b>'특정치료비'</b>라고 부를 뿐이다(실측 양예슬 `[건강]종합병원 유사암Ⅱ 특정치료비Ⅲ` 600 → 구 [확인]큐).
+    #   ★'유사암<u>제외</u>'는 여전히 유사암이 아니다(v258b) — 위 v422 암 특정치료비와 짝을 이룬다.
+    if has('유사암') and no('유사암제외') and (has('주요치료') or has('특정치료비')): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
     if has('암주요치료비') and no('유사암','하이클래스','비급여'): return '암주요치료비',0   # ②순수 암주요치료비만 21행 (v396: 하이클래스·비급여는 아래 23행으로)
     #   ★v396 `비급여암주요치료비`는 '하이클래스' 글자가 없어 아래 조건만으로는 안 걸린다 — 명시 추가.
     if has('하이클래스') or (has('비급여') and has('암') and has('주요치료')):
@@ -3767,6 +3909,7 @@ def resolve_kw(raw):
     if has('암') and (has('주요치료') or has('특정치료') or (has('진단후') and has('치료') and (has('종합병원') or has('특정'))))         and no('순환계','2대','뇌','허혈','심장','심근','비급여','하이클래스','재활','통원','입원일당','MRI','PET','초음파','검사','수술'):
         return '암주요치료비',0
     # 뇌혈관·허혈성심장 특정치료비 = 2대주요치료비(뇌·심 두 칸). ★v65 '뇌심주요치료비특약' 누락 수정(지점장 2026.07.15)
+    # ★v421e 순환계 단독은 위에서 `__P7_CIRC__`로 빠진다 — 여기 '순환계'를 남기면 다시 2대로 끌려간다.
     if (has('뇌혈관') or has('허혈') or has('심장') or has('순환계') or has('뇌심') or (has('뇌') and has('심'))) and (has('특정치료') or has('주요치료')) and no('암','수술'):
         return '2대 주요치료비',0
     if has('치료지원금') or (has('진단후') and has('치료')): return None,0   # ★v30a 잔여 진단후 치료지원금(암·뇌·심 아닌) = 진단비 아님 → [확인]
@@ -3870,7 +4013,12 @@ def resolve_kw(raw):
     if has('암') and has('입원'): return '암일당',0
 
     # ── 뇌혈관 ──
-    if has('외상성') and has('뇌출혈'): return '외상성뇌출혈',0
+    # ★★★★★v421 (지점장 확정 2026.08.14 박미정) — <b>「주요상해뇌출혈진단비」는 외상성이다</b>.
+    #   지점장 원문 「<b>외상성뇌출혈이라 뇌출혈진단비와 별개야</b>」.
+    #   실측: DB 참좋은운전자상해보험2510 `주요상해뇌출혈진단비 1,000만`이
+    #   <b>뇌출혈진단비(35행)</b>에 들어가 있었다 → <b>외상성뇌출혈(37행)</b>이 정본.
+    #   ★<b>상해로 인한 뇌출혈은 질병 뇌출혈진단비가 아니다</b>(제3조 단독 5종의 취지).
+    if (has('외상성') or has('주요상해')) and has('뇌출혈'): return '외상성뇌출혈',0
     # ★★★★★v325 <b>뇌출혈진단비는 진단 전용</b>(단독담보 원칙 = "그 담보 하나로 존재하면").
     #   <b>수술·입원·일당·통원 담보는 이 행이 아니다</b>. 제외어가 없어 전부 합산되던 것을 막는다.
     #   실측 = 우체국 `뇌출혈수술급부금`(→뇌혈관수술비) · `뇌출혈입원급부금`(→[확인]큐).
@@ -3959,6 +4107,13 @@ def resolve_kw(raw):
         #   상해후유3%에 전부 합산돼 39,000이 됐다(한장표 20,000). → 셋 다 [확인]큐.
         #   ★위의 `고도장해`(v104 지점장 확정)는 이 검사보다 앞에서 이미 처리된다 — 영향 없다.
         if not has('후유'):
+            return None,0
+        # ★★★★★v421 (지점장 확정 2026.08.14 박미정) — <b>「특정상해후유장해」는 상해후유3%가 아니다</b>.
+        #   지점장 원문 「<b>DB 특정상해후유장해 100만 — 빼자</b>」.
+        #   실측: DB 참좋은훼밀리 `상해사망,(20~100%)이상후유장해(보통약관)`이 신정원에서
+        #   <b>「특정상해후유장해」</b>로 분류되는데 엑셀은 상해후유3%에 100만을 더해 10,100이 됐다.
+        #   KB 한장표는 10,000 → <b>「특정」이 붙은 후유장해는 3% 행이 아니다</b>. [확인]큐로 보낸다.
+        if has('특정') and no('80'):
             return None,0
         # ★★★v222 (지점장 지시 2026.07.25, 영구): <b>후유장해 20% · 50%는 결과값 미기재 — 더하지도 말 것</b>.
         #   마스터 후유장해 행은 <b>3% · 80% 넷뿐</b>이고 20%·50% 전용행은 없다.
@@ -4167,7 +4322,12 @@ def resolve2(raw):
     #     resolve_kw의 정본 규칙(외상성뇌출혈 행 / 중대한 뇌출혈 행)까지 도달하지 못했다.
     #     교통상해사망(v300) · 중증화상진단비(v301-A)와 <b>완전히 같은 구조</b>다.
     #   ★실측: `외상성뇌출혈진단비`(공백 없음)만 틀렸고 `외상성 뇌출혈 진단비`(공백 있음)는 정상이었다.
-    if ('뇌출혈' in _n300) and ('외상성' in _n300):
+    # ★★★★★v421 (지점장 확정 2026.08.14 박미정) — <b>「주요상해뇌출혈」도 외상성이다</b>.
+    #   지점장 원문 「<b>외상성뇌출혈이라 뇌출혈진단비와 별개야</b>」.
+    #   실측: DB 참좋은운전자상해보험2510 `주요상해뇌출혈진단비 1,000만`이 DMAP 부분일치로
+    #   <b>뇌출혈진단비(35행)</b>에 먼저 먹혔다 → 정본은 <b>외상성뇌출혈(37행)</b>.
+    #   ★<b>상해로 인한 뇌출혈은 질병 뇌출혈진단비가 아니다.</b>
+    if ('뇌출혈' in _n300) and ('외상성' in _n300 or '주요상해' in _n300):
         return ('외상성뇌출혈', 0)
     if ('뇌출혈' in _n300) and ('중대한' in _n300):
         return ('중대한 뇌출혈', 0)
@@ -4738,10 +4898,27 @@ def build_excel(data, out):
         # ★★v199 지점장 확정 2026.07.23: 보험료 합계를 '=D2+E2+…'가 아니라 단일 '=SUM()'으로 만들기 위해
         #   완납 계약의 보험료 칸은 <b>텍스트</b>로 넣는다. 엑셀 SUM은 텍스트를 무시하므로
         #   금액은 화면에 그대로 보이면서 합계에서만 자동 제외된다(v129 정본 유지).
+        # ★★★★★v424 (지점장 확정 2026.08.16): <b>일시납 계약의 납입액이 통째로 버려지던 것 수정</b>.
+        #   실측 = 메트라이프 무배당 변액연금보험 동행 — PDF 「일시납 / 11,000,000원」인데
+        #   엑셀 2행이 <b>공란</b>. 월납만 담기고 일시납은 담을 자리가 없어 사라졌다.
+        #   → <b>텍스트</b>로 넣는다. 엑셀 SUM은 텍스트를 무시하므로 월보험료 합계는 그대로다
+        #     (일시납을 월보험료에 더하면 424,563원이 1,100만이 된다 — 섞으면 안 된다).
+        _lump = 0
+        if not pm:
+            try:
+                _lump = int(str(ct.get('lump_sum') or ct.get('premium_lump') or 0
+                                ).replace(',', '').replace('원', '').strip() or 0)
+            except Exception:
+                _lump = 0
         if pm and paid:
             ws.cell(2,col).value = f'{pm:,} (완납)'
+        elif pm:
+            ws.cell(2,col).value = pm
+        elif _lump:
+            ws.cell(2,col).value = f'{_lump:,} (일시납)'
+            print(f"[v424 일시납] {ct['company']} {ct['product']} — {_lump:,}원 헤더 2행 기재")
         else:
-            ws.cell(2,col).value = pm if pm else None
+            ws.cell(2,col).value = None
         ws.cell(2,col).font = BL if gen else BK
         ws.cell(3,col).value = ct['contract_date']
         ws.cell(4,col).value = ct['expiry_date']
@@ -6090,7 +6267,20 @@ def build_excel(data, out):
         if not _hj:
             _hj = (data.get('hanjang_kb') or {}); _hjsrc = 'KB 전체 보장 현황(2~3p)'   # ★v295
         if _hj:
+            # ★★★★★v421 (지점장 지적 2026.08.14 박미정 검산 불일치 3건 — <b>게이트 오탐</b>)
+            #   구 코드는 `_lc2 = 3 + n_ct`로 <b>파싱 단계의 계약 수</b>를 썼다. 3열(KB) 리포트에서
+            #   `sebu_ci`가 계약을 3건으로 세면 검산은 <b>C~E 3열만</b> 합산한다.
+            #   실측: 상해사망 엑셀 17,600(정답)인데 검산은 10,000 → 「불일치」로 뜬다.
+            #   엑셀은 맞는데 <b>게이트가 틀린 값을 비교</b>했다 = 제출 금지가 오탐으로 걸린다.
+            #   ★<b>「계약이냐」 판정은 한 곳에서만</b>([v419]) — 엑셀 헤더로 실제 끝열을 찾는다.
             _lc2 = 3 + n_ct
+            try:
+                _mx = ws.max_column
+                _sc = [c for c in range(3, _mx+1) if _is_sumcol(ws, c)]
+                if _sc:
+                    _lc2 = min(_sc)          # 첫 합산 열 = 계약 열의 끝(exclusive)
+                    print(f'[v421 검산] 끝열 재판정 {3+n_ct} → {_lc2} (엑셀 헤더 기준 · 계약 {_lc2-3}열)')
+            except Exception: pass
             def _num(v):
                 if isinstance(v,(int,float)): return float(v)
                 t=str(v or '')
@@ -6194,11 +6384,21 @@ def build_excel(data, out):
             _OPAIR = {'질병사망':('일반사망','질병사망(80세)'), '일반암':('일반암','중대한 암'),
                       '뇌졸증진단비':('뇌졸증진단비','중대한 뇌졸증'),
                       '급성심근경색':('급성심근경색','중대한 급성심근'), '통원':('통원','약값')}
+            # ★★★★★v421 (지점장 확정 2026.08.14 박미정) — <b>기준표가 두 담보를 합쳐 쓰는 칸</b>.
+            #   지점장 원문 「<b>무슨소리야!!! 엑셀봐봐</b>」 — 엑셀은 <b>합의금 20,000 / 6주미만 1,000</b>으로
+            #   이미 두 행에 정확히 나눠 있었다. KB 한장표만 `교통사고처리지원금 2억1,000만`으로 <b>합쳐</b> 쓴다.
+            #   ★<b>엑셀이 맞고 기준표가 뭉뚱그린 것</b>이다 — 검산은 <b>엑셀 두 행의 합</b>과 비교한다.
+            _SUMPAIR = {'합의금': ('합의금', '6주미만')}
             _bad=[]; _ok=0; _exl=[]
             for _k,_ev in _pairs:
                 if _k not in _hj: continue
                 _hv=_hj[_k]
                 if abs(_hv-_ev) < 0.5: _ok+=1; continue
+                # ★v421 기준표가 합쳐 쓰는 칸 → 엑셀 여러 행의 합으로 재비교
+                if _k in _SUMPAIR:
+                    _sv = sum(_xl.get(_x, 0.0) for _x in _SUMPAIR[_k])
+                    if abs(_hv-_sv) < 0.5:
+                        _ok+=1; continue
                 _dd = sum(_orph.get(_x,0) for _x in _OPAIR.get(_k,(_k,)))
                 if _dd and abs((_hv-_dd)-_ev) < 0.5:
                     _ok+=1; _exl.append((_k,_hv,_ev,_dd))     # 제외계약 몫과 정확히 일치 → 정상
@@ -7297,6 +7497,11 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <label class="up" id="up">📑 <span id="uplabel">가입제안서 PDF (최대 3건)</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
+  <div class="bar">
+    <label class="up" id="upr1">📊 <span id="upr1label">① 기존 엑셀</span></label>
+    <label class="up" id="upr2">📊 <span id="upr2label">② 최종 엑셀</span></label>
+    <button class="send" id="rsend" disabled>리모델링 비교</button>
+  </div>
   <div class="qlbl" id="qlbl">📋 분석된 보장분석지에 대해 질문하세요</div>
   <div class="qbar" id="qbar">
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
@@ -7306,8 +7511,36 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </div>
 <input type="file" id="fi" accept=".pdf,application/pdf" multiple style="display:none">
 <input type="file" id="fp" accept=".pdf,application/pdf" style="display:none">
+<input type="file" id="fr1" accept=".xlsx" style="display:none">
+<input type="file" id="fr2" accept=".xlsx" style="display:none">
 <script>
 const $=s=>document.querySelector(s);let ACCESS='';
+let R1=null,R2=null;
+function rchk(){const b=$("#rsend");if(b)b.disabled=!(R1&&R2);}
+window.addEventListener('DOMContentLoaded',()=>{
+ const u1=$("#upr1"),u2=$("#upr2"),f1=$("#fr1"),f2=$("#fr2"),rb=$("#rsend");
+ if(!u1)return;
+ u1.onclick=()=>f1.click(); u2.onclick=()=>f2.click();
+ f1.onchange=e=>{R1=e.target.files[0];$("#upr1label").textContent=R1?("① "+R1.name):"① 기존 엑셀";rchk();};
+ f2.onchange=e=>{R2=e.target.files[0];$("#upr2label").textContent=R2?("② "+R2.name):"② 최종 엑셀";rchk();};
+ rb.onclick=async()=>{
+  if(!(R1&&R2))return; rb.disabled=true; rb.textContent="비교 중…";
+  const fd=new FormData(); fd.append("old_xlsx",R1); fd.append("new_xlsx",R2); fd.append("pw",ACCESS);
+  try{
+   const r=await fetch("/remodel",{method:"POST",body:fd}); const j=await r.json();
+   if(!j.ok){alert(j.error||"실패");}
+   else{
+    let h='<div class="card"><b>리모델링 비교</b><br>'
+      +'기존 '+j.prem_old.toLocaleString()+'원 → 최종 '+j.prem_new.toLocaleString()+'원'
+      +' · 월 절감 <b>'+j.save_m.toLocaleString()+'원</b> ('+j.save_pct+'%)<br>'
+      +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del+'<br><br>'
+      +'<a href="'+j.xlsx+'">📊 비교 엑셀</a> &nbsp; <a href="'+j.pptx+'">📑 리포트 PPT</a></div>';
+    const box=$("#out")||document.body; box.insertAdjacentHTML("afterbegin",h);
+   }
+  }catch(e){alert("오류: "+e);}
+  rb.disabled=false; rb.textContent="리모델링 비교";
+ };
+});
 async function unlock(){const v=$("#pw").value;$("#gerr").textContent="확인 중…";
   try{const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
     const j=await r.json();if(j.ok){ACCESS=v;$("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}else{fail();}}
@@ -7632,8 +7865,11 @@ async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
 #   지점장 원문: 「1. zip에 지침·메모리 항상 최신본 / 2. 무조건 읽고 분석하기 / 3. 지침이 법이고 엑셀이 기준이다」
 #   ①은 그동안 <b>손으로</b> 확인했다 — 그래서 2026.08.12에 <b>제0조 6항 본문이 빠진 채</b> 나갈 뻔했다.
 #   → 이 함수 하나가 zip 10파일·4파일 각인 일치·지침 조문·핵심 조문 수록·셀프테스트를 <b>전부</b> 찍는다.
+# ★v423 — 11파일. report_pages.py(리모델링 7쪽 시안)와 requirements.txt를 뺐다가
+#   배포가 통째로 깨질 뻔했다(팩폭 30 · 2026.08.15). 파일이 늘면 <b>이 목록부터</b> 늘린다.
 ZIP9 = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py','ga_tables.py',
-        'master.xlsx','Dockerfile','nixpacks.toml','ppt_form.pptx']
+        'master.xlsx','Dockerfile','nixpacks.toml','ppt_form.pptx','remodel.py','assets_b64.py',
+        'report_pages.py','requirements.txt']
 DOC_MUST = ['단독 5종','심장 묶음','제외 7종','결과값 동결','엑셀에 없는 건','제0조 6',
             '배포 9파일','PC ↔ 폰','미결','조문 = 테스트']
 
@@ -8010,8 +8246,35 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                             except Exception: pass
             except Exception: pass
             print(f'[R10] 흥국화재 10억통장 가입판정={_r10} 금액={_r10amt}만원')
+            # ★★★★★v421e — <b>진단서 7페이지 전용 담보</b>(지점장 확정 2026.08.14).
+            #   「신특정순환계질환 주요치료비」는 <b>마스터 행이 없다</b> → 엑셀엔 기재하지 않는다
+            #   (정본 3줄 2항: 엑셀에 없는 것은 만들지 않는다). 대신 <b>7p 순환계 칸에만</b> 싣는다.
+            #   ★계약 담보 원문에서 직접 찾아 rep에 주입한다(엑셀 우회가 아니라 <b>산출물별 담보 범위</b>).
+            #   4종: 순환계 주요 / 순환계 통합 / 암 통합 / 비급여 암 통합
+            _p7only = {}
+            def _p7put(_k, _v):
+                try: _v=float(_v)
+                except Exception: return
+                if _v: _p7only[_k] = max(_p7only.get(_k,0.0), _v)
+            try:
+                _srcs = list((data.get('contracts') or []))   # ★v421f 파싱 결과는 data['contracts']다
+                for _c7 in _srcs:
+                    if not isinstance(_c7, dict): continue
+                    for _n7, _v7 in (_c7.get('dambo') or {}).items():
+                        _t7 = re.sub(r'\s','',str(_n7))
+                        if '통합치료' in _t7:
+                            if '순환계' in _t7:            _p7put('순환계통합치료비', _v7)
+                            elif '비급여' in _t7 or '전액본인' in _t7: _p7put('비급여암통합치료비', _v7)
+                            elif '암' in _t7:               _p7put('암통합치료비', _v7)
+                        elif ('순환계' in _t7) and ('주요치료' in _t7):
+                            _p7put('순환계주요치료비', _v7)
+                        # ★v422c 특정치료비Ⅲ는 <b>엑셀 암주요치료비</b>로 간다(지점장 최종 확정) —
+                        #   7p 암 주요치료비 칸은 그 엑셀 값을 읽으므로 전용 주입이 필요 없다.
+            except Exception as _e7: print('[v421f 7p전용] 탐색 실패', _e7)
+            print(f'[v421f 7p전용] 진단서 전용 담보 {len(_p7only)}건 {_p7only}')
             rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,'reset10_amt':_r10amt,
                 'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
+            if _p7only: rep['p7_only'] = _p7only      # ★v421f 진단서 전용 칸 값(엑셀 미반영)
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)
         if rep is not None:
@@ -8026,6 +8289,38 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 rpdf=os.path.join(d,f'보장설명서_{cust}.pdf')
                 build_report_pptx(rep, rpx, pdf_out=rpdf)
                 if os.path.exists(rpdf):
+                    # ★★★★★v424 (지점장 지시 2026.08.16): <b>재무 페이지는 진단서에만</b>.
+                    #   진단서 PPT는 이 PDF 앞부분을 잘라 쓰므로 원본에는 남기고,
+                    #   <b>설명서 PDF에서만</b> 그 한 장을 뺀다.
+                    try:
+                        assert os.path.exists(rpx), 'PPT 미생성 — 제거 보류'
+                        print('[v424 설명서] PPT 존재 확인 후 제거 진행')
+                        import subprocess as _sp9, re as _re9
+                        from pypdf import PdfReader as _RD, PdfWriter as _WR
+                        _txt = _sp9.run(['pdftotext', rpdf, '-'],
+                                        capture_output=True).stdout.decode('utf-8', 'replace')
+                        _pgs = _txt.split('\f')
+                        _drop = [i for i, t in enumerate(_pgs)
+                                 if 'ASSET & FINANCE' in t and '돈을 보내고 있나요' in t]
+                        if not _drop:
+                            # ★v425 (제49조) 정정: 설명서는 <b>인포메이션 구간만</b> 잘라 쓰므로
+                            #   재무 페이지가 애초에 없다. 다만 <b>있는데 못 지운 경우</b>는 사고다.
+                            if 'ASSET' in _txt or '돈을 보내고' in _txt:
+                                print('[v425 ★설명서] 재무 페이지가 있는데 제거 실패 — 문구 변경 의심')
+                                response.setdefault('warnings', []).append(
+                                    '[확인] 설명서 재무 페이지 제거 실패')
+                            else:
+                                print('[v425 설명서] 재무 페이지 없음(인포메이션 구간만 사용) — 정상')
+                        if _drop:
+                            _rd = _RD(rpdf); _wr = _WR()
+                            for _i9 in range(len(_rd.pages)):
+                                if _i9 not in _drop:
+                                    _wr.add_page(_rd.pages[_i9])
+                            with open(rpdf, 'wb') as _f9:
+                                _wr.write(_f9)
+                            print(f'[v424 설명서] 재무 페이지 {len(_drop)}장 제거 → {len(_rd.pages)-len(_drop)}쪽')
+                    except Exception as _e9:
+                        print('[v424 설명서] 재무 제거 실패:', _e9)
                     response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
                     response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
                 if os.path.exists(rpx):
@@ -8167,6 +8462,63 @@ def build_context(data):
         lines.append("\n자동매핑 실패 담보 (약관 확인 필요):")
         for u in sorted(set(unmapped)): lines.append(f"  - {u}")
     return '\n'.join(lines)
+
+def _save_dl(data: bytes, fname: str) -> str:
+    """산출물 1개를 임시 저장하고 /dl URL을 돌려준다(기존 analyze와 같은 방식)."""
+    import uuid as _uuid
+    _tok = _uuid.uuid4().hex[:12]
+    _dir = os.path.join(tempfile.gettempdir(), 'barum_dl', _tok)
+    os.makedirs(_dir, exist_ok=True)
+    _p = os.path.join(_dir, fname)
+    with open(_p, 'wb') as _h:
+        _h.write(data)
+    return '/dl/%s/%s' % (_tok, urllib.parse.quote(fname))
+
+
+# ★★★★★v422g — ④ 리모델링 비교 (지점장 지시 2026.08.15)
+#   「1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀 → 두개를 비교한 진단서」
+#   ★<b>①②③ 경로(analyze)를 한 줄도 건드리지 않는다</b> — 별도 라우트·별도 모듈(remodel.py).
+# ★★★★★v423 — 「엑셀은 1번만 보면된다」(지점장 2026.08.15).
+#   엑셀 <b>한 개</b> 안에 보유(기존)와 제안(최종)이 다 들어 있다 → `remodel_single`.
+#   구 2파일 방식(old_xlsx+new_xlsx)도 살려 둔다 — 둘 다 오면 2파일 방식이 이긴다.
+@app.post('/remodel')
+async def remodel_route(xlsx: UploadFile = File(None),
+                        old_xlsx: UploadFile = File(None), new_xlsx: UploadFile = File(None),
+                        pw: str = Form(''), client: str = Form(''), base_date: str = Form('')):
+    if pw != PW:
+        return JSONResponse({'ok': False, 'error': '비밀번호 오류'})
+    try:
+        import remodel as _rm
+        _two = bool(old_xlsx and new_xlsx)
+        if not _two and not xlsx:
+            return JSONResponse({'ok': False, 'error': '엑셀을 올려주십시오'})
+        _ob = await old_xlsx.read() if _two else b''
+        _nb = await new_xlsx.read() if _two else await xlsx.read()
+        # ★기본값 객체가 그대로 올 수 있다(직접 호출·테스트) → 문자열만 신뢰한다
+        client = client if isinstance(client, str) else ''
+        base_date = base_date if isinstance(base_date, str) else ''
+        _fn = (new_xlsx.filename if _two else xlsx.filename) or ''
+        _cl = client or re.sub(r'[^가-힣]', '', _fn.split('.')[0])[:4] or '고객'
+        _bd = base_date or datetime.datetime.now().strftime('%Y.%m.%d')
+        r = _rm.remodel_all(_ob, _nb, _cl, _bd) if _two else _rm.remodel_single(_nb, _cl, _bd)
+        c = r['cmp']
+        _x = _save_dl(r['xlsx'], f'{_cl}_remodel_compare.xlsx')
+        _p = _save_dl(r['pptx'], f'{_cl}_remodel_report.pptx')
+        _d = _save_dl(r['pdf'], f'{_cl}_remodel_report.pdf') if r.get('pdf') else ''
+        print(f"[v422g 리모델링] {_cl} {c['prem_old']:,.0f}→{c['prem_new']:,.0f} "
+              f"절감 {c['save_m']:,.0f}({c['save_pct']}%) · 증가 {len(c['up'])} 신규 {len(c['add'])} "
+              f"감소 {len(c['down'])} 삭제 {len(c['delete'])}")
+        return JSONResponse({'ok': True, 'client': _cl,
+                             'prem_old': int(c['prem_old']), 'prem_new': int(c['prem_new']),
+                             'save_m': int(c['save_m']), 'save_y': int(c['save_y']),
+                             'save_pct': c['save_pct'],
+                             'n_up': len(c['up']), 'n_add': len(c['add']),
+                             'n_down': len(c['down']), 'n_del': len(c['delete']),
+                             'xlsx': _x, 'pptx': _p, 'pdf': _d})
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse({'ok': False, 'error': f'{type(e).__name__}: {e}'})
+
 
 @app.post('/ask')
 async def ask(body:dict):

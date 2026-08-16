@@ -1,10 +1,14 @@
+# ★★★★★ BARUM 배포 의존성 (v423 · 2026.08.15)
+#   비어 있어서 배포가 통째로 깨질 뻔했다(팩폭 30 · 1번).
+#   코드에서 실제 import 되는 것만 적는다 — 안 쓰는 걸 적으면 빌드만 느려진다.
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
+httpx
 openpyxl
 python-pptx
-python-multipart
-lxml
-httpx
-weasyprint==69.0
-matplotlib
+weasyprint
 pdf2image
+pypdf
+Pillow
+fonttools

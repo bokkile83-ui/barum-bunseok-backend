@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """BARUM 보장진단서 PPT v39 — 뼈대 그대로 · 워크시트 흰칸 전부 편집(빈칸 상자 흰색 채우기로 클릭 가능)."""
+# ★각인 v425-guard-20260816
 import os, re, subprocess, tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -73,6 +74,15 @@ def _valueset(rep):
     #   편집칸이 없으면 색(레드)도 슬라이드에 실리지 않는다. 6p는 값이 우연히 겹쳐 잡혔다.
     for _v in rep.get('_p7vals', []):
         add(_v)
+    # ★★★★★v421m (지점장 지적 2026.08.14 「회색버튼에 글자가없는것 개선」)
+    #   `가입`·`미가입`·`상태` 칩은 <b>편집 대상이 아니다</b>. 그런데 값 집합에 섞여 들어가
+    #   편집칸이 칩 위를 덮었고 <b>배경의 칩 글자가 가려져 회색 버튼만 남았다</b>.
+    #   ★<b>칩은 값이 아니다 — 편집칸을 만들지 않는다.</b>
+    for _bad in ('가입', '미가입', '상태'):
+        try: V.discard(_bad)
+        except Exception:
+            try: V.remove(_bad)
+            except Exception: pass
     return V
 
 

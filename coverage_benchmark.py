@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v420-audit-20260814 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v425-guard-20260816 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -472,7 +472,13 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         for nm,rec in spec:
             a=_amt_of(nm)
             out.append({'nm':nm,'amt':a,'rec':rec,'pct':(round(a/rec*100) if rec else 0)})
-        return min(out, key=lambda x:x['pct'])
+        # ★★★★★v421 (지점장 지적 2026.08.14 박미정 「5페이지 심장 0%인거 오류」)
+        #   v418의 「담보 2개면 낮은 쪽」이 <b>미가입(0)인 담보</b>를 골라 항상 0%가 됐다.
+        #   실측: 허혈성 2,000만이 엑셀에 있는데 급성심근경색(0)이 기준이 되어 <b>심장 0%</b>.
+        #   → 제1조(엑셀이 담보의 전부다)·제2조(결과값 동결) 위반. 엑셀에 있는데 화면은 0이다.
+        #   ★<b>가입된 담보 중에서</b> 낮은 쪽을 본다. 전부 미가입일 때만 0%.
+        _live=[x for x in out if x['amt']]
+        return min(_live or out, key=lambda x:x['pct'])
     coverage=[]; donut_map={}; detail_map={}; named_map={}
     for cat in CATEGORY_GROUPS:
         p,total,top=pct_for(cat,grp_rows,age_band)
