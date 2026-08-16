@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v425-guard-20260816'
+VSTAMP = 'v427-two-20260816'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1069,6 +1069,9 @@ _STRUCT_SELFTEST = [
     ('제50조 거대상수금지','report_weasy.py', r"_FIN_SURVEY = 'iVBOR", False),
     ('제50조 번호하드코딩','report_weasy.py', r'<div class="pgn"><b>\d+</b>', False),
     ('제50조 재무맨뒤',    'report_weasy.py', r'재무상태 설문지', True),
+    ('제52조 엑셀2개',    'main.py',    r'fd\.append\("old_xlsx",R1\)', True),
+    ('제52조 rows폴백',    'remodel.py', r"if not old.get\('rows'\)", True),
+    ('제52조 dict폴백',    'remodel.py', r"_rowlist\(old, 'delete'\) or dele", True),
     ('제45조 쪽번호없음',  'report_pages.py', r'자산 · 재무</span>', False),
     ('제46조 넘침감지',    'remodel.py',      r'REPORT_OVERFLOW', True),
     ('제47조 페이지반복',  'report_pages.py', r'position:fixed;top:0', True),
@@ -8489,7 +8492,7 @@ async def remodel_route(xlsx: UploadFile = File(None),
         return JSONResponse({'ok': False, 'error': '비밀번호 오류'})
     try:
         import remodel as _rm
-        _two = bool(old_xlsx and new_xlsx)
+        _two = bool(hasattr(old_xlsx, 'read') and hasattr(new_xlsx, 'read'))
         if not _two and not xlsx:
             return JSONResponse({'ok': False, 'error': '엑셀을 올려주십시오'})
         _ob = await old_xlsx.read() if _two else b''

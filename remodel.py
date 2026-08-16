@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v425-guard-20260816 =====
+# ===== BARUM remodel.py v427-two-20260816 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -222,6 +222,11 @@ def _rowlist(old, kind):
     """★행 단위 분류 — 담보명 dict는 동명 2행을 합쳐 값을 두 배로 만든다."""
     # ★값은 <b>행 단위</b>로 읽되(합산 금지), 같은 담보가 두 행이면 <b>대표값 한 줄</b>로 접는다.
     #   고객 눈에 같은 이름이 두 번 나오면 그건 오류로 보인다.
+    # ★★★★★v427 (실측 2026.08.16): `rows`는 <b>엑셀 1개 경로</b>(split_sheet)에서만 만들어진다.
+    #   <b>엑셀 2개 경로</b>(read_sheet ×2)에는 없어 이 함수가 빈 목록을 돌려주고
+    #   삭제·감소가 <b>영원히 0</b>이 됐다. rows가 없으면 호출부의 dict 계산을 그대로 쓴다.
+    if not old.get('rows'):
+        return None
     best = {}
     order = []
     for _r, nm, o, n, _g in old.get('rows', []):
@@ -290,9 +295,9 @@ def compare(old, new):
             'prem_old': op, 'prem_new': np_,
             'save_m': op - np_, 'save_y': (op - np_) * 12,
             'save_pct': (round((op - np_) / op * 100, 1) if op else 0.0),
-            'up': _rowlist(old, 'up'), 'down': _rowlist(old, 'down'),
-            'same': _rowlist(old, 'same'), 'delete': _rowlist(old, 'delete'),
-            'add': _rowlist(old, 'add'),
+            'up': _rowlist(old, 'up') or up, 'down': _rowlist(old, 'down') or down,
+            'same': _rowlist(old, 'same') or same, 'delete': _rowlist(old, 'delete') or dele,
+            'add': _rowlist(old, 'add') or add,
             'all': [(_g, nm, o, n, n - o,
                      '미가입' if (o == 0 and n == 0) else
                      '삭제' if n == 0 else '신규 추가' if o == 0 else
