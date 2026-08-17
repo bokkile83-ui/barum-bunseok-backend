@@ -9,7 +9,14 @@ try:
         _os2mod.table_O_S_2f_2._barum_patched = True
 except Exception:
     pass
-from assets_b64 import *   # ★v425 이미지 상수 분리(제50조)
+# ★★★★★v446 (2026.08.17 실측) — `import *`는 <b>밑줄로 시작하는 이름을 가져오지 않는다</b>.
+#   assets_b64.py의 상수 9개가 전부 `_`로 시작해 <b>하나도 안 들어왔다</b>.
+#   그 결과 보장진단서 PPT·보장설명서 PDF가 통째로 생성 실패(NameError: _BON_LINK).
+#   엑셀·보장분석지 PPT는 이 파일을 안 거치므로 멀쩡했고, 그래서 <b>조용히</b> 두 개만 사라졌다.
+#   → 이름을 <b>하나씩 적어</b> 가져온다. 새 상수를 추가하면 여기도 추가해야 한다(의도한 마찰).
+from assets_b64 import (_BON_FORM, _BON_LINK, _BON_RATIO, _BON_TERMS,
+                        _DOL2_PIC, _DOL2_TBL,
+                        _FIN_DOLLAR, _FIN_FUTURE, _FIN_SURVEY)
 import os as _os_env
 from weasyprint import HTML
 import math, html as _html
@@ -4193,7 +4200,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v443-install-20260817</div>'
+    _VSTAMP = '<div class="vstamp">v462-makeone-20260817</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

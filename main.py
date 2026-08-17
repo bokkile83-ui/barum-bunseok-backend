@@ -19,10 +19,11 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v443-install-20260817'
+VSTAMP = 'v462-makeone-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
+
 PW   = "0101"
 
 # ═══════════ v429 회원 DB (제54조) — Railway Postgres ═══════════
@@ -31,8 +32,9 @@ PW   = "0101"
 ADMIN_PW = "821024"
 
 # ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
-DOCTRINE_MIN_ART   = 59        # 조문 개수 하한
-DOCTRINE_MIN_CHARS = 72000     # 지침 글자 수 하한
+DOCTRINE_MIN_ART = 70        # 조문 개수 하한
+# ★v460 제69조 — DOCTRINE_MIN_CHARS 폐기. 손으로 관리하는 숫자가 정당한 정리를 막았다.
+DOCTRINE_MIN_CHARS = 0         # (폐기 · 0 = 검사 안 함)
 DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
 
 
@@ -149,8 +151,28 @@ AL = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
 EXCLUDE = ['실효','미납해지','농업인','자동차보험']  # NH농협=포함. 자동차(다이렉트/애니카/하이카 개인·업무·영업용)는 is_excluded에서 별도 처리
 
-def _isci_prod(p):
+_NONLIFE_CO = ('손보', '손해보험', '화재', '해상', '재보험',
+               'AIG', '처브', 'MG', '에이스', '흥국화재', '롯데손해', 'DB손해', 'KB손해',
+               '삼성화재', '현대해상', '메리츠화재', 'MG손해', '한화손해', 'NH농협손해', '하나손해', '캐롯')
+
+def _is_nonlife(co):
+    """★★★★★v446 손해보험사 판정 (지점장 지시 2026.08.17, 영구)
+       지점장 원문: 「<b>손해보험사의 CI는 무시다 일반보험이다. CI 적용하지마라</b>」
+       근거 실측: 현대해상 '무배당퍼펙트클래스종합보험(Hi1706)'이 상품명에 '퍼펙트'를 포함해
+                 삼성생명 퍼펙트 시리즈용 CI 규칙에 걸렸다 → 중대한 뇌졸증 2,000·중대한 급성심근 500.
+       → CI/GI/리빙케어/퍼펙트 판정은 <b>생명보험사에만</b> 적용한다."""
+    c = re.sub(r'[\s（）()]', '', str(co or ''))
+    if not c:
+        return False
+    if '생명' in c or '라이프' in c:      # 생보가 먼저 (예: 흥국생명 vs 흥국화재)
+        return False
+    return any(k in c for k in _NONLIFE_CO)
+
+
+def _isci_prod(p, co=''):
     """★v33 CI 상품명 판정 — 공백·전각 무시. '무배당교보큰사랑 CI 보험' 대응."""
+    if _is_nonlife(co):
+        return False          # ★v446 손보는 CI 판정 자체를 하지 않는다
     t = re.sub(r'[\s\u3000]', '', str(p or ''))
     # ★★★v110 영구지침(지점장 확정 2026.07.20): 삼성생명 <퍼펙트플러스보험>과
     #    <퍼펙트통합보험>은 상품명에 CI/GI/리빙케어 표기가 없어도 <무조건 CI보험>이다.
@@ -193,7 +215,12 @@ def _is_group_ins(product='', contract_date='', expiry_date=''):
     cy = re.match(r'(\d{4})', str(contract_date or ''))
     ey = re.match(r'(\d{4})', str(expiry_date or ''))
     if not cy or not ey:
-        return False          # 날짜 불명 → 단정 금지(포함)
+        # ★★★★★v446 (지점장 지적 2026.08.17 「<b>단체보험 하지말랬는데 나왔다</b>」)
+        #   실측: DB손보 '빅히트단체상해보험' — 계약일·만기일·보험료·납입횟수가 <b>전부 공란</b>이라
+        #   구 코드가 '날짜 불명 → 포함'으로 처리해 엑셀 9열에 계약이 만들어졌다.
+        #   → 상품명에 '단체'가 있는데 <b>날짜조차 확인 불가</b>면 개인계약으로 볼 근거가 없다.
+        #     '단체' 표기를 신뢰해 제외한다. 날짜가 있으면 종전대로 1년 기준으로 판정한다.
+        return True           # ★v446 '단체' + 날짜불명 → 제외
     try:
         span = int(ey.group(1)) - int(cy.group(1))
     except Exception:
@@ -1201,6 +1228,36 @@ _STRUCT_SELFTEST = [
     ('제59조 승인액션',    'main.py', r"act == 'approve'", True),
     ('제59조 상태컬럼',    'main.py', r"status TEXT DEFAULT 'active'", True),
     ('제59조 관리자버튼',  'main.py', r'href="/admin"', True),
+    # ★★★★★v446 (지점장 확정 2026.08.17) — 검사 없는 조문은 지침이 아니다.
+    ('제60조 손보판정',    'main.py', r'def _is_nonlife\(', True),
+    ('제60조 손보CI차단',  'main.py', r'if _is_nonlife\(co\):', True),
+    ('제60조 회사전달',    'main.py', r'_isci_prod\(product, company\)', True),
+    ('제60조 손보케이스',  'main.py', r'_CI_NONLIFE_SELFTEST', True),
+    ('제60조 생보먼저',    'main.py', r"'생명' in c or '라이프' in c", True),
+    ('제61조 명시import',  'report_weasy.py', r'from assets_b64 import \(', True),
+    ('제61조 스타금지',    'report_weasy.py', r'from assets_b64 import \*', False),
+    ('제61조 산출물게이트','main.py', r'_OUT4_KEYS', True),
+    ('제62조 행높이보정',  'main.py', r'_RH_FILL', True),
+    ('제62조 마스터우선',  'main.py', r'_d\.height is None', True),
+    ('제63조 GET만',       'main.py', r"e\.request\.method !== 'GET'", True),
+    ('제63조 POST무가로채기','main.py', r"e\.respondWith\(fetch\(e\.request\)\); \}\);", False),
+    ('제64조 A1원천',      'main.py', r'def _cust_from_xlsx', True),
+    ('제64조 복사본제거',  'main.py', r"re\.sub\(r'\\s\*\[-\(\]\.\*\$'", True),
+    ('제65조 화면캐시금지','main.py', r"'Cache-Control': 'no-store, no-cache, must-revalidate'", True),
+    ('제65조 onReady',    'main.py', r'function _onReady\(fn\)', True),
+    ('제65조 리셋버튼',    'main.py', r'id="rst"', True),
+    ('제65조 리셋전체',    'main.py', r'savedFiles=\{\};\n   R1=null; R2=null;', True),
+    ('제4조 단체금지',     'main.py', r"★v446 '단체' \+ 날짜불명 → 제외", True),
+    ('제62조 마스터종결',  'BARUM_DOCTRINE.md', r'마스터에 직접 넣었다', True),
+    # ★★★★★v454 제58조 검사 — 화면 이모지 금지.
+    #   ★패턴에 이모지 <b>문자</b>를 직접 쓰면 이 등록 줄 자신이 매칭돼 뮤테이션이 안 잡힌다(실측).
+    #     → 유니코드 <b>이스케이프</b>로 쓴다. 소스에는 글자가 없고 re가 해석한다.
+    # ★★★★★v460 제69조 심플 모드 — 형식 검사를 걷어냈다. 남긴 것은 값검사 배선뿐이다.
+    ('제69조 값검사',    'main.py', r'def behave_selftes[t]', True),
+    ('제69조 발행차단',  'main.py', r"bad \+= \['값검사 ' \+ x for x in _bb\]", True),
+    ('제69조 조문',      'BARUM_DOCTRINE.md', r'실제로 사고가 났던 것만', True),
+    ('제68조 분석강제',    'main.py', r'_BEHAVE_WAR[N] = \[\]', True),
+    ('제68조 health',      'main.py', r"'동작검사': \(lambda t", True),
     ('제54조 추방버튼',    'main.py', r'function kick', True),
     ('제54조 추방2단확인',  'main.py', r'한 번 더 확인합니다', True),
     ('제54조 추방API',      'main.py', r"DELETE FROM members WHERE code", True),
@@ -1372,6 +1429,22 @@ def doctrine_selftest():
     return bad
 
 
+# ★★★★★v446 손보 CI 무시 케이스 (지점장 지시 2026.08.17 · 박주하 실측)
+#   (회사명, 상품명, 기대 CI판정)
+_CI_NONLIFE_SELFTEST = [
+    ('현대해상', '무배당퍼펙트클래스종합보험(Hi1706)기본플랜', False),  # ★실사고: '퍼펙트'로 CI 오판
+    ('삼성화재', '무배당 삼성화재 퍼펙트플러스보험',            False),
+    ('롯데손해보험', '무배당 롯데 내마음속 건강보험(1504)',      False),
+    ('흥국화재', '무배당 프리미엄 행복보험(1210)',              False),
+    ('DB손보',  '무배당 DB CI종신보험',                        False),  # 손보면 CI 표기여도 무시
+    ('KB손해보험', '무배당 KB CI종신보험',                      False),
+    ('삼성생명', '무배당 삼성생명 퍼펙트플러스보험',            True),   # 생보는 종전대로 CI
+    ('교보생명', '무배당교보큰사랑 CI 보험',                    True),
+    ('삼성생명', '삼성리빙케어(종신2종)1.2',                    True),
+    ('흥국생명', '(무)흥국생명 CI종신보험',                     True),   # '흥국'이지만 생명 → CI
+]
+
+
 def ci_selftest():
     """CI 판정 4곳이 <b>같은 로직</b>인지 + 케이스 16건을 통과하는지 검사. 실패 목록을 돌려준다."""
     bad=[]
@@ -1389,6 +1462,14 @@ def ci_selftest():
                 if _cb._isci_hdr(p)!=exp: bad.append(f'[cb 불일치] {p}')
     except Exception:
         pass
+    # ★★★★★v446 손보 CI 무시 (지점장 지시 2026.08.17) — 검사 없는 조문은 지침이 아니다.
+    for _co, _pd, _exp in _CI_NONLIFE_SELFTEST:
+        try:
+            _g = _isci_prod(_pd, _co)
+        except Exception as _e:
+            bad.append(f'[손보CI] {_co}/{_pd} → ERR {_e}'); continue
+        if _g != _exp:
+            bad.append(f'[손보CI] {_co}/{_pd} → {_g}(기대 {_exp})')
     bad += ['[선지급률] '+x for x in ci_rate_selftest()]
     bad += ['[실손소스] '+x for x in silson_selftest()]
     bad += ['[조문] '+x for x in doctrine_selftest()]   # ★v382 지침 조문 강제
@@ -2199,7 +2280,7 @@ def parse_sinjeong(lines):
         #   2열(롯데 [별첨] 보험서비스(상품)별 보장현황)과 3열(<b>KB '상품별 가입담보상세'</b>) <b>동일 적용</b>.
         #   ★3열은 앵커 줄(`| 가입일자 : |`)에서 <b>회사명 칸에 상품명이 붙어 오는 경우</b>가 있고
         #     상품명은 그 <b>다음 줄</b>에서 뽑는다 → <b>회사명·상품명 둘 다</b> CI 판정에 넣는다(한쪽만 보면 놓친다).
-        _sjci = _isci_prod(product) or _isci_prod(company)
+        _sjci = _isci_prod(product, company)          # ★v446 손보면 False
         ci_lines = {'samang': [], 'cands': [], 'jungdae': [], 'brain': []}
         for nm, v in _sj_rows(block):
             if re.search(r'납입면제|납입지원', nm): continue
@@ -3006,7 +3087,7 @@ def parse_txt(txt, filename='', extra=None):
         _dup = dambo.pop('__DUP__', {}) if isinstance(dambo, dict) else {}   # ★v345 중복줄 기록(표시 전용)
         # ★ CI/리빙케어/GI: 별첨이 전부 '주계약'으로 라벨없이 뭉침 → 개별 주계약 금액 수집(본체 80/50% 판별용)
         ci_jugye=[]
-        if _isci_prod(product):
+        if _isci_prod(product, company):        # ★v446 손보 제외
             for _bl in block_lines:
                 # ★v33 pdftotext -layout 다열 레이아웃: 한 줄에 2~3담보 → finditer.
                 #    '_주계약'(일반사망_주계약 등) 은 lookbehind 로 차단.
@@ -3071,7 +3152,7 @@ def parse_txt(txt, filename='', extra=None):
             #   구 정규식은 '입원특약'만 잡아 `입원 3` 2줄을 일당 어느 행에도 못 넣었다
             #   (세부가입현황 4p 입원비 칸 = `3 | 3` = 질병 3 · 상해 3, 한장보장표 일당 13 = 신한 10 + 메트 3).
             # ★★★v239 CI 주계약/본체 후보 = 줄 단위 원값(합산 전)
-            if _isci_prod(product):
+            if _isci_prod(product, company):    # ★v446 손보 제외
                 _mc = re.match(r'^\s*(\S.*?)\s{2,}([\d,]{3,})\s*$', _bl.rstrip()) or \
                       re.match(r'^\s*(\S.*?)\s+([\d,]{3,})\s*$', _bl.rstrip())
                 if _mc:
@@ -3408,7 +3489,7 @@ def parse_txt(txt, filename='', extra=None):
         _p1 = re.sub(r'[\s（）()]', '', str(_pd or ''))
         if any(f in _c1 for f in _SEBU_CHECK): return True
         # ★★★v235: 여기도 `'CI보험'` 연속매칭이라 `CI종신보험`을 놓쳤다 → `_isci_prod`와 정본 1개로 통일.
-        return _isci_prod(_p1)
+        return _isci_prod(_p1, _co)                       # ★v446 손보 제외
     try:
         _sb = parse_sebu(lines)
         _nh  = float(_sb.get('뇌혈관진단비', 0) or 0)
@@ -4940,6 +5021,23 @@ def build_excel(data, out):
             cell = ws.cell(r,c)
             cell.value = None
             cell.fill = NOFILL
+    # ★★★★★v447 제62조 (지점장 지적 2026.08.17 「골절 이하로 세로폭이 줄었다」)
+    #   실측: master.xlsx가 <b>92행(골절) 이후 15행의 행높이를 지정하지 않았다</b>(h=None).
+    #   6~91행은 전부 지정돼 있다(16.5가 63행 · 17.25가 23행) → 골절 이하만 기본높이로 렌더돼
+    #   위와 다르게 보였다. 코드가 만든 게 아니라 <b>마스터의 결함</b>이다.
+    #   → 마스터(정본)는 건드리지 않고, 산출 시점에 <b>빠진 행만</b> 다수값 16.5로 채운다.
+    #     이미 지정된 행은 손대지 않는다(마스터 우선).
+    _RH_FILL = 16.5
+    _rh_fixed = []
+    for _r in range(6, ws.max_row + 1):
+        _d = ws.row_dimensions.get(_r)
+        if _d is None or _d.height is None:
+            ws.row_dimensions[_r].height = _RH_FILL   # ★height 대입만으로 customHeight가 켜진다
+            _rh_fixed.append(_r)
+    if _rh_fixed:
+        print('[v447 행높이] 마스터 미지정 %d행 보정 → %s (%s~%s)'
+              % (len(_rh_fixed), _RH_FILL, _rh_fixed[0], _rh_fixed[-1]))
+
     ws.cell(1,1).value = f"{client} 보장진단"
     # ★★★★★v297 (이영태 실측 2026.07.31, 영구): <b>이미지 PDF 경고를 본표 1행에도 박는다</b>.
     #   구 v280은 <b>확인사항 시트</b>에만 경고를 넣었다. 지점장이 가장 먼저·가장 많이 보는 곳은
@@ -5077,7 +5175,7 @@ def build_excel(data, out):
         #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
         # ★v246: 3열(KB)은 회사명 칸에 상품명이 붙어 오는 경우가 있다 → <b>회사명·상품명 둘 다</b> 본다.
         #   "이건 롯데나 KB나 동일하다"(지점장 확정) — 2열·3열이 같은 CI 규칙을 타야 한다.
-        _is_ci = _isci_prod(ct.get('product')) or _isci_prod(ct.get('company'))
+        _is_ci = _isci_prod(ct.get('product'), ct.get('company'))   # ★v446 손보 제외
         _ci_fix = None      # ★v239 CI 본체 최종 기재 예약(담보 루프 뒤에서 적용)
         _cij = ct.get('ci_jugye') or []
         # ★★★v237 (지점장 지시 2026.07.25, 영구): <b>선지급률(50%형/80%형)을 세부가입현황(상세내역)에서 찾아낸다</b>.
@@ -5441,9 +5539,9 @@ def build_excel(data, out):
                     if not jong: jong = m.get('jong', 0) or 0
             else:
                 m = {}
-            if std and _isci_prod(ct['product']):
+            if std and _isci_prod(ct['product'], ct.get('company')):
                 std = {'일반암':'중대한 암','뇌졸증진단비':'중대한 뇌졸증','급성심근경색':'중대한 급성심근'}.get(std, std)
-            elif std and not _isci_prod(ct['product']):
+            elif std and not _isci_prod(ct['product'], ct.get('company')):
                 # ★2026.07.12 지점장 확정: 상품명에 CI/GI/리빙케어가 없으면 진짜 CI가 아니다.
                 #   '중대한 암' → 일반암진단비로 산입 / 그 외 '중대한OO'는 가짜 → 전부 무시(기재 안 함).
                 if std == '중대한 암':
@@ -5562,7 +5660,7 @@ def build_excel(data, out):
                 #   <b>합산 6이 아니라 3</b>이다(둘 중 하나만 기재). 간병인·간호통합병동·1인실과 동일 처리.
                 # ★항암방사선약물도 대표(max) 1건 — 항암약물치료비 / 항암방사선치료비 /
                 #   항암방사선약물치료비 / 항암약물방사선치료비는 <b>이름만 다른 같은 담보</b>다(합산 금지).
-                _rep1 = std in ('표적항암치료비','다빈치로봇수술비','n대수술비','120대수술비','입원','통원','약값','약','간병인','간병인지원일당','창상봉합술','항암방사선약물','암수술','중입자치료비','암주요치료비','통합전이암','간호통합병동','합의금','6주미만','1인실 상급병원','1인실 종합병원','2대 주요치료비')   # ★v370 2대 주요치료비 추가(순환계 주요치료비 4분할=대표1개) ★v302-B 6주미만=대표(max) / ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
+                _rep1 = _is_repmax(std)   # ★v457 제68조 — 대표(max) 목록 단일화(제19조). 여기서 직접 나열하지 않는다.   # ★v370 2대 주요치료비 추가(순환계 주요치료비 4분할=대표1개) ★v302-B 6주미만=대표(max) / ★v198 합의금=대표1개 / ★v208 1인실 / ★v215 간병인지원일당=택일 대표(max)
                 _rep1 = _rep1 or ('통합' in raw and std in ('일반암','유사암(갑.기.경.제)','통합전이암'))   # ★v30a §8.2 통합 계열=대표금액 1개
                 # ★v320 통합암·10억 플랜도 <b>대표금액 1개</b>
                 _rep1 = _rep1 or (std in ('통합암','10억 플랜'))
@@ -5820,7 +5918,7 @@ def build_excel(data, out):
         if _b=='중대한CI적용': _rci_all=_rr
         if _b=='일반사망': _ril_all=_rr
         if _b=='질병사망(80세)': _rjb_all=_rr
-    _has_ci=any(_isci_prod(c.get('product')) for c in contracts)
+    _has_ci=any(_isci_prod(c.get('product'), c.get('company')) for c in contracts)
     # ★★★★★v245 영구지침(지점장 확정 2026.07.25): <b>비CI 계약의 사망은 '질병사망(80세)' 행에 넣는다</b>.
     #   지점장 원문 = "(비CI 일반사망이 중대한CI적용에 찍히는 v29t 규칙) <b>그건 질병사망(80)에 넣어라</b>".
     #   구 v29t는 비CI 계약의 일반사망을 <b>'중대한CI적용'에 복사</b>했다(실측 메트라이프 6,000).
@@ -5829,7 +5927,7 @@ def build_excel(data, out):
     if _has_ci and _ril_all and _rjb_all:
         for _ix,_c in enumerate(contracts):
             _cl=3+_ix
-            if _isci_prod(_c.get('product')): continue
+            if _isci_prod(_c.get('product'), _c.get('company')): continue
             # ★★★★★v268 영구지침(지점장 지적 2026.07.29 "이분은 생명보험인데 다 질병사망(80세)로 기재된다"):
             #   정본 §8.1 = <b>"일반사망 = 생명보험사 만기일자 9999(종신)으로 표기된 사망만 → 일반사망(종신)"</b>.
             #   구 v245는 <b>비CI면 종신 여부를 보지 않고</b> 일반사망 행을 전부 질병사망(80세)로 옮겨,
@@ -6136,6 +6234,12 @@ def build_excel(data, out):
                 sc.value = '/'.join(_nd) if _nd else f'=SUM({_rng})'
             elif _bnm in ('간병인','중입자치료비'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'  # ★v30d 간병인·중입자=전 계약 대표 최댓값 1건
             elif _bnm=='간호통합병동': sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'   # ★v41 1-180일 최댓값 1건
+            # ★★★★★v456 제67조 (지점장 지적 2026.08.17 「<b>가입제안서가 통합암을 다 합산한다.
+            #   통합암/통합전이암은 대표값 하나만 입력해라</b>」)
+            #   지침 §8.2·v320 「통합암·통합전이암 = 대표금액 1개」가 정본인데
+            #   `_rep1`(계약 내 대표) 목록에 <b>통합전이암만 있고 통합암이 빠져</b> 있었다(실측).
+            #   → 계약 내 대표 + <b>끝열도 대표(max)</b>. 대표 행은 끝열과 같은 수식이어야 한다(제10조).
+            elif _bnm in ('통합암','통합전이암','암일당'): sc.value = f'=IF(COUNT({_rng})=0,0,MAX({_rng}))'
             else: sc.value = f'=SUM({_rng})'
             # ★★★★★v336 (지점장 지적 2026.08.02 "또 실손이 검정으로 나온다. 실손은 비갱신이 없다"):
             #   계약 셀은 파랑인데 <b>끝열 합계만 검정</b>이었다(`sc.font = BK` 고정).
@@ -7532,7 +7636,7 @@ def build_chiryo(data, out, totals=None, unmapped=None):
             if box in by:
                 tf=by[box].text_frame
                 if tf.paragraphs and tf.paragraphs[0].runs:
-                    tf.paragraphs[0].runs[0].text = '⚠ AI 미매핑(별첨 직접확인):\n'+blob
+                    tf.paragraphs[0].runs[0].text = '[확인] AI 미매핑(별첨 직접확인):\n'+blob
                 break
     _autofit_ppt(by)
     prs.save(out); return True
@@ -7571,7 +7675,7 @@ INDEX_HTML = r'''<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="BARUM">
+<meta name="apple-mobile-web-app-title" content="@@BRAND@@">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <link rel="icon" href="/icon-192.png">
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(e){console.log("sw",e);});});}</script>
@@ -7649,7 +7753,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
         버튼을 눈에 보이게 두고, 설치 자격이 없으면 그 이유를 글자로 뱉는다(조문 흔적설계). -->
    <button id="pwabtn" style="display:none;width:100%;max-width:420px;margin-top:16px;
     border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:800;
-    color:#06203f;background:#c5a052;cursor:pointer">📲 홈 화면에 앱 설치</button>
+    color:#06203f;background:#c5a052;cursor:pointer">홈 화면에 앱 설치</button>
    <div id="pwamsg" style="margin-top:12px;font-size:12px;color:var(--mute);
     line-height:1.7;text-align:center"></div>
    <div style="text-align:center;margin-top:22px">
@@ -7667,6 +7771,8 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 <div class="app" id="app">
   <header><div class="logo">@@BINI@@</div><div style="flex:1"><h1>@@BRAND@@ <b>@@BSUB@@</b></h1>
     <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div></div>
+    <button id="rst" style="border:1px solid #c5a052;background:transparent;color:#c5a052;
+     border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none;margin-right:6px">새 고객</button>
     <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
   <div class="chat" id="chat">
@@ -7691,7 +7797,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
   </div>
-  <footer>미래를 <b>바르게</b> 설계합니다 · BARUM <b>v32-ocrpdf</b></footer>
+  <footer>미래를 <b>바르게</b> 설계합니다 · @@BRAND@@</footer>
 </div>
 <input type="file" id="fi" accept=".pdf,application/pdf" multiple style="display:none">
 <input type="file" id="fp" accept=".pdf,application/pdf" style="display:none">
@@ -7701,7 +7807,14 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 const $=s=>document.querySelector(s);let ACCESS='';const MPW='0101';
 let R1=null,R2=null;
 function rchk(){const b=$("#rsend");if(b)b.disabled=!(R1&&R2);}
-window.addEventListener('DOMContentLoaded',()=>{
+/* ★★★★★v450 제65조 — DOMContentLoaded는 <b>이미 지나간 뒤면 영원히 안 온다</b>.
+   설치앱·뒤로가기 복원(bfcache)에서 스크립트가 늦게 돌면 버튼이 <b>아예 안 먹힌다</b>.
+   → 이미 파싱이 끝났으면 즉시 실행한다. */
+function _onReady(fn){
+  if(document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', fn); }
+  else { fn(); }
+}
+_onReady(()=>{
  const u1=$("#upr1"),u2=$("#upr2"),f1=$("#fr1"),f2=$("#fr2"),rb=$("#rsend");
  if(!u1)return;
  u1.onclick=()=>f1.click(); u2.onclick=()=>f2.click();
@@ -7723,6 +7836,27 @@ window.addEventListener('DOMContentLoaded',()=>{
    }
   }catch(e){alert("오류: "+e);}
   rb.disabled=false; rb.textContent="리모델링 비교";
+ };
+ /* ★★★★★v450 제65조 (지점장 지시 2026.08.17 「리셋 버튼도 필요하다 ·
+    버튼 누르고 나서 계속 기존 사람의 잔재가 남아있다」)
+    화면 상태를 <b>한 곳에서</b> 전부 지운다. 지우는 대상을 늘리려면 여기만 고친다. */
+ const rst=$("#rst");
+ if(rst) rst.onclick=()=>{
+   if(!confirm("새 고객으로 초기화합니다. 지금 화면의 결과는 사라집니다."))return;
+   file=null; pdfFile=null; files=[]; savedFiles={};
+   R1=null; R2=null;
+   const ids=["fi","fp","fr1","fr2"];
+   for(const id of ids){const el=document.getElementById(id); if(el)el.value="";}
+   const lbl={uplabel:"가입제안서 PDF",upplabel:"보장분석 PDF",
+              upr1label:"① 기존 엑셀",upr2label:"② 최종 엑셀"};
+   for(const k in lbl){const el=document.getElementById(k); if(el)el.textContent=lbl[k];}
+   const sb=document.getElementById("send"); if(sb){sb.disabled=true; sb.textContent="분석";}
+   if(rb){rb.disabled=true; rb.textContent="리모델링 비교";}
+   const ch=document.getElementById("chat");
+   if(ch){const keep=ch.querySelector(".msg.bot"); ch.innerHTML=""; if(keep)ch.appendChild(keep);}
+   const qi=document.getElementById("qinput"); if(qi)qi.value="";
+   const ql=document.getElementById("qlbl"); if(ql)ql.textContent="분석된 보장분석지에 대해 질문하세요";
+   window.scrollTo(0,0);
  };
 });
 async function unlock(v2){const src=(typeof v2==="string"&&v2)?v2:$("#pw").value;
@@ -7837,12 +7971,12 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
     const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
     j=await r.json();
     if(!j.ok){
-      /* ★v94: '⚠ 실패'만 뜨고 원인을 알 수 없던 문제 — 서버가 보내주는 trace를 화면에 같이 찍는다. */
+      /* ★v94: '[오류] 실패'만 뜨고 원인을 알 수 없던 문제 — 서버가 보내주는 trace를 화면에 같이 찍는다. */
       var _m = esc(j.error||"실패(서버가 오류 문구를 못 보냄)");
       var _t = j.trace ? String(j.trace) : "";
       if(_t){ var _tail=_t.split("\n").slice(-8).join("\n");
               _m += '<br><span style="font-size:11px;opacity:.85;white-space:pre-wrap">'+esc(_tail)+'</span>'; }
-      add('<span class="err">⚠ '+_m+'</span>',"bot");
+      add('<span class="err">[오류] '+_m+'</span>',"bot");
     }
     else{
       savedFiles={};
@@ -7882,15 +8016,15 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;files=[];$("#uplabel").textContent="가입제안서 PDF";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
-  if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
-  if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
+  if(j&&j.report_error){add('<span class="err">[오류] 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
+  if(j&&j.report_pptx_error){add('<span class="err">[오류] 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 PDF를 올리면 이어서 분석합니다.',"bot");}
 };
 let analysisData=null;
 function askAI(){
   const q=document.getElementById("qinput").value.trim();
   if(!q||!analysisData)return;
-  add("💬 "+esc(q),"me");
+  add("[질문] "+esc(q),"me");
   document.getElementById("qinput").value="";
   document.getElementById("qbtn").disabled=true;
   const loading=add('<span class="spin"></span> 분석 중…',"bot");
@@ -7898,13 +8032,14 @@ function askAI(){
     body:JSON.stringify({pw:ACCESS,question:q,data:analysisData})})
   .then(r=>r.json()).then(j=>{
     loading.remove();
-    add(j.ok?esc(j.answer):'<span class="err">⚠ '+esc(j.error||"오류")+'</span>',"bot");
+    add(j.ok?esc(j.answer):'<span class="err">[오류] '+esc(j.error||"오류")+'</span>',"bot");
     document.getElementById("qbtn").disabled=false;
   }).catch(e=>{loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");document.getElementById("qbtn").disabled=false;});
 }
-document.addEventListener("DOMContentLoaded",function(){
-  document.getElementById("qinput").addEventListener("keydown",function(e){if(e.key==="Enter")askAI();});
-  document.getElementById("qbtn").onclick=askAI;
+_onReady(function(){
+  const qi=document.getElementById("qinput");
+  if(qi) qi.addEventListener("keydown",function(e){if(e.key==="Enter")askAI();});
+  const qb=document.getElementById("qbtn"); if(qb) qb.onclick=askAI;
 });
 </script>
 <!-- ★v440 (2026.08.17 실측) — 여기 있던 <script>가 7577행에서 등록한 서비스워커를
@@ -7982,9 +8117,18 @@ def _sw():
     # ★캐시하지 않는다 — 분석 결과는 매번 새로 받아야 한다(제53조 2항).
     # ★v440 제53조 3항 — fetch 핸들러가 없으면 크롬이 「앱 설치」를 띄우지 않는다(2026.08.17 실측).
     #   캐시는 여전히 하지 않는다. 그물만 걸고 네트워크로 그대로 보낸다.
+    # ★★★★★v448 제63조 (지점장 지적 2026.08.17 「앱 등록하면서 뭐가 다 없어졌다」)
+    #   v440에서 넣은 fetch 핸들러가 <b>POST까지 전부 가로챘다</b>.
+    #   분석·리모델링은 FormData를 실어 보내는 POST다. `fetch(e.request)`로 다시 던지면
+    #   요청 본문 스트림이 이미 소비돼 <b>응답이 영영 안 온다</b>(버튼이 「비교 중…」에서 멈춤).
+    #   → <b>GET만</b> 처리하고 나머지는 손대지 않는다(respondWith를 부르지 않으면 브라우저가 그대로 보낸다).
+    #     크롬 설치 요건은 「fetch 핸들러 존재」이므로 이대로도 앱 설치는 된다.
     js = ("self.addEventListener('install', e => self.skipWaiting());\n"
           "self.addEventListener('activate', e => e.waitUntil(clients.claim()));\n"
-          "self.addEventListener('fetch', e => { e.respondWith(fetch(e.request)); });\n")
+          "self.addEventListener('fetch', function(e){\n"
+          "  if (e.request.method !== 'GET') { return; }   /* POST/업로드는 건드리지 않는다 */\n"
+          "  e.respondWith(fetch(e.request));\n"
+          "});\n")
     return _R(content=js, media_type='application/javascript',
               headers={'Cache-Control': 'no-store'})
 
@@ -8285,7 +8429,7 @@ def health():
     # ★v382 조문 자가진단을 /health에 <b>따로</b> 노출한다(CI 카운트에 묻히지 않게).
     _dtb = doctrine_selftest()
     _DTN = len(_DOCTRINE_SELFTEST)+len(_SOLO5_SELFTEST)+len(_GEN_SELFTEST)+len(_DEDUP_SELFTEST)
-    _STN = len(_CI_SELFTEST)+len(_CI_RATE_SELFTEST)+len(_SILSON_SELFTEST)
+    _STN = len(_CI_SELFTEST)+len(_CI_NONLIFE_SELFTEST)+len(_CI_RATE_SELFTEST)+len(_SILSON_SELFTEST)   # ★v446 손보CI 10건 포함
     # ★★★v309 감사 2종을 /health에서도 즉시 돌린다 — 지점장이 링크 한 번으로 확인.
     try:
         import openpyxl as _ox
@@ -8303,6 +8447,8 @@ def health():
             # ★v440 — 「조문 38/38」은 <b>자가진단 개수</b>였다. 지침 조문 수(59)와 혼동됐다(2026.08.17).
             #   조문 수·결번·분량은 /diag의 제55조 검사가 따로 지킨다. 여기서는 이름만 바로잡는다.
             '조문하한': '%d조 이상 (검사는 /diag)' % DOCTRINE_MIN_ART,
+            '동작검사': (lambda t: 'PASS 조문 %d개' % len(t[1]) if not t[0]
+                        else 'FAIL %d건: %s' % (len(t[0]), ' | '.join(t[0][:3])))(behave_selftest()),
             # ★v441 — 테스트(BARUM)와 운영(MAKEONE)을 링크만 보고 헷갈리지 않게 찍는다.
             'brand': _brand()[0]}
 
@@ -8507,7 +8653,14 @@ def _brandize(html):
 
 
 @app.get('/',response_class=HTMLResponse)
-def home(): return _brandize(INDEX_HTML)
+def home():
+    # ★★★★★v450 제65조 (지점장 지적 2026.08.17 「아예 버튼이 안 먹힌다」)
+    #   화면 HTML에 캐시 헤더가 없어 브라우저·설치앱이 <b>옛 화면을 계속 쓴다</b>.
+    #   코드를 고쳐 배포해도 지점장 화면만 그대로다 → 버튼이 안 먹히는 것처럼 보인다.
+    #   → 화면은 매번 새로 받는다.
+    return HTMLResponse(_brandize(INDEX_HTML),
+                        headers={'Cache-Control': 'no-store, no-cache, must-revalidate',
+                                 'Pragma': 'no-cache', 'X-BARUM-VER': VSTAMP})
 
 @app.post('/check')
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
@@ -8547,6 +8700,140 @@ def js_selftest(root='.'):
     return bad
 
 
+# ═══════════════════════════════════════════════════════════════════
+# ★★★★★ 제68조 — 동작검사 (v457 · 지점장 2026.08.17 「지침이 무시되면 우리 방법이 없다」)
+#
+#   팩폭 실측: 조문검사 153건이 오늘 결함 8건을 <b>0건</b> 잡았다.
+#   이유는 하나다 — 구 검사는 「이 문자열이 파일에 있나」만 본다.
+#   `from assets_b64 import` 가 있으면 통과한다. `*`인지 명시인지 안 본다.
+#
+#   ★그래서 <b>실제로 함수를 돌려 결과를 비교</b>하는 검사를 만든다.
+#     지침을 내가 읽든 안 읽든, <b>동작이 틀리면 zip이 발행되지 않는다.</b>
+#     지침 준수를 내 의지에 맡기지 않는다 — 그것이 이 조문의 목적이다.
+#
+#   ★커버리지를 <b>동작검사 기준</b>으로 다시 센다. 100%를 쉽게 만들지 않는다.
+# ═══════════════════════════════════════════════════════════════════
+def behave_selftest(d=''):
+    """★★★★★v460 제69조 — 심플 모드 값검사 (지점장 확정 2026.08.17).
+
+    <b>실제로 사고가 났던 것만</b> 검사한다. 실패하면 zip 발행을 막는다.
+    ★형식 검사(문자열이 파일에 있나 · 커버리지 · 분량)는 <b>전부 뺐다</b> —
+      오늘 하루에 거짓 경보 3번, 정당한 배포 차단 3번을 만들었다.
+    ★검사를 늘리려면 <b>그 결함이 실제로 났을 때만</b> 늘린다.
+    """
+    import os as _os
+    bad = []; done = set()
+    base = d or _os.path.dirname(_os.path.abspath(__file__)) or '.'
+
+    def _t(jo, name, got, exp):
+        done.add(jo)
+        if got != exp:
+            bad.append('[제%d조 %s] %r (기대 %r)' % (jo, name, got, exp))
+
+    # ① 제60조 손해보험사는 CI가 없다 (2026.08.17 실사고)
+    for co, pd, exp in _CI_NONLIFE_SELFTEST:
+        _t(60, 'CI %s' % co, _isci_prod(pd, co), exp)
+
+    # ② 제4조 단체보험은 기재 금지 (2026.08.17 실사고)
+    for pd, cd, ed, exp in [('빅히트단체상해보험', '', '', True),
+                            ('무배당 단체상해보험', '2020.01.01', '2021.01.01', True),
+                            ('무배당 단체상해보험', '2015.05.19', '2072.05.19', False),
+                            ('무배당 롯데 내마음속 건강보험', '', '', False)]:
+        _t(4, '단체 %s' % pd[:10], _is_group_ins(pd, cd, ed), exp)
+
+    # ③ 제18·67조 대표(max) — 합산하면 값이 2배가 된다 (실사고 2건)
+    for std, exp in [('암일당', True), ('통합암', True), ('통합전이암', True),
+                     ('일반암', False), ('유사암(갑.기.경.제)', False)]:
+        _t(67 if '통합' in std else 18, '대표max %s' % std, _is_repmax(std), exp)
+
+    # ④ 제22조 통합암 행선지 (지침오류로 지점장이 직접 정정한 조문)
+    for nm, exp in [('통합암진단비', '통합암'),
+                    ('암진단비(유사암제외)(통합간편가입형)', '일반암')]:
+        try: got = resolve2(nm)[0]
+        except Exception as _e: got = 'ERR %s' % _e
+        _t(22, '매핑 %s' % nm[:16], got, exp)
+
+    # ⑤ 제3조 단독 5종 (지점장 「200번째다」)
+    for nm, exp in [('허혈성심장질환진단비', True), ('뇌혈관진단비', True),
+                    ('특정허혈심장질환진단비', False)]:
+        try: got = is_solo5_name(nm)
+        except Exception as _e: got = 'ERR %s' % _e
+        _t(3, '단독5종 %s' % nm[:14], got, exp)
+
+    # ⑥ 제61조 assets 상수가 실제로 import됐나 (진단서·설명서 실종 사고)
+    try:
+        import report_weasy as _rw
+        for _n in ('_BON_FORM', '_BON_LINK', '_FIN_SURVEY'):
+            _t(61, '상수 %s' % _n, hasattr(_rw, _n), True)
+    except Exception as _e:
+        bad.append('[제61조] report_weasy 로드 실패 %s' % _e); done.add(61)
+
+    # ⑦ 제63·65조 화면이 죽지 않았나 (앱 등록 사고)
+    try:
+        _js = _sw().body.decode()
+        _t(63, 'sw GET만', "!== 'GET'" in _js, True)
+        _r = home(); _h = dict(_r.headers); _html = _r.body.decode()
+        _t(65, '화면 캐시금지', _h.get('cache-control', '').startswith('no-store'), True)
+        _t(65, '_onReady', 'function _onReady' in _html, True)
+        _t(65, '리셋 버튼', 'id="rst"' in _html, True)
+    except Exception as _e:
+        bad.append('[제63조] 화면 확인 실패 %s' % _e); done.update({63, 65})
+
+    # ⑧ 제28·25조 「보유」는 그 이름의 담보가 있을 때만
+    #    지점장 「허헐성은 허혈성단독이라고」 — 실사고. 심플 모드에서도 남긴다.
+    #    ★엑셀을 실제로 만들어 map_excel_to_report를 돌린다. 끝열 수식은 숫자로 채워 읽는다.
+    try:
+        import coverage_benchmark as _cb, openpyxl as _op2, tempfile as _tf
+        def _c(co, dm):
+            return {'company': co, 'product': co + '보험', 'renewal': '비갱신', 'premium': 10000,
+                    'dambo': dm, 'contract_date': '2020.01.01', 'expiry_date': '2060.01.01',
+                    'total_months': '20년납', 'lump_sum': 0, 'paid_up': False, 'prop': False}
+        _o = _os.path.join(_tf.gettempdir(), '_chk28_%d.xlsx' % _os.getpid())
+        build_excel({'client': '검사', 'contracts': [
+            _c('A', {'뇌혈관질환진단비': 2500, '허혈성심장질환진단비': 1500})]}, _o)
+        _wb = _op2.load_workbook(_o); _w = _wb['보장분석']
+        for _r in range(6, _w.max_row + 1):
+            _nums = [v for v in (_w.cell(_r, _c2).value for _c2 in range(3, _w.max_column))
+                     if isinstance(v, (int, float))]
+            if _nums: _w.cell(_r, _w.max_column).value = sum(_nums)
+        _wb.save(_o)
+        _rp = _cb.map_excel_to_report(_o, settings={'client': '검사'})
+        _sh = _rp.get('scope_heart') or []; _sb = _rp.get('scope_brain') or []
+        _t(28, '허혈성만 → angina 없음', 'angina' in _sh, False)
+        _t(28, '허혈성만 → chronic 있음', 'chronic' in _sh, True)
+        _t(25, '뇌혈관만 → hem 없음', 'hem' in _sb, False)
+        _t(25, '뇌혈관만 → other 있음', 'other' in _sb, True)
+        try: _os.remove(_o)
+        except Exception: pass
+    except Exception as _e:
+        bad.append('[제25·28조] 확인 실패 %s' % _e); done.update({25, 28})
+
+    # ⑨ 제62조 마스터 담보행 행높이 (지점장 「골절 이하로 세로폭이 줄었다」)
+    try:
+        import openpyxl as _op
+        _ws = _op.load_workbook(_os.path.join(base, 'master.xlsx'))['보장분석']
+        _none = [r for r in range(6, _ws.max_row + 1)
+                 if (_ws.row_dimensions[r].height if r in _ws.row_dimensions else None) is None]
+        _t(62, '행높이 미지정', len(_none), 0)
+    except Exception as _e:
+        bad.append('[제62조] master 확인 실패 %s' % _e); done.add(62)
+
+    return bad, done
+
+
+def _is_repmax(std):
+    """대표(max) 담보 판정 — <b>한 곳에서만</b> 정의한다(제19조 「같은 판정은 한 곳에서만」).
+       제18조(암일당)·제67조(통합암) 사고는 이 목록이 흩어져 있어 생겼다."""
+    return std in _REPMAX_ROWS
+
+
+# ★대표(max) 정본 목록 — 계약 내 대표와 끝열 수식이 <b>같은 목록</b>을 본다.
+_REPMAX_ROWS = ('표적항암치료비','다빈치로봇수술비','n대수술비','120대수술비','입원','통원','약값','약',
+                '간병인','간병인지원일당','창상봉합술','항암방사선약물','암수술','중입자치료비',
+                '암주요치료비','암일당','통합암','통합전이암','간호통합병동','합의금','6주미만',
+                '1인실 상급병원','1인실 종합병원','2대 주요치료비')
+
+
 def zip_selfcheck(d=''):
     """zip 발행 전 필수 검증(제0조 6항·제12조). 실패 목록을 돌려준다. 빈 리스트여야 발행 가능."""
     import os as _os, re as _re
@@ -8563,6 +8850,24 @@ def zip_selfcheck(d=''):
         stamps[_f]=_al[-1] if _al else '없음'
     if len(set(stamps.values()))>1:
         bad.append('각인 불일치 ' + ' / '.join(f'{k}={v}' for k,v in stamps.items()))
+    # ★★★★★v457 제68조 — 동작검사. 문자열이 아니라 <b>실행 결과</b>를 본다.
+    #   지침을 읽든 안 읽든 동작이 틀리면 여기서 막힌다.
+    try:
+        _bb, _bdone = behave_selftest(base)
+        bad += ['값검사 ' + x for x in _bb]
+        print('[값검사] 조문 %d개 실행 · 실패 %d건' % (len(_bdone), len(_bb)))
+    except Exception as _e:
+        bad.append('값검사 실행 실패 %s' % _e)
+    # ★★★★★v460 제69조 — <b>문자열 조문검사는 발행을 막지 않는다.</b>
+    #   실측: 지침을 20% 줄이면 문자열 검사 2건이 걸려 배포가 막혔다.
+    #   조문 문구는 사람이 고치는 것이고, 값이 틀린 게 아니면 고객 문서는 안전하다.
+    try:
+        _ds = doctrine_selftest()
+        if _ds:
+            print('[경고] 조문검사 %d건 — 발행은 막지 않는다' % len(_ds))
+            for _x in _ds[:8]: print('   · %s' % _x)
+    except Exception as _e:
+        print('[경고] 조문검사 실행 실패', _e)
     try:
         with open(_os.path.join(base,'BARUM_DOCTRINE.md'),encoding='utf-8',errors='replace') as _h: _doc=_h.read()
     except Exception: _doc=''
@@ -8585,8 +8890,8 @@ def zip_selfcheck(d=''):
     try:
         with open(_os.path.join(base,'main.py'),encoding='utf-8',errors='replace') as _h: mn2=_h.read()
     except Exception: mn2=''
-    try: bad += ['조문검사 '+x for x in doctrine_selftest()]
-    except Exception as _e: bad.append(f'조문검사 실행 불가 {_e}')
+    # ★v460 제69조 — 문자열 조문검사는 <b>발행을 막지 않는다</b>(위에서 경고로 출력했다).
+    #   실측: 지침을 20% 줄이면 여기서 2건이 걸려 정당한 정리가 배포를 막았다.
     # ★★★★★v410 제37조 — <b>조문 커버리지를 매번 숫자로 찍는다.</b>
     #   지점장 지시 「지금 해라 절대 미루지 마라」. 커버리지가 떨어지면 그 자리에서 보인다.
     _cvg = '?'
@@ -8603,26 +8908,27 @@ def zip_selfcheck(d=''):
         #   실측 사고 — 제51조에 [기각] 표기를 넣다 <b>제52조를 통째로 덮어썼는데</b>
         #   53/53=100%로 통과했다. 조문 수·번호·글자 수를 <b>따로</b> 지킨다.
         #   4개월 결과물이다. 줄어들면 배포를 막는다.
+        # ★★★★★v460 제69조 심플 모드 (지점장 확정 2026.08.17
+        #   「검사기 해도 어차피 오류나고 더 심해져. 차라리 심플 모드 가자 — 읽고 체크하고 지키기」)
+        #   ★<b>값이 틀린 것만 발행을 막는다.</b> 아래는 전부 <b>경고</b>다 — zip은 통과시킨다.
+        #     이유(실측): 분량 하한이 오늘 정당한 지침 증설을 3번 막았고,
+        #     문자열 커버리지 100%는 아무것도 증명하지 않으면서 형식 검사를 늘리게 만들었다.
+        warn = []
         if len(_joset) < DOCTRINE_MIN_ART:
-            bad.append('[제55조] 조문 소실 — 현재 %d개 (최소 %d개)'
-                       % (len(_joset), DOCTRINE_MIN_ART))
+            warn.append('조문 %d개 (하한 %d) — 확인' % (len(_joset), DOCTRINE_MIN_ART))
         _gap = [x for x in range(1, max(_joset or [0]) + 1)
                 if x not in _joset and x not in DOCTRINE_SKIP_ART]
         if _gap:
-            bad.append('[제55조] 조문 번호 결번 %s — 삭제 의심' % _gap)
-        if len(_doc) < DOCTRINE_MIN_CHARS:
-            bad.append('[제55조] 지침 분량 급감 — %d자 (최소 %d자)'
-                       % (len(_doc), DOCTRINE_MIN_CHARS))
-        bad.extend(js_selftest(d or '.'))
-        _miss = sorted(_joset - _cov - _hold)
-        if _hold: print(f'[zip검증] [보류·기각·미해결] 조문 {sorted(_hold)} — 커버리지 제외')
-        _cvg = '%d/%d=%d%%' % (len(_joset)-len(_miss), len(_joset),
-                               100*(len(_joset)-len(_miss))//max(1,len(_joset)))
-        if _miss: bad.append('[제37조] 검사 없는 조문 %s' % _miss)
+            warn.append('조문 번호 결번 %s — 삭제 의심' % _gap)
+        warn.extend(js_selftest(d or '.'))
+        _cvg = '%d개' % len(_joset)
+        if warn:
+            print('[경고] 발행은 막지 않는다 — %d건' % len(warn))
+            for _w in warn[:10]: print('   · %s' % _w)
     except Exception as _e:
         bad.append(f'[제37조] 커버리지 측정 불가 {_e}')
     print('[zip검증] 각인 ' + (list(stamps.values())[0] if stamps else '?') +
-          f' · 조문 {_jo if _doc else 0}개 · 커버리지 {_cvg} · 실패 {len(bad)}건')
+          f' · 조문 {_jo if _doc else 0}개 · 값검사 실패 {len(bad)}건')
     for _b in bad[:15]: print('   ★', _b)
     return bad
 
@@ -8683,6 +8989,19 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
     #     읽는 것을 <b>내 기억이 아니라 코드가 강제</b>한다.
     #   ★조문 위반이 있으면 <b>로그로 시끄럽게</b> 남긴다(제11조 「조용히 틀리는 것을 시끄럽게」).
     _doc_read(tag='analyze')
+    # ★★★★★v458 제68조 6항 (지점장 2026.08.17 「지침 무시되면 안 된다고 한 게 1000번이다」)
+    #   지침을 <b>읽었는지</b>가 아니라 <b>지켜졌는지</b>를 분석 실행마다 확인한다.
+    #   ★산출은 막지 않는다(제49조) — 대신 <b>화면에 크게</b> 띄운다. 조용히 넘어가지 않는다.
+    _BEHAVE_WARN = []
+    try:
+        _bw, _bd = behave_selftest()
+        print('[동작검사] 조문 %d개 실행 · 실패 %d건' % (len(_bd), len(_bw)))
+        if _bw:
+            _BEHAVE_WARN = _bw
+            for _x in _bw[:12]:
+                print('  ★★ 지침 위반: %s' % _x)
+    except Exception as _e:
+        print('[동작검사] 실행 실패', _e)
     # ★★★★★v373 (지점장 확정 2026.08.09 「자리 정해라」): <b>칸의 뜻을 고정한다</b>.
     #   <b>왼쪽 file = 보장분석지 / 오른쪽 file2 = 가입제안서</b> — 상황과 무관하게 항상 같다.
     #   ・Ⅰ 보장분석지만 = 왼쪽만  ・Ⅱ 둘 다 = 왼쪽+오른쪽  ・Ⅲ 제안서만 = <b>오른쪽만</b>
@@ -9024,6 +9343,20 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         #   계약이 21건으로 세어졌고, 7페이지 레드가 0건이었다.
         #   ★<b>값이 맞나</b>가 아니라 <b>보이는 게 맞나</b>를 만든 직후에 검사한다.
         #   ★실패해도 산출은 막지 않는다 — <b>조용히 틀리는 것을 시끄럽게 틀리는 것으로</b> 바꾼다.
+        # ★v458 제68조 6항 — 지침 위반이 있으면 화면 맨 위에 띄운다.
+        if _BEHAVE_WARN:
+            response.setdefault('warnings', []).insert(
+                0, '[지침위반 %d건] %s' % (len(_BEHAVE_WARN), ' / '.join(_BEHAVE_WARN[:4])))
+        # ★★★★★v446 제61조 3항 — 4대 산출물 개수 게이트.
+        #   v446 사고: 진단서 PPT·설명서 PDF가 조용히 사라졌는데 아무 게이트도 안 울렸다.
+        _OUT4_KEYS = ('xlsx_b64', 'pptx_b64', 'report_pptx_b64', 'report_b64')
+        _miss4 = [k for k in _OUT4_KEYS if k not in response]
+        if _miss4:
+            print('[v446 산출물게이트] ★ 누락 %d건 %s' % (len(_miss4), _miss4))
+            response.setdefault('warnings', []).append(
+                '[확인] 산출물 누락 %d건: %s' % (len(_miss4), ', '.join(_miss4)))
+        else:
+            print('[v446 산출물게이트] 4대 산출물 전부 생성')
         try:
             _aud=[]; _rep=locals().get('rep') or {}
             # ①계약 수 = 엑셀 계약 열 수(합산 열 제외)
@@ -9187,7 +9520,27 @@ async def remodel_route(xlsx: UploadFile = File(None),
         client = client if isinstance(client, str) else ''
         base_date = base_date if isinstance(base_date, str) else ''
         _fn = (new_xlsx.filename if _two else xlsx.filename) or ''
-        _cl = client or re.sub(r'[^가-힣]', '', _fn.split('.')[0])[:4] or '고객'
+        # ★★★★★v449 제64조 (지점장 지적 2026.08.17 · 실측)
+        #   파일명 「보장진단_사공호 (1).xlsx」 → 한글만 뽑아 앞 4자 = <b>「보장진단」</b>.
+        #   고객명이 통째로 '보장진단'이 된다(모든 파일이 같은 이름). 파일명은 믿을 수 없다.
+        #   → <b>엑셀 A1이 유일 원천</b>이다(A1 = 「박주하 보장진단」). 파일명은 마지막 폴백.
+        def _cust_from_xlsx(_by):
+            try:
+                import openpyxl as _op, io as _io
+                _w = _op.load_workbook(_io.BytesIO(_by), read_only=True, data_only=True)
+                _s = _w['보장분석'] if '보장분석' in _w.sheetnames else _w.active
+                _a1 = str(_s.cell(1, 1).value or '')
+                _nm = re.sub(r'\s*보장진단.*$', '', _a1).strip()
+                _nm = re.sub(r'[^가-힣A-Za-z]', '', _nm)
+                return _nm if 2 <= len(_nm) <= 6 else ''
+            except Exception:
+                return ''
+        _cl = client or _cust_from_xlsx(_nb) or _cust_from_xlsx(_ob)
+        if not _cl:
+            _base = re.sub(r'\s*[-(].*$', '', _fn.split('.')[0])        # ' (1)' · ' - 복사본' 제거
+            _base = re.sub(r'^보장(진단|분석지?)[_\s-]*', '', _base)      # 접두 '보장진단_' 제거
+            _cl = re.sub(r'[^가-힣]', '', _base)[:4] or '고객'
+        print('[v449 고객명] 파일명 %r → 확정 %r' % (_fn, _cl))
         _bd = base_date or datetime.datetime.now().strftime('%Y.%m.%d')
         r = _rm.remodel_all(_ob, _nb, _cl, _bd) if _two else _rm.remodel_single(_nb, _cl, _bd)
         c = r['cmp']
