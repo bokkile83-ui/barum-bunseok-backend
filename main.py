@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v439-signup-20260817'
+VSTAMP = 'v440-pwa-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -7659,7 +7659,9 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </div>
 <div class="app" id="app">
   <header><div class="logo">M</div><div style="flex:1"><h1>MAKEONE <b>보장설명서</b></h1>
-    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 메이크원</div></div></header>
+    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 메이크원</div></div>
+    <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
+     border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
   <div class="chat" id="chat">
     <div class="msg bot"><b>왼쪽 = 보장분석 리포트 PDF · 오른쪽 = 가입제안서 PDF</b> (칸의 역할은 항상 고정입니다)<br>
       ① 보장분석지만 → 왼쪽만 &nbsp;② 둘 다 → 왼쪽+오른쪽(맨 오른쪽에 <b>제안 계약 열</b> 추가) &nbsp;③ 제안서만 → <b>오른쪽만</b><br><br>
@@ -7729,6 +7731,11 @@ async function unlock(v2){const src=(typeof v2==="string"&&v2)?v2:$("#pw").value
       $("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
     else{try{localStorage.removeItem("barum_code");}catch(e){} fail(j.error);}}
   catch(e){$("#gerr").textContent="서버 연결 실패";}}
+/* ★v440 — 자동 로그인(localStorage) 때문에 잠금화면으로 돌아갈 길이 없었다(2026.08.17 실측).
+   저장된 코드를 지우고 게이트를 다시 세운다. 다른 사람에게 넘길 때도 이 버튼을 쓴다. */
+$("#lout").onclick=function(){try{localStorage.removeItem("barum_code");}catch(e){}
+  $("#app").style.display="none";$("#gate").style.display="flex";
+  $("#pw").value="";$("#gerr").textContent="";$("#pw").focus();};
 function fail(m){$("#gerr").textContent=m||"코드 또는 비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
 $("#go").onclick=function(){unlock();};
 $("#joinopen").onclick=function(){
@@ -7865,7 +7872,10 @@ document.addEventListener("DOMContentLoaded",function(){
   document.getElementById("qbtn").onclick=askAI;
 });
 </script>
-<script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
+<!-- ★v440 (2026.08.17 실측) — 여기 있던 <script>가 7577행에서 등록한 서비스워커를
+     매 로드마다 통째로 unregister 했다. 그래서 크롬이 「앱 설치」를 영영 띄우지 않았다.
+     서비스워커는 캐시를 하지 않으므로(no-store) 해제할 이유가 없다. 삭제한다. -->
+</body></html>'''
 
 # ═══════════ v428 PWA (제53조) — manifest · 아이콘 · 서비스워커 ═══════════
 _PWA_ICON = None
@@ -7917,8 +7927,11 @@ def _icon(sz: int):
 def _sw():
     from fastapi.responses import Response as _R
     # ★캐시하지 않는다 — 분석 결과는 매번 새로 받아야 한다(제53조 2항).
+    # ★v440 제53조 3항 — fetch 핸들러가 없으면 크롬이 「앱 설치」를 띄우지 않는다(2026.08.17 실측).
+    #   캐시는 여전히 하지 않는다. 그물만 걸고 네트워크로 그대로 보낸다.
     js = ("self.addEventListener('install', e => self.skipWaiting());\n"
-          "self.addEventListener('activate', e => e.waitUntil(clients.claim()));\n")
+          "self.addEventListener('activate', e => e.waitUntil(clients.claim()));\n"
+          "self.addEventListener('fetch', e => { e.respondWith(fetch(e.request)); });\n")
     return _R(content=js, media_type='application/javascript',
               headers={'Cache-Control': 'no-store'})
 
@@ -8233,7 +8246,10 @@ def health():
     return {'ok':True,'version':VSTAMP,
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
-            'doctrine': ('PASS 조문 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6]))}
+            'doctrine': ('PASS 지침자가진단 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6])),
+            # ★v440 — 「조문 38/38」은 <b>자가진단 개수</b>였다. 지침 조문 수(59)와 혼동됐다(2026.08.17).
+            #   조문 수·결번·분량은 /diag의 제55조 검사가 따로 지킨다. 여기서는 이름만 바로잡는다.
+            '조문하한': '%d조 이상 (검사는 /diag)' % DOCTRINE_MIN_ART}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
