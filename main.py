@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v438-textonly-20260817'
+VSTAMP = 'v439-signup-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -31,7 +31,7 @@ PW   = "0101"
 ADMIN_PW = "821024"
 
 # ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
-DOCTRINE_MIN_ART   = 58        # 조문 개수 하한
+DOCTRINE_MIN_ART   = 59        # 조문 개수 하한
 DOCTRINE_MIN_CHARS = 72000     # 지침 글자 수 하한
 DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
 
@@ -63,11 +63,18 @@ def _db_init():
                 code TEXT UNIQUE NOT NULL,
                 phone TEXT DEFAULT '',
                 memo TEXT DEFAULT '',
+                status TEXT DEFAULT 'active',
                 blocked BOOLEAN DEFAULT FALSE,
                 created TIMESTAMP DEFAULT NOW(),
                 expires DATE,
                 last_used TIMESTAMP,
                 use_count INT DEFAULT 0)""")
+            # ★v439 기존 테이블에도 status 보강(제59조)
+            try:
+                k.execute("ALTER TABLE members ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'")
+                k.execute("ALTER TABLE members ALTER COLUMN code DROP NOT NULL")
+            except Exception as _ae:
+                print('[v439 DB] status 보강 생략:', str(_ae)[:60])
             k.execute("""CREATE TABLE IF NOT EXISTS uselog(
                 id SERIAL PRIMARY KEY,
                 code TEXT, name TEXT, act TEXT,
@@ -99,11 +106,13 @@ def _member_check(code):
         return False, '', 'DB 미연결 — 지점장에게 문의'
     try:
         with c, c.cursor() as k:
-            k.execute("SELECT name, blocked, expires FROM members WHERE code=%s", (code,))
+            k.execute("SELECT name, blocked, expires, status FROM members WHERE code=%s", (code,))
             r = k.fetchone()
             if not r:
                 return False, '', '없는 코드입니다'
-            nm, blocked, exp = r
+            nm, blocked, exp, st = r
+            if st and st != 'active':
+                return False, nm, '아직 승인 전입니다'
             if blocked:
                 return False, nm, '차단된 코드입니다'
             if exp:
@@ -1188,6 +1197,10 @@ _STRUCT_SELFTEST = [
     ('제57조 줄바꿈금지',  'main.py', r'white-space:nowrap;overflow:hidden', True),
     ('제57조 모바일축소',  'main.py', r'@media \(max-width:520px\)', True),
     ('제58조 글자만',      'main.py', r'class="logo">M<', True),
+    ('제59조 가입신청',    'main.py', r'/member/apply', True),
+    ('제59조 승인액션',    'main.py', r"act == 'approve'", True),
+    ('제59조 상태컬럼',    'main.py', r"status TEXT DEFAULT 'active'", True),
+    ('제59조 관리자버튼',  'main.py', r'href="/admin"', True),
     ('제54조 추방버튼',    'main.py', r'function kick', True),
     ('제54조 추방2단확인',  'main.py', r'한 번 더 확인합니다', True),
     ('제54조 추방API',      'main.py', r"DELETE FROM members WHERE code", True),
@@ -7629,9 +7642,23 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   <div class="s">회원코드 6자리를 입력하세요</div>
   <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="회원코드 6자리" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
+  <div id="joinbox" style="margin-top:18px;width:100%;max-width:420px">
+   <div id="joinopen" style="text-align:center;font-size:13px;color:var(--mute);cursor:pointer;
+    text-decoration:underline">처음이신가요? 가입 신청</div>
+   <div style="text-align:center;margin-top:22px">
+    <a href="/admin" style="font-size:12px;color:#6b7280;text-decoration:none;
+     border:1px solid #3a3f4a;border-radius:8px;padding:7px 16px">관리자</a></div>
+   <div id="joinform" style="display:none;margin-top:14px;text-align:left">
+    <input id="jn" class="pw" placeholder="이름" style="letter-spacing:0;text-align:left;font-size:15px">
+    <input id="jp" class="pw" placeholder="연락처 (010-0000-0000)" inputmode="tel"
+     style="letter-spacing:0;text-align:left;font-size:15px;margin-top:10px">
+    <button id="jgo" class="go" style="margin-top:10px">가입 신청</button>
+    <div id="jmsg" style="margin-top:12px;font-size:13px;text-align:center;color:var(--mute)"></div>
+   </div>
+  </div>
 </div>
 <div class="app" id="app">
-  <header><div class="logo">M</div><div><h1>MAKEONE <b>보장설명서</b></h1>
+  <header><div class="logo">M</div><div style="flex:1"><h1>MAKEONE <b>보장설명서</b></h1>
     <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 메이크원</div></div></header>
   <div class="chat" id="chat">
     <div class="msg bot"><b>왼쪽 = 보장분석 리포트 PDF · 오른쪽 = 가입제안서 PDF</b> (칸의 역할은 항상 고정입니다)<br>
@@ -7703,7 +7730,36 @@ async function unlock(v2){const src=(typeof v2==="string"&&v2)?v2:$("#pw").value
     else{try{localStorage.removeItem("barum_code");}catch(e){} fail(j.error);}}
   catch(e){$("#gerr").textContent="서버 연결 실패";}}
 function fail(m){$("#gerr").textContent=m||"코드 또는 비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
-$("#go").onclick=function(){unlock();};$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>{
+$("#go").onclick=function(){unlock();};
+$("#joinopen").onclick=function(){
+  var f=$("#joinform"); f.style.display=(f.style.display==="none")?"block":"none";
+  if(f.style.display==="block"){ var s=null; try{s=JSON.parse(localStorage.getItem("barum_apply")||"null");}catch(e){}
+    if(s){ $("#jn").value=s.n; $("#jp").value=s.p; jcheck(); } }
+};
+async function jcheck(){
+  var n=$("#jn").value.trim(), p=$("#jp").value.trim();
+  if(!n||!p)return;
+  const fd=new FormData(); fd.append("name",n); fd.append("phone",p);
+  const r=await fetch("/member/check",{method:"POST",body:fd}); const j=await r.json();
+  if(j.ok&&j.status==="active"){
+    $("#jmsg").innerHTML='승인되었습니다. 회원코드<br><b style="font-size:26px;color:var(--acc2);letter-spacing:.12em">'
+      +j.code+'</b><br>위 칸에 입력해 접속하세요';
+    $("#pw").value=j.code;
+  } else if(j.ok){ $("#jmsg").textContent="승인 대기 중입니다. 승인되면 여기에 코드가 나옵니다."; }
+  else { $("#jmsg").textContent=j.error||""; }
+}
+$("#jgo").onclick=async function(){
+  var n=$("#jn").value.trim(), p=$("#jp").value.trim();
+  if(n.length<2){$("#jmsg").textContent="이름을 정확히 입력하세요";return;}
+  if(p.length<9){$("#jmsg").textContent="연락처를 정확히 입력하세요";return;}
+  $("#jmsg").textContent="신청 중…";
+  const fd=new FormData(); fd.append("name",n); fd.append("phone",p);
+  const r=await fetch("/member/apply",{method:"POST",body:fd}); const j=await r.json();
+  if(!j.ok){$("#jmsg").textContent=j.error||"실패";return;}
+  try{localStorage.setItem("barum_apply",JSON.stringify({n:n,p:p}));}catch(e){}
+  if(j.status==="active"){ jcheck(); }
+  else { $("#jmsg").textContent="신청되었습니다. 지점장 승인 후 이 화면에 코드가 나옵니다."; }
+};$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>{
   var sv=null; try{sv=localStorage.getItem("barum_code");}catch(e){}
   if(sv){unlock(sv);}else{$("#pw").focus();}});
 const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 제안서 최대 3건 */
@@ -7937,6 +7993,10 @@ td{padding:7px 5px;border-bottom:1px solid #1c2c3f}
   <button onclick="issue()">코드 발급</button>
   <div id="out"></div>
  </div>
+ <div class="card" id="pcard" style="display:none;border-color:#c5a052">
+  <b style="font-size:14px;color:#e7c274">승인 대기 <span id="pn"></span></b>
+  <div id="plist"></div>
+ </div>
  <div class="card">
   <b style="font-size:14px">회원 목록</b>
   <div class="sum" id="sum"></div>
@@ -7969,6 +8029,14 @@ function cp(c){navigator.clipboard.writeText(c);alert('복사됨: '+c);}
 async function load(){const j=await api('list'); if(j.ok) render(j);}
 function render(j){
  $('sum').textContent='전체 '+j.total+'명 · 차단 '+j.blocked+'명';
+ var pd=j.pend||[];
+ $('pcard').style.display=pd.length?'block':'none';
+ $('pn').textContent=pd.length?('· '+pd.length+'명'):'';
+ var ph='<table><tr><th>이름</th><th>연락처</th><th>신청일</th><th></th></tr>';
+ pd.forEach(function(r){ph+='<tr><td>'+r.name+'</td><td>'+r.phone+'</td><td>'+r.created+'</td><td>'
+  +'<button class="act" style="background:#0e7258" onclick="appr(&#39;'+r.name+'&#39;,&#39;'+r.phone+'&#39;)">승인</button> '
+  +'<button class="act red" onclick="rej(&#39;'+r.name+'&#39;,&#39;'+r.phone+'&#39;)">거절</button></td></tr>';});
+ $('plist').innerHTML=ph+'</table>';
  let h='<table><tr><th>이름</th><th>코드</th><th>사용</th><th>만료</th><th></th></tr>';
  (j.rows||[]).forEach(r=>{h+='<tr><td>'+r.name+(r.blocked?' <span class="b">차단</span>':'')+
   '</td><td style="font-weight:800;color:#e7c274">'+r.code+'</td><td>'+r.cnt+'회<br><span style="color:#9fb0c4">'+
@@ -7977,6 +8045,13 @@ function render(j){
   (r.blocked?'해제':'차단')+'</button> '+'<button class="act red" onclick="kick(&#39;'+r.code+'&#39;,&#39;'+r.name+'&#39;)">추방</button>'+'</td></tr>';});
  $('list').innerHTML=h+'</table>';}
 async function tog(c,b){await api(b?'unblock':'block',{code:c}); load();}
+async function appr(nm,ph){
+ const j=await api('approve',{name:nm,memo:ph,months:$('mo').value});
+ if(j.ok){alert(nm+' 승인 완료 · 코드 '+j.code);load();}else{alert(j.error||'실패');}}
+async function rej(nm,ph){
+ if(!confirm(nm+' 님의 신청을 거절합니까?'))return;
+ const j=await api('reject',{name:nm,memo:ph});
+ if(j.ok){load();}else{alert(j.error||'실패');}}
 async function kick(c,nm){
  if(!confirm(nm+' ('+c+') 님을 추방합니다.\\n코드가 삭제되어 즉시 접속 불가가 됩니다.'))return;
  if(!confirm('되돌릴 수 없습니다. 정말 추방합니까?'))return;
@@ -7986,6 +8061,66 @@ async function kick(c,nm){
 
 
 # ═══════════ v429 관리자 · 회원 라우트 (제54조) ═══════════
+@app.post('/member/apply')
+async def member_apply(name: str = Form(''), phone: str = Form('')):
+    """★v439 (제59조) 가입 신청 — 설계사가 이름·연락처를 넣고 신청한다.
+       코드는 <b>지점장 승인 뒤</b>에 생긴다. 승인 전에는 입장 불가."""
+    name = (name or '').strip()
+    phone = (phone or '').strip()
+    if len(name) < 2:
+        return JSONResponse({'ok': False, 'error': '이름을 정확히 입력하십시오'})
+    if len(phone) < 9:
+        return JSONResponse({'ok': False, 'error': '연락처를 정확히 입력하십시오'})
+    c = _db()
+    if not c:
+        return JSONResponse({'ok': False, 'error': 'DB 미연결 — 지점장에게 문의'})
+    try:
+        with c, c.cursor() as k:
+            k.execute("SELECT status, code FROM members WHERE name=%s AND phone=%s", (name, phone))
+            r = k.fetchone()
+            if r:
+                st, cd = r
+                if st == 'active':
+                    return JSONResponse({'ok': True, 'status': 'active', 'code': cd})
+                return JSONResponse({'ok': True, 'status': 'pending'})
+            k.execute("INSERT INTO members(name,phone,status) VALUES(%s,%s,'pending')",
+                      (name, phone))
+            k.execute("INSERT INTO uselog(code,name,act) VALUES('',%s,'apply')", (name,))
+            print('[v439 신청] %s %s' % (name, phone))
+        return JSONResponse({'ok': True, 'status': 'pending'})
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)[:100]})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+
+@app.post('/member/check')
+async def member_check_status(name: str = Form(''), phone: str = Form('')):
+    """★신청자가 승인됐는지 확인 — 승인됐으면 코드를 돌려준다."""
+    c = _db()
+    if not c:
+        return JSONResponse({'ok': False, 'error': 'DB 미연결'})
+    try:
+        with c, c.cursor() as k:
+            k.execute("SELECT status, code, blocked FROM members WHERE name=%s AND phone=%s",
+                      ((name or '').strip(), (phone or '').strip()))
+            r = k.fetchone()
+            if not r:
+                return JSONResponse({'ok': False, 'error': '신청 기록이 없습니다'})
+            st, cd, blk = r
+            if blk:
+                return JSONResponse({'ok': False, 'error': '차단된 계정입니다'})
+            if st == 'active' and cd:
+                return JSONResponse({'ok': True, 'status': 'active', 'code': cd})
+            return JSONResponse({'ok': True, 'status': 'pending'})
+    except Exception as e:
+        return JSONResponse({'ok': False, 'error': str(e)[:100]})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+
 @app.post('/member/login')
 async def member_login(code: str = Form(''), pw: str = Form('')):
     """설계사 로그인 — 코드 또는 화면비번(0101)."""
@@ -8021,6 +8156,28 @@ async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''
                           (name.strip(), cd, exp, memo))
                 return JSONResponse({'ok': True, 'code': cd, 'name': name.strip(),
                                      'expires': str(exp)})
+            if act == 'approve':
+                # ★v439 (제59조) 승인 = 코드 생성 + status active
+                import datetime as _d2
+                exp = _d2.date.today() + _d2.timedelta(days=int(months) * 30)
+                for _ in range(20):
+                    cd = _mk_code()
+                    k.execute("SELECT 1 FROM members WHERE code=%s", (cd,))
+                    if not k.fetchone():
+                        break
+                k.execute("UPDATE members SET code=%s, status='active', expires=%s "
+                          "WHERE name=%s AND phone=%s", (cd, exp, name.strip(), memo.strip()))
+                k.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'approve')",
+                          (cd, name.strip()))
+                print('[v439 승인] %s → %s' % (name.strip(), cd))
+                return JSONResponse({'ok': True, 'code': cd, 'name': name.strip(),
+                                     'expires': str(exp)})
+            if act == 'reject':
+                k.execute("DELETE FROM members WHERE name=%s AND phone=%s AND status='pending'",
+                          (name.strip(), memo.strip()))
+                k.execute("INSERT INTO uselog(code,name,act) VALUES('',%s,'reject')",
+                          (name.strip(),))
+                return JSONResponse({'ok': True})
             if act in ('block', 'unblock', 'delete'):
                 if act == 'delete':
                     # ★추방은 되돌릴 수 없다 — 누구를 언제 뺐는지 uselog에 남긴다(제54조 8항).
@@ -8036,14 +8193,19 @@ async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''
                 return JSONResponse({'ok': True})
             k.execute("""SELECT name,code,blocked,to_char(created,'YY.MM.DD'),
                          to_char(expires,'YY.MM.DD'),to_char(last_used,'MM.DD HH24:MI'),
-                         use_count FROM members ORDER BY created DESC LIMIT 300""")
-            rows = [{'name': r[0], 'code': r[1], 'blocked': r[2], 'created': r[3],
+                         use_count,COALESCE(memo,''),COALESCE(status,'active'),
+                         COALESCE(phone,'') FROM members ORDER BY created DESC LIMIT 300""")
+            _all = [{'name': r[0], 'code': r[1] or '', 'blocked': r[2], 'created': r[3],
                      'expires': r[4], 'last': r[5] or '-', 'cnt': r[6],
-                     'memo': r[7] or ''}
+                     'memo': r[7], 'status': r[8], 'phone': r[9]}
                     for r in k.fetchall()]
-            k.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE blocked) FROM members")
-            tot, blk = k.fetchone()
-            return JSONResponse({'ok': True, 'rows': rows, 'total': tot, 'blocked': blk})
+            rows = [x for x in _all if x['status'] == 'active']
+            pend = [x for x in _all if x['status'] == 'pending']
+            k.execute("SELECT COUNT(*) FILTER (WHERE blocked) FROM members")
+            blk = k.fetchone()[0]
+            return JSONResponse({'ok': True, 'rows': rows, 'pend': pend,
+                                 'total': len(rows), 'blocked': blk,
+                                 'npend': len(pend)})
     except Exception as _e:
         return JSONResponse({'ok': False, 'error': str(_e)[:120]})
     finally:
