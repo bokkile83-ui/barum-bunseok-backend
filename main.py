@@ -19,11 +19,108 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v427-two-20260816'
+VSTAMP = 'v438-textonly-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
-PW   = "0101"   # ★★v334 대문 비번 고정(지점장 지시 2026.08.02). Railway Variables의 ACCESS_PW/BARUM_PW(=1009)가 코드 기본값을 이기고 있어 환경변수 참조를 제거했다.
+PW   = "0101"
+
+# ═══════════ v429 회원 DB (제54조) — Railway Postgres ═══════════
+#   ★권한자 = 최은혜 지점장. 마스터 비번 821024. 화면 비번은 0101 그대로.
+#   DATABASE_URL이 없으면 <b>DB 없이도 앱은 돈다</b>(0101 게이트만 작동) — 배포 사고 방지.
+ADMIN_PW = "821024"
+
+# ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
+DOCTRINE_MIN_ART   = 58        # 조문 개수 하한
+DOCTRINE_MIN_CHARS = 72000     # 지침 글자 수 하한
+DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
+
+
+def _db():
+    """psycopg 연결. 실패하면 None — 호출부는 반드시 None을 처리한다."""
+    import os as _o
+    url = _o.environ.get('DATABASE_URL', '')
+    if not url:
+        return None
+    try:
+        import psycopg
+        return psycopg.connect(url, connect_timeout=6)
+    except Exception as _e:
+        print('[v429 DB] 연결 실패:', str(_e)[:80])
+        return None
+
+
+def _db_init():
+    c = _db()
+    if not c:
+        print('[v429 DB] DATABASE_URL 없음 — 회원 기능 비활성(0101 게이트만 작동)')
+        return False
+    try:
+        with c, c.cursor() as k:
+            k.execute("""CREATE TABLE IF NOT EXISTS members(
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                code TEXT UNIQUE NOT NULL,
+                phone TEXT DEFAULT '',
+                memo TEXT DEFAULT '',
+                blocked BOOLEAN DEFAULT FALSE,
+                created TIMESTAMP DEFAULT NOW(),
+                expires DATE,
+                last_used TIMESTAMP,
+                use_count INT DEFAULT 0)""")
+            k.execute("""CREATE TABLE IF NOT EXISTS uselog(
+                id SERIAL PRIMARY KEY,
+                code TEXT, name TEXT, act TEXT,
+                at TIMESTAMP DEFAULT NOW())""")
+        print('[v429 DB] members · uselog 준비 완료')
+        return True
+    except Exception as _e:
+        print('[v429 DB] 초기화 실패:', str(_e)[:100])
+        return False
+    finally:
+        try: c.close()
+        except Exception: pass
+
+
+def _mk_code(n=6):
+    """★숫자 6자리(지점장 확정 2026.08.16). 영문이 섞이면 폰 입력이 어렵다.
+       맨 앞은 0을 피해 앞자리 누락을 막는다."""
+    import random
+    return str(random.randint(1, 9)) + ''.join(str(random.randint(0, 9)) for _ in range(n - 1))
+
+
+def _member_check(code):
+    """코드 검증. (ok, 이름, 사유)"""
+    code = (code or '').strip().upper()
+    if not code:
+        return False, '', '코드를 입력하십시오'
+    c = _db()
+    if not c:
+        return False, '', 'DB 미연결 — 지점장에게 문의'
+    try:
+        with c, c.cursor() as k:
+            k.execute("SELECT name, blocked, expires FROM members WHERE code=%s", (code,))
+            r = k.fetchone()
+            if not r:
+                return False, '', '없는 코드입니다'
+            nm, blocked, exp = r
+            if blocked:
+                return False, nm, '차단된 코드입니다'
+            if exp:
+                import datetime as _d
+                if exp < _d.date.today():
+                    return False, nm, '만료된 코드입니다 (%s)' % exp
+            k.execute("UPDATE members SET last_used=NOW(), use_count=use_count+1 WHERE code=%s",
+                      (code,))
+            k.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'login')", (code, nm))
+        return True, nm, ''
+    except Exception as _e:
+        return False, '', 'DB 오류: %s' % str(_e)[:60]
+    finally:
+        try: c.close()
+        except Exception: pass
+
+   # ★★v334 대문 비번 고정(지점장 지시 2026.08.02). Railway Variables의 ACCESS_PW/BARUM_PW(=1009)가 코드 기본값을 이기고 있어 환경변수 참조를 제거했다.
 HERE = os.path.dirname(os.path.abspath(__file__))
 TPL_XL  = os.path.join(HERE, "master.xlsx")
 TPL_PPT = os.path.join(HERE, "ppt_form.pptx")
@@ -1072,6 +1169,28 @@ _STRUCT_SELFTEST = [
     ('제52조 엑셀2개',    'main.py',    r'fd\.append\("old_xlsx",R1\)', True),
     ('제52조 rows폴백',    'remodel.py', r"if not old.get\('rows'\)", True),
     ('제52조 dict폴백',    'remodel.py', r"_rowlist\(old, 'delete'\) or dele", True),
+    ('제53조 매니페스트',  'main.py', r'manifest\.webmanifest', True),
+    ('제53조 아이콘생성',  'main.py', r'def _pwa_icon', True),
+    ('제53조 SW무캐시',    'main.py', r'no-store', True),
+    ('제54조 관리자비번',  'main.py', r'ADMIN_PW = "821024"', True),
+    ('제54조 회원테이블',  'main.py', r'CREATE TABLE IF NOT EXISTS members', True),
+    ('제54조 쉬운코드',    'main.py', r'def _mk_code', True),
+    ('제54조 DB없어도뜸',  'main.py', r'DATABASE_URL 없음', True),
+    ('제54조 psycopg',     'requirements.txt', r'psycopg', True),
+    ('제54조 추방버튼',    'main.py', r'async function kick', True),
+    ('제54조 추방기록',    'main.py', r"VALUES\(%s,%s,'kick'\)", True),
+    ('제55조 조문수하한',  'main.py', r'DOCTRINE_MIN_ART', True),
+    ('제55조 결번감시',    'main.py', r'조문 번호 결번', True),
+    ('제55조 분량하한',    'main.py', r'DOCTRINE_MIN_CHARS', True),
+    ('제56조 JS검사',     'main.py', r'def js_selftest', True),
+    ('제56조 PC반응형',    'main.py', r'@media \(min-width:900px\)', True),
+    ('제56조 엔티티',      'main.py', r'&#39;', True),
+    ('제57조 줄바꿈금지',  'main.py', r'white-space:nowrap;overflow:hidden', True),
+    ('제57조 모바일축소',  'main.py', r'@media \(max-width:520px\)', True),
+    ('제58조 글자만',      'main.py', r'class="logo">M<', True),
+    ('제54조 추방버튼',    'main.py', r'function kick', True),
+    ('제54조 추방2단확인',  'main.py', r'한 번 더 확인합니다', True),
+    ('제54조 추방API',      'main.py', r"DELETE FROM members WHERE code", True),
     ('제45조 쪽번호없음',  'report_pages.py', r'자산 · 재무</span>', False),
     ('제46조 넘침감지',    'remodel.py',      r'REPORT_OVERFLOW', True),
     ('제47조 페이지반복',  'report_pages.py', r'position:fixed;top:0', True),
@@ -7410,7 +7529,7 @@ def make_summary(data):
     total_premium=sum(ct['premium'] for ct in contracts)
     갱신수=sum(1 for ct in contracts if ct['renewal']=='갱신')
     lines=[f"<b>👤 {cust} 고객님 분석 완료</b>","",
-           f"📋 <b>계약 현황</b>",
+           f"<b>계약 현황</b>",
            f"  • 총 계약 수: <b>{len(contracts)}건</b>",
            f"  • 갱신형: {갱신수}건 / 비갱신형: {len(contracts)-갱신수}건",
            f"  • 월 보험료 합계: <b>{total_premium:,}원</b>","","🏢 <b>가입 회사</b>"]
@@ -7432,8 +7551,17 @@ def make_summary(data):
 
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>MAKEONE 보장설명서</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#06203f">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BARUM">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="icon" href="/icon-192.png">
+<script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(e){console.log("sw",e);});});}</script>
 <style>
 :root{--bg:#0c0d10;--panel:#15171c;--line:#2a2d34;--acc:#7C3AED;--acc2:#A78BFA;--ink:#EAECEF;--mute:#929aa6;--green:#4ADE80;--blue:#5B9BFF}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -7448,6 +7576,19 @@ body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans K
 #gate .err{color:var(--acc2);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
 .shake{animation:sh .35s}@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
+@media (min-width:900px){ .app{max-width:1000px;padding:0 16px}
+ .msg{max-width:78%;font-size:14px} .chat{padding:18px 8px}
+ #gate .pw,#gate .go{max-width:460px} }
+@media (min-width:1400px){ .app{max-width:1200px} }
+/* ★v435 PC 대응 — 넓은 화면에서 폭·글자를 키운다(제56조) */
+@media (min-width:900px){
+ .app{max-width:1000px;padding:0 16px}
+ .msg{max-width:78%;font-size:14px}
+ .chat{padding:18px 8px}
+ #gate .pw,#gate .go{max-width:460px}
+ .file-card{font-size:13px}
+}
+@media (min-width:1400px){ .app{max-width:1200px} }
 header{padding:14px 18px;border-bottom:1px solid var(--line);background:linear-gradient(135deg,#17131f,#0d0e11 60%,#1a1426);display:flex;align-items:center;gap:10px}
 .logo{width:32px;height:32px;border-radius:9px;border:1px solid var(--acc);display:flex;align-items:center;justify-content:center;font-size:16px}
 h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;color:var(--mute)}
@@ -7468,7 +7609,11 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
-.up{flex:1;border:1.5px dashed rgba(124,58,237,.5);border-radius:12px;padding:13px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2)}
+.up{flex:1;min-width:0;border:1.5px dashed rgba(124,58,237,.5);border-radius:12px;padding:13px 8px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.send{white-space:nowrap}
+@media (max-width:520px){ .up{font-size:11.5px;padding:12px 4px;letter-spacing:-.02em}
+ .send{font-size:12.5px;padding:0 12px} }
+@media (max-width:380px){ .up{font-size:10.5px;padding:11px 3px} }
 .send{border:none;border-radius:12px;padding:0 20px;font-weight:800;font-size:14px;background:var(--acc);color:#fff;cursor:pointer}
 .send:disabled{opacity:.4}
 .qbar{padding:8px 12px;border-top:1px solid var(--line);display:none;gap:8px;background:var(--bg)}
@@ -7481,13 +7626,13 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </style></head><body>
 <div id="gate">
   <div class="kick">MAKEONE</div><h1>MAKEONE 보장설명서</h1>
-  <div class="s">접속 비밀번호를 입력하세요</div>
-  <input id="pw" class="pw" type="password" inputmode="numeric" placeholder="비밀번호" autocomplete="off">
+  <div class="s">회원코드 6자리를 입력하세요</div>
+  <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="회원코드 6자리" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
 </div>
 <div class="app" id="app">
-  <header><div class="logo">📋</div><div><h1>MAKEONE <b>보장설명서</b></h1>
-    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 최은혜 지점장</div></div></header>
+  <header><div class="logo">M</div><div><h1>MAKEONE <b>보장설명서</b></h1>
+    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 메이크원</div></div></header>
   <div class="chat" id="chat">
     <div class="msg bot"><b>왼쪽 = 보장분석 리포트 PDF · 오른쪽 = 가입제안서 PDF</b> (칸의 역할은 항상 고정입니다)<br>
       ① 보장분석지만 → 왼쪽만 &nbsp;② 둘 다 → 왼쪽+오른쪽(맨 오른쪽에 <b>제안 계약 열</b> 추가) &nbsp;③ 제안서만 → <b>오른쪽만</b><br><br>
@@ -7496,16 +7641,16 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
       ※ 롯데(let:) · KB · 메리츠 리포트 모두 원본 PDF 그대로 인식합니다.</span></div>
   </div>
   <div class="bar">
-    <label class="up" id="upp">📑 <span id="upplabel">보장분석 PDF 선택</span></label>
-    <label class="up" id="up">📑 <span id="uplabel">가입제안서 PDF (최대 3건)</span></label>
+    <label class="up" id="upp"><span id="upplabel">보장분석 PDF</span></label>
+    <label class="up" id="up"><span id="uplabel">가입제안서 PDF</span></label>
     <button class="send" id="send" disabled>분석</button>
   </div>
   <div class="bar">
-    <label class="up" id="upr1">📊 <span id="upr1label">① 기존 엑셀</span></label>
-    <label class="up" id="upr2">📊 <span id="upr2label">② 최종 엑셀</span></label>
+    <label class="up" id="upr1"><span id="upr1label">① 기존 엑셀</span></label>
+    <label class="up" id="upr2"><span id="upr2label">② 최종 엑셀</span></label>
     <button class="send" id="rsend" disabled>리모델링 비교</button>
   </div>
-  <div class="qlbl" id="qlbl">📋 분석된 보장분석지에 대해 질문하세요</div>
+  <div class="qlbl" id="qlbl">분석된 보장분석지에 대해 질문하세요</div>
   <div class="qbar" id="qbar">
     <input class="qinput" id="qinput" placeholder="예: 심장 담보 왜 빠졌어요?" autocomplete="off">
     <button class="qbtn" id="qbtn">질문</button>
@@ -7517,7 +7662,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 <input type="file" id="fr1" accept=".xlsx" style="display:none">
 <input type="file" id="fr2" accept=".xlsx" style="display:none">
 <script>
-const $=s=>document.querySelector(s);let ACCESS='';
+const $=s=>document.querySelector(s);let ACCESS='';const MPW='0101';
 let R1=null,R2=null;
 function rchk(){const b=$("#rsend");if(b)b.disabled=!(R1&&R2);}
 window.addEventListener('DOMContentLoaded',()=>{
@@ -7537,25 +7682,36 @@ window.addEventListener('DOMContentLoaded',()=>{
       +'기존 '+j.prem_old.toLocaleString()+'원 → 최종 '+j.prem_new.toLocaleString()+'원'
       +' · 월 절감 <b>'+j.save_m.toLocaleString()+'원</b> ('+j.save_pct+'%)<br>'
       +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del+'<br><br>'
-      +'<a href="'+j.xlsx+'">📊 비교 엑셀</a> &nbsp; <a href="'+j.pptx+'">📑 리포트 PPT</a></div>';
+      +'<a href="'+j.xlsx+'">비교 엑셀</a> &nbsp; <a href="'+j.pptx+'">리포트 PPT</a></div>';
     const box=$("#out")||document.body; box.insertAdjacentHTML("afterbegin",h);
    }
   }catch(e){alert("오류: "+e);}
   rb.disabled=false; rb.textContent="리모델링 비교";
  };
 });
-async function unlock(){const v=$("#pw").value;$("#gerr").textContent="확인 중…";
-  try{const r=await fetch("/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({pw:v})});
-    const j=await r.json();if(j.ok){ACCESS=v;$("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}else{fail();}}
+async function unlock(v2){const src=(typeof v2==="string"&&v2)?v2:$("#pw").value;
+  const v=String(src||"").trim().toUpperCase();
+  if(!v)return; $("#gerr").textContent="확인 중…";
+  try{
+    const fd=new FormData();
+    if(v===MPW){fd.append("pw",v);}else{fd.append("code",v);}
+    const r=await fetch("/member/login",{method:"POST",body:fd});
+    const j=await r.json();
+    if(j.ok){ACCESS=MPW; try{localStorage.setItem("barum_code",v);}catch(e){}
+      if(j.name)$(".sub").textContent=j.name+" 님 · 보장분석 자동화";
+      $("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
+    else{try{localStorage.removeItem("barum_code");}catch(e){} fail(j.error);}}
   catch(e){$("#gerr").textContent="서버 연결 실패";}}
-function fail(){$("#gerr").textContent="비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
-$("#go").onclick=unlock;$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>$("#pw").focus());
+function fail(m){$("#gerr").textContent=m||"코드 또는 비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
+$("#go").onclick=function(){unlock();};$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>{
+  var sv=null; try{sv=localStorage.getItem("barum_code");}catch(e){}
+  if(sv){unlock(sv);}else{$("#pw").focus();}});
 const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 제안서 최대 3건 */
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
 $("#up").onclick=()=>$("#fi").click();
 $("#upp").onclick=()=>$("#fp").click();
-$("#fi").onchange=e=>{/* ★v385 제안서 복수선택 최대 3건 */files=Array.from(e.target.files||[]).slice(0,3);if((e.target.files||[]).length>3){alert("가입제안서는 최대 3건까지입니다. 앞의 3건만 사용합니다.");}file=files[0]||null;$("#uplabel").textContent=files.length?(files.length>1?(files[0].name+" 외 "+(files.length-1)+"건"):files[0].name):"가입제안서 PDF (최대 3건)";_syncSend();};
-$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"보장분석 PDF 선택";_syncSend();};
+$("#fi").onchange=e=>{/* ★v385 제안서 복수선택 최대 3건 */files=Array.from(e.target.files||[]).slice(0,3);if((e.target.files||[]).length>3){alert("가입제안서는 최대 3건까지입니다. 앞의 3건만 사용합니다.");}file=files[0]||null;$("#uplabel").textContent=files.length?(files.length>1?(files[0].name+" 외 "+(files.length-1)+"건"):files[0].name):"가입제안서 PDF";_syncSend();};
+$("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"보장분석 PDF";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
 function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
@@ -7566,10 +7722,10 @@ const PDFMIME="application/pdf";
 let savedFiles={};
 function reDL(k){const f=savedFiles[k];if(f&&f.b64){dl(b64toBlob(f.b64,f.mime),f.name);}}
 $("#send").onclick=async()=>{
-  if(!file&&!pdfFile)return;add("📄 "+esc((file?file.name:"")+(file&&pdfFile?" + ":"")+(pdfFile?pdfFile.name:"")),"me");
+  if(!file&&!pdfFile)return;add(esc((file?file.name:"")+(file&&pdfFile?" + ":"")+(pdfFile?pdfFile.name:"")),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
-  const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">📄 PDF 파싱 중…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
-  const t0=Date.now();const steps=["📄 PDF 파싱 중…","🔎 담보 추출 중…","📊 엑셀 생성 중…","🖼 PPT 채우는 중…","✅ 완성 중…"];let si=0;
+  const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">PDF 파싱 중…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
+  const t0=Date.now();const steps=["PDF 파싱 중…","담보 추출 중…","엑셀 생성 중…","PPT 채우는 중…","완성 중…"];let si=0;
   const timer=setInterval(()=>{si=Math.min(si+1,steps.length-1);const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과";if(mm)mm.textContent=steps[si];},8000);
   const fd=new FormData();
 /* v370 role fix: server file=bojang(pdfFile) / file2=jean(file) */
@@ -7613,21 +7769,21 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
       let ptCard='';
       if(j.pptx_b64){
         savedFiles.pptx={b64:j.pptx_b64,name:j.pptx_name,mime:PTMIME};
-        ptCard=`<a class="file-card pt" ${_mk(j.pptx_url,'pptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">📊</span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">💾 저장</span></a>`;}
+        ptCard=`<a class="file-card pt" ${_mk(j.pptx_url,'pptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장</span></a>`;}
       if(j.chiryo_b64){
         savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
-        ptCard+=`<a class="file-card pt" ${_mk(j.chiryo_url,'chiryo')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">🩺</span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">💾 저장</span></a>`;}
+        ptCard+=`<a class="file-card pt" ${_mk(j.chiryo_url,'chiryo')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">저장</span></a>`;}
       if(j.report_b64){
         savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
-        ptCard+=`<a class="file-card pt" ${_mk(j.report_url,'report')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">📄</span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">💾 저장</span></a>`;}
+        ptCard+=`<a class="file-card pt" ${_mk(j.report_url,'report')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">저장</span></a>`;}
       if(j.report_pptx_b64){
         savedFiles.reportpptx={b64:j.report_pptx_b64,name:j.report_pptx_name,mime:PTMIME};
-        ptCard+=`<a class="file-card pt" ${_mk(j.report_pptx_url,'reportpptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">📋</span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">💾 저장</span></a>`;}
-      add('<b>✅ 분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★휴대폰은 <b>카드를 하나씩 눌러</b> 저장하세요 (연속 저장이 차단됩니다)':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
-        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic">📗</span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">💾 저장</span></a>`+ptCard+'</div>',"bot");}
+        ptCard+=`<a class="file-card pt" ${_mk(j.report_pptx_url,'reportpptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">저장</span></a>`;}
+      add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★휴대폰은 <b>카드를 하나씩 눌러</b> 저장하세요 (연속 저장이 차단됩니다)':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
+        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
-  file=null;files=[];$("#uplabel").textContent="가입제안서 PDF (최대 3건)";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
+  file=null;files=[];$("#uplabel").textContent="가입제안서 PDF";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
   if(j&&j.report_error){add('<span class="err">⚠ 보장설명지 PDF 생성 실패: '+esc(j.report_error)+'</span>',"bot");}
   if(j&&j.report_pptx_error){add('<span class="err">⚠ 보장진단서 PPT 생성 실패: '+esc(j.report_pptx_error)+'</span>',"bot");}
   if(j&&j.ok){add('다음 고객 PDF를 올리면 이어서 분석합니다.',"bot");}
@@ -7654,6 +7810,246 @@ document.addEventListener("DOMContentLoaded",function(){
 });
 </script>
 <script>if("serviceWorker" in navigator){navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister();});}).catch(function(){});}</script></body></html>'''
+
+# ═══════════ v428 PWA (제53조) — manifest · 아이콘 · 서비스워커 ═══════════
+_PWA_ICON = None
+
+
+def _pwa_icon(size=192):
+    """★네이비 바탕에 금색 M — 외부 파일 없이 코드에서 그린다(배포 파일 증가 0)."""
+    from PIL import Image, ImageDraw
+    im = Image.new('RGB', (size, size), '#06203f')
+    d = ImageDraw.Draw(im)
+    u = size / 24
+    d.rectangle([0, int(20.4 * u), size, size], fill='#c5a052')
+    w = int(1.9 * u)
+    pts = [(5.4, 18), (5.4, 6), (9.2, 6), (12, 12.2), (14.8, 6), (18.6, 6), (18.6, 18)]
+    d.line([(x * u, y * u) for x in [5.4] for y in [6, 18]], fill='#ffffff', width=w)
+    d.line([(18.6 * u, 6 * u), (18.6 * u, 18 * u)], fill='#ffffff', width=w)
+    d.line([(5.4 * u, 6 * u), (12 * u, 13.6 * u)], fill='#ffffff', width=w)
+    d.line([(18.6 * u, 6 * u), (12 * u, 13.6 * u)], fill='#ffffff', width=w)
+    import io as _io
+    b = _io.BytesIO(); im.save(b, 'PNG'); return b.getvalue()
+
+
+@app.get('/manifest.webmanifest')
+def _manifest():
+    return JSONResponse({
+        "name": "BARUM 보장분석", "short_name": "BARUM",
+        "start_url": "/", "scope": "/", "display": "standalone",
+        "background_color": "#06203f", "theme_color": "#06203f",
+        "lang": "ko",
+        "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png",
+                   "purpose": "any maskable"},
+                  {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png",
+                   "purpose": "any maskable"}]},
+        headers={'Cache-Control': 'public, max-age=3600'})
+
+
+@app.get('/icon-{sz}.png')
+def _icon(sz: int):
+    from fastapi.responses import Response as _R
+    try:
+        return _R(content=_pwa_icon(int(sz)), media_type='image/png',
+                  headers={'Cache-Control': 'public, max-age=86400'})
+    except Exception as _e:
+        print('[v428 PWA] 아이콘 생성 실패:', _e)
+        return _R(content=b'', media_type='image/png')
+
+
+@app.get('/sw.js')
+def _sw():
+    from fastapi.responses import Response as _R
+    # ★캐시하지 않는다 — 분석 결과는 매번 새로 받아야 한다(제53조 2항).
+    js = ("self.addEventListener('install', e => self.skipWaiting());\n"
+          "self.addEventListener('activate', e => e.waitUntil(clients.claim()));\n")
+    return _R(content=js, media_type='application/javascript',
+              headers={'Cache-Control': 'no-store'})
+
+
+@app.on_event('startup')
+def _startup_db():
+    # ★DB가 없어도 앱은 뜬다(제54조 4항) — 회원 기능만 꺼진다.
+    try:
+        _db_init()
+    except Exception as _e:
+        print('[v429 DB] startup 예외:', str(_e)[:80])
+
+
+@app.get('/admin')
+def admin_page():
+    """★권한자 화면(최은혜 지점장). 비번 821024 · 코드 발급 · 차단 · 사용 이력."""
+    return HTMLResponse("""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BARUM 관리자</title><style>
+*{box-sizing:border-box;font-family:-apple-system,"Noto Sans KR",sans-serif}
+body{margin:0;background:#0b1420;color:#e8edf4;padding:14px}
+/* ★v435 PC 대응(제56조) — 넓은 화면에서 2단 · 표 글자 확대 */
+@media (min-width:900px){
+ body{padding:24px 32px}
+ h1{font-size:24px}
+ .wrap{max-width:1200px;margin:0 auto}
+ .cols{display:flex;gap:18px;align-items:flex-start}
+ .cols>.card:first-child{width:360px;flex:none}
+ .cols>.card:last-child{flex:1}
+ table{font-size:13px}
+ th,td{padding:9px 8px}
+ input,select,button{font-size:15px}
+}
+h1{font-size:19px;margin:6px 0 14px;color:#e7c274}
+.card{background:#132234;border:1px solid #24374f;border-radius:12px;padding:14px;margin-bottom:12px}
+label{display:block;font-size:12px;color:#9fb0c4;margin:8px 0 4px}
+input,select{width:100%;padding:11px;border-radius:8px;border:1px solid #2c4258;
+background:#0d1a28;color:#e8edf4;font-size:15px}
+button{width:100%;padding:13px;border:0;border-radius:8px;background:#c5a052;color:#0b1420;
+font-weight:800;font-size:15px;margin-top:12px}
+button.gray{background:#2c4258;color:#e8edf4}
+.out{margin-top:12px;padding:14px;background:#0d1a28;border:1px solid #c5a052;border-radius:8px;
+text-align:center}
+.code{font-size:27px;font-weight:900;color:#e7c274;letter-spacing:.14em;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+th{background:#0d1a28;padding:7px 5px;text-align:left;color:#9fb0c4;font-size:11px}
+td{padding:7px 5px;border-bottom:1px solid #1c2c3f}
+.b{color:#ff8a8a}.g{color:#7fd6a8}
+.act{padding:5px 9px;border-radius:6px;background:#2c4258;font-size:11px;border:0;color:#e8edf4;width:auto;margin:0}
+.act.red{background:#7a2b2b;color:#ffd9d9}
+.act.red{background:#7a2b2b;color:#ffd9d9}
+.err{color:#ff8a8a;font-size:13px;margin-top:8px}
+.sum{font-size:12px;color:#9fb0c4;margin-bottom:6px}
+</style></head><body>
+<h1>BARUM 관리자</h1>
+<div class="wrap">
+<div class="card" id="gate">
+ <label>관리자 비밀번호</label>
+ <input type="password" id="pw" inputmode="numeric" placeholder="••••••">
+ <button onclick="login()">확인</button>
+ <div class="err" id="ge"></div>
+</div>
+<div id="main" style="display:none">
+ <div class="cols">
+ <div class="card">
+  <b style="font-size:14px">코드 발급</b>
+  <label>이름</label><input id="nm" placeholder="홍길동">
+  <label>메모 (선택)</label><input id="mm" placeholder="비워도 됩니다">
+  <label>유효기간</label>
+  <select id="mo"><option value="12">12개월</option><option value="6">6개월</option>
+  <option value="24">24개월</option><option value="120">무기한(10년)</option></select>
+  <button onclick="issue()">코드 발급</button>
+  <div id="out"></div>
+ </div>
+ <div class="card">
+  <b style="font-size:14px">회원 목록</b>
+  <div class="sum" id="sum"></div>
+  <div id="list"></div>
+  <button class="gray" onclick="load()">새로고침</button>
+ </div>
+ </div>
+</div>
+</div>
+<script>
+let PW='';
+const $=x=>document.getElementById(x);
+async function api(act,extra){
+ const fd=new FormData(); fd.append('pw',PW); fd.append('act',act||'');
+ for(const k in (extra||{})) fd.append(k,extra[k]);
+ const r=await fetch('/admin/api',{method:'POST',body:fd}); return r.json();}
+async function login(){
+ PW=$('pw').value.trim();
+ const j=await api('list');
+ if(j.ok){$('gate').style.display='none';$('main').style.display='block';render(j);}
+ else{$('ge').textContent=j.error||'오류';}}
+async function issue(){
+ const j=await api('issue',{name:$('nm').value,months:$('mo').value,memo:$('mm').value});
+ if(!j.ok){$('out').innerHTML='<div class="err">'+j.error+'</div>';return;}
+ $('out').innerHTML='<div class="out"><div style="font-size:12px;color:#9fb0c4">'+j.name+
+  ' 님 코드</div><div class="code">'+j.code+'</div><div style="font-size:11px;color:#9fb0c4">유효 '+
+  j.expires+'</div><button onclick="cp(&#39;'+j.code+'&#39;)">복사</button></div>';
+ $('nm').value='';$('mm').value=''; load();}
+function cp(c){navigator.clipboard.writeText(c);alert('복사됨: '+c);}
+async function load(){const j=await api('list'); if(j.ok) render(j);}
+function render(j){
+ $('sum').textContent='전체 '+j.total+'명 · 차단 '+j.blocked+'명';
+ let h='<table><tr><th>이름</th><th>코드</th><th>사용</th><th>만료</th><th></th></tr>';
+ (j.rows||[]).forEach(r=>{h+='<tr><td>'+r.name+(r.blocked?' <span class="b">차단</span>':'')+
+  '</td><td style="font-weight:800;color:#e7c274">'+r.code+'</td><td>'+r.cnt+'회<br><span style="color:#9fb0c4">'+
+  r.last+'</span></td><td>'+(r.expires||'-')+'</td><td>'+
+  '<button class="act" onclick="tog(&#39;'+r.code+'&#39;,'+(r.blocked?1:0)+')">'+
+  (r.blocked?'해제':'차단')+'</button> '+'<button class="act red" onclick="kick(&#39;'+r.code+'&#39;,&#39;'+r.name+'&#39;)">추방</button>'+'</td></tr>';});
+ $('list').innerHTML=h+'</table>';}
+async function tog(c,b){await api(b?'unblock':'block',{code:c}); load();}
+async function kick(c,nm){
+ if(!confirm(nm+' ('+c+') 님을 추방합니다.\\n코드가 삭제되어 즉시 접속 불가가 됩니다.'))return;
+ if(!confirm('되돌릴 수 없습니다. 정말 추방합니까?'))return;
+ const j=await api('delete',{code:c});
+ if(j.ok){alert(nm+' 추방 완료');load();}else{alert(j.error||'실패');}}
+</script></body></html>""")
+
+
+# ═══════════ v429 관리자 · 회원 라우트 (제54조) ═══════════
+@app.post('/member/login')
+async def member_login(code: str = Form(''), pw: str = Form('')):
+    """설계사 로그인 — 코드 또는 화면비번(0101)."""
+    if pw == PW and not code:
+        return JSONResponse({'ok': True, 'name': '', 'mode': 'pw'})
+    ok, nm, why = _member_check(code)
+    return JSONResponse({'ok': ok, 'name': nm, 'mode': 'code'} if ok
+                        else {'ok': False, 'error': why})
+
+
+@app.post('/admin/api')
+async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''),
+                    code: str = Form(''), months: int = Form(12), memo: str = Form('')):
+    """★권한자 전용(최은혜 지점장 · 821024). 발급 · 목록 · 차단 · 해제 · 삭제."""
+    if pw != ADMIN_PW:
+        return JSONResponse({'ok': False, 'error': '관리자 비밀번호 오류'})
+    c = _db()
+    if not c:
+        return JSONResponse({'ok': False, 'error': 'DB 미연결 — Railway에 Postgres를 붙이십시오'})
+    try:
+        import datetime as _d
+        with c, c.cursor() as k:
+            if act == 'issue':
+                if not name.strip():
+                    return JSONResponse({'ok': False, 'error': '이름을 입력하십시오'})
+                exp = _d.date.today() + _d.timedelta(days=int(months) * 30)
+                for _ in range(20):
+                    cd = _mk_code()
+                    k.execute("SELECT 1 FROM members WHERE code=%s", (cd,))
+                    if not k.fetchone():
+                        break
+                k.execute("INSERT INTO members(name,code,expires,memo) VALUES(%s,%s,%s,%s)",
+                          (name.strip(), cd, exp, memo))
+                return JSONResponse({'ok': True, 'code': cd, 'name': name.strip(),
+                                     'expires': str(exp)})
+            if act in ('block', 'unblock', 'delete'):
+                if act == 'delete':
+                    # ★추방은 되돌릴 수 없다 — 누구를 언제 뺐는지 uselog에 남긴다(제54조 8항).
+                    k.execute("SELECT name FROM members WHERE code=%s", (code.upper(),))
+                    _r0 = k.fetchone()
+                    k.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'kick')",
+                              (code.upper(), _r0[0] if _r0 else ''))
+                    k.execute("DELETE FROM members WHERE code=%s", (code.upper(),))
+                    print('[v429 추방] %s (%s)' % (_r0[0] if _r0 else '?', code.upper()))
+                else:
+                    k.execute("UPDATE members SET blocked=%s WHERE code=%s",
+                              (act == 'block', code.upper()))
+                return JSONResponse({'ok': True})
+            k.execute("""SELECT name,code,blocked,to_char(created,'YY.MM.DD'),
+                         to_char(expires,'YY.MM.DD'),to_char(last_used,'MM.DD HH24:MI'),
+                         use_count FROM members ORDER BY created DESC LIMIT 300""")
+            rows = [{'name': r[0], 'code': r[1], 'blocked': r[2], 'created': r[3],
+                     'expires': r[4], 'last': r[5] or '-', 'cnt': r[6],
+                     'memo': r[7] or ''}
+                    for r in k.fetchall()]
+            k.execute("SELECT COUNT(*), COUNT(*) FILTER (WHERE blocked) FROM members")
+            tot, blk = k.fetchone()
+            return JSONResponse({'ok': True, 'rows': rows, 'total': tot, 'blocked': blk})
+    except Exception as _e:
+        return JSONResponse({'ok': False, 'error': str(_e)[:120]})
+    finally:
+        try: c.close()
+        except Exception: pass
+
 
 @app.get('/health')
 def health():
@@ -7876,6 +8272,28 @@ ZIP9 = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py','ga
 DOC_MUST = ['단독 5종','심장 묶음','제외 7종','결과값 동결','엑셀에 없는 건','제0조 6',
             '배포 9파일','PC ↔ 폰','미결','조문 = 테스트']
 
+
+def js_selftest(root='.'):
+    """★★★★★v435 제56조 — <b>JS 문법은 아무도 안 봤다</b>.
+       오늘 이스케이프 사고로 관리자 화면·로그인이 통째로 죽은 채
+       「배포하십시오」를 네 번 말했다. 화면 <script>를 뽑아 검사한다."""
+    import os as _o, re as _r
+    bad = []
+    try:
+        src = open(_o.path.join(root, 'main.py'), encoding='utf-8').read()
+    except Exception as e:
+        return ['[제56조] main.py 읽기 실패: %s' % e]
+    for n, m in enumerate(_r.finditer(r'<script>(.*?)</script>', src, _r.S), 1):
+        js = m.group(1)
+        fns = _r.findall(r'function\s+([A-Za-z_$][\w$]*)\s*\(', js)
+        dup = sorted({x for x in fns if fns.count(x) > 1})
+        if dup:
+            bad.append('[제56조] JS 블록%d 함수 중복 정의 %s' % (n, dup))
+        if _r.search(r'onclick="[^"]*\\\\+\'', js):
+            bad.append('[제56조] JS 블록%d onclick 이스케이프 위험 — &#39; 를 쓸 것' % n)
+    return bad
+
+
 def zip_selfcheck(d=''):
     """zip 발행 전 필수 검증(제0조 6항·제12조). 실패 목록을 돌려준다. 빈 리스트여야 발행 가능."""
     import os as _os, re as _re
@@ -7928,6 +8346,21 @@ def zip_selfcheck(d=''):
         #   제목에 「[보류]」가 붙은 조문은 커버리지에서 뺀다 — 대신 그 사실을 로그에 남긴다.
         # ★v412 [보류]·[기각] 조문은 구현이 없으므로 커버리지 대상이 아니다.
         _hold = set(int(x) for x in _re.findall(r'^## .*?제(\d+)조 — \[(?:보류|기각|미해결)\]', _doc, flags=_re.M))
+        # ★★★★★v434 (제55조 · 2026.08.16): <b>조문이 사라져도 커버리지는 100%</b>였다.
+        #   실측 사고 — 제51조에 [기각] 표기를 넣다 <b>제52조를 통째로 덮어썼는데</b>
+        #   53/53=100%로 통과했다. 조문 수·번호·글자 수를 <b>따로</b> 지킨다.
+        #   4개월 결과물이다. 줄어들면 배포를 막는다.
+        if len(_joset) < DOCTRINE_MIN_ART:
+            bad.append('[제55조] 조문 소실 — 현재 %d개 (최소 %d개)'
+                       % (len(_joset), DOCTRINE_MIN_ART))
+        _gap = [x for x in range(1, max(_joset or [0]) + 1)
+                if x not in _joset and x not in DOCTRINE_SKIP_ART]
+        if _gap:
+            bad.append('[제55조] 조문 번호 결번 %s — 삭제 의심' % _gap)
+        if len(_doc) < DOCTRINE_MIN_CHARS:
+            bad.append('[제55조] 지침 분량 급감 — %d자 (최소 %d자)'
+                       % (len(_doc), DOCTRINE_MIN_CHARS))
+        bad.extend(js_selftest(d or '.'))
         _miss = sorted(_joset - _cov - _hold)
         if _hold: print(f'[zip검증] [보류·기각·미해결] 조문 {sorted(_hold)} — 커버리지 제외')
         _cvg = '%d/%d=%d%%' % (len(_joset)-len(_miss), len(_joset),
@@ -8276,7 +8709,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
             except Exception as _e7: print('[v421f 7p전용] 탐색 실패', _e7)
             print(f'[v421f 7p전용] 진단서 전용 담보 {len(_p7only)}건 {_p7only}')
             rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,'reset10_amt':_r10amt,
-                'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
+                'branch':'메이크원','manager':'최은혜','title':'지점장','phone':''})
             if _p7only: rep['p7_only'] = _p7only      # ★v421f 진단서 전용 칸 값(엑셀 미반영)
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)

@@ -4193,7 +4193,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v427-two-20260816</div>'
+    _VSTAMP = '<div class="vstamp">v438-textonly-20260817</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
@@ -4463,5 +4463,5 @@ if __name__=='__main__':
     if len(sys.argv)<2:
         print('사용법: python report_weasy.py <엑셀> [고객명]'); sys.exit(1)
     _xl=sys.argv[1]; _cn=sys.argv[2] if len(sys.argv)>2 else '고객'
-    _rep=map_excel_to_report(_xl, settings={'client':_cn,'branch':'온빛센터 바름지점','manager':'최은혜','title':'지점장','phone':''})
+    _rep=map_excel_to_report(_xl, settings={'client':_cn,'branch':'메이크원','manager':'최은혜','title':'지점장','phone':''})
     build_report_pdf(_rep, f'보장설명지_{_cn}.pdf'); print('PDF 생성: 보장설명지_'+_cn+'.pdf')

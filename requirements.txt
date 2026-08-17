@@ -12,3 +12,4 @@ pdf2image
 pypdf
 Pillow
 fonttools
+psycopg[binary]
