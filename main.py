@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v440-pwa-20260817'
+VSTAMP = 'v441-barum-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -7565,7 +7565,7 @@ def make_summary(data):
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>MAKEONE 보장설명서</title>
+<title>BARUM 보장분석</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#06203f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -7638,7 +7638,7 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{color:var(--acc2)}
 </style></head><body>
 <div id="gate">
-  <div class="kick">MAKEONE</div><h1>MAKEONE 보장설명서</h1>
+  <div class="kick">BARUM</div><h1>BARUM 보장분석</h1>
   <div class="s">회원코드 6자리를 입력하세요</div>
   <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="회원코드 6자리" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
@@ -7658,8 +7658,8 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   </div>
 </div>
 <div class="app" id="app">
-  <header><div class="logo">M</div><div style="flex:1"><h1>MAKEONE <b>보장설명서</b></h1>
-    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드 · 메이크원</div></div>
+  <header><div class="logo">B</div><div style="flex:1"><h1>BARUM <b>보장분석</b></h1>
+    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div></div>
     <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
   <div class="chat" id="chat">
