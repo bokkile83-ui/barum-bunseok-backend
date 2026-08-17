@@ -2,7 +2,7 @@
 """GA채널 회사별 비교표 (설계사 참고용) — 2표/페이지. 보장설명서 부록."""
 import html as _h
 
-# ★각인 v442-icon-20260817
+# ★각인 v443-install-20260817
 def _tbl(head, rows, hl=1):
     th="".join(f"<th>{_h.escape(str(c))}</th>" for c in head)
     body=""

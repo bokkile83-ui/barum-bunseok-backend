@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v442-icon-20260817'
+VSTAMP = 'v443-install-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -7645,6 +7645,13 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   <div id="joinbox" style="margin-top:18px;width:100%;max-width:420px">
    <div id="joinopen" style="text-align:center;font-size:13px;color:var(--mute);cursor:pointer;
     text-decoration:underline">처음이신가요? 가입 신청</div>
+   <!-- ★v443 (2026.08.17) — 크롬 ⋮ 메뉴만 믿으면 「왜 안 뜨는지」를 영영 모른다.
+        버튼을 눈에 보이게 두고, 설치 자격이 없으면 그 이유를 글자로 뱉는다(조문 흔적설계). -->
+   <button id="pwabtn" style="display:none;width:100%;max-width:420px;margin-top:16px;
+    border:none;border-radius:14px;padding:16px;font-size:16px;font-weight:800;
+    color:#06203f;background:#c5a052;cursor:pointer">📲 홈 화면에 앱 설치</button>
+   <div id="pwamsg" style="margin-top:12px;font-size:12px;color:var(--mute);
+    line-height:1.7;text-align:center"></div>
    <div style="text-align:center;margin-top:22px">
     <a href="/admin" style="font-size:12px;color:#6b7280;text-decoration:none;
      border:1px solid #3a3f4a;border-radius:8px;padding:7px 16px">관리자</a></div>
@@ -7738,6 +7745,34 @@ $("#lout").onclick=function(){try{localStorage.removeItem("barum_code");}catch(e
   $("#pw").value="";$("#gerr").textContent="";$("#pw").focus();};
 function fail(m){$("#gerr").textContent=m||"코드 또는 비밀번호가 올바르지 않습니다.";$("#gate").classList.add("shake");setTimeout(()=>$("#gate").classList.remove("shake"),350);$("#pw").value="";$("#pw").focus();}
 $("#go").onclick=function(){unlock();};
+/* ★v443 앱 설치 (2026.08.17) — 자격이 되면 버튼, 안 되면 이유. 빈 화면은 두지 않는다. */
+var _dp=null;
+window.addEventListener("beforeinstallprompt",function(e){
+  e.preventDefault(); _dp=e;
+  $("#pwabtn").style.display="block"; $("#pwamsg").textContent="";});
+$("#pwabtn").onclick=async function(){
+  if(!_dp)return; _dp.prompt();
+  try{var r=await _dp.userChoice;
+    $("#pwamsg").textContent=(r.outcome==="accepted")?"설치했습니다. 홈 화면을 확인하세요.":"설치를 취소했습니다.";
+  }catch(e){} _dp=null; $("#pwabtn").style.display="none";};
+window.addEventListener("appinstalled",function(){
+  $("#pwabtn").style.display="none"; $("#pwamsg").textContent="설치 완료";});
+setTimeout(function(){
+  if(_dp)return;
+  var ua=navigator.userAgent||"";
+  var standalone=window.matchMedia("(display-mode: standalone)").matches||navigator.standalone;
+  var m="";
+  if(standalone){m="이미 앱으로 실행 중입니다.";}
+  else if(/iPhone|iPad|iPod/i.test(ua)){
+    m=/CriOS|FxiOS|EdgiOS/i.test(ua)
+      ? "아이폰은 <b>사파리</b>로 열어야 설치됩니다.<br>사파리 → 공유(⬆) → 홈 화면에 추가"
+      : "공유(⬆) → <b>홈 화면에 추가</b> 를 누르세요";}
+  else if(/SamsungBrowser/i.test(ua)){
+    m="삼성 인터넷입니다. <b>크롬</b>으로 열면 설치 버튼이 나옵니다.<br>(삼성 인터넷은 ≡ → 현재 페이지 추가 → 홈 화면)";}
+  else if(location.protocol!=="https:"){m="https 주소로 열어야 설치됩니다.";}
+  else{m="설치 자격 확인 중입니다. 화면을 <b>한 번 더 새로고침</b>하세요.<br>그래도 없으면 크롬 ⋮ → 홈 화면에 추가";}
+  $("#pwamsg").innerHTML=m;
+},2500);
 $("#joinopen").onclick=function(){
   var f=$("#joinform"); f.style.display=(f.style.display==="none")?"block":"none";
   if(f.style.display==="block"){ var s=null; try{s=JSON.parse(localStorage.getItem("barum_apply")||"null");}catch(e){}
