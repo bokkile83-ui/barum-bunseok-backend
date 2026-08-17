@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v462-makeone-20260817 =====
+# ===== BARUM remodel.py v463-jongsin-20260817 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -81,6 +81,11 @@ def read_sheet(path_or_bytes):
                           'product': parts[1] if len(parts) > 1 else '',
                           'renewal': (parts[2] if len(parts) > 2 else '').strip('[]'),
                           'lump_sum': _lump(ws.cell(2, c).value),
+                          # ★★★★★v463 제71조 2항 (지점장 지적 2026.08.17 「리포트에도 종신+연금 나오는지」)
+                          #   실측: 종신 판별은 맞았는데 표의 <b>가입날짜·납입기간 칸이 '—'</b>였다.
+                          #   read_sheet가 두 키를 안 만들었다. 마스터 헤더 3행=가입년일 · 5행=총납입기간.
+                          'contract_date': str(ws.cell(3, c).value or '').strip(),
+                          'pay_term': str(ws.cell(5, c).value or '').strip(),
                           'premium': _num(ws.cell(2, c).value)})
         premium += _num(ws.cell(2, c).value)
 

@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v462-makeone-20260817 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v463-jongsin-20260817 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -322,7 +322,20 @@ def load_excel(path):
         _gh=re.search(r'\((\d)\s*세대', _raw)
         _np3=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_np3_rows',[]))
         _drug=any(str(ws.cell(r,c).value or '').strip() not in ('','0') for r in getattr(load_excel,'_drug_rows',[]))
+        # ★★★★★v463 제71조 (지점장 지적 2026.08.17
+        #   「보장진단서 12페이지에 종신사망 계약리스트가 기재가 안 된다」)
+        #   실측: 12쪽은 `rep['contracts']`를 읽는데 그 키가 <b>아예 없었다</b>(None) →
+        #   연금·종신·저축이 전부 「미보유」. 판정 함수는 멀쩡했고 <b>데이터가 도달을 못 했다</b>.
+        #   → 헤더 원본을 그대로 실어 보낸다. 종신 판정은 헤더의 `[비갱신(종신)]`이 원천이다.
+        #     실측: 교보생명 / 교보3밸런스보장보험 (무배당) / [비갱신(종신)]
         headers.append({'nm':nm or '계약','amt':int(pr),'renew':renew,'join':_join,'sil':_hassil,
+                        'raw_hdr':_raw,                               # ★v463 헤더 원본(3줄)
+                        'company':_co_, 'product':_pr_,               # ★v463 12쪽이 쓰는 이름
+                        'renewal':(re.search(r'\[[^\]]*\]', _raw).group(0) if re.search(r'\[[^\]]*\]', _raw) else ''),
+                        'contract_date':_join,
+                        'premium':int(pr),
+                        'lump_sum':(int(pr) if '일시납' in str(ws.cell(2,c).value or '') else 0),
+                        'pay_term':str(ws.cell(5,c).value or '').strip(),
                         'prop':(c in _propcols),                      # ★v419 가입제안서 계약 = 레드
                         'co':_co_,'prod':_pr_,'np3':_np3,'drug':_drug,
                         'genhint':(int(_gh.group(1)) if _gh else None)})
@@ -669,6 +682,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'client':client,
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
+        'contracts':headers,   # ★v463 제71조 — 12쪽 재무 표가 읽는 계약 목록(없어서 「미보유」였다)
         'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'own_amt':_own_amt,'prop_amt':_prop_amt,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,

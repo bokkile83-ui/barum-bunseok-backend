@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v462-makeone-20260817'
+VSTAMP = 'v463-jongsin-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -32,7 +32,7 @@ PW   = "0101"
 ADMIN_PW = "821024"
 
 # ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
-DOCTRINE_MIN_ART = 70        # 조문 개수 하한
+DOCTRINE_MIN_ART = 71        # 조문 개수 하한
 # ★v460 제69조 — DOCTRINE_MIN_CHARS 폐기. 손으로 관리하는 숫자가 정당한 정리를 막았다.
 DOCTRINE_MIN_CHARS = 0         # (폐기 · 0 = 검사 안 함)
 DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
