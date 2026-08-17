@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v441-barum-20260817'
+VSTAMP = 'v441-brand-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -7565,7 +7565,7 @@ def make_summary(data):
 INDEX_HTML = r'''<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>BARUM 보장분석</title>
+<title>@@BRAND@@ @@BSUB@@</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#06203f">
 <meta name="mobile-web-app-capable" content="yes">
@@ -7638,7 +7638,7 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{color:var(--acc2)}
 </style></head><body>
 <div id="gate">
-  <div class="kick">BARUM</div><h1>BARUM 보장분석</h1>
+  <div class="kick">@@BRAND@@</div><h1>@@BRAND@@ @@BSUB@@</h1>
   <div class="s">회원코드 6자리를 입력하세요</div>
   <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="회원코드 6자리" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
@@ -7658,7 +7658,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   </div>
 </div>
 <div class="app" id="app">
-  <header><div class="logo">B</div><div style="flex:1"><h1>BARUM <b>보장분석</b></h1>
+  <header><div class="logo">@@BINI@@</div><div style="flex:1"><h1>@@BRAND@@ <b>@@BSUB@@</b></h1>
     <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div></div>
     <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
@@ -7882,18 +7882,36 @@ _PWA_ICON = None
 
 
 def _pwa_icon(size=192):
-    """★네이비 바탕에 금색 M — 외부 파일 없이 코드에서 그린다(배포 파일 증가 0)."""
+    """★네이비 바탕에 흰 글자 — 외부 파일 없이 코드에서 그린다(배포 파일 증가 0).
+       ★v441 브랜드 연동 — BRAND=BARUM이면 B, 아니면 M.
+         아이콘만 M으로 남아 「글자는 BARUM인데 아이콘은 M」이 됐다(2026.08.17 실측)."""
     from PIL import Image, ImageDraw
-    im = Image.new('RGB', (size, size), '#06203f')
+    # ★v441 (지점장 지시 2026.08.17) — BARUM은 <b>골드 바탕에 남색 B</b>.
+    #   MAKEONE은 종전 그대로(네이비 바탕 · 흰 M · 하단 골드 띠).
+    GOLD, NAVY = '#c5a052', '#06203f'
+    _isB = (_brand()[2] == 'B')
+    im = Image.new('RGB', (size, size), GOLD if _isB else NAVY)
     d = ImageDraw.Draw(im)
     u = size / 24
-    d.rectangle([0, int(20.4 * u), size, size], fill='#c5a052')
-    w = int(1.9 * u)
-    pts = [(5.4, 18), (5.4, 6), (9.2, 6), (12, 12.2), (14.8, 6), (18.6, 6), (18.6, 18)]
-    d.line([(x * u, y * u) for x in [5.4] for y in [6, 18]], fill='#ffffff', width=w)
-    d.line([(18.6 * u, 6 * u), (18.6 * u, 18 * u)], fill='#ffffff', width=w)
-    d.line([(5.4 * u, 6 * u), (12 * u, 13.6 * u)], fill='#ffffff', width=w)
-    d.line([(18.6 * u, 6 * u), (12 * u, 13.6 * u)], fill='#ffffff', width=w)
+    if not _isB:
+        d.rectangle([0, int(20.4 * u), size, size], fill=GOLD)
+    w = max(2, int(1.9 * u))
+    W = NAVY if _isB else '#ffffff'
+    if _brand()[2] == 'B':
+        # B — 세로 기둥 + 위아래 반원 두 개
+        _x0, _x1 = 6.8 * u, 16.4 * u
+        d.line([(_x0, 5.4 * u), (_x0, 18.6 * u)], fill=W, width=w)
+        for y0, y1 in ((5.4, 12.0), (12.0, 18.6)):
+            d.arc([_x0, y0 * u, _x1, y1 * u], -90, 90, fill=W, width=w)
+            _mid = (_x0 + _x1) / 2
+            d.line([(_x0, y0 * u), (_mid, y0 * u)], fill=W, width=w)
+            d.line([(_x0, y1 * u), (_mid, y1 * u)], fill=W, width=w)
+    else:
+        # M — 기존 그대로
+        d.line([(5.4 * u, 6 * u), (5.4 * u, 18 * u)], fill=W, width=w)
+        d.line([(18.6 * u, 6 * u), (18.6 * u, 18 * u)], fill=W, width=w)
+        d.line([(5.4 * u, 6 * u), (12 * u, 13.6 * u)], fill=W, width=w)
+        d.line([(18.6 * u, 6 * u), (12 * u, 13.6 * u)], fill=W, width=w)
     import io as _io
     b = _io.BytesIO(); im.save(b, 'PNG'); return b.getvalue()
 
@@ -7901,7 +7919,7 @@ def _pwa_icon(size=192):
 @app.get('/manifest.webmanifest')
 def _manifest():
     return JSONResponse({
-        "name": "BARUM 보장분석", "short_name": "BARUM",
+        "name": _brand()[0] + ' ' + _brand()[1], "short_name": _brand()[0],
         "start_url": "/", "scope": "/", "display": "standalone",
         "background_color": "#06203f", "theme_color": "#06203f",
         "lang": "ko",
@@ -8249,7 +8267,9 @@ def health():
             'doctrine': ('PASS 지침자가진단 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6])),
             # ★v440 — 「조문 38/38」은 <b>자가진단 개수</b>였다. 지침 조문 수(59)와 혼동됐다(2026.08.17).
             #   조문 수·결번·분량은 /diag의 제55조 검사가 따로 지킨다. 여기서는 이름만 바로잡는다.
-            '조문하한': '%d조 이상 (검사는 /diag)' % DOCTRINE_MIN_ART}
+            '조문하한': '%d조 이상 (검사는 /diag)' % DOCTRINE_MIN_ART,
+            # ★v441 — 테스트(BARUM)와 운영(MAKEONE)을 링크만 보고 헷갈리지 않게 찍는다.
+            'brand': _brand()[0]}
 
 # ★★v101 진단 엔드포인트(2026.07.20): 폰에서 링크 한 번만 눌러
 #   Railway 컨테이너에 pdftotext(poppler)가 실제로 살아있는지 확인한다.
@@ -8431,8 +8451,28 @@ def _mod_ok(m):
     except Exception as e:
         return 'ERR ' + str(e)[:60]
 
+# ★★★★★v441 브랜드 스위치 (지점장 지시 2026.08.17, 영구)
+#   「업데이트할 때마다 BARUM으로 테스트하고 MAKEONE에 최종 업데이트한다」
+#   → 코드는 <b>하나</b>다. 서버마다 환경변수 BRAND만 다르게 준다.
+#     zip을 두 벌 유지하면 반드시 갈라진다(분해 경로 2개 금지 원칙).
+#   BRAND=BARUM   → 테스트 서버
+#   미설정/그외    → MAKEONE (운영 기본 · 안전한 쪽)
+def _brand():
+    import os as _o
+    if (_o.environ.get('BRAND', '') or '').strip().upper() == 'BARUM':
+        return ('BARUM', '보장분석', 'B')
+    return ('MAKEONE', '보장설명서', 'M')
+
+
+def _brandize(html):
+    b, sub, ini = _brand()
+    return (html.replace('@@BRAND@@', b)
+                .replace('@@BSUB@@', sub)
+                .replace('@@BINI@@', ini))
+
+
 @app.get('/',response_class=HTMLResponse)
-def home(): return INDEX_HTML
+def home(): return _brandize(INDEX_HTML)
 
 @app.post('/check')
 async def check_pw(body:dict): return {'ok':body.get('pw')==PW}
