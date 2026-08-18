@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v472-heart-20260817'
+VSTAMP = 'v474-prodname-20260818'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -338,19 +338,89 @@ def _is_silson_prod(company='', product=''):
     return '실손' in re.sub(r'\s', '', str(company) + str(product))
 
 
+#   ★v473 상품명에서 '갱신'을 근거로 인정하는 <b>정형 토큰</b>. 맨 '갱신' 두 글자는 인정하지 않는다.
+_RENEW_TOKEN = re.compile(r'갱신형|\d+\s*년\s*갱신|\(\s*갱신\s*\)')
+#   ★★v473f 상품명 '세만기' = 비갱신(지점장 확정 2026.08.18 · <b>지침이 우선이다</b>).
+#     ★v473e에서 내가 넣었던 「'95세만기'·'100세만기'는 만기 나이라 제외」는 <b>지침에 없는 예외</b>였다.
+#       지점장 지적 — 「<b>지침이 우선이다</b>」 ⇒ <b>'세만기'라고 적혀 있으면 비갱신</b>. 예외 없음.
+_SEMANGI = re.compile(r'세만기')
+
+
+#   ★★★★★v474 제82조 — <b>상품명은 제목이 끝나면 끝낸다</b>(지점장 지시 2026.08.18).
+#     지점장 원문 — 「<b>이건 너의 숙제고 너무 다양해서 다 파악하기 힘들다. 하지만 제목이 끝나면
+#     끝내라</b>」
+#     [실측 오염 2건 · 이창재]
+#       `한화 운전자상해보험 무배당2404 상하지(손,발제외)절골술및체내금속고정수술비(연간1회한,급`
+#       `LIFEPLUS 3N5 간편건강보험(세만기형) 무배당2405 갑상선암및전립선암다빈치로봇수술비(1회한)(3N5간편,갱신`
+#     별첨 표에서 <b>상품명 칸 뒤에 담보명이 흘러들어온다</b>. 이 꼬리의 '갱신' 두 글자가
+#     제5조 ①을 먹어 계약을 통째로 뒤집었다(v473 사고의 근원).
+#     [자르는 법 — 회사별 하드코딩 없이 구조로만]
+#       ① 상품명을 공백 토큰으로 나눈다.
+#       ② <b>'보험'·'공제'·'플랜'류가 들어간 마지막 토큰</b> = 제목의 끝(상품 종결어).
+#       ③ 그 <b>뒤쪽</b> 토큰 중 <b>담보 접미어</b>(진단비·수술비·치료비·일당·급부금…)를 가진
+#          <b>첫 토큰부터 끝까지</b> 잘라낸다. 상품코드(`무배당2404`)는 접미어가 없어 살아남는다.
+#       ④ 종결어가 없거나 자를 게 없으면 <b>원본 그대로</b>(안전측 — 못 자르는 건 놔둔다).
+_PROD_END  = ('보험', '공제', '플랜', '연금', '저축')      # 제목의 끝을 알리는 말
+_DAMBO_TAIL = ('진단비', '수술비', '치료비', '입원비', '통원비', '일당', '급부금', '급여금',
+               '위로금', '지원금', '의료비', '보장금', '선임비용', '벌금', '수술료', '진단금')
+
+
+def _clean_product(p):
+    """★v474 제82조 — 상품명 뒤에 붙은 담보명 꼬리를 잘라낸다. 못 자르면 원본을 돌려준다."""
+    s = str(p or '')
+    tk = s.split()
+    if len(tk) < 2: return s
+    end = -1
+    for i, t in enumerate(tk):
+        if any(k in t for k in _PROD_END): end = i        # 마지막 종결어 위치
+    if end < 0: return s                                   # 제목의 끝을 못 찾으면 손대지 않는다
+    for j in range(end + 1, len(tk)):
+        if any(k in tk[j] for k in _DAMBO_TAIL):
+            _new = ' '.join(tk[:j]).strip()
+            return _new or s                               # 빈 문자열이면 원본 유지
+    return s
+
+
+_PRODCLEAN_SELFTEST = [
+    ('한화 운전자상해보험 무배당2404 상하지(손,발제외)절골술및체내금속고정수술비(연간1회한,급',
+     '한화 운전자상해보험 무배당2404'),
+    ('LIFEPLUS 3N5 간편건강보험(세만기형) 무배당2405 갑상선암및전립선암다빈치로봇수술비(1회한)(3N5간편,갱신',
+     'LIFEPLUS 3N5 간편건강보험(세만기형) 무배당2405'),
+    ('(무) 경영인 정기보험(2405)(3형:20%체증형,해약환급금일부지급형,95세만기)',
+     '(무) 경영인 정기보험(2405)(3형:20%체증형,해약환급금일부지급형,95세만기)'),
+    ('성공하는 Owner 재산종합보험 무배당2404', '성공하는 Owner 재산종합보험 무배당2404'),
+    ('(무)LIG닥터플러스Ⅴ보험', '(무)LIG닥터플러스Ⅴ보험'),
+    ('무배당 흥Good 고당지 3.10.5 간편종합보험', '무배당 흥Good 고당지 3.10.5 간편종합보험'),
+]
+
+
 def judge_renewal(product, expiry, pay_count, contract='', pay_period='', company='', dambo=None):
     # 지침 §6 판정 (2026.07.09 개정: 240회 규칙 삭제 / 삼성화재 예외 / 납입==보장→갱신)
     # 0) ★★★실손은 비갱신이 없다 — 무조건 '갱신' (영구지침, 지점장 확정 2026.07.20 / v103)
     #    실손의료비는 제도상 갱신형만 존재한다. 만기 9999·납입!=보장 등 어떤 조건에도 우선한다.
     if _is_silson_prod(company, product): return '갱신'
-    # 1) '갱신형' 명시 -> 갱신
-    if '갱신형' in product and '비갱신' not in product: return '갱신'
-    if '갱신' in product and '비갱신' not in product: return '갱신'
-    # 2) 만기 9999(종신) -> 비갱신
+    # ★★★★★v473e 제5조 최종 (지점장 확정 2026.08.18 · 이 순서다)
+    #   지점장 원문 —
+    #   「<b>20년 = 가입시기 → 만기시기 = 20년 동일 → 갱신 이거나 아니면 상품명에 (갱신형)이거나 하면
+    #     올 갱신. 이고 20년 = 가입시기 → 만기시기 = 상이하면 비갱신 이거나 세만기 라고 적혀있으면
+    #     비갱신이다. 그리고 담보별에 (갱신)이라고 적혀있는건 주계약은 비갱신이지만 담보는 갱신이다</b>」
+    #   [계약(헤더) 판정] ⓪실손 → ①<b>상품명 '갱신형' → 갱신</b> → ②<b>상품명 '세만기' → 비갱신</b>
+    #                    → ③만기 9999 → 비갱신(종신) → ④납입기간 vs 보장기간
+    #   ★v473f 정정 — 지점장 원문이 <b>갱신 조건을 먼저</b> 말한다. v473e에서 내가 세만기를 앞에 뒀던 것을
+    #     원문 순서로 되돌렸다. LIFEPLUS는 상품명에 <b>(갱신형) 정형 토큰이 없어</b> ②에서 비갱신으로 잡힌다.
+    #   [담보(값 글자색) 판정] 담보명에 '갱신' → <b>그 담보만 파랑</b>(주계약이 비갱신이어도).
+    #                        구현 = build_excel `blue = gen or ('갱신' in raw)` — 별개 층위다.
+    _p473 = re.sub(r'\s', '', str(product or ''))
+    # ① 상품명에 '갱신형' 명시 -> 갱신 (지점장 원문 = 갱신 조건이 먼저다)
+    #    ★대상은 <b>상품명뿐</b>. '갱신' 두 글자 부분일치 금지(담보명 꼬리 오염 차단) — 정형 토큰만.
+    if _RENEW_TOKEN.search(_p473) and '비갱신' not in _p473: return '갱신'
+    # ② 상품명에 '세만기' -> 비갱신
+    #    ★<b>예외 없다.</b> v473e에서 내가 「95세만기·100세만기는 만기 나이라 제외」를 넣었으나
+    #      지점장 지적 「<b>지침이 우선이다</b>」로 <b>철회</b>했다. 적혀 있으면 세만기다.
+    if _SEMANGI.search(_p473) and '비갱신' not in _p473: return '비갱신'
+    # ③ 만기 9999(종신) -> 비갱신
     if expiry.startswith('9999'): return '비갱신(종신)'
-    # 3) ★삼성화재 예외 삭제(지점장 2026.07.15 확정): 운전자 특례가 아니라 '납입기간==보장기간이면 갱신'이
-    #    보편 규칙이다 → 삼성도 예외 없이 ④로 판정(20년납/20년만기=갱신). 종신(9999)은 위 ②에서 이미 비갱신.
-    # 4) 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
+    # ④ 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
     pay_y = 0; cov_y = 0
     m = re.search(r'(\d+)\s*년', pay_period or '')
     if m: pay_y = int(m.group(1))
@@ -362,21 +432,14 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
         cy = int(contract[:4]); ey = int(expiry[:4])
         if cy and ey: cov_y = ey - cy
     except: pass
-    if pay_y and cov_y and pay_y == cov_y:
-        # ★★★★★v354 전기납 예외 — 지점장 확정 2026.08.02(영구)
-        #   지점장 원문: "<b>전기납 이고 아래 담보들에 (갱신)이라고 표기 안된건 비갱신으로 표기해달라
-        #   / 삼성화재 + 2010년전 aia생명만 적용시키면 된다</b>".
-        #   [배경] `52년납/52년만기`(전기납)와 `20년납/20년만기`(갱신형)는 <b>형식이 완전히 같아</b>
-        #   ④만으로는 구분할 수 없다(메모리 [확인 대기] 사안). → <b>담보에 '갱신' 표기가 하나도 없으면
-        #   전기납으로 보고 비갱신</b>. ★<b>대상은 삼성화재 · 2010년 이전 가입 AIA생명 둘뿐</b> —
-        #   다른 회사는 종전대로 ④(납입==보장 → 갱신)를 그대로 따른다. 범위를 넓히지 않는다.
-        _co354 = re.sub(r'\s','',str(company or ''))
-        _aia10 = ('AIA' in _co354.upper()) and (str(contract or '')[:4].isdigit()) and (int(str(contract)[:4]) < 2010)
-        if ('삼성화재' in _co354) or _aia10:
-            _has_gen = any('갱신' in str(k) for k in (dambo or {}).keys())
-            if not _has_gen:
-                return '비갱신'
-        return '갱신'
+    if pay_y and cov_y:
+        if pay_y != cov_y: return '비갱신'          # ★기간 상이 = 비갱신
+        # ★★★★★v354·v473 전기납 — 지점장 확정 2026.08.02 / 회사 한정 해제 2026.08.18
+        #   지점장 원문 — 「1,509,740 / 2024.06.26 / 2073.06.25 / 49년납 (26/588)
+        #   → <b>이런걸 전기납이라고한다</b>」 ⇒ 납입 == 보장인데 담보에 '갱신' 표기가
+        #   <b>하나도 없으면</b> 전기납이므로 비갱신. 있으면 갱신.
+        _has_gen = any('갱신' in str(k) for k in (dambo or {}).keys())
+        return '갱신' if _has_gen else '비갱신'
     return '비갱신'
 
 def _has_nonpay3(dambo):
@@ -3462,17 +3525,26 @@ def parse_txt(txt, filename='', extra=None):
             if pc: c['pay_count'] = pc
     # 병합·회차 보정 반영하여 갱신 재판정 (정본 §7 규칙대로만)
     for c in deduped:
+        # ★★★★★v474 제82조 — <b>상품명 오염 절단은 여기 한 곳에서만</b>(지점장 지시 2026.08.18
+        #   「제목이 끝나면 끝내라」). 헤더 표기·갱신 판정·CI 판정이 <b>전부 같은 상품명</b>을 쓰도록
+        #   judge_renewal 호출 <b>앞</b>에서 한 번 정제한다(제0조 「판정은 한 곳에서만」).
+        _pc0 = c.get('product') or ''
+        _pc1 = _clean_product(_pc0)
+        if _pc1 != _pc0:
+            c['product'] = _pc1
+            print('[v474 상품명] 꼬리 절단 %r → %r' % (_pc0[:60], _pc1[:60]))
         # ★★★v207 (지점장 확정 2026.07.25, 영구지침): 3열(KB·메리츠)도 judge_renewal을 그대로 탄다.
         #   <b>납입기간 == 보장기간(가입~만기)이면 '갱신'</b>이다 — 운전자·실손도 예외 없다.
         #   구 v44 규칙('3열은 총회차가 없으니 ④ 적용 금지')은 <b>폐기</b>. 3열에도 납입기간(20년납)과
         #   보험기간(2026.03.27~2046.03.27)이 그대로 인쇄돼 있어 ④ 판정에 필요한 값이 다 있다.
         #   실측 오류(양*선 KB): 삼성 운전자 20년납/20년만기 → 비갱신(오류) · New내돈내삼 54년납/54년만기 → 비갱신(오류).
         c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''), c.get('dambo'))
-        # ★ 담보 절반 이상이 '갱신형' 표기면 갱신 강제(상품명만 보던 판정 보강). 단 종신(9999)은 유지.
-        if not c['expiry_date'].startswith('9999') and c['dambo']:
-            _dk=list(c['dambo'].keys())
-            _gc=sum(1 for k in _dk if '갱신' in k and '비갱신' not in k)
-            if _dk and _gc>=len(_dk)*0.5: c['renewal']='갱신'
+        # ★★★★★v473b 폐기 (지점장 지적 2026.08.18 「지침을 어겼다 · 늘 지침이 우선이다」)
+        #   구 규칙 = 「담보 절반 이상이 '갱신형' 표기면 갱신 강제」.
+        #   <b>지침 §6에 없는 조문</b>이다. '절반'이라는 임계값은 어디에도 없다.
+        #   이 규칙이 <b>지침 ④(납입기간 == 보장기간)를 덮어써서</b> LIFEPLUS 3N5(20년납/44년보장)를
+        #   갱신으로 뒤집었다. 특약 꼬리 `(3N5간편,갱신형)`은 <b>상품의 갱신 여부가 아니다</b>.
+        #   ⇒ 삭제한다. 담보에 찍힌 '갱신'은 지침 ④의 <b>전기납 판별</b>에서만 쓴다(judge_renewal 내부).
     # ★신버전 보충: 세부가입현황에서 뇌·심 담보 파싱해 별첨서 0인 항목만 보충(첫 계약에 귀속)
     # ★★v43 뇌혈관 유동 재배치 (지점장 2026.07.13 확정)
     #   [정본] AIA생명·라이나생명·AIG손보·우체국 = 별첨에 '뇌혈관'이라 적혀 있어도 그대로 믿지 말 것.
@@ -7841,19 +7913,53 @@ _onReady(()=>{
    const r=await fetch("/remodel",{method:"POST",body:fd}); const j=await r.json();
    if(!j.ok){alert(j.error||"실패");}
    else{
-    let h='<div class="card"><b>리모델링 비교</b><br>'
-      +'기존 '+j.prem_old.toLocaleString()+'원 → 최종 '+j.prem_new.toLocaleString()+'원'
-      +' · 월 절감 <b>'+j.save_m.toLocaleString()+'원</b> ('+j.save_pct+'%)<br>'
-      +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del+'<br><br>'
-      +'<a href="'+j.xlsx+'">비교 엑셀</a> &nbsp; <a href="'+j.pptx+'">리포트 PPT</a></div>';
+    /* ★★★★★v473 제78조 (지점장 지적 2026.08.18 「리모델링비교하면 계속 아래에 파란색글짜로만 뜬다」)
+       실측 결함 2건 —
+       ① 보장분석 결과는 <b>`.file-card` 저장 카드</b>인데 리모델링만 <b>맨 `<a>` 파란 링크</b>였다.
+          폰에서 글자가 작아 누르기 어렵고 산출물로 보이지 않는다.
+       ② 서버는 `j.pdf`(리포트 PDF)를 <b>이미 보내고 있는데 화면에 아예 안 걸렸다</b> — 산출물 1개 누락.
+       → 보장분석과 <b>같은 카드·같은 저장 동작</b>으로 통일한다. PC 자동저장 · 폰 카드 클릭도 동일. */
+    const _rM=/Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(navigator.userAgent)
+              ||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent));
+    const _rc=(u,nm,sub,cls)=>u?('<a class="file-card '+cls+'" href="'+u+'" download'
+      +' style="cursor:pointer;text-decoration:none;color:inherit">'
+      +'<span class="ic"></span><span class="nm">'+nm
+      +'<br><span style="font-size:10px;color:var(--mute)">'+sub+'</span></span>'
+      +'<span class="dl">저장</span></a>'):'';
+    const _rn=(j.client||'')+'_리모델링';
+    let h='<b>리모델링 비교 완료!</b> <span style="font-size:11px;color:var(--mute)">'
+      +(_rM?'★휴대폰은 <b>카드를 하나씩 눌러</b> 저장하세요 (연속 저장이 차단됩니다)'
+          :'자동 저장 중… 안 되면 카드를 누르세요')+'</span>'
+      +'<div class="summary-box">'
+      +'기존 <b>'+j.prem_old.toLocaleString()+'원</b> → 최종 <b>'+j.prem_new.toLocaleString()+'원</b><br>'
+      +'월 절감 <b>'+j.save_m.toLocaleString()+'원</b> ('+j.save_pct+'%) · 연 '
+      +(j.save_y||0).toLocaleString()+'원<br>'
+      +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del
+      +'</div><div class="file-cards">'
+      +_rc(j.xlsx,_rn+'_비교.xlsx','비교 엑셀','xl')
+      +_rc(j.pptx,_rn+'_리포트.pptx','리모델링 리포트 PPT','pt')
+      +_rc(j.pdf, _rn+'_리포트.pdf', '리모델링 리포트 PDF','pt')
+      +'</div>';
+    if(!_rM){
+      const _q=[[j.xlsx,_rn+'_비교.xlsx'],[j.pptx,_rn+'_리포트.pptx'],[j.pdf,_rn+'_리포트.pdf']]
+               .filter(x=>x[0]);
+      _q.forEach((x,i)=>setTimeout(()=>{const a=document.createElement("a");
+        a.href=x[0];a.download=x[1];a.style.display="none";document.body.appendChild(a);a.click();
+        setTimeout(()=>{try{document.body.removeChild(a);}catch(e){}},2000);}, i*900));
+    }
     /* ★★★★★v464 제72조 (지점장 지적 2026.08.17 「보험리모델링이 화면 가운데 안 뜨고 저 위에 뜬다」)
        실측: `#out`은 <b>화면에 없는 아이디</b>였다(0개) → 폴백인 `document.body` 맨 앞에 붙어
        <b>헤더보다 위</b>에 나왔다. 분석 결과는 대화창(`#chat`)에 들어가는데 리모델링만 딴 데 갔다.
-       → 분석 결과와 <b>같은 자리</b>(대화창 맨 아래)에 넣고 그리로 스크롤한다. */
-    const box=document.getElementById("chat");
-    if(box){ box.insertAdjacentHTML("beforeend",h); box.scrollTop=box.scrollHeight;
-             box.lastElementChild.scrollIntoView({behavior:"smooth",block:"center"}); }
-    else { document.body.insertAdjacentHTML("beforeend",h); }
+       → 분석 결과와 <b>같은 자리</b>(대화창 맨 아래)에 넣고 그리로 스크롤한다.
+       ★v473: 카드 CSS(.file-card)는 <b>`.msg.bot` 말풍선 안</b>에서만 제 폭이 나온다.
+       → 분석 결과와 <b>똑같이</b> `add(h,"bot")`으로 감싸 넣는다(raw 삽입 폐기). */
+    let _el=null;
+    if(typeof add==="function"){ _el=add(h,"bot"); }
+    else{ const box=document.getElementById("chat");
+          if(box){ box.insertAdjacentHTML("beforeend",'<div class="msg bot">'+h+'</div>');
+                   _el=box.lastElementChild; }
+          else { document.body.insertAdjacentHTML("beforeend",h); } }
+    if(_el) _el.scrollIntoView({behavior:"smooth",block:"center"});
    }
   }catch(e){alert("오류: "+e);}
   rb.disabled=false; rb.textContent="리모델링 비교";

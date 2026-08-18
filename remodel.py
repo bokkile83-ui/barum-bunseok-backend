@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v472-heart-20260817 =====
+# ===== BARUM remodel.py v474-prodname-20260818 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -594,7 +594,28 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     # ★★★★★v468 제75조 (지점장 2026.08.17 「원래 5페이지여야 한다」)
     #   쪽당 38개면 4쪽이 된다(실측: 나누기 36·80·124 → 4쪽).
     #   쪽당 <b>30개</b>로 줄이면 담보 101개가 5쪽으로 갈라진다. 한 쪽이 덜 빽빽해 상담 중에 읽기 쉽다.
-    _PER = 24
+    # ★★★★★v473 제79조 (지점장 지적 2026.08.18 「페이지 반을 못 넘긴다 · 그전에는 가득찼었다」)
+    #   [실측] 산출물 `이창재_remodel_compare.xlsx` — 1쪽 51행 <b>770pt(27.2cm)</b>로 가득 차는데
+    #          2~4쪽은 30행 <b>460pt(16.2cm)</b>뿐이었다. A4 세로 인쇄 가능 높이의 <b>60%</b>다.
+    #   [원인] 쪽당 담보 개수를 <b>숫자로 박아</b>(_PER=24) 두었다. 1쪽은 앞에 계약별 표가 있어
+    #          24개면 딱 찼지만, 2쪽부터는 그 표가 없는데도 <b>같은 24개</b>를 써서 절반이 비었다.
+    #          검산: 머리41 + 밴드15 + 헤더15 + 담보 24×15 + 꼬리29 = 460pt — 실측치와 정확히 일치.
+    #   [수정] 개수가 아니라 <b>높이 예산</b>으로 끊는다(제11조 구조 가정 금지).
+    #          쪽마다 남은 높이를 실제 행 높이로 재서, 다음 담보행과 꼬리가 안 들어갈 때만 끊는다.
+    #          ⇒ 1쪽 24개(종전 그대로) · 2쪽부터 44개. 쪽이 바뀌어도 자동으로 가득 찬다.
+    _PAGE_PT = 770.0        # A4 세로(29.7cm) − 상하 여백 0.5in×2 = 27.16cm = 770pt
+    _ROW_PT  = 15.0         # 담보 한 줄 기본 높이
+    _FOOT_PT = 29.0         # 페이지 꼬리 = 골드 9pt + 네이비 20pt
+
+    def _pgpt(_a, _b):
+        """_a행부터 _b-1행까지 실제 높이 합(pt). 미지정 행은 기본 15pt."""
+        _t = 0.0
+        for _x in range(_a, _b):
+            _h = ws.row_dimensions[_x].height
+            _t += float(_h) if _h else _ROW_PT
+        return _t
+
+    _ptop = 1
     _brks = []
     for _one in [None]:
         _pg, _gs = None, None
@@ -602,8 +623,8 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         _cnt, _first = 0, True
         for _i, (grp, nm, o, n, d, tag) in enumerate(cmp_['all']):
             # ★v469 — 예전에는 1쪽을 「사망·후유장애」에서 끊었다. 담보 전수를 실으면
-            #   1쪽이 담보 9행뿐이라 <b>절반이 빈다</b>(실측). 쪽당 개수로만 끊는다.
-            _cut = (_cnt >= _PER)
+            #   1쪽이 담보 9행뿐이라 <b>절반이 빈다</b>(실측). 이제는 높이로만 끊는다.
+            _cut = (_pgpt(_ptop, r) + _ROW_PT + _FOOT_PT > _PAGE_PT)
             if _i and _cut:
                 if _gs is not None and r - 1 > _gs:        # 병합이 페이지를 넘지 않게 끊는다
                     ws.merge_cells(start_row=_gs, start_column=2, end_row=r - 1, end_column=2)
@@ -611,6 +632,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
                 _first, _cnt = False, 0
                 r = _pfoot(r)                                  # 앞쪽 꼬리
                 _brks.append(r - 1)
+                _ptop = r                                      # ★v473 새 쪽의 첫 행
                 r = _phead(r)                                  # 다음 쪽 머리
                 band(r, '담보별 전 · 후 (증감) — 이어서')
                 for j2, h2 in enumerate(['구분', '담보', '전 (기존)', '후 (변경 후)', '증감', '변화'], 2):
