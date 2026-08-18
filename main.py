@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v474-prodname-20260818'
+VSTAMP = 'v476-clean-20260818'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -381,6 +381,59 @@ def _clean_product(p):
     return s
 
 
+#   ★★★★★v476 제84조 — <b>회사명 앞에 기간칸이 흘러들어온다</b>(지점장 지시 2026.08.18).
+#     실측(김순자 C열) — `년납/3년NH농협생명` . 별첨 헤더의 <b>납입기간 칸</b>이 회사명 앞으로 밀려
+#     들어와 회사명·확인사항·근거표·검색링크까지 전부 오염됐다.
+#     [자르는 법] 회사명 <b>맨 앞</b>에 붙은 기간·납입 토큰(`N년납`·`/N년`·`일시납`·`월납`·`연납`…)만
+#     걷어낸다. 회사 이름은 숫자나 '/'로 시작하지 않는다. 걷어내고 남는 게 없으면 원본을 쓴다.
+_CO_HEAD = re.compile(r'^(?:\s|/|\d+\s*년?|년납|월납|연납|일시납|분기납|반년납|납)+')
+
+
+#   ★★★★★v476 제86조 — <b>「갱신형 담보」도 「담보 (갱신형)」도 모두 갱신이다</b>
+#     (지점장 지시 2026.08.18 · 추가건). 담보명에서 '갱신' 표기는 <b>앞에 붙든 뒤에 붙든 같다</b>.
+#       앞: `갱신형 뇌혈관질환진단비` · `[갱신형]암진단비`
+#       뒤: `간병인사용 질병입원일당(1-180일)(간편가입)(갱신형)` · `…(3N5간편,갱신형)`
+#       중간: `(10년갱신)갱신형 다빈치로봇 암수술비`
+#     ⇒ <b>위치를 따지지 않는다.</b> 판정은 이 함수 하나로만 한다(제0조 「판정은 한 곳에서만」).
+def _is_gen_dambo(raw):
+    """★v476 제86조 — 담보명에 갱신 표기가 있는가(위치 무관). '비갱신'만 제외."""
+    t = re.sub(r'\s', '', str(raw or ''))
+    if '비갱신' in t: return False
+    return '갱신' in t
+
+
+_GENDAMBO_SELFTEST = [
+    ('갱신형 뇌혈관질환진단비', True),
+    ('[갱신형]암진단비(유사암제외)(추가고지형)(갱신형_20년)', True),
+    ('간병인사용 질병입원일당(요양병원제외,1-180일)(간편가입)(갱신형)', True),
+    ('갑상선암및전립선암다빈치로봇수술비(1회한)(3N5간편,갱신형)', True),
+    ('(10년갱신)갱신형 다빈치로봇 암수술비(특정암)', True),
+    ('일반상해사망(간편가입)(갱신형)', True),
+    ('재해사망', False),
+    ('질병사망', False),
+    ('비갱신형 상해수술비', False),
+]
+
+
+def _clean_company(c):
+    """★v476 제84조 — 회사명 앞에 붙은 기간칸 토큰을 잘라낸다. 못 자르면 원본."""
+    s0 = str(c or '').strip()
+    if not s0: return s0
+    s1 = _CO_HEAD.sub('', s0).strip()
+    return s1 if re.search(r'[가-힣A-Za-z]', s1) else s0
+
+
+_COCLEAN_SELFTEST = [
+    ('년납/3년NH농협생명', 'NH농협생명'),
+    ('일시납AIG손보', 'AIG손보'),
+    ('20년납 삼성화재', '삼성화재'),
+    ('NH농협생명', 'NH농협생명'),
+    ('KB손보', 'KB손보'),
+    ('메리츠화재', '메리츠화재'),
+    ('롯데손해보험', '롯데손해보험'),
+]
+
+
 _PRODCLEAN_SELFTEST = [
     ('한화 운전자상해보험 무배당2404 상하지(손,발제외)절골술및체내금속고정수술비(연간1회한,급',
      '한화 운전자상해보험 무배당2404'),
@@ -426,7 +479,13 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     if m: pay_y = int(m.group(1))
     if not pay_y:
         try:
-            _, b = pay_count.split('/'); pay_y = round(int(b.strip())/12)
+            _, b = pay_count.split('/'); _b = int(b.strip())
+            # ★★★★★v476 제85조 — <b>총회차가 12 미만이면 연납이다</b>(지점장 지시 2026.08.18).
+            #   구 코드는 총회차를 <b>무조건 개월수</b>로 보고 12로 나눴다 → 연납 계약
+            #   `2/3`(3년납 3회)이 `round(3/12)=0`이 되어 <b>기간 판정 자체를 건너뛰고</b>
+            #   무조건 비갱신으로 떨어졌다(김순자 NH모두안심재해보험 실측).
+            #   ⇒ 12 미만이면 그 숫자가 곧 <b>연수</b>다. 12 이상은 종전대로 개월수.
+            pay_y = _b if 0 < _b < 12 else round(_b/12)
         except: pass
     try:
         cy = int(contract[:4]); ey = int(expiry[:4])
@@ -438,7 +497,7 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
         #   지점장 원문 — 「1,509,740 / 2024.06.26 / 2073.06.25 / 49년납 (26/588)
         #   → <b>이런걸 전기납이라고한다</b>」 ⇒ 납입 == 보장인데 담보에 '갱신' 표기가
         #   <b>하나도 없으면</b> 전기납이므로 비갱신. 있으면 갱신.
-        _has_gen = any('갱신' in str(k) for k in (dambo or {}).keys())
+        _has_gen = any(_is_gen_dambo(k) for k in (dambo or {}).keys())   # ★v476 제86조
         return '갱신' if _has_gen else '비갱신'
     return '비갱신'
 
@@ -1213,6 +1272,11 @@ _STRUCT_SELFTEST = [
     ('제33조 실행마다정독','main.py',          r'_doc_read\(tag=.analyze.\)', True),
     ('제34조 각인1곳',   'main.py',            r"^VSTAMP = 'v\d", True),
     ('제35조 zip검증',   'main.py',            r'def zip_selfcheck', True),
+    # ★v475 제83조 — 갱신 담보 색은 계약 루프 끝에서 확정한다(제5조 B).
+    ('제83조 갱신담보색', 'main.py',            r'_blue_r', True),
+    ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
+    ('제84조 회사명절단', 'main.py',            r'def _clean_company', True),
+    ('제86조 갱신담보',   'main.py',            r'def _is_gen_dambo', True),
     # ★v410b 구 패턴 `\[v\d\d\d `는 <b>기존 기능 이력 라벨 수백 건</b>까지 잡아 거짓경보를 냈다.
     #   제36조의 대상은 <b>각인을 찍는 로그</b>(`[지침]`·`[zip검증]`)뿐이다 → 그 둘만 검사한다.
     # ★v410c 주석 안의 <b>예시 문구</b>까지 걸렸다 → `print(` 줄로 한정한다.
@@ -3533,6 +3597,12 @@ def parse_txt(txt, filename='', extra=None):
         if _pc1 != _pc0:
             c['product'] = _pc1
             print('[v474 상품명] 꼬리 절단 %r → %r' % (_pc0[:60], _pc1[:60]))
+        # ★★★★★v476 제84조 — 회사명 앞 기간칸 오염도 <b>같은 자리에서</b> 걷어낸다.
+        _co0 = c.get('company') or ''
+        _co1 = _clean_company(_co0)
+        if _co1 != _co0:
+            c['company'] = _co1
+            print('[v476 회사명] 머리 절단 %r → %r' % (_co0[:40], _co1[:40]))
         # ★★★v207 (지점장 확정 2026.07.25, 영구지침): 3열(KB·메리츠)도 judge_renewal을 그대로 탄다.
         #   <b>납입기간 == 보장기간(가입~만기)이면 '갱신'</b>이다 — 운전자·실손도 예외 없다.
         #   구 v44 규칙('3열은 총회차가 없으니 ④ 적용 금지')은 <b>폐기</b>. 3열에도 납입기간(20년납)과
@@ -5235,6 +5305,14 @@ def build_excel(data, out):
         for r in [3,4,5]: ws.cell(r,col).font = BL if gen else BK
 
         dambo = ct['dambo']
+        # ★★★★★v475 제83조 (지점장 지적 2026.08.18 「갱신형 담보 → 이거 갱신인데 비갱신으로 잡혔다」)
+        #   제5조 B(담보명에 '(갱신)' → 그 담보만 파랑)가 <b>담보 루프 한 경로에서만</b> 지켜지고
+        #   있었다. 심장 묶음 분해 · CI 배분 · 종신 사망 이동 등 <b>다른 15곳은 `BL if gen else BK`</b>라
+        #   비갱신 계약의 '갱신형 담보'가 <b>검정</b>으로 찍혔다(김순자 실측 — 메리츠 `갱신형
+        #   뇌혈관질환진단비`·`갱신형 허혈성심장질환진단비`·`갱신형 암진단비`·`갱신형 일반상해사망`).
+        #   → <b>파랑이어야 할 행을 모아 두고 계약 루프 끝에서 한 번에 확정</b>한다.
+        #     (제0조 「판정은 한 곳에서만」 · 「규칙 두 개가 같은 값을 만지면 나중 것이 앞 것을 죽인다」)
+        _blue_r = set()
         jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}
         ndae_acc = [0]*6      # ★v386 116대/120대 수술비 = 등급 Ⅰ~Ⅵ 슬래시 6칸   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
         trio_acc = [0,0,0]   # ★v29y MRI/도수치료/비급여주사
@@ -5573,7 +5651,9 @@ def build_excel(data, out):
                     if _br:
                         _ex = ws.cell(_br,col).value
                         ws.cell(_br,col).value = (_ex+amt) if isinstance(_ex,(int,float)) else amt
-                        ws.cell(_br,col).font = BL if gen else BK
+                        _bl0 = gen or _is_gen_dambo(raw)        # ★v475 제83조 · v476 제86조
+                        ws.cell(_br,col).font = BL if _bl0 else BK
+                        if _bl0: _blue_r.add(_br)
                 heart_trace.append((ct['company'], raw, ' · '.join(_heart_bundle), amt))   # ★v29z 근거 기록
                 continue
             # ★ 우선순위 역전: 확정 규칙(resolve2) 먼저 → 못 잡은 것만 Haiku(llm_resolve).
@@ -5648,7 +5728,7 @@ def build_excel(data, out):
                 #   → <b>별첨 명시값을 그대로 쓴다.</b> 금액을 못 읽었을 때만 5,000을 기본값으로 넣는다.
                 if not amt: amt=5000
             # ★v34 암주요치료비 10,000 강제 폐기(지점장 2026.07.09): 실제 가입금액 사용. 하이클래스는 별도행 합산.
-            blue = gen or ('갱신' in raw)      # ★ 담보명에 (갱신) 표시 -> 파랑
+            blue = gen or _is_gen_dambo(raw)   # ★v476 제86조 — 앞·뒤·중간 어디든 갱신 표기면 갱신
             # ★★★★★v337 (지점장 지적 2026.08.02 "표 안에 입원이 검정 통원·약은 파랑이다"):
             #   §10 정본 = <b>실손(입원·통원·약값…) + 일상배상책임은 항상 파랑</b>.
             #   통원·약값은 실손 디폴트 블록이 BL로 써서 파랑인데, <b>입원은 별첨 파싱 경로</b>를 타서
@@ -5753,6 +5833,7 @@ def build_excel(data, out):
                 #   보험료 · 가입년일 · 만기일자 · 총납입기간(=계약 갱신 판정) 또는 담보명의 <b>[갱신] 표기</b>에 따라
                 #   갱신=파랑 / 비갱신=검정으로 <b>일반 담보와 동일하게</b> 칠한다(구 v139 '간병인 계열 3행 무조건 파랑' 폐기).
                 ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','일상배상책임')) else BK
+                if blue: _blue_r.add(tr)          # ★v475 제83조 — 갱신 담보 행 수집
                 # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
                 try: trace_all.append((str(std), str(raw).strip(), amt, str(ct.get('company','')), str(ct.get('product',''))[:40]))
                 except Exception: pass
@@ -5969,6 +6050,17 @@ def build_excel(data, out):
                 _hc = ws.cell(1,col)
                 if _hc.value and _sg not in str(_hc.value):
                     _hc.value = str(_hc.value) + f'\n({_sg} 실손)'
+
+        # ★★★★★v475 제83조 — <b>이 계약 열의 색은 여기서 확정한다</b>(지점장 2026.08.18).
+        #   담보명에 '(갱신)'이 있으면 <b>주계약이 비갱신이어도 그 담보만 파랑</b>(제5조 B).
+        #   담보 기재 뒤에 CI 배분·종신 사망 이동·묶음 분해가 같은 셀을 다시 칠하므로,
+        #   <b>계약 루프의 맨 끝에서 한 번 더</b> 파랑을 확정한다 — 나중 규칙이 앞 규칙을 죽이지 못하게.
+        if _blue_r:
+            _bn = 0
+            for _r in sorted(_blue_r):
+                if isinstance(ws.cell(_r,col).value, (int,float,str)) and ws.cell(_r,col).value not in (None,''):
+                    ws.cell(_r,col).font = BL; _bn += 1
+            print('[v475 갱신담보색] %s 열%d — 파랑 확정 %d행' % (ct.get('company',''), col, _bn))
 
     # ★v29t (지점장 확정 2026.07.02): CI 존재 시 '중대한CI적용' 행 = CI 잔여액 + 비CI 계약의 일반사망 동일액 —
     #   CI 적용/미적용 각각의 총 사망액이 양쪽 행에서 가로합산되도록.
