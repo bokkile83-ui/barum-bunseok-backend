@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 #   옛 레이어를 그대로 썼다. 그래서 서버는 v443, GitHub은 v462였다.
 #   → 이 값을 바꾸면 이 줄 아래 레이어의 캐시가 전부 무효화된다.
 #     소스를 올려도 서버가 안 바뀌면 이 숫자를 하나 올린다.
-ARG CACHEBUST=v464
+ARG CACHEBUST=v474
 RUN echo "cachebust=$CACHEBUST"
 
 COPY . .

@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v463-jongsin-20260817 =====
+# ===== BARUM remodel.py v472-heart-20260817 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -248,6 +248,33 @@ def _rowlist(old, kind):
     return [best[x] for x in order]
 
 
+
+_GRPMAP = None
+
+
+def _grp_of(nm):
+    """담보명 → 구분(A열). 마스터를 한 번만 읽어 캐시한다.
+       ★구분을 코드에 적지 않는다 — 마스터가 정본이다(제15조)."""
+    global _GRPMAP
+    if _GRPMAP is None:
+        _GRPMAP = {}
+        try:
+            import openpyxl, os
+            _p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'master.xlsx')
+            _ws = openpyxl.load_workbook(_p)['보장분석']
+            _cur = ''
+            for _r in range(6, _ws.max_row + 1):
+                _a = _ws.cell(_r, 1).value
+                if _a and str(_a).strip():
+                    _cur = str(_a).strip()
+                _b = _ws.cell(_r, 2).value
+                if _b:
+                    _GRPMAP[str(_b).strip()] = _cur
+        except Exception as _e:
+            print('[v468 구분] 마스터 읽기 실패', str(_e)[:60])
+    return _GRPMAP.get(str(nm).strip(), '기타')
+
+
 def compare(old, new):
     """기존 ↔ 신규 비교 결과."""
     names = list(old['cov'].keys())
@@ -262,7 +289,16 @@ def compare(old, new):
     for nm in names:
         o = old['cov'].get(nm, 0.0)
         n = new['cov'].get(nm, 0.0)
-        pass
+        # ★★★★★v468 제75조 4항 (지점장 2026.08.17 「말은 101가지 담보라면서 엑셀도 1페이지다」)
+        #   ★결함: `allrows`가 <b>비어 있었다</b>. 담보표 원천이 `old['rows']`뿐인데
+        #   `read_sheet`는 `rows`를 만들지 않는다(키: contracts·cov·premium 뿐 — 실측).
+        #   그래서 담보표가 통째로 0행 → 엑셀이 1쪽이었다.
+        #   → <b>담보 전수</b>를 여기서 만든다. 미가입(0/0)도 싣는다 —
+        #     「없다」는 것도 상담에서 보여줄 정보다(지점장 시안도 전 담보를 싣는다).
+        allrows.append((_grp_of(nm), nm, o, n, n - o,
+                        '미가입' if (o == 0 and n == 0) else
+                        '삭제' if n == 0 else '신규 추가' if o == 0 else
+                        '보장 증가' if n > o else '보장 감소' if n < o else '변동 없음'))
         if o == 0 and n == 0:
             continue
         if o > 0 and n == 0:
@@ -319,7 +355,7 @@ def _mw(v):
         return '-'
     return f'{v:,}만원'
 
-def build_report(cmp_, client='고객', base_date='', total=8):
+def build_report(cmp_, client="고객", base_date="", total=9):
     """★★★★★v423 — 리포트 7쪽을 <b>지점장 시안 HTML</b>로 만들어 (PDF, [PNG]) 로 돌려준다.
        구판 `build_pptx`(PPT 도형)는 폐기했다. 뷰어가 차트를 자기 방식으로 다시 그려
        데이터 레이블 서식도 막대 색도 버렸다 — 내가 고칠 수 없는 자리였다."""
@@ -336,7 +372,7 @@ def build_report(cmp_, client='고객', base_date='', total=8):
     for i, html in enumerate(report_pages.build(cmp_, client, base_date, total), 1):
         f = os.path.join(tmp, 'p%d.pdf' % i)
         HTML(string=html, base_url=_base).write_pdf(f)
-        ims = convert_from_path(f, dpi=110)
+        ims = convert_from_path(f, dpi=200)   # ★v464 제72조 — 110dpi는 흐렸다(지점장 지적). 200으로 올린다.
         if len(ims) != 1:                      # ★한 쪽이 넘치면 조용히 넘어가지 않는다
             print('[REPORT_OVERFLOW] %d쪽이 %d장이 됐다' % (i, len(ims)))
         g = os.path.join(tmp, 'p%d.png' % i)
@@ -379,10 +415,17 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     import openpyxl
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+    # ★★★★★v471 제76조 (지점장 2026.08.17 「색들만 더 눈에 띄게 하자」)
+    #   기존 색은 흰 배경에서 거의 안 보였다 — 표 머리 #F2F5F9, 신규 #EAF6EF.
+    #   ★진하게 올린다. 인쇄해도 구분이 남아야 한다.
     NAVY = 'FF0B2340'; GOLD = 'FFC5A052'
     HDR = PatternFill('solid', fgColor=NAVY)
-    SUB = PatternFill('solid', fgColor='FFF2F5F9')
-    NEWF = PatternFill('solid', fgColor='FFEAF6EF')   # ★신규 강조 배경(연그린)
+    SUB = PatternFill('solid', fgColor='FFD6E2F0')    # 표 머리 — 옅은 회청 → 또렷한 하늘남
+    NEWF = PatternFill('solid', fgColor='FFC8EBD8')   # 신규 — 연그린 → 진한 민트
+    UPF = PatternFill('solid', fgColor='FFDDEBFB')    # 보장 증가 — 하늘
+    DNF = PatternFill('solid', fgColor='FFFDE2C8')    # 보장 감소 — 주황
+    DELF = PatternFill('solid', fgColor='FFF7CFCF')   # 삭제 — 분홍
+    GRPF = PatternFill('solid', fgColor='FFE9EEF5')   # 구분(A열 그룹) — 회청
     # ★글자 포인트 (지점장 지시 2026.08.15) — 기본 11pt는 A4 표에서 크다
     _FS = 9
     W = Font(color='FFFFFFFF', bold=True, name='맑은 고딕', size=10)
@@ -398,10 +441,10 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = 'MAKEONE LIFE PLAN'   # ★시트명 (지점장 지시 2026.08.15)
     ws.column_dimensions['A'].width = 1.6
-    for col, w in zip('BCDEFG', [12, 30, 13, 13, 11, 9]):   # ★상품명 24→30   # ★A4 폭 합계 92자 — 108자면 인쇄 시 심하게 축소된다
+    for col, w in zip('BCDEFG', [12, 30, 13, 13, 11, 9]):
         ws.column_dimensions[col].width = w
 
-    def band(r, txt, span=5):   # ★B~G — 모든 표의 오른쪽 끝을 맞춘다(지점장 「옆라인일치화」)
+    def band(r, txt, span=5):   # ★B~G — 모든 표의 오른쪽 끝을 맞춘다
         ws.cell(r, 2, txt).font = W
         for c in range(2, 3 + span):
             ws.cell(r, c).fill = HDR; ws.cell(r, c).border = BD
@@ -501,6 +544,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     for cc in range(2, 7): ws.cell(_r, cc).alignment = C
     _r += 2
 
+    # ★v471 — 상단 KPI 6칸은 뺐다. 지점장 「그냥 이거 쓰고 색들만 더 눈에 띄게」(2026.08.17).
     band(_r, '보험료')
     rows = [('기존 보험료 합계', cmp_['prem_old']), ('삭제 후 보험료(유지 계약)', cmp_['prem_keep']),
             ('제안 보험료(신규 계약)', cmp_['prem_prop']), ('최종 리포트 금액', cmp_['prem_new']),
@@ -533,6 +577,8 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #   1쪽이 25행뿐이라 아래가 비었다. 담보표를 1쪽에서 시작하고 <b>암 블록 앞</b>에서 끊는다.
     _pp = _pr + 1
     band(_pp, '담보별 전 · 후 (증감)')
+    # ★★★★★v470 (지점장 확정 2026.08.17) — 상담 3열(검토 결과·설계사 설명·고객 결정)은
+    #   <b>넣지 않는다</b>. 세로 A4에 6열이 정본이다. 시안을 그대로 베끼지 않는다.
     for j, h in enumerate(['구분', '담보', '전 (기존)', '후 (변경 후)', '증감', '변화'], 2):
         ws.cell(_pp + 1, j, h).font = B; ws.cell(_pp + 1, j).fill = SUB
         ws.cell(_pp + 1, j).border = BD; ws.cell(_pp + 1, j).alignment = C
@@ -545,14 +591,19 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     # ★★★★★v422y — 페이지를 <b>균등하게</b> 나눈다(지점장 「1페이지가 너무 긴데」 2026.08.15).
     #   A4 세로 한 장에 들어가는 것은 대략 <b>46행</b>이다. 담보 101개를 한 덩이로 두면 67행짜리 쪽이 생긴다.
     #   → 쪽당 담보 <b>38개</b>로 끊는다. 개수가 달라져도 자동으로 필요한 만큼 쪽이 생긴다.
-    _PER = 38
+    # ★★★★★v468 제75조 (지점장 2026.08.17 「원래 5페이지여야 한다」)
+    #   쪽당 38개면 4쪽이 된다(실측: 나누기 36·80·124 → 4쪽).
+    #   쪽당 <b>30개</b>로 줄이면 담보 101개가 5쪽으로 갈라진다. 한 쪽이 덜 빽빽해 상담 중에 읽기 쉽다.
+    _PER = 24
     _brks = []
     for _one in [None]:
         _pg, _gs = None, None
         _heads = []
         _cnt, _first = 0, True
         for _i, (grp, nm, o, n, d, tag) in enumerate(cmp_['all']):
-            _cut = (_first and grp not in ('사망', '후유장애')) or (not _first and _cnt >= _PER)
+            # ★v469 — 예전에는 1쪽을 「사망·후유장애」에서 끊었다. 담보 전수를 실으면
+            #   1쪽이 담보 9행뿐이라 <b>절반이 빈다</b>(실측). 쪽당 개수로만 끊는다.
+            _cut = (_cnt >= _PER)
             if _i and _cut:
                 if _gs is not None and r - 1 > _gs:        # 병합이 페이지를 넘지 않게 끊는다
                     ws.merge_cells(start_row=_gs, start_column=2, end_row=r - 1, end_column=2)
@@ -575,14 +626,21 @@ def build_xlsx(cmp_, client='고객', base_date=''):
                     ws.merge_cells(start_row=_gs, start_column=2, end_row=r - 1, end_column=2)
                 _gs, _pg = r, grp
                 _heads.append(r)
-                ws.cell(r, 2, grp).font = B
+                ws.cell(r, 2, grp).font = Font(bold=True, name='맑은 고딕', size=_FS, color='FF0B2340')
+                ws.cell(r, 2).fill = GRPF          # ★v471 구분 열도 색으로 갈라 보이게
                 ws.cell(r, 2).alignment = CV
             ws.cell(r, 3, nm).font = (B if _new else N)
             ws.cell(r, 4, o).font = N; ws.cell(r, 5, n).font = (G if _new else B)
             ws.cell(r, 6, d).font = (G if d > 0 else (R if d < 0 else N))
             ws.cell(r, 7, tag).font = (G if d > 0 else (R if d < 0 else N))
-            if _new:
-                for cc in range(2, 8): ws.cell(r, cc).fill = NEWF
+            # ★★★★★v471 제76조 — 변화 유형마다 <b>줄 전체</b>에 색을 깐다.
+            #   숫자만 보고는 무엇이 바뀌었는지 안 보인다. 색이 먼저 눈에 들어와야 한다.
+            _fill = (NEWF if tag == '신규 추가' else UPF if tag == '보장 증가'
+                     else DNF if tag == '보장 감소' else DELF if tag == '삭제' else None)
+            if _fill:
+                for cc in range(2, 8): ws.cell(r, cc).fill = _fill
+            elif _head:
+                ws.cell(r, 2).fill = GRPF
             for c in range(4, 7): ws.cell(r, c).number_format = '#,##0'
             # ★구분이 바뀌는 행은 위쪽 굵은 선 — 불린으로 판정한다(Side 객체 비교는 실패한다)
             for c in range(2, 8):
@@ -631,6 +689,8 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         ws.cell(_fr, c).fill = GOLDF
         ws.cell(_fr + 1, c).fill = HDR
 
+    # ★★★★★v470 제75조 6항 (지점장 2026.08.17 「우린 세로야 / 고객검토·설계사검토 삭제다」)
+    #   상담 3열을 뺐으므로 <b>세로로 되돌린다</b>. 우리 문서는 세로가 정본이다.
     ws.page_setup.orientation = 'portrait'
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToWidth = 1

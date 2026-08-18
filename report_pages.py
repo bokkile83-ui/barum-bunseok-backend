@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """★★★★★ report_pages.py — 리모델링 리포트 7쪽 (지점장 시안 정본 2026.08.15)
-# 각인: v463-jongsin-20260817
+# 각인: v472-heart-20260817
 
    지점장이 시안(HTML)을 7장 다 주셨다. <b>흉내내지 않고 그 시안을 렌더한다.</b>
    ㆍ값은 전부 엑셀에서 온다 — 하드코딩 0건(뮤테이션 테스트 실패 0건으로 확인)
@@ -20,27 +20,27 @@ CSS1 = """
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:#1c2430}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
 .tbar{position:absolute;left:0;top:0;width:210mm;height:14mm;background:#0b2340}
-.tgold{position:absolute;left:0;top:14mm;width:210mm;height:2.4mm;background:#c5a052}
+.tgold{position:absolute;left:0;top:14mm;width:210mm;height:2.4mm;background:#b08d38}
 .fbar{position:absolute;left:0;bottom:0;width:210mm;height:6mm;background:#0b2340}
 .body{position:absolute;left:16mm;right:16mm;top:30mm}
 .brand{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:13pt;font-weight:800;color:#0b2340;letter-spacing:.18em}
-.bln{width:24mm;height:1.6mm;background:#c5a052;margin-top:3mm}
+.bln{width:24mm;height:1.6mm;background:#b08d38;margin-top:3mm}
 .mark{position:absolute;right:0;top:14mm;font-size:44pt;font-weight:900;color:#f2f4f7;letter-spacing:.06em}
-.eyebrow{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:26mm;font-size:9.5pt;font-weight:800;color:#9c7c32;letter-spacing:.28em}
+.eyebrow{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:26mm;font-size:9.5pt;font-weight:800;color:#8a6c22;letter-spacing:.28em}
 .title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:4mm;font-size:44pt;font-weight:900;color:#0b2340;line-height:1.14;letter-spacing:-.03em}
-.rule{width:34mm;height:1.8mm;background:#c5a052;margin-top:7mm}
+.rule{width:34mm;height:1.8mm;background:#b08d38;margin-top:7mm}
 .sub{margin-top:5mm;font-size:11pt;font-weight:700;color:#0b2340}
 .namebox{margin-top:11mm;background:#f4f7fb;border-left:1.4mm solid #0b2340;padding:7mm 8mm;
 display:flex;align-items:baseline;gap:6mm}
 .namebox .nm{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:40pt;font-weight:900;color:#0b2340}
-.namebox .sfx{font-size:13pt;font-weight:800;color:#9c7c32}
+.namebox .sfx{font-size:13pt;font-weight:800;color:#8a6c22}
 .stats{display:flex;gap:5mm;margin-top:9mm}
-.stat{flex:1;border-top:1.4mm solid #c5a052;border-left:.3mm solid #c9d2dc;
-border-right:.3mm solid #c9d2dc;border-bottom:.3mm solid #c9d2dc;padding:4mm 5mm 5mm}
-.stat .k{font-size:8.5pt;font-weight:800;color:#33404f}
+.stat{flex:1;border-top:1.4mm solid #b08d38;border-left:.38mm solid #9fb0c2;
+border-right:.38mm solid #9fb0c2;border-bottom:.38mm solid #9fb0c2;padding:4mm 5mm 5mm}
+.stat .k{font-size:8.5pt;font-weight:800;color:#1e2a38}
 .stat .v{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3mm;font-size:20pt;font-weight:900;color:#06203f}
-.inbox{margin-top:9mm;border:.3mm solid #c9d2dc;padding:5mm 6mm}
-.inbox .t{font-size:8.5pt;font-weight:900;color:#9c7c32}
+.inbox{margin-top:9mm;border:.38mm solid #9fb0c2;padding:5mm 6mm}
+.inbox .t{font-size:8.5pt;font-weight:900;color:#8a6c22}
 .inbox .l{margin-top:3mm;font-size:10.5pt;font-weight:800;color:#0b2340;line-height:1.8}
 .hr{margin-top:12mm;border-top:.2mm solid #d9dee6}
 .foot{margin-top:4mm;text-align:center;font-size:9.5pt;font-weight:800;color:#0b2340}
@@ -84,7 +84,7 @@ def p1(client='고객', base_date='', pg=1, totpg=7, cmp_=None):
 CSS2 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--gold:#c88d20;--gold2:#e6b74d;--green:#14945e;
---softBlue:#f4f8fd;--softGreen:#f1faf5;--line:#dde4ec;--text:#132b48;--muted:#7a8796}
+--softBlue:#f4f8fd;--softGreen:#f1faf5;--line:#b3c0cf;--text:#132b48;--muted:#455363}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
@@ -97,42 +97,42 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .title-line{width:100mm;height:.9mm;background:linear-gradient(90deg,var(--gold) 0 24%,var(--navy) 24%)}
 .client{display:none}
 .client strong{font-size:12pt;display:block;margin-bottom:1.6mm}
-.client span{display:block;font-size:8pt;margin-top:1mm;color:#7a8796}
+.client span{display:block;font-size:8.4pt;margin-top:1mm;color:#455363}
 .client .step{color:#ffcf5c;font-weight:800;margin-top:2mm}
 .content{padding:0 10mm 17mm}
-.summary-card{margin-top:1.6mm;border:.5pt solid #c9d2dc;border-radius:3.2mm;padding:5.2mm 6mm;
+.summary-card{margin-top:1.6mm;border:.5pt solid #9fb0c2;border-radius:3.2mm;padding:5.2mm 6mm;
 display:flex}
 .summary-col{flex:1;min-height:34mm;padding:2.4mm 5mm}
 .summary-col:first-child{border-right:.4pt solid #d7dde5}
 .summary-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:#06203f;font-size:14pt;font-weight:900}
-.summary-sub{margin-top:2.8mm;font-size:9.5pt;color:#33404f}
-.big-gold{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#b07d0e;font-size:34pt;font-weight:900}
+.summary-sub{margin-top:2.8mm;font-size:9.5pt;color:#1e2a38}
+.big-gold{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#95690a;font-size:34pt;font-weight:900}
 .big-navy{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#06203f;font-size:32pt;font-weight:900}
 .summary-note{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.8mm;font-size:12pt;font-weight:900;color:#06203f}
 .summary-gold{margin-top:4.8mm;color:var(--gold);font-size:11.5pt;font-weight:900}
-.section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:6.8mm 4mm 3.4mm;color:#06203f;font-size:15pt;font-weight:900;border-left:1.6mm solid #c5a052;padding-left:3mm}
+.section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:6.8mm 4mm 3.4mm;color:#06203f;font-size:15pt;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
 .compare{display:flex;gap:2.4mm;align-items:center;padding:0 4mm}
 .premium-card{flex:1;min-height:30mm;padding:3.2mm 4.4mm;border-radius:2.6mm}
 .premium-card.before{background:var(--softBlue);border:.4pt solid #b8cce3}
 .premium-card.after{background:var(--softGreen);border:.4pt solid #acd4ba}
 .premium-card b{display:block;font-size:10pt;margin-bottom:2.4mm}
 .premium-card.after b{color:var(--green)}
-.insurers{font-size:8pt;color:#33404f}
+.insurers{font-size:8.4pt;color:#1e2a38}
 .premium-number{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:5.2mm;font-size:22pt;font-weight:900;color:var(--navy)}
 .after .premium-number{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--green)}
 .arrow{width:11mm;flex:none;text-align:center;color:var(--gold);font-size:22pt}
 .contract-head{display:flex;justify-content:space-between;align-items:flex-end;margin:5.4mm 4mm 2mm}
-.contract-head h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0;font-size:15pt;color:#06203f;font-weight:900;border-left:1.6mm solid #c5a052;padding-left:3mm}
-.contract-head span{font-size:8.5pt;color:#33404f;font-weight:700}
+.contract-head h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0;font-size:15pt;color:#06203f;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
+.contract-head span{font-size:8.5pt;color:#1e2a38;font-weight:700}
 .report-table{width:calc(100% - 8mm);margin:0 4mm;border-collapse:collapse;font-size:8.5pt}
 .report-table th{padding:2.2mm 1.8mm;text-align:left;color:#b57a12;border-bottom:.4pt solid #d8dde4}
-.report-table td{padding:2.2mm 1.8mm;border-bottom:.4pt solid #e7ebef}
+.report-table td{padding:2.2mm 1.8mm;border-bottom:.4pt solid #c8d2dd}
 .report-table tbody tr:nth-child(odd) td{background:#eef3f9}
 .report-table tbody tr.new td{background:#d7f0e2;font-weight:800}
 .report-table tbody tr.del td{background:#fbdedb;font-weight:800}
 .report-table th:nth-child(3),.report-table th:nth-child(4),
 .report-table td:nth-child(3),.report-table td:nth-child(4){text-align:right}
-.report-table td:nth-child(3){color:#4b5a6b}
+.report-table td:nth-child(3){color:#1e2a38}
 .report-table td:nth-child(4){font-weight:800;color:var(--navy)}
 .status-new{color:var(--green);font-weight:900}
 .total-row td{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:10.5pt;font-weight:900;padding-top:3.4mm;color:var(--navy)!important}
@@ -224,7 +224,7 @@ def p2(cmp_, client='고객', base_date='', pg=2, totpg=7):
 CSS3 = """
 @page{size:A4;margin:0}
 :root{--navy:#0b2d58;--navy2:#123f79;--gold:#c79532;--gold-light:#e7c274;--green:#159263;
---red:#cc5656;--text:#17273c;--gray:#33404f;--line:#e5e9ef;--soft:#f5f8fb}
+--red:#cc5656;--text:#17273c;--gray:#1e2a38;--line:#e5e9ef;--soft:#f5f8fb}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
 .report{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
@@ -242,7 +242,7 @@ h1{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:1.5
 .customer span{display:block;margin-top:1.2mm;font-size:8.5pt}
 .customer .step{color:#ffd478;font-weight:800;margin-top:2.5mm}
 .content{padding:1mm 13mm 19mm}
-.panel{border:.9pt solid #b9c6d6;background:#fff;border-radius:4mm;margin-bottom:2.8mm;overflow:hidden;box-shadow:0 .6mm 1.4mm rgba(11,45,89,.10)}
+.panel{border:.9pt solid #d7e2ef;background:#fff;border-radius:4mm;margin-bottom:2.8mm;overflow:hidden;box-shadow:0 .6mm 1.4mm rgba(11,45,89,.10)}
 .panel-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:inline-block;padding:2.6mm 6mm;
 border-radius:0 0 3mm 0;color:#fff;background:linear-gradient(90deg,var(--navy),var(--navy2));
 font-size:13pt;font-weight:900}
@@ -254,35 +254,35 @@ th,td{padding:.5mm 3mm;border-bottom:.4pt solid #edf0f4;text-align:right}
 th{color:#96671e;background:#fffaf2;font-weight:800;font-size:9pt}
 th:first-child,td:first-child{text-align:left}
 tbody tr:last-child td{border-bottom:0}
-.old{color:#4b5a6b}
+.old{color:#1e2a38}
 .new{color:var(--navy);font-weight:800}
-.diff{color:var(--green);font-weight:800}
+.diff{color:var(--green);font-weight:800}.diff.up{color:#0b6559}.diff.down{color:#c0392b}.diff.same{color:#5b6b7d}
 .circle-icon{display:inline-block;width:7mm;height:7mm;line-height:7mm;text-align:center;
 margin-right:2mm;border-radius:50%;background:#fff6e7;color:var(--gold);font-size:9pt;font-weight:900}
 .chart{padding:1.6mm 7mm 2mm}
 .legend{text-align:right;margin-bottom:1mm;color:#738095;font-size:8.5pt}
 .legend span{margin-left:4mm}
 .legend i{display:inline-block;width:3mm;height:3mm;margin-right:1.2mm}
-.legend .gray{background:#d8dee7}
+.legend .gray{background:#b3c0cf}
 .legend .navy{background:var(--navy)}
 .bar-row{display:flex;align-items:center;gap:4mm;margin:0.5mm 0}
 .bar-label{width:42mm;font-weight:700;font-size:9.5pt;flex:none}
 .bar-group{flex:1}
 .bar-line{display:flex;align-items:center;gap:2mm;height:3.4mm}
 .bar{height:3.4mm;min-width:.5mm}
-.bar-before{background:#d8dee7}
+.bar-before{background:#b3c0cf}
 .bar-after{background:linear-gradient(90deg,#0b2d58,#154579)}
-.value{font-size:8.5pt;color:#33404f;white-space:nowrap}
+.value{font-size:8.5pt;color:#1e2a38;white-space:nowrap}
 .value.after{color:var(--navy);font-weight:800}
 .premium-wrap{display:flex;gap:6mm;align-items:center;padding:2mm 7mm 2mm}
 .premium-left{flex:1}
 .premium-row{display:flex;align-items:center;gap:3mm;margin:1.6mm 0}
 .premium-row b{width:22mm;font-size:11pt;flex:none}
 .premium-barwrap{flex:1}
-.premium-bar{height:7mm;background:#d8dee7}
+.premium-bar{height:7mm;background:#b3c0cf}
 .premium-bar.after{background:linear-gradient(90deg,#0b2d58,#164679)}
 .premium-value{width:26mm;text-align:right;font-weight:800;font-size:10.5pt;flex:none}
-.increase-box{width:40mm;flex:none;text-align:center;border:.4pt solid #dde4ec;border-radius:4mm;
+.increase-box{width:40mm;flex:none;text-align:center;border:.4pt solid #b3c0cf;border-radius:4mm;
 padding:4mm 2mm;background:linear-gradient(180deg,#f6fbff,#fff)}
 .arrow{display:none}
 .increase-box strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:block;margin-top:2mm;color:var(--gold);font-size:19pt}
@@ -304,7 +304,7 @@ clip-path:polygon(50% 0,92% 18%,82% 70%,50% 100%,18% 70%,8% 18%)}
 .shield span{position:absolute;left:0;right:0;top:1.4mm;color:#fff;font-size:10pt;font-weight:900}
 .summary-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--navy);font-size:11.5pt;font-weight:800}
 .summary-number{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:24pt;line-height:1;color:var(--navy);font-weight:900;margin:1mm 0 1.5mm}
-.summary-text{font-size:8.5pt;color:#33404f}
+.summary-text{font-size:8.5pt;color:#1e2a38}
 .footer{position:absolute;left:0;right:0;bottom:0;height:14mm;padding:0 13mm;display:flex;
 align-items:center;justify-content:space-between;
 background:linear-gradient(90deg,#092b55,#154477);color:#fff;font-size:9pt}
@@ -320,7 +320,28 @@ def _mw(v):
 
 
 def p3(cmp_, client='고객', base_date='', pg=3, totpg=7):
+    # ★★★★★v470 제76조 (지점장 사진 2026.08.17 — 3쪽이 <b>텅 비어</b> 올라갔다)
+    #   변화가 없는 고객이면 `up + add`가 0개라 표도 차트도 <b>빈칸</b>이 된다.
+    #   ★고객은 「변화」만 보러 온 게 아니다. <b>지금 무엇을 갖고 있는지</b>를 봐야 한다.
+    #   → 변화 항목이 6개가 안 되면 <b>보유 핵심 담보</b>로 채운다. 빈 쪽을 내보내지 않는다.
     rw = (cmp_['up'] + cmp_['add'])[:6]
+    if len(rw) < 6:
+        _KEY = ['일반암', '뇌혈관진단비', '허혈성 진단비', '급성심근경색', '뇌졸증진단비',
+                '상해사망', '일반사망', '질병사망(80세)', '상해후유3%', '실손 입원']
+        _seen = {x[0] for x in rw}
+        _cov = (cmp_.get('new') or {}).get('cov', {}) or {}
+        _old = (cmp_.get('old') or {}).get('cov', {}) or {}
+        for _k in _KEY:
+            if len(rw) >= 6:
+                break
+            if _k in _seen:
+                continue
+            try: _n = int(float(_cov.get(_k, 0) or 0))
+            except Exception: _n = 0
+            try: _o = int(float(_old.get(_k, 0) or 0))
+            except Exception: _o = 0
+            if _n or _o:
+                rw.append((_k, _o, _n, _n - _o)); _seen.add(_k)
     vmax = max([max(o, n) for _n, o, n, _d in rw] + [1])
     sv = cmp_['save_m']
     up = sv < 0
@@ -331,11 +352,17 @@ def p3(cmp_, client='고객', base_date='', pg=3, totpg=7):
 
     trs = ''
     for i, (nm, o, n, d) in enumerate(rw):
+        # ★★★★★v472 제77조 (육안검수 실측 2026.08.17) — <b>줄었는데 초록 +로 찍혔다.</b>
+        #   실측: 일반암 전 4,000만 → 후 1,000만인데 증감이 「3,000만」 초록.
+        #   `abs(d)`로 절댓값만 쓰고 마이너스 부호를 버렸다. <b>보장이 준 것을 늘었다고 보여줬다.</b>
+        #   → 부호를 살리고 색도 가른다. 늘면 초록 `+`, 줄면 빨강 `−`.
+        _cls = 'diff up' if d > 0 else ('diff down' if d < 0 else 'diff same')
+        _sgn = '+' if d > 0 else ('−' if d < 0 else '')
         trs += ('<tr><td><span class="circle-icon">%s</span>%s</td>'
                 '<td class="old">%s</td><td class="new">%s</td>'
-                '<td class="diff">%s%s</td></tr>'
+                '<td class="%s">%s%s</td></tr>'
                 % (ICONS3[i % len(ICONS3)], nm, _mw(o), _mw(n),
-                   '+' if d > 0 else '', _mw(abs(d))))
+                   _cls, _sgn, _mw(abs(d))))
 
     bars = ''
     for nm, o, n, d in rw:
@@ -404,7 +431,7 @@ def p3(cmp_, client='고객', base_date='', pg=3, totpg=7):
 CSS4 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--deepGreen:#0e4b3e;--green:#15865f;--gold:#c6912c;
---goldSoft:#f7f0dc;--red:#bf3434;--line:#dfe5eb;--soft:#f4f7fb;--text:#142c49;--muted:#33404f}
+--goldSoft:#f7f0dc;--red:#bf3434;--line:#dfe5eb;--soft:#f4f7fb;--text:#142c49;--muted:#1e2a38}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
 .page{width:210mm;height:297mm;position:relative;background:#fff;overflow:hidden}
@@ -417,21 +444,21 @@ justify-content:space-between;align-items:flex-start}
 .header h1{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:2.4mm 0 0;color:var(--navy);font-size:22pt;line-height:1.18;white-space:nowrap}
 .client{display:none}
 .client strong{display:block;font-size:12pt;margin-bottom:1.6mm}
-.client span{display:block;font-size:8pt;margin-top:1mm}
+.client span{display:block;font-size:8.4pt;margin-top:1mm}
 .client .page-step{margin-top:2mm;color:#ffc84d;font-weight:800}
 .title-line{margin:0 10mm;height:.9mm;background:linear-gradient(90deg,var(--gold) 0 23%,var(--navy) 23%)}
 .content{padding:2.4mm 10mm 18mm}
 .section-header{display:flex;align-items:center;gap:3.2mm;padding-bottom:2.4mm;
 border-bottom:.5mm solid var(--navy)}
 .section-header h2{margin:0;color:var(--navy);font-size:13pt}
-.section-header span{color:#a97821;font-size:7.5pt;font-weight:800}
+.section-header span{color:#a97821;font-size:8pt;font-weight:800}
 .coverage-grid{display:flex;gap:3.6mm;margin-top:2.6mm}
 .coverage-panel{flex:1}
 .coverage-panel h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0 0 1.6mm;font-size:15pt;font-weight:900}
 .coverage-panel.brain h3{color:var(--green)}
 .coverage-panel.heart h3{color:var(--red)}
 .gold-rule{height:.9mm;background:var(--gold);margin-bottom:2mm}
-.coverage-table{width:100%;border-collapse:collapse;font-size:7.5pt}
+.coverage-table{width:100%;border-collapse:collapse;font-size:8pt}
 .coverage-table th{padding:1.4mm 1mm;color:#fff;text-align:center;background:var(--deepGreen);
 border-right:.2mm solid rgba(255,255,255,.15)}
 .coverage-table th:last-child{background:#927224}
@@ -442,15 +469,15 @@ vertical-align:middle}
 text-align:left;padding:1.1mm}
 .highlight td{background:#fffaf0;border-top:.5mm solid #d3a13b;border-bottom:.5mm solid #d3a13b}
 .code-name{display:block;font-weight:800;color:#20384c}
-.code-number{display:block;margin-top:.6mm;color:#33404f}
+.code-number{display:block;margin-top:.6mm;color:#1e2a38}
 .amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #d5dde5;
 border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
 border:.5mm solid #cfd5db;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
 .hold{display:inline-block;margin-right:1mm;padding:.4mm 1mm;border-radius:4mm;
-background:#d5a239;color:#fff;font-size:6pt;font-weight:900}
-.legend{margin:2mm 0 0;font-size:7.5pt;color:#7c8794}
+background:#d5a239;color:#fff;font-size:6.8pt;font-weight:900}
+.legend{margin:2mm 0 0;font-size:8pt;color:#7c8794}
 .legend .circle{display:inline-block;width:2.6mm;height:2.6mm;border-radius:50%;
 margin-right:.8mm;border:.5mm solid #cfd5db}
 .legend .circle.on{background:var(--green);border-color:var(--green)}
@@ -458,7 +485,7 @@ margin-right:.8mm;border:.5mm solid #cfd5db}
 .opinion{margin-top:4mm}
 .opinion-title{font-size:10.5pt;font-weight:900;color:var(--navy);padding-bottom:1.6mm;
 border-bottom:.5mm solid var(--gold)}
-.opinion-box{margin-top:2mm;height:24mm;border:.3mm solid #c9d2dc;border-radius:1.8mm}
+.opinion-box{margin-top:2mm;height:24mm;border:.38mm solid #9fb0c2;border-radius:1.8mm}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;
 background:linear-gradient(90deg,#082d59,#123f75);color:#fff;padding:0 10mm;display:flex;
 align-items:center;justify-content:space-between;font-size:8.5pt}
@@ -574,7 +601,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
 CSS5 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--gold:#c78d22;--gold2:#e8bd61;--green:#0f785e;
---green2:#138c68;--red:#d53b31;--blue:#1686c9;--gray:#98a5b4;--line:#dce4ec;--soft:#f8fafc;
+--green2:#138c68;--red:#d53b31;--blue:#1686c9;--gray:#5b6b7d;--line:#dce4ec;--soft:#f8fafc;
 --text:#132c49}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
@@ -603,35 +630,35 @@ font-size:11.5pt;font-weight:900}
 .big-title::before{content:"";width:3.6mm;height:3.6mm;border-radius:50%;background:#fff;margin-right:1.6mm}
 .diagnosis,.brain-table{padding:2mm 1.6mm 2.2mm;background:#f7fcf9}
 .check-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--green);font-size:11pt;font-weight:900}
-.small-desc{margin-top:.8mm;color:#33404f;font-size:7pt}
+.small-desc{margin-top:.8mm;color:#1e2a38;font-size:7.6pt}
 .amount-row{display:flex;gap:1.4mm;align-items:center;margin-top:1.4mm}
 .amount-row .st{width:16mm;flex:none}
 .amount-row .lb{flex:1}
 .amount-row .vb{width:24mm;flex:none}
 .amount-row .un{width:6mm;flex:none}
 .status{height:5.6mm;white-space:nowrap;border-radius:1.2mm;display:flex;align-items:center;justify-content:center;
-color:#fff;font-size:8pt;font-weight:900}
+color:#fff;font-size:8.4pt;font-weight:900}
 .status.join{background:var(--red);padding:0 1mm}
 .status.gray{background:var(--gray)}
-.label{font-size:7.5pt;font-weight:800;color:#294558}
+.label{font-size:8pt;font-weight:800;color:#294558}
 .label.blue{color:var(--blue)}
 .value-box{height:6.2mm;display:flex;justify-content:flex-end;align-items:center;
-border:.3mm solid #c9d2dc;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
+border:.38mm solid #9fb0c2;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
 font-weight:900;font-size:11pt}
 .value-box.red{color:#d52f28}
 .value-box.blue{color:#1583c4}
-.unit{font-size:7pt;color:#778593}
-.small-card{border:.3mm solid #c9d2dc;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
+.unit{font-size:7.6pt;color:#778593}
+.small-card{border:.38mm solid #9fb0c2;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
 .small-card h4{margin:0 0 .6mm;color:#123d42;font-size:9pt}
-.small-card .desc{color:#33404f;font-size:7pt;line-height:1.35}
-.small-card .special{color:#0d7158;font-size:7.5pt;font-weight:900;margin-top:.6mm}
+.small-card .desc{color:#1e2a38;font-size:7.6pt;line-height:1.35}
+.small-card .special{color:#0d7158;font-size:8pt;font-weight:900;margin-top:.6mm}
 .small-line{display:flex;gap:1.6mm;align-items:center;margin-top:1.1mm}
 .small-line .st{width:16mm;flex:none}
 .small-line .vb{flex:1}
 .small-line .un{width:6mm;flex:none}
 .brain-row{display:flex;gap:1.8mm;align-items:center;margin-top:1.2mm}
 .brain-row .st{width:13mm;flex:none}
-.brain-row .lb{width:20mm;flex:none;font-size:7.5pt;font-weight:800;color:#274958}
+.brain-row .lb{width:20mm;flex:none;font-size:8pt;font-weight:800;color:#274958}
 .brain-row .lb.blue{color:#1187ca}
 .brain-row .vb{flex:1}
 .brain-row .un{width:6mm;flex:none}
@@ -640,12 +667,12 @@ font-weight:900;font-size:11pt}
 .customer-center strong{display:block;font-size:13pt}
 .customer-center .gold{color:var(--gold);font-size:9.5pt;font-weight:900;display:block;margin-top:1mm}
 .customer-center .counter{margin-top:1.4mm;font-size:12pt;font-weight:900}
-.customer-center small{color:#33404f;font-size:7pt}
+.customer-center small{color:#1e2a38;font-size:7.6pt}
 .special-wrap{display:flex;gap:3.6mm;margin-top:1.4mm;padding:1.6mm;border:.5mm solid #dfbb5d;
 border-radius:2.4mm;background:#fffcf5}
-.special-card{flex:1;border:.3mm solid #c9d2dc;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
+.special-card{flex:1;border:.38mm solid #9fb0c2;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
 .special-card h4{margin:0 0 .8mm;font-size:10pt;color:var(--navy)}
-.special-card p{margin:0;color:#33404f;font-size:7pt}
+.special-card p{margin:0;color:#1e2a38;font-size:7.6pt}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;display:flex;align-items:center;
 justify-content:space-between;padding:0 10mm;color:#fff;
 background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
@@ -680,15 +707,15 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
     def row(lb, v, st=None, blue=False, ind=False):
         """★뇌·심 칸이 계속 찌그러졌다(지점장 반복 지적) — flex는 좁은 열에서 눌린다.
            <b>표</b>로 그려 배지·라벨·값 자리를 고정한다."""
-        badge = ('<div class="status join" style="height:5.2mm;font-size:7.5pt">가입</div>'
+        badge = ('<div class="status join" style="height:5.2mm;font-size:8pt">가입</div>'
                  if st else '')
         return ('<tr>'
                 '<td style="width:11mm;padding:.7mm 0">%s</td>'
-                '<td style="width:18mm;padding:.7mm 1mm;font-size:7.5pt;font-weight:800;'
+                '<td style="width:18mm;padding:.7mm 1mm;font-size:8pt;font-weight:800;'
                 'color:%s;white-space:nowrap">%s</td>'
                 '<td style="padding:.7mm 0"><div class="value-box%s">%s</div></td>'
-                '<td style="width:6mm;padding:.7mm 0 .7mm 1.2mm;font-size:6.5pt;'
-                'color:#4a5768">만원</td></tr>'
+                '<td style="width:6mm;padding:.7mm 0 .7mm 1.2mm;font-size:7.2pt;'
+                'color:#1e2a38">만원</td></tr>'
                 % (badge, '#1187ca' if blue else '#274958', lb,
                    ' blue' if blue else '', _m5(v)))
 
@@ -718,8 +745,9 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
              + row('뇌출혈', g('뇌출혈진단비'), blue=True, ind=True)
              + row('심부전', g('심부전'), ind=True)
              + row('부정맥', g('부정맥'), ind=True)
+             # ★v472 제77조 — 5쪽도 같은 결함이었다. 급성심근 칸에 <b>허혈성 값</b>을 넣고 있었다.
              + row('허혈성', isch, ind=True)
-             + row('급성심근경색', isch, ind=True) + '</table>')
+             + row('급성심근경색', g('급성심근경색'), ind=True) + '</table>')
 
     owned = sum(1 for v in (g('일반암'), g('뇌혈관진단비'), isch) if v)
 
@@ -800,32 +828,37 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .content{padding:2mm 9.6mm 15mm}
 .columns{display:flex;gap:5mm}
 .columns>section{flex:1;min-width:0}
-.panel{border:.3mm solid #c9d2dc;border-radius:2.2mm;margin-bottom:1.4mm;overflow:hidden;background:#fff}
+.panel{border:.38mm solid #9fb0c2;border-radius:2.2mm;margin-bottom:.8mm;overflow:hidden;background:#fff}
 .panel-title{padding:1.4mm 3mm;font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;padding:1.8mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;
 font-size:11pt;font-weight:900}
 .panel-title:before{content:"■";margin-right:1.6mm}
-.inner{padding:1.4mm 2.2mm}
-.inner h3{margin:0 0 .6mm;font-size:10pt;color:#123f42}
-.desc{color:var(--muted);font-size:7pt;margin-bottom:1.2mm}
-.row{display:flex;align-items:center;gap:1.2mm;margin:.8mm 0}
+.inner{padding:.8mm 1.8mm}
+.inner h3{margin:0 0 .4mm;font-size:9.6pt;color:#123f42}
+.desc{color:var(--muted);font-size:7.4pt;margin-bottom:.7mm}
+.row{display:flex;align-items:center;gap:1.2mm;margin:.35mm 0}
 .row .lb{width:24mm;flex:none}
 .row .bx{flex:1}
 .row .un{width:6mm;flex:none}
 .row.two .lb{width:16mm}
-.label{font-size:7.5pt;font-weight:800;color:#294c4a}
-.box{height:5.4mm;border:.3mm solid #c9d2dc;border-radius:1.2mm;background:#fff;
-display:flex;align-items:center;justify-content:flex-end;padding:0 1.8mm;font-weight:900;
-color:#0b2340;font-size:10pt}
-.unit{font-size:6.5pt;color:#33404f}
+.label{font-size:8pt;font-weight:800;color:#294c4a}
+/* ★★★★★v465 제72조 2항 (육안검수 실측) — 6쪽 「일반암 14,000만」이 두 줄로 깨졌다.
+   진하기를 올리면서 글자가 커져 좁은 칸(2칸 행)을 넘쳤다.
+   ★<b>금액 칸은 절대 줄바꿈하지 않는다.</b> 넘치면 글자를 줄여서라도 한 줄로 둔다. */
+.box{height:4.5mm;border:.38mm solid #9fb0c2;border-radius:1.2mm;background:#fff;
+display:flex;align-items:center;justify-content:flex-end;padding:0 1.4mm;font-weight:900;
+color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
+.row.two .box{font-size:8.6pt;padding:0 1mm}
+.row.two .un{width:5mm}
+.unit{font-size:7.2pt;color:#1e2a38}
 .red{color:var(--red)}
-.sub-title{margin:1.2mm 0 .8mm;padding:1mm 1.4mm;background:#f0f4f8;font-size:7.5pt;
+.sub-title{margin:.8mm 0 .5mm;padding:.7mm 1.2mm;background:#f0f4f8;font-size:8pt;
 font-weight:900;color:#0d554d}
 .sub-title:before{content:"■ ";color:#087166}
 .customer{display:none}
 .customer strong{display:block;font-size:13pt;color:var(--navy)}
 .customer .gold{color:var(--gold);font-weight:900;margin-top:.8mm;font-size:9pt}
 .customer .life{margin-top:1.6mm;font-size:11pt;font-weight:900;color:var(--navy)}
-.customer small{color:#7d8995;font-size:7pt}
+.customer small{color:#7d8995;font-size:7.6pt}
 .bottom{display:flex;gap:5mm;margin-top:1mm}
 .bottom>div{flex:1}
 .footer{position:absolute;bottom:0;left:0;right:0;height:13mm;display:flex;align-items:center;
@@ -884,13 +917,16 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
             + r2('뇌혈관', '뇌혈관진단비', '뇌졸중', '뇌졸증진단비')
             + r1('뇌출혈', '뇌출혈진단비')
             + '<div class="sub-title">심장</div>'
-            + ('<div class="row two"><div class="lb"><div class="label">허혈성</div></div>'
-               '<div class="bx"><div class="box">%s</div></div>'
-               '<div class="un"><span class="unit">만원</span></div>'
-               '<div class="lb"><div class="label">협심증</div></div>'
-               '<div class="bx"><div class="box">%s</div></div>'
-               '<div class="un"><span class="unit">만원</span></div></div>' % (_m6(isch), _m6(isch)))
-            + r2('급성심근', None, '심부전', '심부전')
+            # ★★★★★v472 제77조 (지점장 지적 2026.08.17 「리포트가 뇌심 입력물이다 안 나온다」)
+            #   ★결함 2개 — 실측으로 잡았다.
+            #   ① 협심증 칸에 <b>허혈성 값</b>을 넣고 있었다(`_m6(isch)`가 두 번).
+            #      사공호 실측: 협심증 1,000만인데 허혈성 0 → <b>빈칸</b>으로 나왔다.
+            #   ② 급성심근 칸의 키가 <b>None</b>이라 무슨 값이 있어도 늘 빈칸이었다.
+            #      사공호 실측: 급성심근경색 1,000만.
+            #   ★제28조(허혈성 단독)는 <b>보유 배지</b> 규칙이다 — 칸에 값을 넣는 것과 다르다.
+            #     칸은 <b>그 이름의 담보 값</b>을 넣는다.
+            + r2('허혈성', '허혈성 진단비', '협심증', '협심증')
+            + r2('급성심근', '급성심근경색', '심부전', '심부전')
             + r2('염증', '염증', '부정맥', '부정맥')
             + '</div></div>'
             '<div class="panel"><div class="inner"><h3>수술</h3>'
@@ -903,6 +939,15 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
             + r2('상해수술비', '상해수술비', '1~5종', '상해 종수술비(1-5종)')
             + r2('중대상해수술', '중대한상해수술비', '창상봉합', '창상봉합술')
             + r2('골절수술비', '골절수술비', '5대골절수술', '5대골절수술비')
+            + '</div></div>'
+            # ★★★★★v466 제74조 — 운전자는 <b>왼쪽 칸</b>에 둔다.
+            #   오른쪽(일당 아래)에 넣었더니 6쪽이 2장으로 넘쳐 <b>연금·종신 칸이 통째로 사라졌다</b>(실측).
+            #   라벨은 진단서와 같은 이름을 쓴다.
+            '<div class="panel"><div class="inner"><h3>운전자</h3>'
+            '<div class="desc">벌금 · 합의금 · 변호사 · 부상치료</div>'
+            + r2('대인', '대인', '대물', '대물')
+            + r2('합의금', '합의금', '6주미만', '6주미만')
+            + r2('변호사', '변호사', '자부상', '자부상')
             + '</div></div>')
 
     right = ('<div class="panel"><div class="panel-title">후유장해 · 상해 · 일당</div>'
@@ -924,6 +969,10 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
              + r1('질병 수술일당', '질병수술일당') + r1('상해 수술일당', '상해수술일당')
              + r1('질병 중환자실', '질병중환자실') + r1('상해 중환자실', '상해중환자실')
              + r1('1인실(종합/상급)', '1인실 종합병원')
+             # ★★★★★v466 제74조 (지점장 지적 2026.08.17 「리모델링 리포트 운전자·간병인이 빠졌다.
+             #   진단서에서 카피해라」) — 엑셀에는 있는데(간병인 92행·운전 118행) 리포트만 없었다.
+             + r1('간병인', '간병인') + r1('간병인지원일당', '간병인지원일당')
+             + r1('간호통합병동', '간호통합병동')
              + '</div></div>')
 
     # ★연금·종신·저축은 계약에서 판별한다(마스터에 담보 행이 없다 · 지점장 확인 2026.08.16)
@@ -937,10 +986,10 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
             val = ('<span style="color:#0b6559;font-weight:900">가입</span>&nbsp;'
                    + nmk + ('&nbsp;· %s원' % format(pr, ',') if pr else ''))
         else:
-            val = '<span style="color:#98a5b4">미가입</span>'
+            val = '<span style="color:#5b6b7d">미가입</span>'
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box" style="justify-content:flex-start;'
-                'font-size:8pt">%s</div></div>'
+                'font-size:8.4pt">%s</div></div>'
                 '<div class="un"></div></div>' % (lb, val))
 
     bottom = ('<div class="bottom">'
@@ -995,7 +1044,7 @@ align-items:flex-start;padding:8.4mm 10.4mm 3.6mm}
 .section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:2mm;padding-bottom:1.6mm;border-bottom:.9mm solid var(--navy);
 color:var(--navy);font-size:13pt;font-weight:900}
 .summary-grid{display:flex;gap:4.4mm;margin-top:2.8mm}
-.summary-card{flex:1;border:.3mm solid #c9d2dc;border-radius:2.2mm;overflow:hidden;background:#fff}
+.summary-card{flex:1;border:.38mm solid #9fb0c2;border-radius:2.2mm;overflow:hidden;background:#fff}
 .summary-head{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;height:9.4mm;display:flex;align-items:center;justify-content:center;color:#fff;
 font-size:11pt;font-weight:900}
 .summary-head.green{background:linear-gradient(90deg,#0b6757,#0c7764)}
@@ -1008,12 +1057,12 @@ font-size:20pt;background:#f0f4f8}
 .summary-card:nth-child(2) .icon-circle{color:var(--navy);background:#f0f4fa}
 .summary-card:nth-child(3) .icon-circle{color:var(--gold);background:#fff7e7}
 .summary-body h3{margin:0;font-size:12.5pt;color:var(--navy)}
-.summary-body p{margin:3.4mm 0 5.4mm;font-size:8.5pt;color:#33404f;line-height:1.7}
-.metric{height:12mm;border:.3mm solid #c9d2dc;border-radius:1.8mm;display:flex;align-items:center;
-justify-content:space-around;padding:0 3mm;color:var(--navy);font-size:8pt;font-weight:800}
+.summary-body p{margin:3.4mm 0 5.4mm;font-size:8.5pt;color:#1e2a38;line-height:1.7}
+.metric{height:12mm;border:.38mm solid #9fb0c2;border-radius:1.8mm;display:flex;align-items:center;
+justify-content:space-around;padding:0 3mm;color:var(--navy);font-size:8.4pt;font-weight:800}
 .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:24pt;color:var(--navy)}
 .summary-card:nth-child(3) .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--gold)}
-.points{border:.3mm solid #c9d2dc;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
+.points{border:.38mm solid #9fb0c2;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
 .point{flex:1;text-align:center;padding:0 3.6mm;position:relative}
 .point:not(:last-child)::after{content:"";position:absolute;right:0;top:1.6mm;height:24mm;
 border-right:.2mm dashed #cbd4de}
@@ -1022,7 +1071,7 @@ background:#f2f5f9;font-size:14pt;color:var(--navy)}
 .point:nth-child(1) .point-icon{color:var(--green);background:#eef8f2}
 .point:nth-child(3) .point-icon{color:var(--gold);background:#fff7e7}
 .point b{display:block;font-size:10pt;color:var(--navy)}
-.point p{margin:1.4mm 0 0;color:#33404f;font-size:7.5pt;line-height:1.45}
+.point p{margin:1.4mm 0 0;color:#1e2a38;font-size:8pt;line-height:1.45}
 .closing{margin-top:5.4mm;border:.2mm solid #ead6a7;border-radius:2.2mm;
 background:#fff;padding:4mm 5mm;text-align:left;height:46mm}
 .closing-main{color:#b4760b;font-size:11.5pt;font-weight:900}
@@ -1033,7 +1082,7 @@ background:#fff;padding:4mm 5mm;text-align:left;height:46mm}
 .contact-icon{width:11mm;height:11mm;line-height:11mm;text-align:center;flex:none;border-radius:50%;
 background:#f0f3f8;font-size:14pt;color:var(--navy)}
 .contact-lines{flex:1}
-.contact-row{display:flex;gap:2mm;font-size:8pt;color:#50657b;margin-bottom:1.8mm}
+.contact-row{display:flex;gap:2mm;font-size:8.4pt;color:#50657b;margin-bottom:1.8mm}
 .contact-row b{width:26mm;flex:none;line-height:1.25}
 .contact-value{flex:1;border-bottom:.2mm solid #cfd7df;min-height:4mm}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;padding:0 10mm;
@@ -1119,6 +1168,96 @@ def p7(cmp_, client='고객', base_date='', pg=7, totpg=7):
 
 # ═══════════════════ 8 쪽 · 자산 · 연금 ═══════════════════
 
+EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-size:8pt}.ctb th{background:#0b2340;color:#fff;font-weight:900;padding:1.4mm 1.6mm;border:.3mm solid #0b2340}.ctb td{border:.3mm solid #9fb0c2;padding:1.3mm 1.6mm;color:#1e2a38}.ctb td.g{background:#eef3f9;font-weight:900;text-align:center}.ctb td.hi{color:#b3261e;font-weight:900}.ctb td.ok{color:#0b6559;font-weight:900}.ctb .tn{font-weight:400}.sect{margin:1.6mm 0 1.2mm;padding:1.6mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;font-size:10.5pt;font-weight:900;border-radius:0 3mm 3mm 0;display:inline-block}'
+
+
+def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
+    """★★★★★v467 제74조 2항 (지점장 지적 2026.08.17 「PPT도 운전자·간병인 페이지 없는데」)
+
+    ★내 잘못: 6쪽에 <b>작은 칸 6개</b>를 끼워넣고 「넣었다」고 보고했다.
+      지점장이 말한 것은 <b>진단서 10쪽을 페이지째 카피하라</b>는 것이었다.
+      진단서 10쪽 = 운전자보험 담보 + 자동차보험 대비표 + 간병비 담보 + 간병인 비교표.
+    ★리포트와 진단서는 <b>같은 구조</b>여야 한다 — 한 사람에게 두 문서가 다르면 안 된다.
+    """
+    old = (cmp_.get('old') or {}).get('cov', {}) or {}
+    new = (cmp_.get('new') or {}).get('cov', {}) or {}
+
+    def line(lb, key):
+        """보유(검정) + 제안 증가분(레드)을 한 칸에. 원천은 비교 결과다."""
+        try: o = int(float(old.get(key, 0) or 0))
+        except Exception: o = 0
+        try: n = int(float(new.get(key, 0) or 0))
+        except Exception: n = 0
+        val = (format(o, ',') + '만') if o else ''
+        if n > o:
+            add = '<span class="red">+%s만</span>' % format(n - o, ',')
+            val = (val + '&nbsp;' + add) if val else add
+        return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
+                '<div class="bx"><div class="box">%s</div></div>'
+                '<div class="un"><span class="unit">만원</span></div></div>' % (lb, val))
+
+    drive_l = ('<div class="panel"><div class="inner"><h3>벌금 · 합의금</h3>'
+               '<div class="desc">교통사고 형사 · 행정</div>'
+               + line('대인 벌금', '대인') + line('대물 벌금', '대물')
+               + line('합의금', '합의금') + line('6주미만 합의금', '6주미만')
+               + '</div></div>')
+    drive_r = ('<div class="panel"><div class="inner"><h3>변호사 · 위로금</h3>'
+               '<div class="desc">기타 지원</div>'
+               + line('변호사비', '변호사') + line('자동차부상위로금', '자부상')
+               + '</div></div>')
+
+    care_l = ('<div class="panel"><div class="inner"><h3>간병인 지원</h3>'
+              '<div class="desc">보험사 파견</div>'
+              + line('간병인지원일당', '간병인지원일당') + line('간호통합병동', '간호통합병동')
+              + '</div></div>')
+    care_r = ('<div class="panel"><div class="inner"><h3>간병인 사용</h3>'
+              '<div class="desc">직접 고용</div>'
+              + line('간병인일당', '간병인') + line('질병 간병인일당', '질병간병인일당')
+              + '</div></div>')
+
+    cmp_tbl = ('<table class="ctb"><tr><th style="width:18%">구분</th>'
+               '<th>자동차보험 <span class="tn">(의무)</span></th>'
+               '<th>운전자보험 <span class="tn">(선택)</span></th></tr>'
+               '<tr><td class="g">보장 대상</td><td>타인의 피해</td><td class="hi">운전자 본인</td></tr>'
+               '<tr><td class="g">책임 종류</td><td>민사 배상</td><td class="hi">형사 · 행정</td></tr>'
+               '<tr><td class="g">주요 보장</td><td>대인 · 대물</td>'
+               '<td class="hi">벌금 · 형사합의금 · 변호사선임비</td></tr></table>')
+
+    care_tbl = ('<table class="ctb"><tr><th style="width:20%">구분</th>'
+                '<th>간병인지원일당</th><th>간병인사용일당</th></tr>'
+                '<tr><td class="g">방식</td><td>보험사가 간병인 <b>직접 배정</b></td>'
+                '<td>내가 <b>직접 고용</b> 후 정액 지급</td></tr>'
+                '<tr><td class="g">간병인 선택</td><td>불가 (배정 · 교체 가능)</td>'
+                '<td class="ok"><b>간병인 or 지인</b> 가능</td></tr>'
+                '<tr><td class="g">갱신</td><td>5 · 10 · 15 · 20년 갱신</td>'
+                '<td class="ok">비갱신 선택 가능</td></tr>'
+                '<tr><td class="g">납입면제</td><td>갱신형이라 <b>갱신 끝나면 다시 납부</b></td>'
+                '<td class="ok"><b>납입면제 가능</b></td></tr>'
+                '<tr><td class="g">인건비 상승</td><td>간병인 배정 (교체 가능)</td>'
+                '<td>체증형 (5년 10%↑)</td></tr></table>')
+
+    return ('<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><style>%s%s</style></head><body>'
+            '<article class="page"><div class="top-curve"></div>'
+            '<header class="header"><div>'
+            '<div class="brand">MAKEONE 리모델링 · 일상 리스크</div>'
+            '<h1>운전자 · 간병 — <span>일상 리스크 대비</span></h1></div>'
+            '<div class="page-number"><strong>%d</strong><div>운전자·간병</div></div></header>'
+            '<div class="line"></div>'
+            '<main class="content">'
+            '<div class="sect">■ 운전자보험 담보</div>'
+            '<div class="columns"><section>%s</section><section>%s</section></div>'
+            '%s'
+            '<div class="sect">■ 간병비 담보</div>'
+            '<div class="columns"><section>%s</section><section>%s</section></div>'
+            '%s'
+            '</main>'
+            '<footer class="footer"><div><strong>MAKEONE</strong>&nbsp;보장분석 자동화</div>'
+            '<div>%s 고객님 · 리모델링 리포트 · %d / %d</div></footer>'
+            '</article></body></html>'
+            % (CSS6, EXTRA9, pg, drive_l, drive_r, cmp_tbl, care_l, care_r, care_tbl,
+               client, pg, totpg))
+
+
 def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
     """★자산 · 재무 (지점장 확정 2026.08.16)
        [선저축|선지출] → [지금 시작하세요 전폭] → [현재의 나|미래의 나] → [이미 준비된 것 전폭]
@@ -1140,24 +1279,24 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
     cov = cmp_.get('new', {}).get('cov', {})
     dth = int(cov.get('일반사망', 0))
     prem = int(cmp_.get('prem_new', 0))
-    NAVY, GOLD, GREEN, LINE = '#06203f', '#c5a052', '#0e7258', '#c3ccd8'
+    NAVY, GOLD, GREEN, LINE = '#06203f', '#b08d38', '#0e7258', '#9fb0c2'
 
     def blank(lb):
         return ('<div style="display:flex;align-items:flex-end;gap:2mm;margin:0">'
-                '<div style="width:28mm;flex:none;font-size:6.8pt;font-weight:800;color:#33404f">%s</div>'
-                '<div style="flex:1;height:2.8mm;border-bottom:.3mm solid %s"></div>'
-                '<div style="width:6mm;flex:none;font-size:7.5pt;color:#4a5768">원</div></div>'
+                '<div style="width:28mm;flex:none;font-size:7.4pt;font-weight:800;color:#1e2a38">%s</div>'
+                '<div style="flex:1;height:2.8mm;border-bottom:.38mm solid %s"></div>'
+                '<div style="width:6mm;flex:none;font-size:8pt;color:#1e2a38">원</div></div>'
                 % (lb, LINE))
 
     def head(t):
         return ('<div style="font-size:9pt;font-weight:900;color:%s;'
-                'border-bottom:.4mm solid %s;padding-bottom:.3mm;margin-top:.6mm;font-size:7.2pt">%s</div>'
+                'border-bottom:.4mm solid %s;padding-bottom:.3mm;margin-top:.6mm;font-size:7.8pt">%s</div>'
                 % (NAVY, GOLD, t))
 
     def col(title, sub, bg, body):
-        return ('<div style="flex:1;border:.3mm solid %s;border-radius:2.2mm;overflow:hidden">'
+        return ('<div style="flex:1;border:.38mm solid %s;border-radius:2.2mm;overflow:hidden">'
                 '<div style="background:%s;color:#fff;padding:1.2mm 3mm;font-size:9pt;font-weight:900">'
-                '%s<span style="font-size:7.5pt;font-weight:400;margin-left:2mm">%s</span></div>'
+                '%s<span style="font-size:8pt;font-weight:400;margin-left:2mm">%s</span></div>'
                 '<div style="padding:1mm 3mm 1.2mm">%s</div></div>'
                 % (LINE, bg, title, sub, body))
 
@@ -1171,9 +1310,9 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
 
     def _chk(t):
         return ('<td style="width:3.2mm;padding:.15mm 0"><div style="width:2.6mm;height:2.6mm;'
-                'border:.3mm solid %s"></div></td>'
-                '<td style="padding:.15mm 1.6mm .15mm 1.2mm;font-size:6.8pt;font-weight:800;'
-                'color:#33404f;white-space:nowrap">%s</td>' % (NAVY, t))
+                'border:.38mm solid %s"></div></td>'
+                '<td style="padding:.15mm 1.6mm .15mm 1.2mm;font-size:7.4pt;font-weight:800;'
+                'color:#1e2a38;white-space:nowrap">%s</td>' % (NAVY, t))
 
     # ★목표 6개를 <b>2열 3행</b>으로 접어 세로를 절반으로 (지점장 2026.08.16)
     goals = ('<table style="width:100%;border-collapse:collapse">'
@@ -1191,7 +1330,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             return format(lp, ',') + '원'
         if pm:
             return format(pm, ',') + '원/월'
-        return '<span style="color:#98a5b4;font-weight:400">상담 시 확인</span>'
+        return '<span style="color:#5b6b7d;font-weight:400">상담 시 확인</span>'
 
     MAXROW = 10   # ★한 장에 담는 계약 수 상한(지점장 확정 2026.08.16). 넘으면 다음 장으로.
 
@@ -1204,23 +1343,23 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
         for c in (lst or []):
             v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                  else (str(c.get('contract_date') or '') or '—')
-            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7pt;border-bottom:.25mm solid #e7ebef">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:7pt;border-bottom:.25mm solid #e7ebef">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:8pt;font-weight:900;color:%s;'
-                    'text-align:right;border-bottom:.25mm solid #e7ebef">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:7pt;text-align:center;'
-                    'border-bottom:.25mm solid #e7ebef">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:7pt;text-align:center;'
-                    'border-bottom:.25mm solid #e7ebef">%s</td></tr>'
+            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
+                    'text-align:right;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
+                    'border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
+                    'border-bottom:.32mm solid #c8d2dd">%s</td></tr>'
                     % (c['company'], str(c['product'])[:26], NAVY, amt(c), v3,
                        str(c.get('pay_term') or '') or '—'))
         if _cut:
-            out += ('<tr><td colspan="5" style="padding:1.6mm;text-align:center;color:#b07d0e;'
-                    'font-weight:900;font-size:7.5pt;border-bottom:.25mm solid #e7ebef">'
+            out += ('<tr><td colspan="5" style="padding:1.6mm;text-align:center;color:#95690a;'
+                    'font-weight:900;font-size:8pt;border-bottom:.32mm solid #c8d2dd">'
                     '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not out:
-            out = ('<tr><td colspan="5" style="padding:2.4mm;text-align:center;color:#98a5b4;'
-                   'font-size:8pt;border-bottom:.25mm solid #e7ebef">보유 계약 없음</td></tr>')
+            out = ('<tr><td colspan="5" style="padding:2.4mm;text-align:center;color:#5b6b7d;'
+                   'font-size:8.4pt;border-bottom:.32mm solid #c8d2dd">보유 계약 없음</td></tr>')
         return out
 
     def tbl_all():
@@ -1243,41 +1382,41 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
                 n += 1
                 v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                      else (str(c.get('contract_date') or '') or '—')
-                body += ('<tr><td style="padding:.55mm 1.6mm;font-size:7pt;font-weight:900;'
-                         'color:%s;border-bottom:.25mm solid #e7ebef">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7pt;border-bottom:.25mm solid #e7ebef">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7pt;border-bottom:.25mm solid #e7ebef">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:8pt;font-weight:900;color:%s;'
-                         'text-align:right;border-bottom:.25mm solid #e7ebef">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7pt;text-align:center;'
-                         'border-bottom:.25mm solid #e7ebef">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7pt;text-align:center;'
-                         'border-bottom:.25mm solid #e7ebef">%s</td></tr>'
+                body += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;font-weight:900;'
+                         'color:%s;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
+                         'text-align:right;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
+                         'border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
+                         'border-bottom:.32mm solid #c8d2dd">%s</td></tr>'
                          % (NAVY, lbl, c['company'], str(c['product'])[:24], NAVY, amt(c), v3,
                             str(c.get('pay_term') or '') or '—'))
         if _cut:
-            body += ('<tr><td colspan="6" style="padding:1.6mm;text-align:center;color:#b07d0e;'
-                     'font-weight:900;font-size:7.5pt;border-bottom:.25mm solid #e7ebef">'
+            body += ('<tr><td colspan="6" style="padding:1.6mm;text-align:center;color:#95690a;'
+                     'font-weight:900;font-size:8pt;border-bottom:.32mm solid #c8d2dd">'
                      '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not body:
-            body = ('<tr><td colspan="6" style="padding:2.4mm;text-align:center;color:#98a5b4;'
-                    'font-size:8pt">보유 계약 없음</td></tr>')
-        th = ''.join('<th style="padding:.9mm 1.6mm;background:#eef3f9;font-size:6.8pt;'
+            body = ('<tr><td colspan="6" style="padding:2.4mm;text-align:center;color:#5b6b7d;'
+                    'font-size:8.4pt">보유 계약 없음</td></tr>')
+        th = ''.join('<th style="padding:.9mm 1.6mm;background:#eef3f9;font-size:7.4pt;'
                      'text-align:%s;color:%s">%s</th>' % (al, NAVY, t)
                      for t, al in [('구분', 'left'), ('보험사', 'left'), ('상품명', 'left'),
                                    ('가입금액', 'right'), ('가입날짜 · 담보금액', 'center'),
                                    ('납입기간', 'center')])
         return ('<table style="width:100%%;border-collapse:collapse;background:#fff;'
-                'border:.3mm solid %s"><tr>%s</tr>%s</table>' % (LINE, th, body))
+                'border:.38mm solid %s"><tr>%s</tr>%s</table>' % (LINE, th, body))
 
 
     have = (tbl_all()
             + '<div style="display:flex;gap:3mm;margin-top:1.6mm">'
               '<div style="flex:1;background:%s;padding:1.4mm;text-align:center;color:#fff">'
-              '<div style="font-size:8pt;color:#b9c6d6">사망보장 합계</div>'
+              '<div style="font-size:8.4pt;color:#d7e2ef">사망보장 합계</div>'
               '<div style="font-size:12pt;font-weight:900;margin-top:.6mm">%s</div></div>'
               '<div style="flex:1;background:%s;padding:2mm;text-align:center;color:#fff">'
-              '<div style="font-size:8pt;color:#cfe8de">리모델링 후 월 보험료</div>'
+              '<div style="font-size:8.4pt;color:#cfe8de">리모델링 후 월 보험료</div>'
               '<div style="font-size:12pt;font-weight:900;margin-top:.6mm">%s원</div></div></div>'
               % (NAVY, ('%s만원' % format(dth, ',')) if dth else '—', GREEN, format(prem, ',')))
 
@@ -1288,18 +1427,18 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             if n:
                 cells.append('<td style="width:6mm;text-align:center;font-size:13pt;'
                              'font-weight:900;color:%s">→</td>' % c)
-            cells.append('<td style="text-align:center;padding:1.2mm 1mm;border:.35mm solid %s;'
+            cells.append('<td style="text-align:center;padding:1.2mm 1mm;border:.42mm solid %s;'
                          'border-radius:1.8mm;background:#fff">'
-                         '<div style="font-size:7.5pt;font-weight:900;color:#33404f">%s</div>'
+                         '<div style="font-size:8pt;font-weight:900;color:#1e2a38">%s</div>'
                          '<div style="font-size:12pt;font-weight:900;color:%s;margin-top:.6mm">%s</div>'
                          '</td>' % (c, a, c, v))
         return ('<div style="flex:1;border:.5mm solid %s;border-radius:2.4mm;overflow:hidden;'
                 'background:%s"><div style="background:%s;color:#fff;padding:2mm 3mm;'
                 'text-align:center"><div style="font-size:13pt;font-weight:900">%s %s</div>'
-                '<div style="font-size:7.5pt;margin-top:.5mm">%s</div></div>'
+                '<div style="font-size:8pt;margin-top:.5mm">%s</div></div>'
                 '<div style="padding:1.8mm 2.4mm">'
                 '<table style="width:100%%;border-collapse:separate;border-spacing:0"><tr>%s</tr></table>'
-                '<div style="margin-top:1.8mm;text-align:center;font-size:8pt;font-weight:800;'
+                '<div style="margin-top:1.8mm;text-align:center;font-size:8.4pt;font-weight:800;'
                 'color:%s;line-height:1.5">%s</div></div></div>'
                 % (c, bg, c, ic, title, sub, ''.join(cells), c, ' · '.join(items)))
 
@@ -1327,11 +1466,11 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             + '</div>'
             + '</div>'
             '<div style="margin:1.4mm -10mm;background:#06203f;padding:1.6mm;text-align:center">'
-            '<div style="font-size:8pt;font-weight:800;color:#b9c6d6">'
+            '<div style="font-size:8.4pt;font-weight:800;color:#d7e2ef">'
             '당신의 선택이 10년 후 당신의 모습을 만듭니다</div>'
             '<div style="font-size:13pt;font-weight:900;color:#fff;margin:.6mm 0;'
             'letter-spacing:-.03em">지금 <span style="color:#e7c274">시작하세요</span></div>'
-            '<div style="font-size:7.5pt;color:#d6dee8">'
+            '<div style="font-size:8pt;color:#d6dee8">'
             '① 소득 파악하기　② 저축 먼저 설정하기(자동이체)　③ 남은 돈으로 생활하기</div></div>'
             '<div style="display:flex;gap:4mm">'
             + col('현재의 나', '오늘 · 함께 적습니다', '#0b3264', now)
@@ -1341,7 +1480,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             'overflow:hidden;display:flex;flex-direction:column;">'
             '<div style="background:' + NAVY + ';color:#fff;padding:2.4mm 3mm;text-align:center;'
             'font-size:11.5pt;font-weight:900">이미 준비된 것'
-            '<span style="font-size:8pt;font-weight:400;margin-left:2mm">보험 계약에서 자동으로</span>'
+            '<span style="font-size:8.4pt;font-weight:400;margin-left:2mm">보험 계약에서 자동으로</span>'
             '</div><div style="padding:3.4mm 3mm 4mm;background:#f4f7fb;flex:1">'
             + have + '</div></section>'
             '</main>'
@@ -1350,7 +1489,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             '</footer></article></body></html>')
 
 
-def build(cmp_, client='고객', base_date='', total=8):
+def build(cmp_, client='고객', base_date='', total=9):
     """7쪽 HTML을 순서대로 돌려준다. 페이지 번호·분모는 실제 장수에서 온다(하드코딩 금지)."""
     return [p1(client, base_date, 1, total, cmp_),
             p2(cmp_, client, base_date, 2, total),
@@ -1358,5 +1497,7 @@ def build(cmp_, client='고객', base_date='', total=8):
             p4(cmp_, client, base_date, 4, total),
             p5(cmp_, client, base_date, 5, total),
             p6(cmp_, client, base_date, 6, total),
-            p8(cmp_, client, base_date, 7, total),
-            p7(cmp_, client, base_date, 8, total)]
+            # ★v467 제74조 2항 — 운전자·간병은 <b>전용 페이지</b>다(진단서 10쪽과 같은 구조).
+            p9(cmp_, client, base_date, 7, total),
+            p8(cmp_, client, base_date, 8, total),
+            p7(cmp_, client, base_date, 9, total)]

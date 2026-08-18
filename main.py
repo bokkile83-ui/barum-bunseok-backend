@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v463-jongsin-20260817'
+VSTAMP = 'v472-heart-20260817'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -32,7 +32,7 @@ PW   = "0101"
 ADMIN_PW = "821024"
 
 # ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
-DOCTRINE_MIN_ART = 71        # 조문 개수 하한
+DOCTRINE_MIN_ART = 77        # 조문 개수 하한
 # ★v460 제69조 — DOCTRINE_MIN_CHARS 폐기. 손으로 관리하는 숫자가 정당한 정리를 막았다.
 DOCTRINE_MIN_CHARS = 0         # (폐기 · 0 = 검사 안 함)
 DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
@@ -6870,6 +6870,20 @@ def build_excel(data, out):
             print(f'[JEAN 색] 제안 열 {[3+i for i in _pidx]} → 헤더 주황ED7D31/블랙 · 값 레드C00000 · 제안합계열 레드 {_sumred}셀')
     except Exception as _ej:
         print('[JEAN 색] 실패:', str(_ej)[:80])
+    # ★★★★★v464 제73조 (지점장 지적 2026.08.17 「엑셀이 1페이지만 나온다」)
+    #   실측 원인: 마스터 xml에는 `<pageSetUpPr fitToPage="1"/>`만 있고 fitToWidth/Height 값이 없다.
+    #   openpyxl이 저장할 때 <b>기본값 1/1</b>을 써서 106행 전체를 A4 한 장에 <b>억지로 축소</b>했다.
+    #   → 가로만 1장(fitToWidth=1) · <b>세로는 무제한(fitToHeight=0)</b>으로 못박는다.
+    #     담보표는 세로로 길다. 세로를 1장에 밀어넣으면 글자가 보이지 않는다.
+    try:
+        for _wsp in wb.worksheets:
+            _wsp.page_setup.fitToWidth = 1
+            _wsp.page_setup.fitToHeight = 0
+            if _wsp.sheet_properties.pageSetUpPr is not None:
+                _wsp.sheet_properties.pageSetUpPr.fitToPage = True
+        print('[v464 인쇄] 가로 1장 · 세로 무제한 (시트 %d개)' % len(wb.worksheets))
+    except Exception as _ep:
+        print('[v464 인쇄] 설정 실패', str(_ep)[:60])
     _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
     wb.save(out)
     _force_nocalc_xml(out)    # ★v124 저장 후 XML에 직접 못박음(3중 방어)
@@ -7832,7 +7846,14 @@ _onReady(()=>{
       +' · 월 절감 <b>'+j.save_m.toLocaleString()+'원</b> ('+j.save_pct+'%)<br>'
       +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del+'<br><br>'
       +'<a href="'+j.xlsx+'">비교 엑셀</a> &nbsp; <a href="'+j.pptx+'">리포트 PPT</a></div>';
-    const box=$("#out")||document.body; box.insertAdjacentHTML("afterbegin",h);
+    /* ★★★★★v464 제72조 (지점장 지적 2026.08.17 「보험리모델링이 화면 가운데 안 뜨고 저 위에 뜬다」)
+       실측: `#out`은 <b>화면에 없는 아이디</b>였다(0개) → 폴백인 `document.body` 맨 앞에 붙어
+       <b>헤더보다 위</b>에 나왔다. 분석 결과는 대화창(`#chat`)에 들어가는데 리모델링만 딴 데 갔다.
+       → 분석 결과와 <b>같은 자리</b>(대화창 맨 아래)에 넣고 그리로 스크롤한다. */
+    const box=document.getElementById("chat");
+    if(box){ box.insertAdjacentHTML("beforeend",h); box.scrollTop=box.scrollHeight;
+             box.lastElementChild.scrollIntoView({behavior:"smooth",block:"center"}); }
+    else { document.body.insertAdjacentHTML("beforeend",h); }
    }
   }catch(e){alert("오류: "+e);}
   rb.disabled=false; rb.textContent="리모델링 비교";
