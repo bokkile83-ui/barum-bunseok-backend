@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v497-excel-20260819'
+VSTAMP = 'v500-tenoek-20260819'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -424,6 +424,10 @@ def _is_gen_dambo(raw, contract=''):
     """
     _t95 = re.sub(r'\s', '', str(raw or ''))
     if '갱신' in _t95: return True
+    # ★★★★★v499 제98조 3항 (지점장 지적 2026.08.19 「흥국화재 10억통장이 갱신인데 블랙으로 나오더라」)
+    #   흥국 <b>리셋월렛II(10억 통장)</b>는 담보명에 갱신 표기가 없어도 <b>갱신 담보</b>다.
+    #   구 코드는 표기가 없어 검정으로 찍었다.
+    if ('리셋월렛' in _t95) or ('리셋월랫' in _t95): return True
     # ★v495 제98조 — 배상책임 계열은 2009년 이후 가입이면 갱신
     if _ILSANG.search(str(raw or '')):
         _y = int(str(contract)[:4]) if str(contract)[:4].isdigit() else 0
@@ -526,7 +530,14 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     #     실측 — 메리츠2004의 `의료사고법률비용보장담보`는 `resolve2` 결과가 <b>None</b>(마스터 무행).
     #     이걸 빼면 <b>53/53 = 100%</b>다.
     _dk95 = [_k for _k in _dk95 if (resolve2(_k) or (None,))[0]]
-    if _dk95 and sum(1 for _k in _dk95 if _is_gen_dambo(_k, contract)) * 2 > len(_dk95): return '갱신'
+    #   ★★★★★v498 제95조 재개정 (지침 재정독 2026.08.19) — 지점장 원문은 <b>「담보에 갱신 100% 표기」</b>다.
+    #     내가 「과반」으로 낮춰 썼다 — <b>또 임계값을 내가 정했다</b>. 51%도 갱신이 되어
+    #     「일부 특약만 갱신인 비갱신 계약」이 갱신으로 나갈 뻔했다. <b>100%로 되돌린다.</b>
+    #   ★<b>잘린 담보명은 분모에서 뺀다</b> — 별첨 표에서 칸 폭 때문에 뒤가 끊긴다.
+    #     실측 KB `상해입원일당(요양/정신/한방병원제외,181일이상)(간편가입)<b>(</b>` — `(갱신형)`이 잘렸다.
+    #     괄호가 안 닫힌 담보명은 <b>원문이 더 있다</b>는 뜻이므로 판정 근거로 쓰지 않는다(제102조와 같은 뿌리).
+    _dk95 = [_k for _k in _dk95 if str(_k).count('(') == str(_k).count(')')]
+    if _dk95 and all(_is_gen_dambo(_k, contract) for _k in _dk95): return '갱신'
     # ④ 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
     pay_y = 0; cov_y = 0
     m = re.search(r'(\d+)\s*년', pay_period or '')
@@ -1351,8 +1362,10 @@ _STRUCT_SELFTEST = [
     ('제100조 균등배분',  'remodel.py',         r'v490 균등', True),
     ('제101조 꼬리고정',  'remodel.py',         r'_fpad = int\(', True),
     ('제96조 담보갱신단순', 'main.py',           r"if '갱신' in _t95: return True", True),
-    ('제95조 담보과반',   'main.py',            r'_dk95 and sum\(', True),
+    ('제95조 담보100',    'main.py',            r'_dk95 and all\(_is_gen_dambo', True),
     ('제98조 배상책임',   'main.py',            r'_ILSANG = re.compile', True),
+    ('제98조 10억통장',   'main.py',            r"\('리셋월렛' in _t95\)", True),
+    ('제98조 10억항상파랑','main.py',           r"'일상배상책임','10억 플랜'", True),
     ('제98조 마스터무행', 'main.py',            r'_dk95 = \[_k for _k in _dk95 if \(resolve2', True),
     ('제93조 인쇄농도',   'remodel.py',         r'convert_from_path\(f, dpi=300\)', True),
     # ★v410b 구 패턴 `\[v\d\d\d `는 <b>기존 기능 이력 라벨 수백 건</b>까지 잡아 거짓경보를 냈다.
@@ -5921,8 +5934,11 @@ def build_excel(data, out):
                 # ★★★v210 (지점장 확정 2026.07.25, 영구): <b>간병인 · 간호통합병동 2가지는 '항상 파랑' 강제 폐기</b>.
                 #   보험료 · 가입년일 · 만기일자 · 총납입기간(=계약 갱신 판정) 또는 담보명의 <b>[갱신] 표기</b>에 따라
                 #   갱신=파랑 / 비갱신=검정으로 <b>일반 담보와 동일하게</b> 칠한다(구 v139 '간병인 계열 3행 무조건 파랑' 폐기).
-                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','일상배상책임')) else BK
-                if blue: _blue_r.add(tr)          # ★v475 제83조 — 갱신 담보 행 수집
+                # ★★★★★v500 제98조 3항 (지점장 확정 2026.08.19 「흥국 10억통장은 <b>그냥 무조건 갱신</b>이다」)
+                #   raw 표기가 어떻게 들어오든 <b>「10억 플랜」 행은 항상 파랑</b>이다.
+                #   `_is_gen_dambo`의 리셋월렛 인식(v499)에 더해 <b>표준명으로도</b> 막는다 — 두 겹.
+                ws.cell(tr,col).font = BL if (blue or std in ('입원','통원','약값','약','일상배상책임','10억 플랜')) else BK
+                if blue or std == '10억 플랜': _blue_r.add(tr)   # ★v475 제83조 · v500 10억 플랜
                 # ★v39 워크시트용 원본담보명 수집(그 표준명 중 최댓값 담보의 raw 1개)
                 try: trace_all.append((str(std), str(raw).strip(), amt, str(ct.get('company','')), str(ct.get('product',''))[:40]))
                 except Exception: pass
