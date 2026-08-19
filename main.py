@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v476-clean-20260818'
+VSTAMP = 'v497-excel-20260819'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -395,11 +395,40 @@ _CO_HEAD = re.compile(r'^(?:\s|/|\d+\s*년?|년납|월납|연납|일시납|분�
 #       뒤: `간병인사용 질병입원일당(1-180일)(간편가입)(갱신형)` · `…(3N5간편,갱신형)`
 #       중간: `(10년갱신)갱신형 다빈치로봇 암수술비`
 #     ⇒ <b>위치를 따지지 않는다.</b> 판정은 이 함수 하나로만 한다(제0조 「판정은 한 곳에서만」).
-def _is_gen_dambo(raw):
-    """★v476 제86조 — 담보명에 갱신 표기가 있는가(위치 무관). '비갱신'만 제외."""
-    t = re.sub(r'\s', '', str(raw or ''))
-    if '비갱신' in t: return False
-    return '갱신' in t
+#   ★★★★★v486 제96조 (지점장 실물 PDF 대조 2026.08.19) — <b>「담보 갱신형」이 '비갱신'으로 읽혔다</b>.
+#     구 코드는 공백을 지운 뒤 `'비갱신' in t`로 제외했다. 그런데 <b>'진단비' + '갱신형'</b>이 붙으면
+#     `암진단<b>비갱신</b>형` — <b>없던 '비갱신'이 만들어진다</b>. 그래서 뒤에 붙은 갱신형이 통째로 탈락했다.
+#     ★게다가 구 코드의 `re.sub`는 <b>역슬래시가 두 개</b>라 공백을 아예 못 지우고 있었다(조용한 결함).
+#     ⇒ '비갱신'은 <b>단어 경계</b>(문자열 시작 · 공백 · 괄호 · 쉼표 뒤)일 때만 인정한다.
+_NONGEN = re.compile(r'(?:^|[\s\(\[\{,·/])비\s*갱신')
+
+
+#   ★★★★★v495 제98조 (지점장 확정 2026.08.19) — <b>배상책임 담보는 갱신이다.</b>
+#     지점장 원문 — 「<b>가족생활배상책임담보 / 갱신이다. 이게 비갱신인 건 2009년 이전만 비갱신이다</b>」
+#     [실측] 메리츠 알파Plus2004(2020년 가입)에서 `가족생활배상책임담보`가 <b>갱신 아님</b>으로
+#       세어져 과반 계산이 52/54가 됐다. 실제로는 <b>53/54</b>다.
+#     ⇒ 일상생활·가족생활·자녀생활 <b>배상책임</b> 계열은 <b>2009년 이후 가입이면 갱신</b>으로 센다.
+#       2009년 이전 가입만 비갱신.
+_ILSANG = re.compile(r'(?:일상생활|가족생활|자녀생활|일상|가족)\s*배상책임')
+
+
+def _is_gen_dambo(raw, contract=''):
+    """★제86조 · v493 제96조 — 담보명에 갱신 표기가 있는가(앞·뒤·중간 위치 무관).
+
+    ★★★★★지점장 확정 2026.08.19 — <b>담보에 「비갱신형」이라고 기재는 절대 안 한다.
+      갱신형만 표기된다.</b> ⇒ 「비갱신」 제외 로직 자체가 필요 없다.
+      구 코드는 공백을 지운 뒤 `'비갱신' in t`로 걸렀는데, <b>'암진단비'+'갱신형'</b>이 붙어
+      `암진단<b>비갱신</b>형` — <b>없던 '비갱신'이 만들어져</b> 뒤에 붙은 갱신형이 통째로 탈락했다.
+      단어 경계(`_NONGEN`)로 막았으나, 지점장 확정으로 <b>그 가드도 폐기</b>한다.
+      담보명에 '갱신'이 있으면 <b>무조건 갱신</b>이다.
+    """
+    _t95 = re.sub(r'\s', '', str(raw or ''))
+    if '갱신' in _t95: return True
+    # ★v495 제98조 — 배상책임 계열은 2009년 이후 가입이면 갱신
+    if _ILSANG.search(str(raw or '')):
+        _y = int(str(contract)[:4]) if str(contract)[:4].isdigit() else 0
+        return _y >= 2009
+    return False
 
 
 _GENDAMBO_SELFTEST = [
@@ -473,6 +502,31 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     if _SEMANGI.search(_p473) and '비갱신' not in _p473: return '비갱신'
     # ③ 만기 9999(종신) -> 비갱신
     if expiry.startswith('9999'): return '비갱신(종신)'
+    # ★★★★★v484 제95조 (지점장 확정 2026.08.19) — <b>담보에 갱신 표기가 있으면 그 계약은 갱신이다</b>.
+    #   지점장 원문 — 「<b>우리가 밤샌 이유는 이분 다 갱신인데 니가 계속 비갱신으로 계산해서야</b>」
+    #                「<b>갱신 담보 or 담보 갱신 적용해봐</b>」
+    #   ⇒ 제86조(`_is_gen_dambo` · 앞·뒤·중간 위치 무관)를 <b>계약 헤더 판정에도</b> 쓴다.
+    #   [실측 김순자] 메리츠 알파Plus2004 담보 54개 중 <b>52개가 갱신형</b>인데 20년납/42년보장이라
+    #     기간(⑤)으로 비갱신이 됐다. 2204는 <b>10개 전부</b> 갱신형, KB 3.5.5는 19개 중 17개.
+    #   [순서] 상품명 '세만기'(②)가 <b>이보다 앞</b>이다 — 세만기형 상품의 특약 갱신 표기로는
+    #     계약을 뒤집지 않는다(LIFEPLUS 3N5 · 지점장 2026.08.18 확정 유지).
+    #   ★★★★★v494 제95조 개정 (지점장 원리 설명 2026.08.19)
+    #     「<b>주계약이 비갱신이고 특약이 갱신인 경우가 대부분이기에 블랙·블루 처리하는 거다.</b>
+    #      모든 보장분석지에 갱신은 기재되지만 <b>단 한 번도 비갱신이라고 기재는 없다</b>.
+    #      그래서 타이틀에 세만기를 보든지 <b>납부기간과 보험기간의 상이성</b>을 봐야 하고,
+    #      <b>상이해도 일부 특약은 갱신 기재 시 블루</b>다」
+    #     ⇒ <b>담보 대부분(과반)이 갱신 표기면 계약도 갱신</b>. 「일부」면 계약은 기간대로 판정하고
+    #       <b>그 담보만 파랑</b>(제5조 B · 제83조)으로 둔다. 하나만 있어도 계약을 뒤집던 것은 과했다.
+    #     [실측 김순자] 메리츠2004 <b>52/54</b> · 2204 <b>10/10</b> · KB <b>17/19</b> → 계약 갱신
+    #                  메리츠 운전자 <b>2/15</b>(일부) → 계약은 기간(20납/20년 동일)으로 갱신
+    _dk95 = list((dambo or {}).keys())
+    #   ★★★★★v496 제98조 2항 (지점장 확정 2026.08.19 「의료 엑셀에 없다」)
+    #     <b>마스터 엑셀에 행이 없는 담보는 과반 분모에서 뺀다.</b> 엑셀에 안 실리는 담보가
+    #     분모에 들어가면 판정이 왜곡된다(제0조 「엑셀 = 지침의 법률 존재」).
+    #     실측 — 메리츠2004의 `의료사고법률비용보장담보`는 `resolve2` 결과가 <b>None</b>(마스터 무행).
+    #     이걸 빼면 <b>53/53 = 100%</b>다.
+    _dk95 = [_k for _k in _dk95 if (resolve2(_k) or (None,))[0]]
+    if _dk95 and sum(1 for _k in _dk95 if _is_gen_dambo(_k, contract)) * 2 > len(_dk95): return '갱신'
     # ④ 납입기간 == 보장기간(가입일~만기일) 동일 -> 갱신 / 다르면 비갱신
     pay_y = 0; cov_y = 0
     m = re.search(r'(\d+)\s*년', pay_period or '')
@@ -493,12 +547,19 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
     except: pass
     if pay_y and cov_y:
         if pay_y != cov_y: return '비갱신'          # ★기간 상이 = 비갱신
-        # ★★★★★v354·v473 전기납 — 지점장 확정 2026.08.02 / 회사 한정 해제 2026.08.18
-        #   지점장 원문 — 「1,509,740 / 2024.06.26 / 2073.06.25 / 49년납 (26/588)
-        #   → <b>이런걸 전기납이라고한다</b>」 ⇒ 납입 == 보장인데 담보에 '갱신' 표기가
-        #   <b>하나도 없으면</b> 전기납이므로 비갱신. 있으면 갱신.
-        _has_gen = any(_is_gen_dambo(k) for k in (dambo or {}).keys())   # ★v476 제86조
-        return '갱신' if _has_gen else '비갱신'
+        # ★★★★★v483 제93조 전기납 정의 (지점장 확정 2026.08.19 · 이전 기재 전부 폐기)
+        #   지점장 원문 — 「<b>전기납은 삼성화재를 제외하고 최소 35년납 이상 되는게 전기납이다.
+        #   납입주기 · 가입일자와 만기일자가 납입주기와 같은 시기는 갱신이고</b>」
+        #   ⇒ <b>납입기간 == 보장기간이면 원칙은 갱신이다.</b> 전기납은 <b>35년납 이상</b>일 때만.
+        #   ⇒ 예외는 <b>삼성화재</b> 하나 — 35년 미만이어도 전기납 판별(담보 갱신표기 유무)을 탄다.
+        #   [내 오판] v354·v473은 <b>기간 길이를 안 보고</b> 「담보에 갱신 표기 없으면 전기납」으로만 봤다.
+        #     그래서 <b>롯데 20년납/20년만기(= 명백한 갱신)</b>가 비갱신으로 나갔다(김순자 실측).
+        #     지점장 지적 — 「<b>이건 당연히 갱신이자나</b>」.
+        _co483 = re.sub(r'\s', '', str(company or ''))
+        if pay_y >= 35 or ('삼성화재' in _co483):
+            _has_gen = any(_is_gen_dambo(k, contract) for k in (dambo or {}).keys())   # ★v476 제86조
+            return '갱신' if _has_gen else '비갱신'
+        return '갱신'                      # ★35년 미만 + 납입==보장 = 갱신(제93조)
     return '비갱신'
 
 def _has_nonpay3(dambo):
@@ -1277,6 +1338,23 @@ _STRUCT_SELFTEST = [
     ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
     ('제84조 회사명절단', 'main.py',            r'def _clean_company', True),
     ('제86조 갱신담보',   'main.py',            r'def _is_gen_dambo', True),
+    # ★v480 제89조 — 비교엑셀 계약별 표: 상품명 C+D 2칸 · 상태 G 1칸.
+    ('제89조 비교엑셀열', 'remodel.py',         r"_LAYOUT89 = \{'회사': 2, '상품명': \(3, 4\), '전': 5, '후': 6, '상태': 7\}", True),
+    ('제88조 세로분산',   'report_pages.py',    r'justify-content:space-between', True),
+    ('제87조 하단표',     'remodel.py',         r'v478 하단표', True),
+    ('제91조 행높이',     'remodel.py',         r'defaultRowHeight = _ROW_PT', True),
+    ('제92조 상품명줄',   'remodel.py',         r'_PROD_W = 43', True),
+    ('제93조 전기납35',   'main.py',            r'pay_y >= 35', True),
+    ('제94조 납입회차',   'main.py',            r'월납\|년납\|연납', True),
+    ('제99조 7쪽입력칸', 'report_pages.py',    r'_P9BIG', True),
+    ('제97조 인쇄예산',   'remodel.py',         r'_PAGE_PT = 735\.0', True),
+    ('제100조 균등배분',  'remodel.py',         r'v490 균등', True),
+    ('제101조 꼬리고정',  'remodel.py',         r'_fpad = int\(', True),
+    ('제96조 담보갱신단순', 'main.py',           r"if '갱신' in _t95: return True", True),
+    ('제95조 담보과반',   'main.py',            r'_dk95 and sum\(', True),
+    ('제98조 배상책임',   'main.py',            r'_ILSANG = re.compile', True),
+    ('제98조 마스터무행', 'main.py',            r'_dk95 = \[_k for _k in _dk95 if \(resolve2', True),
+    ('제93조 인쇄농도',   'remodel.py',         r'convert_from_path\(f, dpi=300\)', True),
     # ★v410b 구 패턴 `\[v\d\d\d `는 <b>기존 기능 이력 라벨 수백 건</b>까지 잡아 거짓경보를 냈다.
     #   제36조의 대상은 <b>각인을 찍는 로그</b>(`[지침]`·`[zip검증]`)뿐이다 → 그 둘만 검사한다.
     # ★v410c 주석 안의 <b>예시 문구</b>까지 걸렸다 → `print(` 줄로 한정한다.
@@ -3064,7 +3142,13 @@ def parse_txt(txt, filename='', extra=None):
     paycount_map = {}
     for l in lines:
         ld = l.strip()
-        m = re.search(r'([가-힣A-Za-z]{2,8}(?:생명|화재|손보|손해|해상|라이프|증권)?)\s+.*?(\d{4}\.\d{2}\.\d{2})\s+(\d{4}\.\d{2}\.\d{2})\s+월납\s+(\d{1,3}/\d{2,3})', ld)
+        # ★★★★★v483 제94조 (김순자 실측 2026.08.19) — <b>납입회차를 못 읽으면 갱신 판정이 죽는다</b>.
+        #   구 정규식은 ㉠<b>'월납'이 반드시 있어야</b> 하고 ㉡분모가 <b>2~3자리</b>여야 했다.
+        #   실측 NH농협생명 줄 = `… 2025.08.06 2028.08.06 <b>2/3</b> 24,464 …` —
+        #   납입주기 칸이 <b>비어 있고</b> 분모가 <b>1자리</b>라 둘 다 탈락 → pay_count 공란 →
+        #   judge_renewal이 기간을 못 재고 <b>무조건 비갱신</b>이 됐다(제85조와 같은 뿌리).
+        #   → 납입주기는 <b>선택</b>, 분모는 <b>1~3자리</b>. 두 날짜 바로 뒤 토큰이라 오인 위험은 낮다.
+        m = re.search(r'([가-힣A-Za-z]{2,8}(?:생명|화재|손보|손해|해상|라이프|증권)?)\s+.*?(\d{4}\.\d{2}\.\d{2})\s+(\d{4}\.\d{2}\.\d{2})\s+(?:\d+\s*년납|월납|년납|연납|일시납|분기납|반년납)?\s*(\d{1,3}/\d{1,3})', ld)
         if m:
             comp = m.group(1).strip()
             paycount_map[(comp, m.group(2), m.group(3))] = m.group(4)
@@ -5253,6 +5337,11 @@ def build_excel(data, out):
         if _r is not None: return _r > 0
         return not _is_paid_up(ct.get('pay_period',''), ct.get('pay_count',''))
 
+    # ★★★★★v477 제83조 보강 — 계약 루프가 끝난 뒤에도 <b>세부보충·1-3종·사망이동</b>이
+    #   같은 셀을 다시 칠한다(6269·6304행 `BL if _gen else BK`). 그래서 계약 루프 끝의 확정만으로는
+    #   <b>덮인다</b>(김순자 v476 실측 — 회사명은 고쳐졌는데 갱신담보 색은 그대로 검정).
+    #   → 열별 파랑 행을 <b>루프 바깥에 보관</b>했다가 <b>모든 재기재가 끝난 뒤</b> 마지막에 확정한다.
+    _BLUE_ALL = {}
     for i, ct in enumerate(contracts):
         col = 3 + i
         gen  = ct['renewal'] == '갱신'
@@ -5312,7 +5401,7 @@ def build_excel(data, out):
         #   뇌혈관질환진단비`·`갱신형 허혈성심장질환진단비`·`갱신형 암진단비`·`갱신형 일반상해사망`).
         #   → <b>파랑이어야 할 행을 모아 두고 계약 루프 끝에서 한 번에 확정</b>한다.
         #     (제0조 「판정은 한 곳에서만」 · 「규칙 두 개가 같은 값을 만지면 나중 것이 앞 것을 죽인다」)
-        _blue_r = set()
+        _blue_r = set(); _BLUE_ALL[col] = _blue_r
         jong_acc = {'상해 종수술비(1-5종)':[0]*8, '질병 종수술비(1-5종)':[0]*8}
         ndae_acc = [0]*6      # ★v386 116대/120대 수술비 = 등급 Ⅰ~Ⅵ 슬래시 6칸   # ★v29v 8칸 수집 후 기재 시 5/8종 판정
         trio_acc = [0,0,0]   # ★v29y MRI/도수치료/비급여주사
@@ -5651,7 +5740,7 @@ def build_excel(data, out):
                     if _br:
                         _ex = ws.cell(_br,col).value
                         ws.cell(_br,col).value = (_ex+amt) if isinstance(_ex,(int,float)) else amt
-                        _bl0 = gen or _is_gen_dambo(raw)        # ★v475 제83조 · v476 제86조
+                        _bl0 = gen or _is_gen_dambo(raw, ct.get('contract_date',''))   # ★v475·v495
                         ws.cell(_br,col).font = BL if _bl0 else BK
                         if _bl0: _blue_r.add(_br)
                 heart_trace.append((ct['company'], raw, ' · '.join(_heart_bundle), amt))   # ★v29z 근거 기록
@@ -5728,7 +5817,7 @@ def build_excel(data, out):
                 #   → <b>별첨 명시값을 그대로 쓴다.</b> 금액을 못 읽었을 때만 5,000을 기본값으로 넣는다.
                 if not amt: amt=5000
             # ★v34 암주요치료비 10,000 강제 폐기(지점장 2026.07.09): 실제 가입금액 사용. 하이클래스는 별도행 합산.
-            blue = gen or _is_gen_dambo(raw)   # ★v476 제86조 — 앞·뒤·중간 어디든 갱신 표기면 갱신
+            blue = gen or _is_gen_dambo(raw, ct.get('contract_date',''))   # ★v476·v495
             # ★★★★★v337 (지점장 지적 2026.08.02 "표 안에 입원이 검정 통원·약은 파랑이다"):
             #   §10 정본 = <b>실손(입원·통원·약값…) + 일상배상책임은 항상 파랑</b>.
             #   통원·약값은 실손 디폴트 블록이 BL로 써서 파랑인데, <b>입원은 별첨 파싱 경로</b>를 타서
@@ -6304,6 +6393,19 @@ def build_excel(data, out):
             ws.cell(_r3, _cl3).font = BL if _gen3 else BK
             ws.cell(_r3, _cl3).alignment = Alignment(horizontal='center', vertical='center')
         print(f"[v272 1-3종] {_cn3} {_c3.get('contract_date')} 수술보장 대표 {_mx3:,.0f} → 질병·상해 종수술비(1-3종)")
+
+    # ★★★★★v477 제83조 — <b>색의 최종 확정은 여기다</b>(모든 재기재가 끝난 자리).
+    #   담보명에 갱신 표기가 있으면 주계약이 비갱신이어도 <b>그 담보만 파랑</b>(제5조 B · 제86조).
+    #   세부보충(v271)·1-3종(v272)·사망이동은 계약 갱신 여부만 보고 덮으므로 여기서 되돌린다.
+    _bfix = 0
+    for _bc, _brs in (_BLUE_ALL or {}).items():
+        for _br2 in sorted(_brs or ()):
+            _bv = ws.cell(_br2,_bc).value
+            if _bv in (None,''): continue
+            _bf = ws.cell(_br2,_bc).font
+            if not (_bf and _bf.color and str(_bf.color.rgb or '').endswith('0070C0')):
+                ws.cell(_br2,_bc).font = BL; _bfix += 1
+    if _bfix: print('[v477 갱신담보색] 최종 확정 %d셀 (재기재로 덮인 것 되돌림)' % _bfix)
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     # ★★★★★v388 (지점장 확정 2026.08.12): 「<b>엑셀은 각각 / 보장분석지·보장진단서는 합산.

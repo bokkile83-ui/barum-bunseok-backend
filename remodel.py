@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v476-clean-20260818 =====
+# ===== BARUM remodel.py v497-excel-20260819 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -372,7 +372,9 @@ def build_report(cmp_, client="고객", base_date="", total=9):
     for i, html in enumerate(report_pages.build(cmp_, client, base_date, total), 1):
         f = os.path.join(tmp, 'p%d.pdf' % i)
         HTML(string=html, base_url=_base).write_pdf(f)
-        ims = convert_from_path(f, dpi=200)   # ★v464 제72조 — 110dpi는 흐렸다(지점장 지적). 200으로 올린다.
+        # ★★★★★v483 제93조 (지점장 2026.08.19 「출력하면 희미해서 보기가 싫다 · 진하게 해줘」)
+        #   200dpi도 인쇄에서 흐렸다 → <b>300dpi</b>. 본문 회색 글자도 함께 진하게(report_pages).
+        ims = convert_from_path(f, dpi=300)
         if len(ims) != 1:                      # ★한 쪽이 넘치면 조용히 넘어가지 않는다
             print('[REPORT_OVERFLOW] %d쪽이 %d장이 됐다' % (i, len(ims)))
         g = os.path.join(tmp, 'p%d.png' % i)
@@ -503,9 +505,41 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     # ★★★★★v422j (지점장 지적 2026.08.15 「엑셀에 전과후가없다」)
     #   계약 단위 <b>전 → 후</b> 표. 담보별 표만 있으면 「어느 보험이 빠지고 무엇이 들어왔나」가 안 보인다.
     band(4, '계약별 전 · 후')
-    for j, h in enumerate(['보험사', '상품명', '전 (기존)', '후 (변경 후)', '상태'], 2):
-        ws.cell(5, j, h).font = B; ws.cell(5, j).fill = SUB
-        ws.cell(5, j).border = BD; ws.cell(5, j).alignment = C
+    # ★v480 제89조 레이아웃 상수 — 이 값이 바뀌면 조문검사가 잡는다(제31조·제90조).
+    # ★★★★★v484 제95조 (지점장 지적 2026.08.19 「한 칸씩 밀린다 그래서 또 2페이지가 된다」)
+    #   인쇄 가능 높이는 769.7pt인데 예산을 <b>770pt로 꽉 채워</b> 잡았다 — 여유가 <b>0</b>이다.
+    #   글꼴 렌더 반올림·프린터 드라이버 차이로 <b>한 줄이 툭 넘어가</b> 페이지가 하나 더 생긴다.
+    #   ⇒ <b>한 줄(15pt) 여유</b>를 둔다. 페이지당 담보가 1개 줄지만 <b>절대 안 넘긴다</b>.
+    #   ★한계값을 예산으로 쓰지 않는다. 예산은 한계보다 한 줄 작아야 한다.
+    # ★★★★★v487 제97조 (지점장 실측 2026.08.19 「한 칸씩 밀린다 · 또 2페이지가 된다」)
+    #   내 로컬 LibreOffice 변환은 3장인데 <b>지점장 화면에서는 6장</b>이었다.
+    #   여유 1줄(15pt)로는 <b>뷰어별 행 높이 반올림</b>을 못 이긴다 — 한 줄이 밀리면
+    #   그 줄과 꼬리가 <b>새 장</b>을 만들어 장수가 두 배가 된다.
+    #   ⇒ 여유를 <b>3줄(45pt)</b>로 넓힌다. 꽉 채우는 것보다 <b>안 넘치는 것</b>이 먼저다.
+    # ★★★★★v489 제97조 (지점장 실측 2026.08.19 「한 칸씩 밀린다 · 또 2페이지가 된다」)
+    #   [실측] 지점장 뷰어에서 <b>6장</b>. 내 LibreOffice 변환은 3장 — <b>뷰어마다 달랐다</b>.
+    #   [원인] 인쇄 가능 높이를 769.7pt로 잡았는데, 뷰어에 따라 <b>머리글·바닥글 여백
+    #     (각 0.2in = 14.4pt)</b>을 본문에서 뺀다 → 실제 <b>740.9pt</b>.
+    #     760pt는 769.7 안에는 들어가지만 <b>740.9는 넘는다</b> → 쪽마다 한 행씩 밀려 장수가 배로.
+    #   [수정] 두 겹으로 막는다 — ㉠머리글·바닥글 여백을 <b>0</b>으로 못박고
+    #     ㉡예산을 <b>735pt</b>로 낮춘다(769.7 대비 <b>2행 여유</b>).
+    #   ★<b>「내 뷰어에서 3장」은 「모든 뷰어에서 3장」이 아니다.</b>
+    _PAGE_PT = 735.0        # A4 인쇄 가능 769.7pt − 안전 여유 34.7pt(약 2행) ★v489
+    _ROW_PT  = 15.0         # 담보 한 줄 기본 높이
+    _FOOT_PT = 29.0         # 페이지 꼬리 = 골드 9pt + 네이비 20pt
+    _SUM_PT_R = 15.0 + 5 * 15.0   # ★v485 요약표(밴드 1행 + 5행) 높이
+    _LAYOUT89 = {'회사': 2, '상품명': (3, 4), '전': 5, '후': 6, '상태': 7}
+    _PROD_W = 43            # ★v482 상품명 칸 표시폭 = C(30) + D(13)
+    # ★★★★★v480 제89조 (지점장 지시 2026.08.18)
+    #   「<b>엑셀 제일 처음 상품명을 한 칸 더 쓰고 상태를 제일 끝에 한 칸 쓰게 한 칸 줄여줘</b>」
+    #   [구] B회사 · C상품명 · D전 · E후 · <b>F+G 상태(2칸 병합)</b>  → 상품명이 좁아 잘렸다
+    #   [신] B회사 · <b>C+D 상품명(2칸)</b> · E전 · F후 · <b>G 상태(1칸)</b>
+    #   ★열 배치를 바꾸면 <b>헤더·데이터·합계 세 곳</b>을 같이 바꾼다(제0조 전수 수정).
+    for j, h in (2, '보험사'), (3, '상품명'), (5, '전 (기존)'), (6, '후 (변경 후)'), (7, '상태'):
+        ws.cell(5, j, h).font = B
+    for j in range(2, 8):
+        ws.cell(5, j).fill = SUB; ws.cell(5, j).border = BD; ws.cell(5, j).alignment = C
+    ws.merge_cells(start_row=5, start_column=3, end_row=5, end_column=4)   # ★상품명 2칸
     _r = 6
     _kk = {(c['company'], c['product']) for c in cmp_['keep']}
     _pk = {(c['company'], c['product']) for c in cmp_['prop']}
@@ -523,25 +557,33 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         #   리모델링에서 <b>새로 들어온 것</b>이 결론이다. 같은 글꼴로 묻히면 안 된다.
         _new = (tag == '신규')
         ws.cell(_r, 2, c['company']).font = (B if _new else N)
-        ws.cell(_r, 3, c['product']).font = (B if _new else N)
-        ws.cell(_r, 4, round(before)).font = N
-        ws.cell(_r, 5, round(after)).font = (G if _new else B)
-        ws.cell(_r, 6, tag).font = fn
-        for cc in (4, 5): ws.cell(_r, cc).number_format = '#,##0"원"'
+        ws.cell(_r, 3, c['product']).font = (B if _new else N)   # ★v480 C+D 2칸
+        ws.cell(_r, 5, round(before)).font = N
+        ws.cell(_r, 6, round(after)).font = (G if _new else B)
+        ws.cell(_r, 7, tag).font = fn                            # ★v480 상태 = 끝 1칸
+        for cc in (5, 6): ws.cell(_r, cc).number_format = '#,##0"원"'
         for cc in range(2, 8):
             ws.cell(_r, cc).border = BD
             if _new: ws.cell(_r, cc).fill = NEWF
-        ws.merge_cells(start_row=_r, start_column=6, end_row=_r, end_column=7)
-        for cc in range(2, 7): ws.cell(_r, cc).alignment = C
+        ws.merge_cells(start_row=_r, start_column=3, end_row=_r, end_column=4)
+        for cc in range(2, 8): ws.cell(_r, cc).alignment = C
         ws.cell(_r, 3).alignment = Alignment('center', 'center', wrap_text=True)  # ★잘림 방지
+        # ★★★★★v482 제92조 (지점장 산출물 실측 2026.08.19) — <b>상품명이 두 줄이면 행도 두 줄이다</b>.
+        #   제91조가 모든 행을 15pt로 못박은 뒤, <b>칸보다 긴 상품명</b>은 wrap_text로 두 줄이 되는데
+        #   행 높이가 15pt에 묶여 <b>아랫줄이 잘렸다</b>(실측 KB `…(24.05)_1형_연만기` 표시폭 63 / 칸 43).
+        #   → 표시폭(한글 2 · 영숫자 1)으로 줄 수를 세어 <b>필요한 만큼 높이를 준다</b>.
+        #   ★높이 예산(제80조)은 실제 행 높이를 읽으므로 이 값이 <b>페이지 계산에 그대로 반영</b>된다.
+        _disp = sum(2 if ord(_ch) > 0x1100 else 1 for _ch in str(c['product'] or ''))
+        _ln = max(1, -(-_disp // _PROD_W))
+        ws.row_dimensions[_r].height = _ROW_PT * _ln
         _r += 1
     ws.cell(_r, 2, '합계').font = B
-    ws.cell(_r, 4, round(cmp_['prem_old'])).font = B
-    ws.cell(_r, 5, round(cmp_['prem_new'])).font = B
-    for cc in (4, 5): ws.cell(_r, cc).number_format = '#,##0"원"'
+    ws.cell(_r, 5, round(cmp_['prem_old'])).font = B                # ★v480
+    ws.cell(_r, 6, round(cmp_['prem_new'])).font = B
+    for cc in (5, 6): ws.cell(_r, cc).number_format = '#,##0"원"'
     for cc in range(2, 8): ws.cell(_r, cc).border = BD; ws.cell(_r, cc).fill = SUB
-    ws.merge_cells(start_row=_r, start_column=6, end_row=_r, end_column=7)
-    for cc in range(2, 7): ws.cell(_r, cc).alignment = C
+    ws.merge_cells(start_row=_r, start_column=3, end_row=_r, end_column=4)
+    for cc in range(2, 8): ws.cell(_r, cc).alignment = C
     _r += 2
 
     # ★v471 — 상단 KPI 6칸은 뺐다. 지점장 「그냥 이거 쓰고 색들만 더 눈에 띄게」(2026.08.17).
@@ -603,9 +645,6 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #   [수정] 개수가 아니라 <b>높이 예산</b>으로 끊는다(제11조 구조 가정 금지).
     #          쪽마다 남은 높이를 실제 행 높이로 재서, 다음 담보행과 꼬리가 안 들어갈 때만 끊는다.
     #          ⇒ 1쪽 24개(종전 그대로) · 2쪽부터 44개. 쪽이 바뀌어도 자동으로 가득 찬다.
-    _PAGE_PT = 770.0        # A4 세로(29.7cm) − 상하 여백 0.5in×2 = 27.16cm = 770pt
-    _ROW_PT  = 15.0         # 담보 한 줄 기본 높이
-    _FOOT_PT = 29.0         # 페이지 꼬리 = 골드 9pt + 네이비 20pt
 
     def _pgpt(_a, _b):
         """_a행부터 _b-1행까지 실제 높이 합(pt). 미지정 행은 기본 15pt."""
@@ -615,8 +654,34 @@ def build_xlsx(cmp_, client='고객', base_date=''):
             _t += float(_h) if _h else _ROW_PT
         return _t
 
+    # ★★★★★v490 제100조 (지점장 지시 2026.08.19 「이 틀은 고정 · 그 안에 내용은 유동성」)
+    #   [실측] 4쪽이 <b>머리 + 빈 행 35개 + 요약 + 꼬리</b>뿐이었다 — 담보가 하나도 없는 쪽.
+    #   [지시] <b>머리·꼬리 틀은 페이지마다 고정</b>이고, 그 사이 <b>담보 수는 유동</b>이다.
+    #   ⇒ 앞쪽을 꽉 채우고 마지막에 남는 것을 버리지 말고, <b>전체를 쪽수로 나눠 고르게</b> 싣는다.
+    #   [계산] 쪽당 담보 예산 = 예산 − 머리(41) − 밴드·헤더(30) − 꼬리(29)
+    #          마지막 쪽은 <b>요약(90) 자리를 빼고</b> 센다.
+    _HEAD_PT2, _BANDHD_PT = 41.0, 30.0
+    _per_cap = int((_PAGE_PT - _HEAD_PT2 - _BANDHD_PT - _FOOT_PT) // _ROW_PT)
+    _n_all   = len(cmp_['all'])
+    _first_cap = int((_PAGE_PT - _pgpt(1, r) - _FOOT_PT) // _ROW_PT)   # 1쪽은 앞 표들이 있다
+    _pages = 1
+    _rest  = _n_all - _first_cap
+    while _rest > 0:
+        _pages += 1
+        _rest  -= _per_cap
+    # 마지막 쪽에 요약이 들어가야 한다 — 안 들어가면 쪽을 하나 더 잡는다
+    _last_used = _n_all - _first_cap - (_pages - 2) * _per_cap if _pages >= 2 else _n_all
+    if _pages >= 2 and (_HEAD_PT2 + _BANDHD_PT + _last_used * _ROW_PT + _SUM_PT_R + _FOOT_PT + _ROW_PT) > _PAGE_PT:
+        _pages += 1
+    # 고르게 나눈다 — 1쪽은 앞 표 때문에 적게, 나머지 쪽은 균등
+    _even = max(1, -(-(_n_all - min(_first_cap, _n_all)) // max(1, _pages - 1))) if _pages > 1 else _n_all
+    _quota = [min(_first_cap, _n_all)] + [_even] * (_pages - 1)
+    print('[v490 균등] 담보 %d개 · %d쪽 · 쪽당 한도 %d/%d → 배분 %s'
+          % (_n_all, _pages, _first_cap, _per_cap, _quota))
+
     _ptop = 1
     _brks = []
+    _qi = 0
     for _one in [None]:
         _pg, _gs = None, None
         _heads = []
@@ -625,11 +690,31 @@ def build_xlsx(cmp_, client='고객', base_date=''):
             # ★v469 — 예전에는 1쪽을 「사망·후유장애」에서 끊었다. 담보 전수를 실으면
             #   1쪽이 담보 9행뿐이라 <b>절반이 빈다</b>(실측). 이제는 높이로만 끊는다.
             _cut = (_pgpt(_ptop, r) + _ROW_PT + _FOOT_PT > _PAGE_PT)
-            if _i and _cut:
+            # ★★★★★v485(폐기) — 구 「요약 자리 예약 컷」. v489 제97조 3항으로 대체됐다.
+            #   [실측] 담보표가 3쪽 640pt에서 끝났는데 요약표(90) + 꼬리(29)가 안 들어가
+            #   <b>4쪽이 생기고 3쪽은 83%</b>가 됐다. 요약 한 덩어리 때문에 쪽이 하나 더 났다.
+            #   → <b>마지막 쪽이 될 구간에서는 요약 자리를 미리 예약</b>한다.
+            #     남은 담보가 이 쪽에 다 들어가지만 요약이 안 들어가면 <b>지금 끊는다</b>.
+            # ★★★★★v489 폐기 — 「마지막 쪽이면 요약 자리를 미리 예약하고 없으면 끊는다」는
+            #   <b>끊어도 다음 쪽에서 같은 상황이 반복</b>돼 7행짜리 쪽을 연달아 만들었다(실측 7장).
+            #   ⇒ <b>담보는 높이로만 끊는다.</b> 요약이 안 들어가면 <b>요약만</b> 다음 쪽으로 보낸다(아래).
+            # ★★★★★v489 — <b>요약 예약 컷은 새 쪽 첫 담보에서는 발동하지 않는다</b>.
+            #   `_islast and not _sumfit`이 매 담보마다 다시 참이 되어 <b>끊고 또 끊었다</b>
+            #   (실측: 7행짜리 쪽이 3개 연속 · 총 7장). <b>_cnt(이 쪽에 그린 담보 수)</b>가 0이면 안 끊는다.
+            _qcut = (_qi < len(_quota) and _cnt >= _quota[_qi])   # ★v490 균등 배분
+            if _i and _cnt and (_cut or _qcut):
                 if _gs is not None and r - 1 > _gs:        # 병합이 페이지를 넘지 않게 끊는다
                     ws.merge_cells(start_row=_gs, start_column=2, end_row=r - 1, end_column=2)
                 _gs, _pg = None, None
                 _first, _cnt = False, 0
+                _qi += 1                                   # ★v490 다음 쪽 몫으로
+                # ★★★★★v491 제101조 (지점장 지시 2026.08.19 「계약리스트가 유동성이라 괜찮다.
+                #   <b>위아래 틀만 고정하라</b>」) — 꼬리가 담보 끝에 바로 붙어 <b>페이지 중간에 떴다</b>
+                #   (실측 2·3쪽 65.6% → 꼬리가 2/3 지점). 머리는 늘 맨 위인데 꼬리만 떠다녔다.
+                #   ⇒ 남은 높이만큼 빈 행을 넣어 <b>꼬리를 페이지 맨 아래에 고정</b>한다.
+                #     제87조(요약 바닥 정렬)를 <b>모든 쪽의 꼬리</b>로 넓힌 것이다.
+                _fpad = int((_PAGE_PT - _pgpt(_ptop, r) - _FOOT_PT) // _ROW_PT)
+                if _fpad > 0: r += _fpad
                 r = _pfoot(r)                                  # 앞쪽 꼬리
                 _brks.append(r - 1)
                 _ptop = r                                      # ★v473 새 쪽의 첫 행
@@ -679,6 +764,42 @@ def build_xlsx(cmp_, client='고객', base_date=''):
             ws.cell(_h, c).border = Border(left=thin, right=thin, top=med, bottom=thin)
     for _b in _brks:
         ws.row_breaks.append(Break(id=_b))
+    # ★★★★★v478 제87조 — <b>요약(하단표)은 페이지 바닥에 붙인다</b>(지점장 지시 2026.08.18
+    #   「계속 어중간하게 넘어간다 · 다 붙일순없어? · 위·아래 제목이랑 하단표도 넣어주고」).
+    #   [실측 서은옥] 3쪽 87% — 담보표가 134행에서 끝나고 요약표가 그 바로 밑에 붙어
+    #   <b>페이지 아래가 붕 떴다</b>. 표는 위에 몰리고 여백이 아래에 남아 어중간해 보인다.
+    #   → 남은 높이만큼 <b>빈 행으로 밀어</b> 요약표 + 꼬리가 페이지 <b>바닥에 딱 붙게</b> 한다.
+    #   요약표 = 밴드 15pt + 5행 75pt = 90pt · 꼬리 29pt → 바닥에서 119pt를 확보한다.
+    _SUM_PT = 15.0 + 5 * _ROW_PT
+    # ★★★★★v489 — 요약이 이 쪽에 안 들어가면 <b>요약만</b> 다음 쪽으로 보낸다.
+    #   담보를 끊어서 자리를 만들지 않는다(그러면 7행짜리 쪽이 연달아 생긴다).
+    if _pgpt(_ptop, r + 1) + _SUM_PT + _FOOT_PT + _ROW_PT > _PAGE_PT:
+        r = _pfoot(r)
+        ws.row_breaks.append(Break(id=r - 1))   # ★즉시 적용 — _brks 루프(730행)는 이미 지나갔다
+        _ptop = r
+        r = _phead(r)
+        print('[v489 요약] 자리가 없어 요약을 다음 쪽으로 넘긴다')
+    _used_now = _pgpt(_ptop, r + 1)
+    #   ★꼬리는 `max_row + 2`부터라 요약표와 꼬리 사이에 <b>빈 행 1개</b>가 더 들어간다 —
+    #     그 15pt까지 빼야 페이지를 넘지 않는다(v478 1차 실측 775pt = 101% 초과).
+    #   ★v484 제95조 — 마지막 쪽도 <b>한 줄 여유</b>를 남긴다(`_ROW_PT` 하나 더).
+    _need = _PAGE_PT - _SUM_PT - _FOOT_PT - _ROW_PT * 2 - _used_now
+    # ★★★★★v484 제95조 — <b>요약이 안 들어가면 페이지를 넘긴다</b>.
+    #   담보 루프의 끊기(cut)는 <b>마지막 쪽에서는 일어나지 않는다</b> — 담보가 남으면 계속 쌓이고
+    #   그 뒤에 요약(90pt)+꼬리(29pt)가 붙어 <b>마지막 쪽만 예산을 넘긴다</b>(실측 760pt).
+    #   ⇒ 자리가 모자라면 꼬리를 찍고 새 쪽을 열어 요약을 얹는다. <b>쪽이 하나 늘어도 안 넘긴다.</b>
+    if _need < 0:
+        r = _pfoot(r)
+        ws.row_breaks.append(Break(id=r - 1))   # ★즉시 적용 — _brks 루프는 이미 지나갔다
+        _ptop = r
+        r = _phead(r)
+        _used_now = _pgpt(_ptop, r + 1)
+        _need = _PAGE_PT - _SUM_PT - _FOOT_PT - _ROW_PT * 2 - _used_now
+        print('[v484 하단표] 요약 자리가 모자라 새 쪽으로 넘겼다')
+    if _need >= _ROW_PT:                       # 한 줄 이상 남을 때만 민다
+        _pad = int(_need // _ROW_PT)
+        r += _pad
+        print('[v478 하단표] 요약 %d행 아래로 밀어 페이지 바닥 정렬(남은 %.0fpt)' % (_pad, _need))
     band(r + 1, '요약')
     for i, (k, v) in enumerate([('보장 증가 항목', len(cmp_['up'])), ('신규 추가 특약', len(cmp_['add'])),
                                 ('보장 감소 항목', len(cmp_['down'])), ('삭제 특약', len(cmp_['delete'])),
@@ -693,15 +814,32 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     # ★★★★★v422o — A4 인쇄 설정 (지점장 지적 2026.08.15 「A4에 넘친다」)
     #   엑셀은 기본이 「인쇄 설정 없음」이다. 그대로 인쇄하면 폭이 잘려 두 장으로 흩어진다.
     #   폭은 <b>무조건 한 장</b>(fitToWidth=1), 세로는 자연히 넘기게 둔다(fitToHeight=0).
+    # ★★★★★v481 제91조 (지점장 지적 2026.08.18 「페이지 뒤에 2줄 나온다 · 딱 떨어지게」)
+    #   [원인] 높이 예산(제80조)은 미지정 행을 <b>15pt로 가정</b>해 계산했는데, 엑셀은 높이를
+    #   지정하지 않은 행을 <b>폰트 기준으로 자동 계산</b>한다(맑은 고딕 9pt ≈ 15.75pt).
+    #   실측 — 138행이 미지정. 15.75pt면 1쪽 50행이 <b>794pt</b>가 되어 769.7pt를 넘고
+    #   <b>1~2줄이 다음 장으로 밀린다</b>. 내 계산은 760pt였다 — <b>가정과 실제가 달랐다</b>.
+    #   [수정] <b>모든 행에 높이를 명시</b>한다. 계산에 쓴 값과 파일에 박힌 값을 같게 만든다.
+    #   ★가정으로 계산했으면 그 가정을 <b>파일에 못박아</b> 실제와 일치시킨다.
     _fr = ws.max_row + 2
     for c in range(1, 8):
         ws.cell(_fr, c).fill = GOLDF                   # 하단 골드 포인트 줄
     ws.row_dimensions[_fr].height = 9
     for c in range(1, 8):
         ws.cell(_fr + 1, c).fill = HDR                 # 하단 네이비 바
-    ws.cell(_fr + 1, 1, '  MAKEONE  보장분석 자동화').font = Font(bold=True, size=9, color='FFE6C878', name='맑은 고딕')
+    # ★v478 제87조 — 마지막 페이지 꼬리만 <b>A열</b>에 써서 글자가 안 보였다(A열 폭 1.6).
+    #   다른 페이지 꼬리(`_pfoot`)와 <b>같은 B열</b>로 맞춘다.
+    ws.cell(_fr + 1, 2, 'MAKEONE  보장분석 자동화').font = Font(bold=True, size=9, color='FFE6C878', name='맑은 고딕')
     ws.cell(_fr + 1, 7, f'{client} 고객님').font = Font(size=9, color='FFFFFFFF', name='맑은 고딕')
     ws.cell(_fr + 1, 7).alignment = Alignment('right', 'center')
+
+    ws.sheet_format.defaultRowHeight = _ROW_PT
+    _hfix = 0
+    for _hr in range(1, ws.max_row + 1):
+        if ws.row_dimensions[_hr].height is None:
+            ws.row_dimensions[_hr].height = _ROW_PT; _hfix += 1
+    print('[v481 행높이] 미지정 %d행에 %.0fpt 명시 — 계산과 실제를 일치시킨다' % (_hfix, _ROW_PT))
+
     ws.row_dimensions[_fr + 1].height = 20
 
     # ★병합·값 설정 뒤 A열 fill이 날아간다(실측 2026.08.15) → 마지막에 다시 칠한다
@@ -720,7 +858,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     ws.sheet_properties.pageSetUpPr.fitToPage = True
     ws.page_margins.left = ws.page_margins.right = 0.4
     ws.page_margins.top = ws.page_margins.bottom = 0.5
-    ws.page_margins.header = ws.page_margins.footer = 0.2
+    ws.page_margins.header = ws.page_margins.footer = 0    # ★v489 제97조 — 본문을 깎지 않게 0
     ws.print_options.horizontalCentered = True
     ws.print_area = 'A1:G%d' % ws.max_row
     ws.oddFooter.center.text = '&P / &N'

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """★★★★★ report_pages.py — 리모델링 리포트 7쪽 (지점장 시안 정본 2026.08.15)
-# 각인: v476-clean-20260818
+# 각인: v497-excel-20260819
 
    지점장이 시안(HTML)을 7장 다 주셨다. <b>흉내내지 않고 그 시안을 렌더한다.</b>
    ㆍ값은 전부 엑셀에서 온다 — 하드코딩 0건(뮤테이션 테스트 실패 0건으로 확인)
@@ -17,32 +17,32 @@ import io
 CSS1 = """
 @page{size:A4 portrait;margin:0}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:#1c2430}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:#1c2430;font-weight:600}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
 .tbar{position:absolute;left:0;top:0;width:210mm;height:14mm;background:#0b2340}
-.tgold{position:absolute;left:0;top:14mm;width:210mm;height:2.4mm;background:#b08d38}
+.tgold{position:absolute;left:0;top:14mm;width:210mm;height:2.4mm;background:#7e6528}
 .fbar{position:absolute;left:0;bottom:0;width:210mm;height:6mm;background:#0b2340}
-.body{position:absolute;left:16mm;right:16mm;top:30mm}
+.body{position:absolute;left:16mm;right:16mm;top:30mm;font-weight:600}
 .brand{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:13pt;font-weight:800;color:#0b2340;letter-spacing:.18em}
-.bln{width:24mm;height:1.6mm;background:#b08d38;margin-top:3mm}
+.bln{width:24mm;height:1.6mm;background:#7e6528;margin-top:3mm}
 .mark{position:absolute;right:0;top:14mm;font-size:44pt;font-weight:900;color:#f2f4f7;letter-spacing:.06em}
-.eyebrow{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:26mm;font-size:9.5pt;font-weight:800;color:#8a6c22;letter-spacing:.28em}
+.eyebrow{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:26mm;font-size:9.5pt;font-weight:800;color:#524014;letter-spacing:.28em}
 .title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:4mm;font-size:44pt;font-weight:900;color:#0b2340;line-height:1.14;letter-spacing:-.03em}
-.rule{width:34mm;height:1.8mm;background:#b08d38;margin-top:7mm}
+.rule{width:34mm;height:1.8mm;background:#7e6528;margin-top:7mm}
 .sub{margin-top:5mm;font-size:11pt;font-weight:700;color:#0b2340}
 .namebox{margin-top:11mm;background:#f4f7fb;border-left:1.4mm solid #0b2340;padding:7mm 8mm;
 display:flex;align-items:baseline;gap:6mm}
 .namebox .nm{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:40pt;font-weight:900;color:#0b2340}
-.namebox .sfx{font-size:13pt;font-weight:800;color:#8a6c22}
+.namebox .sfx{font-size:13pt;font-weight:800;color:#524014}
 .stats{display:flex;gap:5mm;margin-top:9mm}
-.stat{flex:1;border-top:1.4mm solid #b08d38;border-left:.38mm solid #9fb0c2;
-border-right:.38mm solid #9fb0c2;border-bottom:.38mm solid #9fb0c2;padding:4mm 5mm 5mm}
+.stat{flex:1;border-top:1.4mm solid #7e6528;border-left:.38mm solid #626d78;
+border-right:.38mm solid #626d78;border-bottom:.38mm solid #626d78;padding:4mm 5mm 5mm}
 .stat .k{font-size:8.5pt;font-weight:800;color:#1e2a38}
 .stat .v{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3mm;font-size:20pt;font-weight:900;color:#06203f}
-.inbox{margin-top:9mm;border:.38mm solid #9fb0c2;padding:5mm 6mm}
-.inbox .t{font-size:8.5pt;font-weight:900;color:#8a6c22}
+.inbox{margin-top:9mm;border:.38mm solid #626d78;padding:5mm 6mm}
+.inbox .t{font-size:8.5pt;font-weight:900;color:#524014}
 .inbox .l{margin-top:3mm;font-size:10.5pt;font-weight:800;color:#0b2340;line-height:1.8}
-.hr{margin-top:12mm;border-top:.2mm solid #d9dee6}
+.hr{margin-top:12mm;border-top:.2mm solid #686b6e}
 .foot{margin-top:4mm;text-align:center;font-size:9.5pt;font-weight:800;color:#0b2340}
 """
 
@@ -83,11 +83,11 @@ def p1(client='고객', base_date='', pg=1, totpg=7, cmp_=None):
 
 CSS2 = """
 @page{size:A4 portrait;margin:0}
-:root{--navy:#082d59;--navy2:#123f75;--gold:#c88d20;--gold2:#e6b74d;--green:#14945e;
---softBlue:#f4f8fd;--softGreen:#f1faf5;--line:#b3c0cf;--text:#132b48;--muted:#455363}
+:root{--navy:#082d59;--navy2:#123f75;--gold:#8c6216;--gold2:#a18035;--green:#14945e;
+--softBlue:#f4f8fd;--softGreen:#f1faf5;--line:#5c636b;--text:#132b48;--muted:#455363}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
-.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
+.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}   /* ★v487 제98조 원복 */
 .top-curve{display:none}
 
 .header{position:relative;z-index:2;padding:8.4mm 10.4mm 4.4mm;display:flex;justify-content:space-between}
@@ -98,23 +98,23 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .client{display:none}
 .client strong{font-size:12pt;display:block;margin-bottom:1.6mm}
 .client span{display:block;font-size:8.4pt;margin-top:1mm;color:#455363}
-.client .step{color:#ffcf5c;font-weight:800;margin-top:2mm}
-.content{padding:0 10mm 17mm}
-.summary-card{margin-top:1.6mm;border:.5pt solid #9fb0c2;border-radius:3.2mm;padding:5.2mm 6mm;
+.client .step{color:#80672e;font-weight:800;margin-top:2mm}
+.content{padding:0 10mm 17mm}   /* ★v487 제98조 원복 */
+.summary-card{margin-top:1.6mm;border:.5pt solid #626d78;border-radius:3.2mm;padding:5.2mm 6mm;
 display:flex}
 .summary-col{flex:1;min-height:34mm;padding:2.4mm 5mm}
-.summary-col:first-child{border-right:.4pt solid #d7dde5}
+.summary-col:first-child{border-right:.4pt solid #676a6e}
 .summary-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:#06203f;font-size:14pt;font-weight:900}
 .summary-sub{margin-top:2.8mm;font-size:9.5pt;color:#1e2a38}
-.big-gold{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#95690a;font-size:34pt;font-weight:900}
+.big-gold{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#593f06;font-size:34pt;font-weight:900}
 .big-navy{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.6mm;color:#06203f;font-size:32pt;font-weight:900}
 .summary-note{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3.8mm;font-size:12pt;font-weight:900;color:#06203f}
 .summary-gold{margin-top:4.8mm;color:var(--gold);font-size:11.5pt;font-weight:900}
-.section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:6.8mm 4mm 3.4mm;color:#06203f;font-size:15pt;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
+.section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:6.8mm 4mm 3.4mm;color:#06203f;font-size:15pt;font-weight:900;border-left:1.6mm solid #7e6528;padding-left:3mm}
 .compare{display:flex;gap:2.4mm;align-items:center;padding:0 4mm}
 .premium-card{flex:1;min-height:30mm;padding:3.2mm 4.4mm;border-radius:2.6mm}
-.premium-card.before{background:var(--softBlue);border:.4pt solid #b8cce3}
-.premium-card.after{background:var(--softGreen);border:.4pt solid #acd4ba}
+.premium-card.before{background:var(--softBlue);border:.4pt solid #66727f}
+.premium-card.after{background:var(--softGreen);border:.4pt solid #607668}
 .premium-card b{display:block;font-size:10pt;margin-bottom:2.4mm}
 .premium-card.after b{color:var(--green)}
 .insurers{font-size:8.4pt;color:#1e2a38}
@@ -122,14 +122,14 @@ display:flex}
 .after .premium-number{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--green)}
 .arrow{width:11mm;flex:none;text-align:center;color:var(--gold);font-size:22pt}
 .contract-head{display:flex;justify-content:space-between;align-items:flex-end;margin:5.4mm 4mm 2mm}
-.contract-head h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0;font-size:15pt;color:#06203f;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
+.contract-head h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0;font-size:15pt;color:#06203f;font-weight:900;border-left:1.6mm solid #7e6528;padding-left:3mm}
 .contract-head span{font-size:8.5pt;color:#1e2a38;font-weight:700}
 .report-table{width:calc(100% - 8mm);margin:0 4mm;border-collapse:collapse;font-size:8.5pt}
-.report-table th{padding:2.2mm 1.8mm;text-align:left;color:#b57a12;border-bottom:.4pt solid #d8dde4}
-.report-table td{padding:2.2mm 1.8mm;border-bottom:.4pt solid #c8d2dd}
+.report-table th{padding:2.2mm 1.8mm;text-align:left;color:#6c490a;border-bottom:.4pt solid #686a6d}
+.report-table td{padding:2.2mm 1.8mm;border-bottom:.4pt solid #70757b}
 .report-table tbody tr:nth-child(odd) td{background:#eef3f9}
 .report-table tbody tr.new td{background:#d7f0e2;font-weight:800}
-.report-table tbody tr.del td{background:#fbdedb;font-weight:800}
+.report-table tbody tr.del td{background:#9b8987;font-weight:800}
 .report-table th:nth-child(3),.report-table th:nth-child(4),
 .report-table td:nth-child(3),.report-table td:nth-child(4){text-align:right}
 .report-table td:nth-child(3){color:#1e2a38}
@@ -139,7 +139,7 @@ display:flex}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;
 background:linear-gradient(90deg,#082d59,#123f75);color:#fff;display:flex;align-items:center;
 justify-content:space-between;padding:0 10mm;font-size:8.5pt}
-.footer strong{color:#ffcb57;font-size:9.5pt}
+.footer strong{color:#80662b;font-size:9.5pt}
 """
 
 
@@ -223,11 +223,11 @@ def p2(cmp_, client='고객', base_date='', pg=2, totpg=7):
 
 CSS3 = """
 @page{size:A4;margin:0}
-:root{--navy:#0b2d58;--navy2:#123f79;--gold:#c79532;--gold-light:#e7c274;--green:#159263;
---red:#cc5656;--text:#17273c;--gray:#1e2a38;--line:#e5e9ef;--soft:#f5f8fb}
+:root{--navy:#0b2d58;--navy2:#123f79;--gold:#8b6823;--gold-light:#8f7847;--green:#159263;
+--red:#cc5656;--text:#17273c;--gray:#1e2a38;--line:#76787b;--soft:#f5f8fb}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
-.report{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
+.report{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column}   /* ★v479 제88조 */
 .top-shape{display:none}
 
 .header{position:relative;z-index:2;display:flex;justify-content:space-between;
@@ -236,13 +236,13 @@ align-items:flex-start;padding:6mm 13mm 2mm}
 h1{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:1.5mm 0 2mm;color:#06203f;font-size:23pt;font-weight:900;line-height:1.18;letter-spacing:-.04em}
 .gold-line{display:flex;gap:1.5mm}
 .gold-line span:first-child{width:23mm;height:1.8mm;background:var(--gold);border-radius:5mm}
-.gold-line span:last-child{width:12mm;height:1.8mm;background:#edd9b2;border-radius:5mm}
+.gold-line span:last-child{width:12mm;height:1.8mm;background:#92866e;border-radius:5mm}
 .customer{display:none}
 .customer strong{display:block;font-size:13.5pt;margin-bottom:2mm}
 .customer span{display:block;margin-top:1.2mm;font-size:8.5pt}
-.customer .step{color:#ffd478;font-weight:800;margin-top:2.5mm}
-.content{padding:1mm 13mm 19mm}
-.panel{border:.9pt solid #d7e2ef;background:#fff;border-radius:4mm;margin-bottom:2.8mm;overflow:hidden;box-shadow:0 .6mm 1.4mm rgba(11,45,89,.10)}
+.customer .step{color:#806a3c;font-weight:800;margin-top:2.5mm}
+.content{padding:1mm 13mm 19mm;flex:1;display:flex;flex-direction:column;justify-content:space-between}   /* ★v479 제88조 */
+.panel{border:.9pt solid #676d73;background:#fff;border-radius:4mm;margin-bottom:2.8mm;overflow:hidden;box-shadow:0 .6mm 1.4mm rgba(11,45,89,.10)}
 .panel-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:inline-block;padding:2.6mm 6mm;
 border-radius:0 0 3mm 0;color:#fff;background:linear-gradient(90deg,var(--navy),var(--navy2));
 font-size:13pt;font-weight:900}
@@ -250,27 +250,27 @@ font-size:13pt;font-weight:900}
 border-radius:50%;color:var(--navy);background:#fff;font-size:8.5pt;font-weight:900;margin-right:1.5mm}
 .table-wrap{padding:.6mm 5mm 1.4mm}
 table{width:100%;border-collapse:collapse;font-size:10pt}
-th,td{padding:.5mm 3mm;border-bottom:.4pt solid #edf0f4;text-align:right}
-th{color:#96671e;background:#fffaf2;font-weight:800;font-size:9pt}
+th,td{padding:.5mm 3mm;border-bottom:.4pt solid #727375;text-align:right}
+th{color:#5a3d12;background:#fffaf2;font-weight:800;font-size:9pt}
 th:first-child,td:first-child{text-align:left}
 tbody tr:last-child td{border-bottom:0}
 .old{color:#1e2a38}
 .new{color:var(--navy);font-weight:800}
-.diff{color:var(--green);font-weight:800}.diff.up{color:#0b6559}.diff.down{color:#c0392b}.diff.same{color:#5b6b7d}
+.diff{color:var(--green);font-weight:800}.diff.up{color:#0b6559}.diff.down{color:#732219}.diff.same{color:#36404b}
 .circle-icon{display:inline-block;width:7mm;height:7mm;line-height:7mm;text-align:center;
 margin-right:2mm;border-radius:50%;background:#fff6e7;color:var(--gold);font-size:9pt;font-weight:900}
 .chart{padding:1.6mm 7mm 2mm}
-.legend{text-align:right;margin-bottom:1mm;color:#738095;font-size:8.5pt}
+.legend{text-align:right;margin-bottom:1mm;color:#454c59;font-size:8.5pt}
 .legend span{margin-left:4mm}
 .legend i{display:inline-block;width:3mm;height:3mm;margin-right:1.2mm}
-.legend .gray{background:#b3c0cf}
+.legend .gray{background:#6e7780}
 .legend .navy{background:var(--navy)}
 .bar-row{display:flex;align-items:center;gap:4mm;margin:0.5mm 0}
 .bar-label{width:42mm;font-weight:700;font-size:9.5pt;flex:none}
 .bar-group{flex:1}
 .bar-line{display:flex;align-items:center;gap:2mm;height:3.4mm}
 .bar{height:3.4mm;min-width:.5mm}
-.bar-before{background:#b3c0cf}
+.bar-before{background:#6e7780}
 .bar-after{background:linear-gradient(90deg,#0b2d58,#154579)}
 .value{font-size:8.5pt;color:#1e2a38;white-space:nowrap}
 .value.after{color:var(--navy);font-weight:800}
@@ -279,10 +279,10 @@ margin-right:2mm;border-radius:50%;background:#fff6e7;color:var(--gold);font-siz
 .premium-row{display:flex;align-items:center;gap:3mm;margin:1.6mm 0}
 .premium-row b{width:22mm;font-size:11pt;flex:none}
 .premium-barwrap{flex:1}
-.premium-bar{height:7mm;background:#b3c0cf}
+.premium-bar{height:7mm;background:#6e7780}
 .premium-bar.after{background:linear-gradient(90deg,#0b2d58,#164679)}
 .premium-value{width:26mm;text-align:right;font-weight:800;font-size:10.5pt;flex:none}
-.increase-box{width:40mm;flex:none;text-align:center;border:.4pt solid #b3c0cf;border-radius:4mm;
+.increase-box{width:40mm;flex:none;text-align:center;border:.4pt solid #646b73;border-radius:4mm;
 padding:4mm 2mm;background:linear-gradient(180deg,#f6fbff,#fff)}
 .arrow{display:none}
 .increase-box strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:block;margin-top:2mm;color:var(--gold);font-size:19pt}
@@ -294,12 +294,12 @@ padding:4mm 2mm;background:linear-gradient(180deg,#f6fbff,#fff)}
 .change-barwrap{flex:1}
 .change-bar{height:4mm;background:var(--navy);min-width:.4mm}
 .change-bar.green{background:var(--green)}
-.change-bar.gray{background:#d8dee5}
+.change-bar.gray{background:#85898d}
 .change-num{width:12mm;font-size:9pt;font-weight:700;flex:none}
 .summary{width:56mm;flex:none;text-align:center;padding:2mm 4mm;border-radius:7mm;
-border:.4pt solid #d9dfe7;background:radial-gradient(circle at 50% 10%,#fff,#f3f7fb)}
+border:.4pt solid #686b6f;background:radial-gradient(circle at 50% 10%,#fff,#f3f7fb)}
 .shield{width:7mm;height:8.4mm;margin:0 auto .6mm;position:relative;
-background:linear-gradient(180deg,#deb354,#96670d);
+background:linear-gradient(180deg,#896e34,#96670d);
 clip-path:polygon(50% 0,92% 18%,82% 70%,50% 100%,18% 70%,8% 18%)}
 .shield span{position:absolute;left:0;right:0;top:1.4mm;color:#fff;font-size:10pt;font-weight:900}
 .summary-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--navy);font-size:11.5pt;font-weight:800}
@@ -308,7 +308,7 @@ clip-path:polygon(50% 0,92% 18%,82% 70%,50% 100%,18% 70%,8% 18%)}
 .footer{position:absolute;left:0;right:0;bottom:0;height:14mm;padding:0 13mm;display:flex;
 align-items:center;justify-content:space-between;
 background:linear-gradient(90deg,#092b55,#154477);color:#fff;font-size:9pt}
-.footer strong{color:#ffd26f}
+.footer strong{color:#806937}
 """
 
 ICONS3 = ['♥', '◈', '✚', '▦', '✥', '▣', '◆', '●']
@@ -430,10 +430,10 @@ def p3(cmp_, client='고객', base_date='', pg=3, totpg=7):
 
 CSS4 = """
 @page{size:A4 portrait;margin:0}
-:root{--navy:#082d59;--navy2:#123f75;--deepGreen:#0e4b3e;--green:#15865f;--gold:#c6912c;
---goldSoft:#f7f0dc;--red:#bf3434;--line:#dfe5eb;--soft:#f4f7fb;--text:#142c49;--muted:#1e2a38}
+:root{--navy:#082d59;--navy2:#123f75;--deepGreen:#0e4b3e;--green:#15865f;--gold:#8a651e;
+--goldSoft:#f7f0dc;--red:#bf3434;--line:#737679;--soft:#f4f7fb;--text:#142c49;--muted:#1e2a38}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .page{width:210mm;height:297mm;position:relative;background:#fff;overflow:hidden}
 .top-curve{display:none}
 
@@ -445,13 +445,13 @@ justify-content:space-between;align-items:flex-start}
 .client{display:none}
 .client strong{display:block;font-size:12pt;margin-bottom:1.6mm}
 .client span{display:block;font-size:8.4pt;margin-top:1mm}
-.client .page-step{margin-top:2mm;color:#ffc84d;font-weight:800}
+.client .page-step{margin-top:2mm;color:#806426;font-weight:800}
 .title-line{margin:0 10mm;height:.9mm;background:linear-gradient(90deg,var(--gold) 0 23%,var(--navy) 23%)}
 .content{padding:2.4mm 10mm 18mm}
 .section-header{display:flex;align-items:center;gap:3.2mm;padding-bottom:2.4mm;
 border-bottom:.5mm solid var(--navy)}
 .section-header h2{margin:0;color:var(--navy);font-size:13pt}
-.section-header span{color:#a97821;font-size:8pt;font-weight:800}
+.section-header span{color:#654813;font-size:8pt;font-weight:800}
 .coverage-grid{display:flex;gap:3.6mm;margin-top:2.6mm}
 .coverage-panel{flex:1}
 .coverage-panel h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0 0 1.6mm;font-size:15pt;font-weight:900}
@@ -462,34 +462,34 @@ border-bottom:.5mm solid var(--navy)}
 .coverage-table th{padding:1.4mm 1mm;color:#fff;text-align:center;background:var(--deepGreen);
 border-right:.2mm solid rgba(255,255,255,.15)}
 .coverage-table th:last-child{background:#927224}
-.coverage-table td{padding:1mm 1mm;border-bottom:.2mm solid #e1e6eb;text-align:center;
+.coverage-table td{padding:1mm 1mm;border-bottom:.2mm solid #6c6e71;text-align:center;
 vertical-align:middle}
 .coverage-table td:first-child{text-align:left}
 .group-row td{background:#edf1f5;color:#183a4f;font-size:8.5pt;font-weight:900;
 text-align:left;padding:1.1mm}
-.highlight td{background:#fffaf0;border-top:.5mm solid #d3a13b;border-bottom:.5mm solid #d3a13b}
+.highlight td{background:#fffaf0;border-top:.5mm solid #97732a;border-bottom:.5mm solid #97732a}
 .code-name{display:block;font-weight:800;color:#20384c}
 .code-number{display:block;margin-top:.6mm;color:#1e2a38}
-.amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #d5dde5;
+.amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
 border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
-border:.5mm solid #cfd5db;background:#fff}
+border:.5mm solid #73777a;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
 .hold{display:inline-block;margin-right:1mm;padding:.4mm 1mm;border-radius:4mm;
-background:#d5a239;color:#fff;font-size:6.8pt;font-weight:900}
-.legend{margin:2mm 0 0;font-size:8pt;color:#7c8794}
+background:#997429;color:#fff;font-size:6.8pt;font-weight:900}
+.legend{margin:2mm 0 0;font-size:8pt;color:#4a5158}
 .legend .circle{display:inline-block;width:2.6mm;height:2.6mm;border-radius:50%;
-margin-right:.8mm;border:.5mm solid #cfd5db}
+margin-right:.8mm;border:.5mm solid #73777a}
 .legend .circle.on{background:var(--green);border-color:var(--green)}
-.legend strong{color:#b67c19}
+.legend strong{color:#6d4a0f}
 .opinion{margin-top:4mm}
 .opinion-title{font-size:10.5pt;font-weight:900;color:var(--navy);padding-bottom:1.6mm;
 border-bottom:.5mm solid var(--gold)}
-.opinion-box{margin-top:2mm;height:24mm;border:.38mm solid #9fb0c2;border-radius:1.8mm}
+.opinion-box{margin-top:2mm;height:24mm;border:.38mm solid #626d78;border-radius:1.8mm}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;
 background:linear-gradient(90deg,#082d59,#123f75);color:#fff;padding:0 10mm;display:flex;
 align-items:center;justify-content:space-between;font-size:8.5pt}
-.footer strong{color:#ffcb57;font-size:9.5pt}
+.footer strong{color:#80662b;font-size:9.5pt}
 """
 
 # (구분, 질병명, 코드, 엑셀 담보명, 순환계, 산정특례)  ※순환계·산정특례는 제도라 고정
@@ -569,7 +569,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
             '<article class="page"><div class="top-curve"></div>'
             '<header class="header"><div>'
             '<div class="brand">MAKEONE · 리모델링 리포트</div>'
-            '<h1>%s <span style="color:#a4731e">고객님</span> 리모델링 리포트</h1></div>'
+            '<h1>%s <span style="color:#624512">고객님</span> 리모델링 리포트</h1></div>'
             '<div class="client"><strong>%s 고객님</strong>'
             '<span>제안 기준일 %s</span>'
             '<span class="page-step">04 담보별 보장범위</span></div></header>'
@@ -600,11 +600,11 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
 
 CSS5 = """
 @page{size:A4 portrait;margin:0}
-:root{--navy:#082d59;--navy2:#123f75;--gold:#c78d22;--gold2:#e8bd61;--green:#0f785e;
---green2:#138c68;--red:#d53b31;--blue:#1686c9;--gray:#5b6b7d;--line:#dce4ec;--soft:#f8fafc;
+:root{--navy:#082d59;--navy2:#123f75;--gold:#8b6217;--gold2:#745f30;--green:#0f785e;
+--green2:#138c68;--red:#d53b31;--blue:#1686c9;--gray:#5b6b7d;--line:#717679;--soft:#f8fafc;
 --text:#132c49}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
 .top-curve{display:none}
 
@@ -622,10 +622,10 @@ font-weight:900;white-space:nowrap}
 .content{padding:2mm 9.6mm 15mm}
 .columns{display:flex;gap:5mm}
 .column{flex:1;min-width:0}
-.big-card{border:.2mm solid #bcd8c9;border-radius:2.4mm;overflow:hidden;background:#fff;margin-bottom:1.8mm}
+.big-card{border:.2mm solid #697870;border-radius:2.4mm;overflow:hidden;background:#fff;margin-bottom:1.8mm}
 .big-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;height:9.6mm;display:flex;align-items:center;padding:0 3.2mm;color:#fff;
 font-size:11.5pt;font-weight:900}
-.big-title.cancer{background:linear-gradient(90deg,#b7861c,#d39b17)}
+.big-title.cancer{background:linear-gradient(90deg,#836014,#976f10)}
 .big-title.brain{background:linear-gradient(90deg,#0e7258,#138669)}
 .big-title::before{content:"";width:3.6mm;height:3.6mm;border-radius:50%;background:#fff;margin-right:1.6mm}
 .diagnosis,.brain-table{padding:2mm 1.6mm 2.2mm;background:#f7fcf9}
@@ -643,12 +643,12 @@ color:#fff;font-size:8.4pt;font-weight:900}
 .label{font-size:8pt;font-weight:800;color:#294558}
 .label.blue{color:var(--blue)}
 .value-box{height:6.2mm;display:flex;justify-content:flex-end;align-items:center;
-border:.38mm solid #9fb0c2;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
+border:.38mm solid #626d78;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
 font-weight:900;font-size:11pt}
-.value-box.red{color:#d52f28}
-.value-box.blue{color:#1583c4}
-.unit{font-size:7.6pt;color:#778593}
-.small-card{border:.38mm solid #9fb0c2;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
+.value-box.red{color:#7f1c18}
+.value-box.blue{color:#0c4e75}
+.unit{font-size:7.6pt;color:#474f58}
+.small-card{border:.38mm solid #626d78;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
 .small-card h4{margin:0 0 .6mm;color:#123d42;font-size:9pt}
 .small-card .desc{color:#1e2a38;font-size:7.6pt;line-height:1.35}
 .small-card .special{color:#0d7158;font-size:8pt;font-weight:900;margin-top:.6mm}
@@ -659,7 +659,7 @@ font-weight:900;font-size:11pt}
 .brain-row{display:flex;gap:1.8mm;align-items:center;margin-top:1.2mm}
 .brain-row .st{width:13mm;flex:none}
 .brain-row .lb{width:20mm;flex:none;font-size:8pt;font-weight:800;color:#274958}
-.brain-row .lb.blue{color:#1187ca}
+.brain-row .lb.blue{color:#0a5179}
 .brain-row .vb{flex:1}
 .brain-row .un{width:6mm;flex:none}
 .brain-row.ind .lb{margin-left:14.8mm}
@@ -668,15 +668,15 @@ font-weight:900;font-size:11pt}
 .customer-center .gold{color:var(--gold);font-size:9.5pt;font-weight:900;display:block;margin-top:1mm}
 .customer-center .counter{margin-top:1.4mm;font-size:12pt;font-weight:900}
 .customer-center small{color:#1e2a38;font-size:7.6pt}
-.special-wrap{display:flex;gap:3.6mm;margin-top:1.4mm;padding:1.6mm;border:.5mm solid #dfbb5d;
+.special-wrap{display:flex;gap:3.6mm;margin-top:1.4mm;padding:1.6mm;border:.5mm solid #7c6833;
 border-radius:2.4mm;background:#fffcf5}
-.special-card{flex:1;border:.38mm solid #9fb0c2;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
+.special-card{flex:1;border:.38mm solid #626d78;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
 .special-card h4{margin:0 0 .8mm;font-size:10pt;color:var(--navy)}
 .special-card p{margin:0;color:#1e2a38;font-size:7.6pt}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;display:flex;align-items:center;
 justify-content:space-between;padding:0 10mm;color:#fff;
 background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
-.footer strong{color:#ffcb57;font-size:9.5pt}
+.footer strong{color:#80662b;font-size:9.5pt}
 """
 
 
@@ -809,11 +809,11 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
 
 CSS6 = """
 @page{size:A4 portrait;margin:0}
-:root{--navy:#082d59;--navy2:#123f75;--gold:#c78d22;--green:#0b6559;--red:#d9342b;
---line:#dbe3eb;--soft:#f7f9fc;--text:#15334b;--muted:#7d8995}
+:root{--navy:#082d59;--navy2:#123f75;--gold:#8b6217;--green:#0b6559;--red:#d9342b;
+--line:#717579;--soft:#f7f9fc;--text:#15334b;--muted:#5a626b}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
-.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
+.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}   /* ★v487 제98조 */
 .top-curve{display:none}
 
 .header{position:relative;z-index:2;display:flex;justify-content:space-between;padding:8.4mm 10.4mm 3.6mm}
@@ -825,10 +825,10 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .page-number strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:26pt}
 .page-number div{font-size:8.5pt}
 .line{margin:0 10mm;height:.9mm;background:linear-gradient(90deg,var(--gold) 0 24%,var(--navy) 24%)}
-.content{padding:2mm 9.6mm 15mm}
+.content{padding:2mm 9.6mm 15mm}   /* ★v487 제98조 */
 .columns{display:flex;gap:5mm}
 .columns>section{flex:1;min-width:0}
-.panel{border:.38mm solid #9fb0c2;border-radius:2.2mm;margin-bottom:.8mm;overflow:hidden;background:#fff}
+.panel{border:.38mm solid #626d78;border-radius:2.2mm;margin-bottom:.8mm;overflow:hidden;background:#fff}
 .panel-title{padding:1.4mm 3mm;font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;padding:1.8mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;
 font-size:11pt;font-weight:900}
 .panel-title:before{content:"■";margin-right:1.6mm}
@@ -844,7 +844,7 @@ font-size:11pt;font-weight:900}
 /* ★★★★★v465 제72조 2항 (육안검수 실측) — 6쪽 「일반암 14,000만」이 두 줄로 깨졌다.
    진하기를 올리면서 글자가 커져 좁은 칸(2칸 행)을 넘쳤다.
    ★<b>금액 칸은 절대 줄바꿈하지 않는다.</b> 넘치면 글자를 줄여서라도 한 줄로 둔다. */
-.box{height:4.5mm;border:.38mm solid #9fb0c2;border-radius:1.2mm;background:#fff;
+.box{height:4.5mm;border:.38mm solid #626d78;border-radius:1.2mm;background:#fff;
 display:flex;align-items:center;justify-content:flex-end;padding:0 1.4mm;font-weight:900;
 color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
 .row.two .box{font-size:8.6pt;padding:0 1mm}
@@ -858,13 +858,13 @@ font-weight:900;color:#0d554d}
 .customer strong{display:block;font-size:13pt;color:var(--navy)}
 .customer .gold{color:var(--gold);font-weight:900;margin-top:.8mm;font-size:9pt}
 .customer .life{margin-top:1.6mm;font-size:11pt;font-weight:900;color:var(--navy)}
-.customer small{color:#7d8995;font-size:7.6pt}
+.customer small{color:#4b5259;font-size:7.6pt}
 .bottom{display:flex;gap:5mm;margin-top:1mm}
 .bottom>div{flex:1}
 .footer{position:absolute;bottom:0;left:0;right:0;height:13mm;display:flex;align-items:center;
 justify-content:space-between;padding:0 10mm;color:#fff;
 background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
-.footer strong{color:#ffca55;font-size:9.5pt}
+.footer strong{color:#80652a;font-size:9.5pt}
 """
 
 
@@ -986,7 +986,7 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
             val = ('<span style="color:#0b6559;font-weight:900">가입</span>&nbsp;'
                    + nmk + ('&nbsp;· %s원' % format(pr, ',') if pr else ''))
         else:
-            val = '<span style="color:#5b6b7d">미가입</span>'
+            val = '<span style="color:#36404b">미가입</span>'
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box" style="justify-content:flex-start;'
                 'font-size:8.4pt">%s</div></div>'
@@ -1019,11 +1019,11 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
 
 CSS7 = """
 @page{size:A4 portrait;margin:0}
-:root{--navy:#082d59;--navy2:#123f75;--gold:#c78916;--gold2:#e7bb59;--green:#0f6957;
---line:#dbe3eb;--soft:#f7f9fc;--cream:#fffaf1;--text:#132c49}
+:root{--navy:#082d59;--navy2:#123f75;--gold:#8b5f0f;--gold2:#735d2c;--green:#0f6957;
+--line:#717579;--soft:#f7f9fc;--cream:#fffaf1;--text:#132c49}
 *{box-sizing:border-box}
-body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text)}
-.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}
+body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
+.page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column}   /* ★v479 제88조 세로 분산 */
 .top-curve{display:none}
 
 .header{position:relative;z-index:2;display:flex;justify-content:space-between;
@@ -1036,7 +1036,7 @@ align-items:flex-start;padding:8.4mm 10.4mm 3.6mm}
 .page-no strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:block;font-size:26pt;line-height:1}
 .page-no span{display:block;margin-top:1.6mm;font-size:8.5pt}
 .title-line{margin:0 10mm;height:.9mm;background:linear-gradient(90deg,var(--gold) 0 24%,var(--navy) 24%)}
-.content{padding:4.4mm 10mm 16mm}
+.content{padding:4.4mm 10mm 16mm;flex:1;display:flex;flex-direction:column;justify-content:space-between}   /* ★v479 제88조 */
 .greeting{text-align:center;padding:5mm 0 7mm}
 .laurel{display:none}
 .customer-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:1mm;color:#0b2340;font-size:28pt;font-weight:900}
@@ -1044,13 +1044,13 @@ align-items:flex-start;padding:8.4mm 10.4mm 3.6mm}
 .section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:2mm;padding-bottom:1.6mm;border-bottom:.9mm solid var(--navy);
 color:var(--navy);font-size:13pt;font-weight:900}
 .summary-grid{display:flex;gap:4.4mm;margin-top:2.8mm}
-.summary-card{flex:1;border:.38mm solid #9fb0c2;border-radius:2.2mm;overflow:hidden;background:#fff}
+.summary-card{flex:1;border:.38mm solid #626d78;border-radius:2.2mm;overflow:hidden;background:#fff}
 .summary-head{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;height:9.4mm;display:flex;align-items:center;justify-content:center;color:#fff;
 font-size:11pt;font-weight:900}
 .summary-head.green{background:linear-gradient(90deg,#0b6757,#0c7764)}
 .summary-head.navy{background:linear-gradient(90deg,#0b3264,#123f75)}
-.summary-head.gold{background:linear-gradient(90deg,#b57b0f,#d19817)}
-.summary-body{padding:9mm 3mm 8mm;text-align:center}
+.summary-head.gold{background:linear-gradient(90deg,#b57b0f,#966d10)}
+.summary-body{padding:9mm 3mm 8mm;text-align:center;font-weight:600}
 .icon-circle{width:17mm;height:17mm;line-height:17mm;margin:0 auto 2.6mm;border-radius:50%;
 font-size:20pt;background:#f0f4f8}
 .summary-card:nth-child(1) .icon-circle{color:var(--green);background:#eef8f2}
@@ -1058,37 +1058,37 @@ font-size:20pt;background:#f0f4f8}
 .summary-card:nth-child(3) .icon-circle{color:var(--gold);background:#fff7e7}
 .summary-body h3{margin:0;font-size:12.5pt;color:var(--navy)}
 .summary-body p{margin:3.4mm 0 5.4mm;font-size:8.5pt;color:#1e2a38;line-height:1.7}
-.metric{height:12mm;border:.38mm solid #9fb0c2;border-radius:1.8mm;display:flex;align-items:center;
+.metric{height:12mm;border:.38mm solid #626d78;border-radius:1.8mm;display:flex;align-items:center;
 justify-content:space-around;padding:0 3mm;color:var(--navy);font-size:8.4pt;font-weight:800}
 .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:24pt;color:var(--navy)}
 .summary-card:nth-child(3) .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--gold)}
-.points{border:.38mm solid #9fb0c2;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
+.points{border:.38mm solid #626d78;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
 .point{flex:1;text-align:center;padding:0 3.6mm;position:relative}
 .point:not(:last-child)::after{content:"";position:absolute;right:0;top:1.6mm;height:24mm;
-border-right:.2mm dashed #cbd4de}
+border-right:.2mm dashed #71767c}
 .point-icon{width:12mm;height:12mm;line-height:12mm;margin:0 auto 2mm;border-radius:50%;
 background:#f2f5f9;font-size:14pt;color:var(--navy)}
 .point:nth-child(1) .point-icon{color:var(--green);background:#eef8f2}
 .point:nth-child(3) .point-icon{color:var(--gold);background:#fff7e7}
 .point b{display:block;font-size:10pt;color:var(--navy)}
 .point p{margin:1.4mm 0 0;color:#1e2a38;font-size:8pt;line-height:1.45}
-.closing{margin-top:5.4mm;border:.2mm solid #ead6a7;border-radius:2.2mm;
+.closing{margin-top:5.4mm;border:.2mm solid #83775d;border-radius:2.2mm;
 background:#fff;padding:4mm 5mm;text-align:left;height:46mm}
-.closing-main{color:#b4760b;font-size:11.5pt;font-weight:900}
+.closing-main{color:#6c4606;font-size:11.5pt;font-weight:900}
 .closing-sub{margin-top:1.6mm;color:var(--navy);font-size:10.5pt;font-weight:800}
 .hand{margin-top:2.4mm;font-size:13pt;color:#173c73}
-.contact{margin-top:3.6mm;padding-top:3mm;border-top:.2mm solid #e6d6ae;display:flex;gap:6mm}
+.contact{margin-top:3.6mm;padding-top:3mm;border-top:.2mm solid #807761;display:flex;gap:6mm}
 .contact-box{flex:1;display:flex;gap:2.4mm;align-items:center;text-align:left}
 .contact-icon{width:11mm;height:11mm;line-height:11mm;text-align:center;flex:none;border-radius:50%;
 background:#f0f3f8;font-size:14pt;color:var(--navy)}
 .contact-lines{flex:1}
-.contact-row{display:flex;gap:2mm;font-size:8.4pt;color:#50657b;margin-bottom:1.8mm}
+.contact-row{display:flex;gap:2mm;font-size:8.4pt;color:#303c49;margin-bottom:1.8mm}
 .contact-row b{width:26mm;flex:none;line-height:1.25}
-.contact-value{flex:1;border-bottom:.2mm solid #cfd7df;min-height:4mm}
+.contact-value{flex:1;border-bottom:.2mm solid #73787c;min-height:4mm}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;padding:0 10mm;
 background:linear-gradient(90deg,#082d59,#123f75);color:#fff;display:flex;align-items:center;
 justify-content:space-between;font-size:8.5pt}
-.footer strong{color:#ffcb57;font-size:9.5pt}
+.footer strong{color:#80662b;font-size:9.5pt}
 """
 
 
@@ -1168,7 +1168,20 @@ def p7(cmp_, client='고객', base_date='', pg=7, totpg=7):
 
 # ═══════════════════ 8 쪽 · 자산 · 연금 ═══════════════════
 
-EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-size:8pt}.ctb th{background:#0b2340;color:#fff;font-weight:900;padding:1.4mm 1.6mm;border:.3mm solid #0b2340}.ctb td{border:.3mm solid #9fb0c2;padding:1.3mm 1.6mm;color:#1e2a38}.ctb td.g{background:#eef3f9;font-weight:900;text-align:center}.ctb td.hi{color:#b3261e;font-weight:900}.ctb td.ok{color:#0b6559;font-weight:900}.ctb .tn{font-weight:400}.sect{margin:1.6mm 0 1.2mm;padding:1.6mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;font-size:10.5pt;font-weight:900;border-radius:0 3mm 3mm 0;display:inline-block}'
+# ★★★★★v488 제99조 (지점장 지적 2026.08.19 「7페이지 심각하지?」) — <b>7쪽 전용 확대</b>.
+#   [실측] 김순자 7쪽 하단 <b>28.3%</b>가 빈다. 정상범(보유계약 없음)은 <b>절반</b>이 빈다.
+#   [지시] 「억지로 벌린 공백은 삭제하고 <b>입력칸의 세로폭을 더 늘려라</b>」
+#   ★1차 실패 — CSS6을 직접 키웠더니 <b>6쪽이 2장으로 넘쳤다</b>(CSS6은 6쪽·7쪽 공용).
+#     ⇒ <b>7쪽 전용 오버라이드(EXTRA9)</b>에만 넣는다. 공용 CSS는 손대지 않는다.
+_P9BIG = ('.content{padding:2mm 9.6mm 15mm}'
+          '.panel{margin-bottom:2.6mm}'
+          '.inner{padding:2.4mm 1.8mm}'
+          '.row{margin:1.7mm 0}'
+          '.box{height:10.2mm}'
+          '.ctb th{padding:2.9mm 1.6mm}'
+          '.ctb td{padding:2.8mm 1.6mm}')
+
+EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-size:8pt}.ctb th{background:#0b2340;color:#fff;font-weight:900;padding:1.4mm 1.6mm;border:.3mm solid #0b2340}.ctb td{border:.3mm solid #626d78;padding:1.3mm 1.6mm;color:#1e2a38}.ctb td.g{background:#eef3f9;font-weight:900;text-align:center}.ctb td.hi{color:#b3261e;font-weight:900}.ctb td.ok{color:#0b6559;font-weight:900}.ctb .tn{font-weight:400}.sect{margin:1.6mm 0 1.2mm;padding:1.6mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;font-size:10.5pt;font-weight:900;border-radius:0 3mm 3mm 0;display:inline-block}' + _P9BIG
 
 
 def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
@@ -1279,7 +1292,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
     cov = cmp_.get('new', {}).get('cov', {})
     dth = int(cov.get('일반사망', 0))
     prem = int(cmp_.get('prem_new', 0))
-    NAVY, GOLD, GREEN, LINE = '#06203f', '#b08d38', '#0e7258', '#9fb0c2'
+    NAVY, GOLD, GREEN, LINE = '#06203f', '#7e6528', '#0e7258', '#626d78'
 
     def blank(lb):
         return ('<div style="display:flex;align-items:flex-end;gap:2mm;margin:0">'
@@ -1330,7 +1343,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             return format(lp, ',') + '원'
         if pm:
             return format(pm, ',') + '원/월'
-        return '<span style="color:#5b6b7d;font-weight:400">상담 시 확인</span>'
+        return '<span style="color:#36404b;font-weight:400">상담 시 확인</span>'
 
     MAXROW = 10   # ★한 장에 담는 계약 수 상한(지점장 확정 2026.08.16). 넘으면 다음 장으로.
 
@@ -1343,23 +1356,23 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
         for c in (lst or []):
             v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                  else (str(c.get('contract_date') or '') or '—')
-            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
-                    'text-align:right;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    'text-align:right;border-bottom:.32mm solid #70757b">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                    'border-bottom:.32mm solid #c8d2dd">%s</td>'
+                    'border-bottom:.32mm solid #70757b">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                    'border-bottom:.32mm solid #c8d2dd">%s</td></tr>'
+                    'border-bottom:.32mm solid #70757b">%s</td></tr>'
                     % (c['company'], str(c['product'])[:26], NAVY, amt(c), v3,
                        str(c.get('pay_term') or '') or '—'))
         if _cut:
-            out += ('<tr><td colspan="5" style="padding:1.6mm;text-align:center;color:#95690a;'
-                    'font-weight:900;font-size:8pt;border-bottom:.32mm solid #c8d2dd">'
+            out += ('<tr><td colspan="5" style="padding:1.6mm;text-align:center;color:#593f06;'
+                    'font-weight:900;font-size:8pt;border-bottom:.32mm solid #70757b">'
                     '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not out:
-            out = ('<tr><td colspan="5" style="padding:2.4mm;text-align:center;color:#5b6b7d;'
-                   'font-size:8.4pt;border-bottom:.32mm solid #c8d2dd">보유 계약 없음</td></tr>')
+            out = ('<tr><td colspan="5" style="padding:2.4mm;text-align:center;color:#36404b;'
+                   'font-size:8.4pt;border-bottom:.32mm solid #70757b">보유 계약 없음</td></tr>')
         return out
 
     def tbl_all():
@@ -1383,23 +1396,23 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
                 v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                      else (str(c.get('contract_date') or '') or '—')
                 body += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;font-weight:900;'
-                         'color:%s;border-bottom:.32mm solid #c8d2dd">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         'color:%s;border-bottom:.32mm solid #70757b">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
-                         'text-align:right;border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         'text-align:right;border-bottom:.32mm solid #70757b">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                         'border-bottom:.32mm solid #c8d2dd">%s</td>'
+                         'border-bottom:.32mm solid #70757b">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                         'border-bottom:.32mm solid #c8d2dd">%s</td></tr>'
+                         'border-bottom:.32mm solid #70757b">%s</td></tr>'
                          % (NAVY, lbl, c['company'], str(c['product'])[:24], NAVY, amt(c), v3,
                             str(c.get('pay_term') or '') or '—'))
         if _cut:
-            body += ('<tr><td colspan="6" style="padding:1.6mm;text-align:center;color:#95690a;'
-                     'font-weight:900;font-size:8pt;border-bottom:.32mm solid #c8d2dd">'
+            body += ('<tr><td colspan="6" style="padding:1.6mm;text-align:center;color:#593f06;'
+                     'font-weight:900;font-size:8pt;border-bottom:.32mm solid #70757b">'
                      '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not body:
-            body = ('<tr><td colspan="6" style="padding:2.4mm;text-align:center;color:#5b6b7d;'
+            body = ('<tr><td colspan="6" style="padding:2.4mm;text-align:center;color:#36404b;'
                     'font-size:8.4pt">보유 계약 없음</td></tr>')
         th = ''.join('<th style="padding:.9mm 1.6mm;background:#eef3f9;font-size:7.4pt;'
                      'text-align:%s;color:%s">%s</th>' % (al, NAVY, t)
@@ -1413,10 +1426,10 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
     have = (tbl_all()
             + '<div style="display:flex;gap:3mm;margin-top:1.6mm">'
               '<div style="flex:1;background:%s;padding:1.4mm;text-align:center;color:#fff">'
-              '<div style="font-size:8.4pt;color:#d7e2ef">사망보장 합계</div>'
+              '<div style="font-size:8.4pt;color:#6c7178">사망보장 합계</div>'
               '<div style="font-size:12pt;font-weight:900;margin-top:.6mm">%s</div></div>'
               '<div style="flex:1;background:%s;padding:2mm;text-align:center;color:#fff">'
-              '<div style="font-size:8.4pt;color:#cfe8de">리모델링 후 월 보험료</div>'
+              '<div style="font-size:8.4pt;color:#67746f">리모델링 후 월 보험료</div>'
               '<div style="font-size:12pt;font-weight:900;margin-top:.6mm">%s원</div></div></div>'
               % (NAVY, ('%s만원' % format(dth, ',')) if dth else '—', GREEN, format(prem, ',')))
 
@@ -1466,11 +1479,11 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             + '</div>'
             + '</div>'
             '<div style="margin:1.4mm -10mm;background:#06203f;padding:1.6mm;text-align:center">'
-            '<div style="font-size:8.4pt;font-weight:800;color:#d7e2ef">'
+            '<div style="font-size:8.4pt;font-weight:800;color:#6c7178">'
             '당신의 선택이 10년 후 당신의 모습을 만듭니다</div>'
             '<div style="font-size:13pt;font-weight:900;color:#fff;margin:.6mm 0;'
-            'letter-spacing:-.03em">지금 <span style="color:#e7c274">시작하세요</span></div>'
-            '<div style="font-size:8pt;color:#d6dee8">'
+            'letter-spacing:-.03em">지금 <span style="color:#73613a">시작하세요</span></div>'
+            '<div style="font-size:8pt;color:#6b6f74">'
             '① 소득 파악하기　② 저축 먼저 설정하기(자동이체)　③ 남은 돈으로 생활하기</div></div>'
             '<div style="display:flex;gap:4mm">'
             + col('현재의 나', '오늘 · 함께 적습니다', '#0b3264', now)
