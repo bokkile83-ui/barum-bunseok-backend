@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """★★★★★ report_pages.py — 리모델링 리포트 7쪽 (지점장 시안 정본 2026.08.15)
-# 각인: v525-border-20260820
+# 각인: v525-ci-20260819
 
    지점장이 시안(HTML)을 7장 다 주셨다. <b>흉내내지 않고 그 시안을 렌더한다.</b>
    ㆍ값은 전부 엑셀에서 온다 — 하드코딩 0건(뮤테이션 테스트 실패 0건으로 확인)
@@ -35,11 +35,11 @@ display:flex;align-items:baseline;gap:6mm}
 .namebox .nm{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:40pt;font-weight:900;color:#0b2340}
 .namebox .sfx{font-size:13pt;font-weight:800;color:#524014}
 .stats{display:flex;gap:5mm;margin-top:9mm}
-.stat{flex:1;border-top:1.4mm solid #b08d38;border-left:.38mm solid #626d78;
-border-right:.38mm solid #626d78;border-bottom:.38mm solid #626d78;padding:4mm 5mm 5mm}
+.stat{flex:1;border-top:1.4mm solid #b08d38;border-left:.38mm solid #414c58;
+border-right:.38mm solid #414c58;border-bottom:.38mm solid #414c58;padding:4mm 5mm 5mm}
 .stat .k{font-size:8.5pt;font-weight:800;color:#1e2a38}
 .stat .v{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:3mm;font-size:20pt;font-weight:900;color:#06203f}
-.inbox{margin-top:9mm;border:.38mm solid #626d78;padding:5mm 6mm}
+.inbox{margin-top:9mm;border:.45mm solid #414c58;padding:5mm 6mm}
 .inbox .t{font-size:8.5pt;font-weight:900;color:#524014}
 .inbox .l{margin-top:3mm;font-size:10.5pt;font-weight:800;color:#0b2340;line-height:1.8}
 .hr{margin-top:12mm;border-top:.2mm solid #686b6e}
@@ -100,7 +100,7 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .client span{display:block;font-size:8.4pt;margin-top:1mm;color:#455363}
 .client .step{color:#80672e;font-weight:800;margin-top:2mm}
 .content{padding:0 10mm 17mm}   /* ★v487 제98조 원복 */
-.summary-card{margin-top:1.6mm;border:.5pt solid #626d78;border-radius:3.2mm;padding:5.2mm 6mm;
+.summary-card{margin-top:1.6mm;border:.5pt solid #414c58;border-radius:3.2mm;padding:5.2mm 6mm;
 display:flex}
 .summary-col{flex:1;min-height:34mm;padding:2.4mm 5mm}
 .summary-col:first-child{border-right:.4pt solid #676a6e}
@@ -113,8 +113,8 @@ display:flex}
 .section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:6.8mm 4mm 3.4mm;color:#06203f;font-size:15pt;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
 .compare{display:flex;gap:2.4mm;align-items:center;padding:0 4mm}
 .premium-card{flex:1;min-height:30mm;padding:3.2mm 4.4mm;border-radius:2.6mm}
-.premium-card.before{background:var(--softBlue);border:.4pt solid #66727f}
-.premium-card.after{background:var(--softGreen);border:.4pt solid #607668}
+.premium-card.before{background:var(--softBlue);border:.6pt solid #66727f}
+.premium-card.after{background:var(--softGreen);border:.6pt solid #607668}
 .premium-card b{display:block;font-size:10pt;margin-bottom:2.4mm}
 .premium-card.after b{color:var(--green)}
 .insurers{font-size:8.4pt;color:#1e2a38}
@@ -125,8 +125,8 @@ display:flex}
 .contract-head h3{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:0;font-size:15pt;color:#06203f;font-weight:900;border-left:1.6mm solid #b08d38;padding-left:3mm}
 .contract-head span{font-size:8.5pt;color:#1e2a38;font-weight:700}
 .report-table{width:calc(100% - 8mm);margin:0 4mm;border-collapse:collapse;font-size:8.5pt}
-.report-table th{padding:2.2mm 1.8mm;text-align:left;color:#96671e;border-bottom:.4pt solid #686a6d}
-.report-table td{padding:2.2mm 1.8mm;border-bottom:.4pt solid #70757b}
+.report-table th{padding:2.2mm 1.8mm;text-align:left;color:#96671e;border-bottom:.6pt solid #686a6d}
+.report-table td{padding:2.2mm 1.8mm;border-bottom:.6pt solid #4e545c}
 .report-table tbody tr:nth-child(odd) td{background:#eef3f9}
 .report-table tbody tr.new td{background:#d7f0e2;font-weight:800}
 .report-table tbody tr.del td{background:#7b5f5c;font-weight:800;color:#fff}   /* ★v501 제103조 — 갈색 배경에 초록 글자는 안 보인다 → 배경 진하게 + 글자 흰색 */
@@ -155,13 +155,6 @@ def p2(cmp_, client='고객', base_date='', pg=2, totpg=7):
     sv = cmp_['save_m']
     up = sv < 0
     kl = {(c['company'], c['product']) for c in cmp_['kill']}
-    # ★★★★★v521 제118조 (지점장 실측 2026.08.19
-    #   «기존보험 11만원에서 2번째 엑셀에서 5만원으로 줄여도 전과 후에 금액이 동일하게 나온다»)
-    #   [결함] 유지 계약을 `bf = af = c['premium']`로 <b>한 값에 묶었다</b>. c는 <b>기존 엑셀</b>의
-    #     계약이므로 최종 엑셀에서 보험료를 낮춰도 「후」가 <b>기존값 그대로</b> 찍힌다.
-    #     게다가 표 합계(prem_new)는 최종 엑셀에서 오므로 <b>계약 합 ≠ 합계</b>가 된다(제2조 등식 위반).
-    #   [수정] 「후」는 <b>최종 엑셀의 같은 회사·상품 보험료</b>에서 읽는다. 없으면 그때만 기존값.
-    _newprem = {(c['company'], c['product']): c['premium'] for c in cmp_['new']['contracts']}
     rows = [(c, 'keep') for c in cmp_['old']['contracts']] + [(c, 'new') for c in cmp_['prop']]
     trs = ''
     for c, kind in rows:
@@ -170,8 +163,7 @@ def p2(cmp_, client='고객', base_date='', pg=2, totpg=7):
         elif (c['company'], c['product']) in kl:
             bf, af, tg, cls = c['premium'], 0, '삭제', 'status-del'   # ★v501 제103조
         else:
-            bf = c['premium']
-            af = _newprem.get((c['company'], c['product']), c['premium'])   # ★v521 제118조
+            bf = af = c['premium']
             tg, cls = '유지', ''
         # ★★★★★v507 제108조 — 「후 (변경 후)」와 「상태」가 <b>같은 칸</b>에 있어 붙어 보였다.
         #   비교 엑셀 제89조와 같이 <b>상태를 오른쪽 끝 별도 칸</b>으로 뺀다.
@@ -275,7 +267,7 @@ font-size:13pt;font-weight:900}
 border-radius:50%;color:var(--navy);background:#fff;font-size:8.5pt;font-weight:900;margin-right:1.5mm}
 .table-wrap{padding:.6mm 5mm 1.4mm}
 table{width:100%;border-collapse:collapse;font-size:10pt}
-th,td{padding:.5mm 3mm;border-bottom:.4pt solid #727375;text-align:right}
+th,td{padding:.5mm 3mm;border-bottom:.6pt solid #727375;text-align:right}
 th{color:#96671e;background:#fffaf2;font-weight:800;font-size:9pt}
 th:first-child,td:first-child{text-align:left}
 tbody tr:last-child td{border-bottom:0}
@@ -310,7 +302,7 @@ margin-right:2mm;border-radius:50%;background:#fff6e7;color:var(--gold);font-siz
 .premium-bar{height:7mm;background:#f0762a}   /* ★v502 — 기존 막대 주황 */
 .premium-bar.after{background:linear-gradient(90deg,#0b2d58,#164679)}
 .premium-value{width:26mm;text-align:right;font-weight:800;font-size:10.5pt;flex:none}
-.increase-box{width:40mm;flex:none;text-align:center;border:.4pt solid #646b73;border-radius:4mm;
+.increase-box{width:40mm;flex:none;text-align:center;border:.6pt solid #646b73;border-radius:4mm;
 padding:4mm 2mm;background:linear-gradient(180deg,#f6fbff,#fff)}
 .arrow{display:none}
 .increase-box strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;display:block;margin-top:2mm;color:var(--gold);font-size:19pt}
@@ -325,7 +317,7 @@ padding:4mm 2mm;background:linear-gradient(180deg,#f6fbff,#fff)}
 .change-bar.gray{background:#85898d}
 .change-num{width:12mm;font-size:9pt;font-weight:700;flex:none}
 .summary{width:56mm;flex:none;text-align:center;padding:2mm 4mm;border-radius:7mm;
-border:.4pt solid #686b6f;background:radial-gradient(circle at 50% 10%,#fff,#f3f7fb)}
+border:.6pt solid #686b6f;background:radial-gradient(circle at 50% 10%,#fff,#f3f7fb)}
 .shield{width:7mm;height:8.4mm;margin:0 auto .6mm;position:relative;
 background:linear-gradient(180deg,#896e34,#96670d);
 clip-path:polygon(50% 0,92% 18%,82% 70%,50% 100%,18% 70%,8% 18%)}
@@ -487,10 +479,10 @@ border-bottom:.5mm solid var(--navy)}
 .coverage-panel.heart h3{color:var(--red)}
 .gold-rule{height:.9mm;background:var(--gold);margin-bottom:2mm}
 .coverage-table{width:100%;border-collapse:collapse;font-size:8pt}
-.coverage-table th{padding:2.6mm 1mm;   /* ★v504 제105조 */color:#fff;text-align:center;background:var(--deepGreen);
+.coverage-table th{padding:2.2mm 1mm;   /* ★v522 */   /* ★v504 제105조 */color:#fff;text-align:center;background:var(--deepGreen);
 border-right:.2mm solid rgba(255,255,255,.15)}
 .coverage-table th:last-child{background:#927224}
-.coverage-table td{padding:2.7mm 1mm;   /* ★v504 제105조 — 의견 칸 자리를 표에 돌린다 */border-bottom:.2mm solid #6c6e71;text-align:center;
+.coverage-table td{padding:2.05mm 1mm;   /* ★v522 — 심장 표가 12→14행이 되어 줄인다(제105조 3항: 긴 쪽 기준) */   /* ★v504 제105조 — 의견 칸 자리를 표에 돌린다 */border-bottom:.2mm solid #6c6e71;text-align:center;
 vertical-align:middle}
 .coverage-table td:first-child{text-align:left}
 .group-row td{background:#edf1f5;color:#183a4f;font-size:8.5pt;font-weight:900;
@@ -501,19 +493,15 @@ text-align:left;padding:1.1mm}
 .amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
 border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
-border:.5mm solid #73777a;background:#fff}
+border:.5mm solid #4f5459;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
 .hold{display:inline-block;margin-right:1mm;padding:.4mm 1mm;border-radius:4mm;
 background:#997429;color:#fff;font-size:6.8pt;font-weight:900}
 .legend{margin:2mm 0 0;font-size:8pt;color:#4a5158}
 .legend .circle{display:inline-block;width:2.6mm;height:2.6mm;border-radius:50%;
-margin-right:.8mm;border:.5mm solid #73777a}
+margin-right:.8mm;border:.5mm solid #4f5459}
 .legend .circle.on{background:var(--green);border-color:var(--green)}
 .legend strong{color:#6d4a0f}
-.opinion{margin-top:4mm}
-.opinion-title{font-size:10.5pt;font-weight:900;color:var(--navy);padding-bottom:1.6mm;
-border-bottom:.5mm solid var(--gold)}
-.opinion-box{margin-top:2mm;height:34mm;border:.38mm solid #626d78;border-radius:1.8mm}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;
 background:linear-gradient(90deg,#082d59,#123f75);color:#fff;padding:0 10mm;display:flex;
 align-items:center;justify-content:space-between;font-size:8.5pt}
@@ -529,26 +517,23 @@ BRAIN4 = [
     ('순환계 확장 · 선천', '선천 뇌혈관기형', 'Q28.0~28.3', None, 0, 1),
     ('순환계 확장 · 선천', '외상성 뇌출혈', 'S06', '외상성뇌출혈', 0, 1),
 ]
-# ★★★★★v521 제122조 (지점장 실측 2026.08.19 «심장도 엉망이고»)
-#   [결함] 허혈성 심장질환 3행이 <b>전부 「허혈성 진단비」 한 칸만</b> 보고 있었다.
-#     급성심근경색 1,000 · 협심증 500이 실려 있어도 <b>허혈성 진단비 행이 비어 있으면 셋 다 ○(미보장)</b>.
-#     [실측 김순자] 롯데 특정심장Ⅰ 1,000(급성심근) · 특정Ⅱ 500(협심증)인데 표는 <b>전부 미보장</b>.
-#   [수정] ㉠급성심근경색 → 「급성심근경색」 행  ㉡협심증 → 「협심증」 행
-#         ㉢허혈성(I24·25) → <b>제84조에 따라 협심증 행을 본다</b>(심장의 허혈성은 다 협심증) ·
-#           금액은 협심증 줄에 이미 찍히므로 여기는 <b>점만</b>(@).
-#         ㉣빈맥(I47·48)은 마스터 43행에 <b>있다</b> — key=None(영구 미보장)은 오답이었다.
-#         ㉤심근병증 코드 I42~45 → <b>I42·43</b>. I44·I45는 방실차단·전도장애로 별개다.
 HEART4 = [
-    ('허혈성 심장질환 (I20~25)', '급성심근경색', 'I21~23', '급성심근경색', 1, 1, 1),
-    ('허혈성 심장질환 (I20~25)', '협심증', 'I20', '협심증', 1, 1, 1),
-    # ★제123조 — ①단독 허혈성진단비가 있으면 그 금액 ②없으면 묶음(협심증 행) 근거로 점만
-    ('허혈성 심장질환 (I20~25)', '허혈성', 'I24 · 25', ('허혈성 진단비', '@협심증'), 1, 1, 1),
-    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심장판막', 'I05 · I34~37 · I39', '심장판막', 1, 1, 1),
-    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심근 · 심내막 염증', 'I30~33 · I38 · I40 · I41', '염증', 1, 1, 1),
-    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '빈맥', 'I47 · 48', '빈맥', 1, 1, 1),
+    ('허혈성 심장질환 (I20~25)', '급성심근경색', 'I21~23', '허혈성 진단비', 1, 1, 1),
+    ('허혈성 심장질환 (I20~25)', '협심증', 'I20', '@허혈성 진단비', 1, 1, 1),
+    ('허혈성 심장질환 (I20~25)', '허혈성', 'I24 · 25', '허혈성 진단비', 1, 1, 1),
+    # ★★★★★v522 제116조 3항 (지점장 지시 2026.08.19 «심장 세분화해라 · 리포트가 안 되니 엑셀도 꼬인다»)
+    #   지점장 정본 — 특정심장질환Ⅰ = 급성심근경색(I21) · 후속(I22) · 합병증(I23)
+    #   · <b>인공소생에 성공한 심장정지(I46.0)</b>. 표에 <b>I46.0 행이 없어</b> 롯데 Ⅰ을 그릴 수 없었다.
+    ('허혈성 심장질환 (I20~25)', '인공소생 성공 심장정지', 'I46.0', None, 1, 1, 1),
+    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심장판막', 'I05 · I34~37', '심장판막', 1, 1, 1),
+    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심근 · 심내막 염증', 'I30~33 · I40', '염증', 1, 1, 1),
+    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '빈맥', 'I47 · 48', None, 1, 1, 1),
     ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '부정맥', 'I49', '부정맥', 1, 1, 1),
     ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심부전', 'I50', '심부전', 1, 1, 1),
+    #   ★<b>심근병증은 I42·43이다</b>. I44(방실차단·좌각차단) · I45(기타 전도장애)는 <b>전도장애</b>다.
+    #     구 표기 `I42~45`는 전도장애를 심근병증에 <b>뭉쳐 넣고 있었다</b> — 이것이 엑셀과 어긋난 원인이다.
     ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '심근병증', 'I42 · 43', '심근병증', 1, 1, 1),
+    ('심장특정 (판막 · 염증 · 부정맥 · 심근)', '방실차단 · 전도장애', 'I44 · 45', None, 1, 1, 1),
     ('순환계 확장 (2대+동맥류 · 정맥류 등)', '대동맥류 · 죽상경화', 'I70 · 71', None, 0, 1, 1),
     ('순환계 확장 (2대+동맥류 · 정맥류 등)', '동맥류 · 정맥류 등', '[확인]', None, 0, 1, 1),
     ('순환계 확장 (2대+동맥류 · 정맥류 등)', '선천 심장기형', 'Q20~25', None, 0, 0, 1),
@@ -569,25 +554,9 @@ def _c4(v):
 def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
     cov = cmp_['new']['cov']
 
-    # ★★★★★v521 제123조 (지점장 재확정 2026.08.19
-    #   «허혈성은 <b>허혈성 단독</b>이다. 심장Ⅰ·Ⅱ 등에는 다 협심증이다»)
-    #   ⇒ 「허혈성」 줄은 <b>2층</b>이다.
-    #     ①담보명이 허혈성인 <b>단독 담보</b>가 있으면 → 그 값을 <b>금액으로</b> 표시.
-    #     ②없고 묶음(특정심장Ⅰ·Ⅱ 등)이 I24·I25를 품고 있으면 → 그 값은 <b>협심증 행</b>에 있으므로
-    #       여기는 <b>점만</b>(@) 찍는다. 금액을 두 줄에 쓰면 이중계상으로 보인다(제84조).
-    #   구현 = key에 <b>대안 목록</b>을 허용한다. 앞에서부터 값이 있는 것을 쓴다.
-    def _pick(key):
-        """key(문자열 또는 대안 튜플) → (금액, 점만여부)"""
-        for k in ((key,) if isinstance(key, str) or key is None else tuple(key)):
-            if not k:
-                continue
-            _v = cov.get(k[1:] if k.startswith('@') else k, 0)
-            if _v:
-                return _v, k.startswith('@')
-        return 0, False
-
     def val(key):
-        return _pick(key)[0]
+        if not key: return 0
+        return cov.get(key[1:] if key.startswith('@') else key, 0)
 
     br = ''
     last = None
@@ -606,7 +575,8 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
         if grp != last:
             ht += '<tr class="group-row"><td colspan="5">%s</td></tr>' % grp
             last = grp
-        v, dot_only = _pick(key)          # ★v521 제123조
+        v = val(key)
+        dot_only = bool(key) and key.startswith('@')
         ht += ('<tr class="%s"><td><span class="code-name">%s</span>'
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td>'
                '<td>%s</td></tr>'
@@ -698,12 +668,12 @@ color:#fff;font-size:8.4pt;font-weight:900}
 .label{font-size:8pt;font-weight:800;color:#294558}
 .label.blue{color:var(--blue)}
 .value-box{height:6.2mm;display:flex;justify-content:flex-end;align-items:center;
-border:.38mm solid #626d78;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
+border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
 font-weight:900;font-size:11pt}
 .value-box.red{color:#d52f28}
 .value-box.blue{color:#0c4e75}
 .unit{font-size:7.6pt;color:#474f58}
-.small-card{border:.38mm solid #626d78;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
+.small-card{border:.45mm solid #414c58;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
 .small-card h4{margin:0 0 .6mm;color:#123d42;font-size:9pt}
 .small-card .desc{color:#1e2a38;font-size:7.6pt;line-height:1.35}
 .small-card .special{color:#0d7158;font-size:8pt;font-weight:900;margin-top:.6mm}
@@ -725,7 +695,7 @@ font-weight:900;font-size:11pt}
 .customer-center small{color:#1e2a38;font-size:7.6pt}
 .special-wrap{display:flex;gap:3.6mm;margin-top:1.4mm;padding:1.6mm;border:.5mm solid #7c6833;
 border-radius:2.4mm;background:#fffcf5}
-.special-card{flex:1;border:.38mm solid #626d78;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
+.special-card{flex:1;border:.45mm solid #414c58;border-radius:1.8mm;padding:2mm 2.4mm;background:#fff}
 .special-card h4{margin:0 0 .8mm;font-size:10pt;color:var(--navy)}
 .special-card p{margin:0;color:#1e2a38;font-size:7.6pt}
 .footer{position:absolute;left:0;right:0;bottom:0;height:13mm;display:flex;align-items:center;
@@ -793,23 +763,36 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
             + arow('통합암진단비', g('통합암'))
             + arow('통합전이암진단비', g('통합전이암'))
             + arow('유사암진단비', g('유사암(갑.기.경.제)'))
-            + arow('고액암진단비', g('고액암')))
+            + arow('고액암진단비', g('고액암'))
+            # ★★★★★v525 제119조 (지점장 2026.08.19 «리포트 + 리포트엑셀 둘 다 CI도 기재»)
+            #   CI(중대한OO)는 <b>값이 있을 때만</b> 줄이 생긴다 — 표준 담보와 <b>합산하지 않는다</b>.
+            + (arow('중대한 암 (CI)', g('중대한 암')) if g('중대한 암') else ''))
 
     right = ('<table style="width:100%;border-collapse:collapse">' + row('뇌혈관', g('뇌혈관진단비'), st=True)
              + row('뇌졸중', g('뇌졸증진단비'), ind=True)
              + row('뇌출혈', g('뇌출혈진단비'), blue=True, ind=True)
-             # ★★★★★v521 제120조 (지점장 지적 2026.08.19 «리포트 5페이지에 협심증칸이 없다»)
-             #   마스터 41행 <b>협심증 = 심장 블록 첫 행</b>인데 5쪽 뇌·심 진단비 표에만 없었다.
-             #   제84조에 따라 <b>심장의 허혈성은 전부 협심증 행</b>으로 떨어진다 —
-             #   롯데 특정심장질환Ⅱ · KB/한화/현대 특정Ⅰ 등 <b>묶음 대부분의 착지점</b>이다.
-             #   칸이 없으면 값이 있어도 상담지에서 사라진다(제1조 등식1 위반).
-             #   ★위치도 <b>마스터 행 순서</b>(협심증→심부전→부정맥)를 따른다.
-             + row('협심증', g('협심증'), ind=True)
              + row('심부전', g('심부전'), ind=True)
              + row('부정맥', g('부정맥'), ind=True)
              # ★v472 제77조 — 5쪽도 같은 결함이었다. 급성심근 칸에 <b>허혈성 값</b>을 넣고 있었다.
              + row('허혈성', isch, ind=True)
-             + row('급성심근경색', g('급성심근경색'), ind=True) + '</table>')
+             + row('급성심근경색', g('급성심근경색'), ind=True)
+             # ★★★★★v524 제116조 4항 (지점장 2026.08.19 «5페이지도 심장진단비 세분화 · 유동성 있게»)
+             #   4쪽 심장 표는 14행인데 5쪽은 <b>7행 고정</b>이었다 — 두 쪽이 어긋난다.
+             #   ⇒ 아래 심장 담보는 <b>값이 있을 때만</b> 줄이 생긴다(유동). 없으면 종전과 같다.
+             #   ★빈칸을 늘리지 않는다 — 워크시트의 기본 7줄은 <b>손으로 적는 칸</b>이라 유지한다.
+             + ''.join(row(_lb, g(_k), ind=True)
+                       for _lb, _k in (('협심증', '협심증'),
+                                       ('심근 · 심내막 염증', '염증'),
+                                       ('심장판막', '심장판막'),
+                                       ('심근병증', '심근병증'),
+                                       ('빈맥', '빈맥'),
+                                       ('산정특례 심장', '산정특례심장'),
+                                       ('2대 주요치료비', '2대 주요치료비'),
+                                       # ★v525 제119조 — CI 3종(값 있을 때만)
+                                       ('중대한 뇌졸중 (CI)', '중대한 뇌졸증'),
+                                       ('중대한 뇌출혈 (CI)', '중대한 뇌출혈'),
+                                       ('중대한 급성심근 (CI)', '중대한 급성심근'))
+                       if g(_k)) + '</table>')
 
     owned = sum(1 for v in (g('일반암'), g('뇌혈관진단비'), isch) if v)
 
@@ -872,7 +855,7 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
 CSS6 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--gold:#c78d22;--green:#0b6559;--red:#d9342b;
---line:#717579;--soft:#f7f9fc;--text:#15334b;--muted:#5a626b}
+--line:#4d5359;--soft:#f7f9fc;--text:#15334b;--muted:#5a626b}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden}   /* ★v487 제98조 */
@@ -890,7 +873,7 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .content{padding:2mm 9.6mm 15mm}   /* ★v487 제98조 */
 .columns{display:flex;gap:5mm}
 .columns>section{flex:1;min-width:0}
-.panel{border:.38mm solid #626d78;border-radius:2.2mm;margin-bottom:.8mm;overflow:hidden;background:#fff}
+.panel{border:.45mm solid #414c58;border-radius:2.2mm;margin-bottom:.8mm;overflow:hidden;background:#fff}
 .panel-title{padding:1.4mm 3mm;font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;padding:1.8mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;
 font-size:11pt;font-weight:900}
 .panel-title:before{content:"■";margin-right:1.6mm}
@@ -906,7 +889,7 @@ font-size:11pt;font-weight:900}
 /* ★★★★★v465 제72조 2항 (육안검수 실측) — 6쪽 「일반암 14,000만」이 두 줄로 깨졌다.
    진하기를 올리면서 글자가 커져 좁은 칸(2칸 행)을 넘쳤다.
    ★<b>금액 칸은 절대 줄바꿈하지 않는다.</b> 넘치면 글자를 줄여서라도 한 줄로 둔다. */
-.box{height:4.5mm;border:.38mm solid #626d78;border-radius:1.2mm;background:#fff;
+.box{height:4.5mm;border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;
 display:flex;align-items:center;justify-content:flex-end;padding:0 1.4mm;font-weight:900;
 color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
 .row.two .box{font-size:8.6pt;padding:0 1mm}
@@ -1087,16 +1070,27 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
 #     키웠더니 <b>5쪽이 2장 · 6쪽이 3장</b>이 됐다(실측). 서은옥은 여유가 있었지만
 #     <b>계약이 많으면 넘친다</b> — 8쪽 원복과 같은 이유(지점장 「계약이 많을 수도 있다」).
 #   ⇒ <b>4쪽만 확대</b>하고 5·6쪽은 원복한다. `_P6BIG`은 빈 값으로 둔다(자리는 남겨 둔다).
-_P6BIG = ('.rcol .row{margin:1.05mm 0}'          # ★★★★★v506 제107조 (지점장 2026.08.19)
-          '.rcol .box{height:6.4mm}'             #   「6페이지 오른쪽 표 3개 세로칸 조금씩만 더 늘려줘」
-          '.rcol .inner{padding:1.7mm 1.8mm}'    #   왼쪽 열은 이미 꽉 찼다 — <b>오른쪽만</b> 키운다.
-          '.rcol .panel{margin-bottom:1.6mm}')   #   페이지 높이는 긴 쪽(왼쪽)이 정하므로 넘치지 않는다.
+# ★★★★★v522 제107조 개정 (지점장 2026.08.19 «억지로 늘리고 공간 놔두지 말고
+#   차라리 칸의 세로길이를 늘려라. 할 게 없으면 네모칸을 차라리 늘려라»)
+#   구 v506은 <b>row margin · inner padding · panel margin</b>을 키웠다 — <b>빈 공간만 벌린 것</b>이다.
+#   ⇒ 여백은 <b>원래대로 되돌리고</b>, <b>입력칸(.box)의 세로 높이</b>만 키운다.
+#     칸이 커지면 고객이 적기 좋다(제99조 7쪽과 같은 이유). 공간이 남으면 <b>칸을 더 키운다</b>.
+_P6BIG = ('.rcol .box{height:8.0mm}'
+          '.rcol .lb .label{font-size:7.6pt}'
+          # ★★★★★v525 (지점장 실측 2026.08.19 «6페이지 짤렸다»)
+          #   v523에서 선 두께를 올리자(.32→.40 · .38→.45mm) 6쪽이 <b>바로 넘쳤다</b> —
+          #   여유가 0.1%뿐이었다. 하단 「연금」·「종신·사망」이 꼬리에 잘렸다.
+          #   ⇒ 6쪽 전용으로 <b>세로 여백만</b> 줄인다. 칸 높이·글자는 건드리지 않는다.
+          '.panel{margin-bottom:1.15mm}'
+          '.inner{padding:0.75mm 1.7mm}'
+          '.row{margin:0.28mm 0}'
+          '.sub-title{margin:0.7mm 0 0.5mm;padding:0.55mm 1.1mm}')
 
 
 CSS7 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--gold:#c78916;--gold2:#e7bb59;--green:#0f6957;
---line:#717579;--soft:#f7f9fc;--cream:#fffaf1;--text:#132c49}
+--line:#4d5359;--soft:#f7f9fc;--cream:#fffaf1;--text:#132c49}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .page{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column}   /* ★v479 제88조 세로 분산 */
@@ -1120,7 +1114,7 @@ align-items:flex-start;padding:8.4mm 10.4mm 3.6mm}
 .section-title{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin-top:2mm;padding-bottom:1.6mm;border-bottom:.9mm solid var(--navy);
 color:var(--navy);font-size:13pt;font-weight:900}
 .summary-grid{display:flex;gap:4.4mm;margin-top:2.8mm}
-.summary-card{flex:1;border:.38mm solid #626d78;border-radius:2.2mm;overflow:hidden;background:#fff}
+.summary-card{flex:1;border:.45mm solid #414c58;border-radius:2.2mm;overflow:hidden;background:#fff}
 .summary-head{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;height:9.4mm;display:flex;align-items:center;justify-content:center;color:#fff;
 font-size:11pt;font-weight:900}
 .summary-head.green{background:linear-gradient(90deg,#0b6757,#0c7764)}
@@ -1134,11 +1128,11 @@ font-size:20pt;background:#f0f4f8}
 .summary-card:nth-child(3) .icon-circle{color:var(--gold);background:#fff7e7}
 .summary-body h3{margin:0;font-size:12.5pt;color:var(--navy)}
 .summary-body p{margin:3.4mm 0 5.4mm;font-size:8.5pt;color:#1e2a38;line-height:1.7}
-.metric{height:12mm;border:.38mm solid #626d78;border-radius:1.8mm;display:flex;align-items:center;
+.metric{height:12mm;border:.45mm solid #414c58;border-radius:1.8mm;display:flex;align-items:center;
 justify-content:space-around;padding:0 3mm;color:var(--navy);font-size:8.4pt;font-weight:800}
 .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;font-size:24pt;color:var(--navy)}
 .summary-card:nth-child(3) .metric strong{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;color:var(--gold)}
-.points{border:.38mm solid #626d78;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
+.points{border:.45mm solid #414c58;border-radius:2mm;margin-top:3.4mm;display:flex;padding:5mm 0}
 .point{flex:1;text-align:center;padding:0 3.6mm;position:relative}
 .point:not(:last-child)::after{content:"";position:absolute;right:0;top:1.6mm;height:24mm;
 border-right:.2mm dashed #71767c}
@@ -1257,7 +1251,7 @@ _P9BIG = ('.content{padding:2mm 9.6mm 15mm}'
           '.ctb th{padding:2.9mm 1.6mm}'
           '.ctb td{padding:2.8mm 1.6mm}')
 
-EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-size:8pt}.ctb th{background:#0b2340;color:#fff;font-weight:900;padding:1.4mm 1.6mm;border:.3mm solid #0b2340}.ctb td{border:.3mm solid #626d78;padding:1.3mm 1.6mm;color:#1e2a38}.ctb td.g{background:#eef3f9;font-weight:900;text-align:center}.ctb td.hi{color:#b3261e;font-weight:900}.ctb td.ok{color:#0b6559;font-weight:900}.ctb .tn{font-weight:400}.sect{margin:1.6mm 0 1.2mm;padding:1.6mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;font-size:10.5pt;font-weight:900;border-radius:0 3mm 3mm 0;display:inline-block}' + _P9BIG
+EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-size:8pt}.ctb th{background:#0b2340;color:#fff;font-weight:900;padding:1.4mm 1.6mm;border:.3mm solid #0b2340}.ctb td{border:.3mm solid #414c58;padding:1.3mm 1.6mm;color:#1e2a38}.ctb td.g{background:#eef3f9;font-weight:900;text-align:center}.ctb td.hi{color:#b3261e;font-weight:900}.ctb td.ok{color:#0b6559;font-weight:900}.ctb .tn{font-weight:400}.sect{margin:1.6mm 0 1.2mm;padding:1.6mm 3mm;background:linear-gradient(90deg,#0a6459,#087166);color:#fff;font-size:10.5pt;font-weight:900;border-radius:0 3mm 3mm 0;display:inline-block}' + _P9BIG
 
 
 def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
@@ -1371,12 +1365,12 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
     cov = cmp_.get('new', {}).get('cov', {})
     dth = int(cov.get('일반사망', 0))
     prem = int(cmp_.get('prem_new', 0))
-    NAVY, GOLD, GREEN, LINE = '#06203f', '#7e6528', '#0e7258', '#626d78'
+    NAVY, GOLD, GREEN, LINE = '#06203f', '#7e6528', '#0e7258', '#414c58'
 
     def blank(lb):
         return ('<div style="display:flex;align-items:flex-end;gap:2mm;margin:0">'
                 '<div style="width:28mm;flex:none;font-size:7.4pt;font-weight:800;color:#1e2a38">%s</div>'
-                '<div style="flex:1;height:4.6mm;border-bottom:.38mm solid %s"></div>'   # ★v503 제104조
+                '<div style="flex:1;height:2.8mm;border-bottom:.38mm solid %s"></div>'   # ★v522 제104조 <b>원복</b>(지점장 «8페이지 기존대로»)
                 '<div style="width:6mm;flex:none;font-size:8pt;color:#1e2a38">원</div></div>'
                 % (lb, LINE))
 
@@ -1386,10 +1380,10 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
                 % (NAVY, GOLD, t))
 
     def col(title, sub, bg, body):
-        return ('<div style="flex:1;border:.38mm solid %s;border-radius:2.2mm;overflow:hidden">'
+        return ('<div style="flex:1;border:.45mm solid %s;border-radius:2.2mm;overflow:hidden">'
                 '<div style="background:%s;color:#fff;padding:1.2mm 3mm;font-size:9pt;font-weight:900">'
                 '%s<span style="font-size:8pt;font-weight:400;margin-left:2mm">%s</span></div>'
-                '<div style="padding:1.8mm 3mm 2.0mm">%s</div></div>'   # ★v503 제104조
+                '<div style="padding:1mm 3mm 1.2mm">%s</div></div>'   # ★v522 원복
                 % (LINE, bg, title, sub, body))
 
     now = (head('소득 · 지출')
@@ -1402,7 +1396,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
 
     def _chk(t):
         return ('<td style="width:3.2mm;padding:.15mm 0"><div style="width:2.6mm;height:2.6mm;'
-                'border:.38mm solid %s"></div></td>'
+                'border:.45mm solid %s"></div></td>'
                 '<td style="padding:.15mm 1.6mm .15mm 1.2mm;font-size:7.4pt;font-weight:800;'
                 'color:#1e2a38;white-space:nowrap">%s</td>' % (NAVY, t))
 
@@ -1435,23 +1429,23 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
         for c in (lst or []):
             v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                  else (str(c.get('contract_date') or '') or '—')
-            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
-                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
+            out += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.40mm solid #4e545c">%s</td>'
+                    '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.40mm solid #4e545c">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
-                    'text-align:right;border-bottom:.32mm solid #70757b">%s</td>'
+                    'text-align:right;border-bottom:.40mm solid #4e545c">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                    'border-bottom:.32mm solid #70757b">%s</td>'
+                    'border-bottom:.40mm solid #4e545c">%s</td>'
                     '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                    'border-bottom:.32mm solid #70757b">%s</td></tr>'
+                    'border-bottom:.40mm solid #4e545c">%s</td></tr>'
                     % (c['company'], str(c['product'])[:26], NAVY, amt(c), v3,
                        str(c.get('pay_term') or '') or '—'))
         if _cut:
             out += ('<tr><td colspan="5" style="padding:1.6mm;text-align:center;color:#c88d20;'
-                    'font-weight:900;font-size:8pt;border-bottom:.32mm solid #70757b">'
+                    'font-weight:900;font-size:8pt;border-bottom:.40mm solid #4e545c">'
                     '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not out:
             out = ('<tr><td colspan="5" style="padding:2.4mm;text-align:center;color:#36404b;'
-                   'font-size:8.4pt;border-bottom:.32mm solid #70757b">보유 계약 없음</td></tr>')
+                   'font-size:8.4pt;border-bottom:.40mm solid #4e545c">보유 계약 없음</td></tr>')
         return out
 
     def tbl_all():
@@ -1475,20 +1469,20 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
                 v3 = (('%s만원' % format(dth, ',')) if dth else '—') if kind == 'whole' \
                      else (str(c.get('contract_date') or '') or '—')
                 body += ('<tr><td style="padding:.55mm 1.6mm;font-size:7.6pt;font-weight:900;'
-                         'color:%s;border-bottom:.32mm solid #70757b">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
-                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.32mm solid #70757b">%s</td>'
+                         'color:%s;border-bottom:.40mm solid #4e545c">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.40mm solid #4e545c">%s</td>'
+                         '<td style="padding:.55mm 1.6mm;font-size:7.6pt;border-bottom:.40mm solid #4e545c">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:8.4pt;font-weight:900;color:%s;'
-                         'text-align:right;border-bottom:.32mm solid #70757b">%s</td>'
+                         'text-align:right;border-bottom:.40mm solid #4e545c">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                         'border-bottom:.32mm solid #70757b">%s</td>'
+                         'border-bottom:.40mm solid #4e545c">%s</td>'
                          '<td style="padding:.55mm 1.6mm;font-size:7.6pt;text-align:center;'
-                         'border-bottom:.32mm solid #70757b">%s</td></tr>'
+                         'border-bottom:.40mm solid #4e545c">%s</td></tr>'
                          % (NAVY, lbl, c['company'], str(c['product'])[:24], NAVY, amt(c), v3,
                             str(c.get('pay_term') or '') or '—'))
         if _cut:
             body += ('<tr><td colspan="6" style="padding:1.6mm;text-align:center;color:#c88d20;'
-                     'font-weight:900;font-size:8pt;border-bottom:.32mm solid #70757b">'
+                     'font-weight:900;font-size:8pt;border-bottom:.40mm solid #4e545c">'
                      '외 %d건 — 다음 장 참조</td></tr>' % _cut)
         if not body:
             body = ('<tr><td colspan="6" style="padding:2.4mm;text-align:center;color:#36404b;'
@@ -1499,7 +1493,7 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
                                    ('가입금액', 'right'), ('가입날짜 · 담보금액', 'center'),
                                    ('납입기간', 'center')])
         return ('<table style="width:100%%;border-collapse:collapse;background:#fff;'
-                'border:.38mm solid %s"><tr>%s</tr>%s</table>' % (LINE, th, body))
+                'border:.45mm solid %s"><tr>%s</tr>%s</table>' % (LINE, th, body))
 
 
     have = (tbl_all()

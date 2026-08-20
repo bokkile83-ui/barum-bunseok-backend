@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v525-border-20260820 =====
+# ===== BARUM remodel.py v525-ci-20260819 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -252,27 +252,6 @@ def _rowlist(old, kind):
 _GRPMAP = None
 
 
-# ★★★★★v525 제143조 (지점장 확정 2026.08.20 — 정답본 compare 대조)
-#   비교 엑셀·리포트의 <b>표시 라벨</b>만 바꾼다. <b>마스터는 손대지 않는다</b>(제15조 · 「엑셀 손대지 마라」).
-#   ㆍ구분  `운전` → `운전자`
-#   ㆍ구분  `골절`·`응급실`·`독감`·`화상`·`깁스` 5개 → <b>`상해`</b> 하나로 묶는다
-#   ㆍ담보  `120대수술비`(마스터 행 이름) → <b>`n대수술비`</b>(표준명 · resolve2 반환값과 같다)
-#   ★값·행 순서·매핑은 그대로다 — 눈에 보이는 이름만 바뀐다.
-_GRP_DISP = {'운전': '운전자', '골절': '상해', '응급실': '상해',
-             '독감': '상해', '화상': '상해', '깁스': '상해'}
-_NM_DISP  = {'120대수술비': 'n대수술비'}
-
-
-def _disp_g(g):
-    """구분 표시명(v525 제143조)"""
-    return _GRP_DISP.get(str(g or '').strip(), g)
-
-
-def _disp_n(nm):
-    """담보 표시명(v525 제143조)"""
-    return _NM_DISP.get(str(nm or '').strip(), nm)
-
-
 def _grp_of(nm):
     """담보명 → 구분(A열). 마스터를 한 번만 읽어 캐시한다.
        ★구분을 코드에 적지 않는다 — 마스터가 정본이다(제15조)."""
@@ -291,21 +270,6 @@ def _grp_of(nm):
                 _b = _ws.cell(_r, 2).value
                 if _b:
                     _GRPMAP[str(_b).strip()] = _cur
-            # ★★★★★v524 제142조 — <b>표준명 별칭</b>. 마스터 행 이름은 `120대수술비`인데
-            #   `resolve2`가 돌려주는 표준명은 `n대수술비`다(v352). 구버전 엑셀·리포트 경로에서
-            #   `n대수술비` 담보명이 오면 <b>구분이 「기타」</b>로 떨어졌다(실측 김순자 compare).
-            #   ⇒ 마스터를 고치지 않고 <b>별칭만</b> 건다(제15조 「마스터가 정본」 유지).
-            for _a1, _a2 in (('n대수술비', '120대수술비'), ('120대수술비', 'n대수술비')):
-                if _a1 not in _GRPMAP and _a2 in _GRPMAP:
-                    _GRPMAP[_a1] = _GRPMAP[_a2]
-            # ★★★★★v525 제144조 — <b>요양병원 간병인 2행</b>은 마스터에 행이 없다(제136조 ·
-            #   「엑셀과 보장분석PPT는 하지 마라 / 진단서+리포트만」). 그래서 구분이 <b>「기타」</b>로
-            #   떨어져 표 맨 뒤로 밀렸다(실측 김순자 compare).
-            #   ⇒ <b>비교 엑셀·리포트는 실어야 하므로</b> 구분만 `간병인`과 같게 별칭을 건다.
-            #     마스터에 행을 만들지 않는다 — 표시용 매핑이다.
-            for _ck in ('간병인질병일당(요양병원)', '간병인상해일당(요양병원)'):
-                if _ck not in _GRPMAP and '간병인' in _GRPMAP:
-                    _GRPMAP[_ck] = _GRPMAP['간병인']
         except Exception as _e:
             print('[v468 구분] 마스터 읽기 실패', str(_e)[:60])
     return _GRPMAP.get(str(nm).strip(), '기타')
@@ -331,7 +295,7 @@ def compare(old, new):
         #   그래서 담보표가 통째로 0행 → 엑셀이 1쪽이었다.
         #   → <b>담보 전수</b>를 여기서 만든다. 미가입(0/0)도 싣는다 —
         #     「없다」는 것도 상담에서 보여줄 정보다(지점장 시안도 전 담보를 싣는다).
-        allrows.append((_disp_g(_grp_of(nm)), _disp_n(nm), o, n, n - o,
+        allrows.append((_grp_of(nm), nm, o, n, n - o,
                         '미가입' if (o == 0 and n == 0) else
                         '삭제' if n == 0 else '신규 추가' if o == 0 else
                         '보장 증가' if n > o else '보장 감소' if n < o else '변동 없음'))
@@ -375,7 +339,7 @@ def compare(old, new):
             'up': _rowlist(old, 'up') or up, 'down': _rowlist(old, 'down') or down,
             'same': _rowlist(old, 'same') or same, 'delete': _rowlist(old, 'delete') or dele,
             'add': _rowlist(old, 'add') or add,
-            'all': [(_disp_g(_g), _disp_n(nm), o, n, n - o,
+            'all': [(_g, nm, o, n, n - o,
                      '미가입' if (o == 0 and n == 0) else
                      '삭제' if n == 0 else '신규 추가' if o == 0 else
                      '보장 증가' if n > o else '보장 감소' if n < o else '변동 없음')
@@ -472,10 +436,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     G = Font(bold=True, color='FF1F7A4D', name='맑은 고딕', size=_FS)
     R = Font(bold=True, color='FFC0444C', name='맑은 고딕', size=_FS)
     thin = Side(style='thin', color='FFD9DEE6'); BD = Border(thin, thin, thin, thin)
-    # ★★★★★v524 제141조 (지점장 지시 2026.08.20 «전체 다 굵은색하니까 너무 진하네 /
-    #   원래대로 <b>위아래만 진한검정선</b> 가자») — 구분 경계선은 <b>검정</b>이고,
-    #   굵은 선은 <b>구분 블록의 위·아래 두 줄만</b>이다. 좌우·내부는 얇은 선 그대로.
-    med = Side(style='medium', color='FF000000')          # ★구분 경계선(진한 검정)
+    med = Side(style='medium', color='FF0B2340')          # ★구분 경계선
     C = Alignment('center', 'center')
     CV = Alignment('center', 'center', wrap_text=True)    # 구분 셀(병합) 세로 가운데
 
@@ -582,19 +543,12 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     _r = 6
     _kk = {(c['company'], c['product']) for c in cmp_['keep']}
     _pk = {(c['company'], c['product']) for c in cmp_['prop']}
-    # ★★★★★v521 제118조 (지점장 실측 2026.08.19
-    #   «기존보험 11만원에서 2번째 엑셀에서 5만원으로 줄여도 전과 후에 금액이 동일하게 나온다»)
-    #   유지 계약의 「후」는 <b>최종 엑셀</b> 값이다. 기존 계약 객체(c)의 보험료를 양쪽에 쓰면
-    #   감액 리모델링이 <b>표에 아예 안 나타나고</b> 합계(prem_new)와도 어긋난다(제2조 등식 위반).
-    _newprem = {(x['company'], x['product']): x['premium'] for x in cmp_['new']['contracts']}
     for c in cmp_['old']['contracts'] + cmp_['prop']:
         key = (c['company'], c['product'])
         if key in _pk:
             before, after, tag, fn = 0, c['premium'], '신규', G
         elif key in _kk or not cmp_['kill']:
-            before = c['premium']
-            after = _newprem.get(key, c['premium'])       # ★v521 제118조
-            tag, fn = '유지', N
+            before = after = c['premium']; tag, fn = '유지', N
         else:
             before, after, tag, fn = c['premium'], 0, '삭제', R
         if key not in _pk and any((k['company'], k['product']) == key for k in cmp_['kill']):
@@ -808,15 +762,6 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     for _h in _heads:
         for c in range(2, 8):
             ws.cell(_h, c).border = Border(left=thin, right=thin, top=med, bottom=thin)
-    # ★v524 제141조 — 각 구분의 <b>마지막 행 아래</b>에도 굵은 검정선(위·아래 한 쌍).
-    _ends141 = [(_heads[_i + 1] - 1) if _i + 1 < len(_heads) else (r - 1)
-                for _i in range(len(_heads))]
-    for _e141 in _ends141:
-        if _e141 < 6: continue
-        for c in range(2, 8):
-            _b141 = ws.cell(_e141, c).border
-            ws.cell(_e141, c).border = Border(left=_b141.left, right=_b141.right,
-                                              top=_b141.top, bottom=med)
     for _b in _brks:
         ws.row_breaks.append(Break(id=_b))
     # ★★★★★v478 제87조 — <b>요약(하단표)은 페이지 바닥에 붙인다</b>(지점장 지시 2026.08.18

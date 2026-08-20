@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v525-border-20260820'
+VSTAMP = 'v525-ci-20260819'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -571,31 +571,6 @@ def judge_renewal(product, expiry, pay_count, contract='', pay_period='', compan
             _has_gen = any(_is_gen_dambo(k, contract) for k in (dambo or {}).keys())   # ★v476 제86조
             return '갱신' if _has_gen else '비갱신'
         return '갱신'                      # ★35년 미만 + 납입==보장 = 갱신(제93조)
-    # ★★★★★v521 제117조 (지점장 실측 2026.08.19 «운전자는 갱신인데 비갱신이라고 나온다»)
-    #   [결함] <b>신규 가입제안서에는 절대일자(가입일·만기일)가 없다</b>. 「20년만기 / 20년납」
-    #     상대표기뿐이라 cov_y=0 → ④ 블록을 통째로 건너뛰고 <b>무조건 비갱신</b>으로 떨어졌다.
-    #     [실측] DB손해보험 참좋은운전자상해보험2607 `20년만기 / 20년납` → 비갱신 (정답=갱신).
-    #     그래서 8쪽 「바뀌지 않는 담보(비갱신 추천)」에 <b>갱신 운전자 담보가 실렸다</b>.
-    #   [수정] 절대일자가 없으면 <b>상대표기끼리</b> 비교한다 — 제93조와 같은 규칙, 같은 결론.
-    #     ★'90세만기'는 <b>나이</b>다(`년만기`가 아니다) → 여기에 안 걸린다.
-    #     ★롯데 `20년납/26년만기(90세만기)` → 26≠20 → 비갱신(정상 유지).
-    _rel521 = ' '.join(str(x or '') for x in (product, expiry, pay_period, pay_count))
-    # ★★★★★v521 제117조 2항 (지점장 확정 2026.08.19 «<b>새 제안서의 운전자는 무조건 갱신이다</b>»)
-    #   여기까지 왔다 = <b>절대일자가 없다 = 신규 가입제안서</b>다. 그 제안서의 운전자보험은
-    #   기간 비교를 볼 것도 없이 <b>갱신</b>이다. (기존 보유계약은 위 ①~④에서 이미 판정돼 여기 안 온다 —
-    #   그래서 이 규칙은 <b>제안서에만</b> 걸린다. 구 「운전자→비갱신」 규칙 폐기 상태 그대로다.)
-    if '운전자' in re.sub(r'\s', '', str(product or '')):
-        print(f"[v521 제117조2항] 제안서 운전자 '{product}' → 갱신(무조건)")
-        return '갱신'
-    _m521 = re.search(r'(\d+)\s*년\s*만기', _rel521)
-    _p521 = re.search(r'(\d+)\s*년\s*납', _rel521)
-    if _m521 and _p521:
-        _my521, _py521 = int(_m521.group(1)), int(_p521.group(1))
-        if _my521 != _py521:
-            return '비갱신'
-        if _py521 >= 35 or ('삼성화재' in re.sub(r'\s', '', str(company or ''))):
-            return '갱신' if any(_is_gen_dambo(k, contract) for k in (dambo or {}).keys()) else '비갱신'
-        return '갱신'
     return '비갱신'
 
 def _has_nonpay3(dambo):
@@ -1387,17 +1362,20 @@ _STRUCT_SELFTEST = [
     ('제103조 그래프색',  'report_pages.py',    r'#f0762a', True),
     ('제103조 그래프색', 'report_pages.py',    r'bar-before\{background:#f0762a', True),
     ('제103조 삭제행',   'report_pages.py',    r'status-del', True),
-    ('제104조 8쪽입력칸','report_pages.py',    r'height:4\.6mm;border-bottom', True),
-    ('제105조 4쪽표',    'report_pages.py',    r'padding:2\.7mm 1mm', True),
+    ('제104조 8쪽원복',  'report_pages.py',    r'height:2\.8mm;border-bottom', True),   # ★v522 — 지점장 «8페이지 기존대로» 원복 반영
+    ('제105조 4쪽표',    'report_pages.py',    r'padding:2\.05mm 1mm', True),
     ('제106조 금색',     'report_pages.py',    r'--gold:#c88d20', True),
     ('제106조 레드',     'report_pages.py',    r'diff\.down\{color:#c0392b\}', True),
-    ('제107조 6쪽우측',  'report_pages.py',    r'\.rcol \.box\{height:6\.4mm\}', True),
+    ('제107조 6쪽우측',  'report_pages.py',    r"\.rcol \.box\{height:8\.0mm\}", True),   # ★v525 — 6쪽 짤림 해소로 8.6→8.0mm
     ('제108조 상태칸',   'report_pages.py',    r'td class="st-cell"', True),
     ('제111조 레켐비',   'report_weasy.py',    r'알츠하이머 신약 <b>레켐비</b>', True),
     ('제109조 간병라벨', 'report_pages.py',    r"line\('간호통합병동', '간호통합병동'\)", True),
     ('제110조 요양간병', 'main.py',            r"return '간병인질병일당\(요양병원\)',0", True),
     ('제111조 연금인포', 'report_weasy.py',    r'연금계좌 세액공제', True),
     ('제110조 진단서',   'main.py',            r"'요양병원 간병인','간병인질병일당\(요양병원\)'", True),
+    ('제116조 심장14행', 'report_pages.py',    r"'인공소생 성공 심장정지', 'I46\.0'", True),
+    ('제116조 5쪽유동', 'report_pages.py',    r"\('산정특례 심장', '산정특례심장'\)", True),
+    ('제119조 CI기재',   'report_pages.py',    r"'중대한 급성심근 \(CI\)', '중대한 급성심근'", True),
     ('제97조 인쇄예산',   'remodel.py',         r'_PAGE_PT = 735\.0', True),
     ('제100조 균등배분',  'remodel.py',         r'v490 균등', True),
     ('제101조 꼬리고정',  'remodel.py',         r'_fpad = int\(', True),
@@ -3157,10 +3135,24 @@ def build_proposal_contract(pdf_bytes, fname=''):
     blk  = ["%s  %s" % (k, _agg[k]) for k in _ord]
     dambo= rule_extract(blk, prefolded=True)   # ★v390b 접힘 복원 재적용 금지
     dambo.pop('__DUP__', None)          # ★내부 로그 키 — 계약 dambo에 남으면 확인큐 기재에서 터진다
-    print(f'[JEAN] 회사={co} 담보={len(rows)}건 매핑입력={len(blk)} 보험료={prem:,} 납기/만기={term}')
+    # ★★★★★v521 제117조 (지점장 실측 2026.08.19 «DB 참좋은운전자상해보험2607이 비갱신으로 나온다»)
+    #   제안서 경로는 `renewal`을 <b>'비갱신'으로 하드코딩</b>하고 있었다 — <b>제5조를 한 번도 타지 않았다</b>.
+    #   실측 PDF는 <b>20년만기 / 20년납</b>(납기 == 만기) → 제5조 ⑤로 <b>갱신</b>이다.
+    #   term(`납기/만기`)은 이미 뽑혀 있었는데 <b>쓰지 않았다</b>.
+    _jr = '비갱신'
+    _pn = re.sub(r'\s', '', str(prod or ''))
+    _jd = list((dambo or {}).keys())
+    if '갱신형' in _pn: _jr = '갱신'                                   # 제5조 ①
+    elif '세만기' in _pn: _jr = '비갱신'                                # 제5조 ②
+    elif _jd and all(_is_gen_dambo(_k, '') for _k in _jd): _jr = '갱신'  # 제5조 ④ 담보 100%
+    elif '/' in term:                                                  # 제5조 ⑤ 납기 == 만기
+        _a, _b = term.split('/', 1)
+        _na = re.sub(r'[^0-9]', '', _a); _nb = re.sub(r'[^0-9]', '', _b)
+        if _na and _nb and _na == _nb: _jr = '갱신'
+    print(f'[JEAN] 회사={co} 담보={len(rows)}건 매핑입력={len(blk)} 보험료={prem:,} 납기/만기={term} 판정={_jr}')
     return {'dup':0,'holder':'','company':co,'ipwon':{},'ci_extra':0,
             'product':(prod or '가입제안서'),'contract_date':'','expiry_date':'',
-            'premium':prem,'pay_period':_pp,'pay_count':'','renewal':'비갱신',
+            'premium':prem,'pay_period':_pp,'pay_count':'','renewal':_jr,
             'dambo':dambo,'ci_jugye':[],'ci_sebu':{},'ci_lines':{},
             'proposal':True,'jean_rows':rows}
 
@@ -3604,22 +3596,11 @@ def parse_txt(txt, filename='', extra=None):
         (lambda t: '심근병증' in t,                 ['심근병증']),
         (lambda t: '주요심장염증' in t,             ['주요심장염증']),
       ],
-      # ★★★★★v522 제129조 (지점장 실측 2026.08.20 «롯데 제안서 넣으면 협심증이 1500 · 염증도 1500»)
-      #   [결함] 조건이 <b>'특정심장' + '2'</b>로 <b>떨어져</b> 있었다. 위에서 `Ⅱ→2` 정규화를 하므로
-      #     담보명 꼬리의 <b>상품 수식어 「간편할인형Ⅱ」가 '2'가 된다</b>.
-      #     ⇒ `심혈관질환진단비(특정심장질환<b>Ⅰ</b>)(간편할인형<b>Ⅱ</b>)` 1,000 이
-      #       첫 줄에 걸려 <b>협심증 1,000 + 염증 1,000</b>으로 분해됐다.
-      #       거기에 인라인 블록이 특정Ⅱ 500을 더해 <b>협심증 1,500 / 염증 1,500</b>,
-      #       <b>급성심근경색은 0</b>이 됐다(실측 김순자).
-      #   [수정] <b>등급을 담보명에 붙여서</b> 본다 — '특정심장질환1' / '특정심장질환2'.
-      #     떨어진 부분일치는 상품 수식어를 못 걸러낸다. 다른 회사(KB·한화·NH·DB·현대)는
-      #     `'특정1'`처럼 <b>이미 붙어</b> 있어 이 함정에 안 걸린다 — 롯데만 고친다.
-      #   근거 = 김순자 롯데 제안서 8~9쪽 약관 각주(Ⅰ=I21~23·I46.0 / Ⅱ=I20·I24·I25·I30~41).
       '롯데': [
-        (lambda t: '특정심장질환2' in t,            ['협심증','주요심장염증']),
-        (lambda t: '특정심장질환1' in t,            ['급성심근경색']),
+        (lambda t: '특정심장' in t and '2' in t,    ['협심증','주요심장염증']),
+        (lambda t: '특정심장' in t and '1' in t,    ['급성심근경색']),
         (lambda t: '특정15대' in t,                 ['심장판막','심근병증','빈맥','심부전']),
-        (lambda t: '기타심장부정맥' in t or '기타부정맥' in t, ['부정맥']),
+        (lambda t: '기타부정맥' in t,               ['부정맥']),
       ],
       # ★삼성·메리츠 '허혈성심장질환진단비' = 무조건 단독(허혈성 행). 분해 없음.
       '삼성':   [],
@@ -3756,7 +3737,12 @@ def parse_txt(txt, filename='', extra=None):
         #   구 v44 규칙('3열은 총회차가 없으니 ④ 적용 금지')은 <b>폐기</b>. 3열에도 납입기간(20년납)과
         #   보험기간(2026.03.27~2046.03.27)이 그대로 인쇄돼 있어 ④ 판정에 필요한 값이 다 있다.
         #   실측 오류(양*선 KB): 삼성 운전자 20년납/20년만기 → 비갱신(오류) · New내돈내삼 54년납/54년만기 → 비갱신(오류).
-        c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''), c.get('dambo'))
+        # ★★★★★v521 제117조 2항 — <b>제안서 계약은 재판정하지 않는다</b>.
+        #   제안서에는 가입일·만기일자·납입회차가 <b>없다</b>(가입 전이므로). `judge_renewal`을 태우면
+        #   입력이 전부 빈 값이라 <b>무조건 비갱신</b>이 된다 — 실측 DB 참좋은운전자2607이 그랬다.
+        #   제안서는 `build_proposal_contract`에서 <b>납기/만기(term)</b>로 이미 판정했다. 그 값을 쓴다.
+        if not c.get('proposal'):
+            c['renewal'] = judge_renewal(c['product'], c['expiry_date'], c['pay_count'], c['contract_date'], c['pay_period'], c.get('company',''), c.get('dambo'))
         # ★★★★★v473b 폐기 (지점장 지적 2026.08.18 「지침을 어겼다 · 늘 지침이 우선이다」)
         #   구 규칙 = 「담보 절반 이상이 '갱신형' 표기면 갱신 강제」.
         #   <b>지침 §6에 없는 조문</b>이다. '절반'이라는 임계값은 어디에도 없다.
@@ -4206,39 +4192,7 @@ def resolve_kw(raw):
     #   → <b>'심뇌'+'주요치료'면 괄호 안 수식어와 무관하게 2대 주요치료비</b>. 혈전용해 판정보다 앞에 둔다.
     #   ★`뇌졸중 혈전용해치료비`·`특정심장질환 혈전용해치료비`처럼 '주요치료'가 없는 담보는 종전대로 혈전용해치료비.
     if has('심뇌') and has('주요치료'): return '2대 주요치료비',0
-    # ★★★★★v521 제128조 (지점장 확정 2026.08.19 «저건 <b>롯데만의 단독상품</b>이다 /
-    #   뇌혈관허혈성주요치료비는 그냥 <b>2대주요치료비에 대표값만</b> 넣어라»)
-    #   [내 오류] v521 초판에서 나는 이 조건을 <b>'주요치료'+뇌·심 키워드 전부</b>로 넓혔다 —
-    #     전 회사에 걸리는 <b>전역 규칙</b>을 내가 만든 것이다. 지점장 지적 「롯데만의 단독상품」으로 <b>철회</b>한다.
-    #   [남기는 것] 담보명이 <b>뇌혈관 + 허혈 + 주요치료</b>인 것만. 이 조합은 롯데 전용 표기다.
-    #     실측 김순자 롯데 `뇌혈관·허혈심장질환주요치료비(<b>수술</b>)(매회)`가 이름 속 '수술' 때문에
-    #     수술 블록으로 내려가 <b>뇌혈관수술비</b>로 샜다. 같은 담보의 (혈전용해치료)·(중환자실치료)는
-    #     2대로 정상 도착 — <b>한 담보가 괄호 수식어에 따라 두 행으로 갈렸다</b>(v397과 같은 결함).
-    #   [정본] 엑셀·보장분석PPT = <b>2대 주요치료비 대표값 1개</b>(`_REPMAX_ROWS`가 max로 접는다).
-    #          진단서·리포트 = <b>순환계 주요치료비 칸</b>(v421f · 리포트 5쪽 `circ` 경로).
-    #     ⇒ 롯데는 뇌허주요치료비 + 순환계주요치료비(2대제외)가 <b>같은 행에서 대표값 1개</b>가 된다.
-    if has('주요치료') and has('뇌혈관') and has('허혈'): return '2대 주요치료비',0
-    # ★★★★★v522 제130조 (지점장 실측 2026.08.20 «계속 암수술이 없는데 암수술이 잡힌다»)
-    #   [결함] `상급종합병원Ⅲ 일반암주요치료비Ⅱ(<b>수술</b>)(매회)` 1,000 이 이름 속 '수술' 때문에
-    #     수술 블록(4341행 `has('암') → 암수술`)에 먼저 걸렸다. <b>롯데엔 암수술비 담보가 없다.</b>
-    #     같은 담보의 (항암방사선치료)·(항암약물치료)·(중환자실치료) 조각은 암주요치료비로 정상 도착 —
-    #     <b>한 담보가 괄호 수식어에 따라 두 행으로 갈렸다</b>.
-    #   [기지 사고] v422 주석에 똑같은 게 적혀 있다 — 「삼성 …특정치료비Ⅲ(<b>수술</b>(회당),…)가
-    #     이름 안의 '수술' 때문에 <b>암수술 행으로 갔다</b>」. 뇌·심만 앞으로 당기고 <b>암은 안 당겼다</b>.
-    #   [수정] 기존 암주요치료비 조문(하단 `has('암') and has('주요치료')`)을 <b>수술 판정보다 앞</b>으로
-    #     올린다. 조건은 <b>그대로</b>다 — 비급여→하이클래스(암) · 유사암→종전 처리 · 순환계·2대→2대. 손대지 않는다.
-    if has('암') and has('주요치료') and no('비급여','전액본인','순환계','2대','유사암','하이클래스'):
-        return '암주요치료비',0
-    # ★★★★★v521 제121조 (지점장 확정 2026.08.19
-    #   «지금 없는 혈전용해치료비도 잡히는데 그건 <b>단독담보로 있을때 기재</b>다»)
-    #   [결함] `…주요치료비(혈전용해치료)`는 <b>주요치료비 한 담보를 치료방식별로 쪼갠 조각</b>이지
-    #     혈전용해치료비 담보가 아니다. 담보명 속 '혈전용해' 글자에 먼저 걸려
-    #     <b>가입한 적 없는 혈전용해치료비 행에 값이 찍혔다</b>
-    #     (실측 김순자 롯데 192 `뇌혈관·허혈심장질환주요치료비(혈전용해치료)` ·
-    #                    208 `특정순환계질환(2대질환제외)주요치료비(혈전용해치료)`).
-    #   ⇒ <b>'주요치료'가 붙으면 혈전용해치료비가 아니다.</b> 단독 담보명일 때만 이 행이다.
-    #     (`뇌졸중 혈전용해치료비`·`특정심장질환 혈전용해치료비` = 단독 → 종전대로 유지)
-    if has('혈전용해') and has('치료') and no('주요치료'): return '혈전용해치료비',0
+    if has('혈전용해') and has('치료'): return '혈전용해치료비',0
     # ★철심제거·핀제거·내고정물제거 = 골절수술비 아님(별개 처치) → [확인]
     if (has('철심') or has('핀제거') or has('내고정물')) and has('수술'): return None,0
     # 종번호
@@ -5375,19 +5329,6 @@ def build_excel(data, out):
     if _rh_fixed:
         print('[v447 행높이] 마스터 미지정 %d행 보정 → %s (%s~%s)'
               % (len(_rh_fixed), _RH_FILL, _rh_fixed[0], _rh_fixed[-1]))
-    # ★★★★★v523 제134조 (렌더 육안검수 2026.08.20) — <b>담보행 가로정렬 미지정 보정</b>.
-    #   [실측] 마스터 <b>46행 심근병증 · 47행 심장판막</b> 두 행만 C열 정렬이 없다(나머지 99행은 center).
-    #     그래서 산출 엑셀에서 이 두 행 값만 <b>우측정렬</b>로 튄다 — 표가 어긋나 보인다.
-    #   제62조(행높이)와 <b>같은 성격의 마스터 서식 누락</b>이다. 같은 방식으로 산출 시점에 채운다.
-    _al_fixed = []
-    for _r in range(6, ws.max_row + 1):
-        for _c in range(3, MAXC + 1):
-            _cl = ws.cell(_r, _c)
-            if _cl.alignment.horizontal is None:
-                _cl.alignment = Alignment(horizontal='center', vertical='center')
-                if _c == 3: _al_fixed.append(_r)
-    if _al_fixed:
-        print('[v523 정렬] 마스터 미지정 %d행 보정 → center %s' % (len(_al_fixed), _al_fixed))
 
     ws.cell(1,1).value = f"{client} 보장진단"
     # ★★★★★v297 (이영태 실측 2026.07.31, 영구): <b>이미지 PDF 경고를 본표 1행에도 박는다</b>.
@@ -5804,47 +5745,7 @@ def build_excel(data, out):
                     _i49=(not _i49excl) and (('I49' in _rn) or ('기타부정맥' in _rn) or ('기타심장부정맥' in _rn))
                     # 흥국·롯데: 특정Ⅰ=급성심근 / 특정Ⅱ=협심증+염증 / 롯데 15대=판막·심근병·빈맥·심부전
                     #   ★v384 구 주석 '허혈'은 협심증으로 표기(묶음은 허혈성 행에 안 넣는다).
-                    # ★★★★★v521 제119조 — <b>롯데 심혈관질환진단비 = 약관표 그대로</b>
-                    #   (지점장 실측 2026.08.19 «협심증도 엉망이고 심장도 엉망이고»)
-                    #   [결함 3중]
-                    #    ① `_rmn`이 <b>0을 돌려준다</b>. v520에서 괄호 안 등급을 다시 죽였는데
-                    #       롯데 담보명은 등급이 <b>괄호 안</b>에 있다 —
-                    #       `심혈관질환진단비(특정심장질환Ⅱ)(간편할인형Ⅱ)` → 괄호 두 개 다 제거 → <b>0</b>.
-                    #       그래서 아래 `_t==1 / _t==2` 분기가 <b>한 번도 안 탔다</b>(전부 사문).
-                    #    ② 못 탄 담보는 `resolve2`로 흘렀고, <b>특정방실차단및전도장애 100만이
-                    #       「염증」 행에 찍혔다</b>(실측 김순자 염증 100 — 근거 없는 값).
-                    #    ③ 결과: 허혈성 진단비 0 · 염증 100(오답) · 방실차단 [확인] 누락.
-                    #   [수정] 롯데는 <b>등급 추론을 버리고 담보명 문자열로 직독</b>한다. 근거는
-                    #     제안서 약관 각주(김순자 롯데 N·10 2604 · 8~9쪽)에 <b>질병코드가 그대로</b> 있다 —
-                    #       특정심장질환Ⅰ = I21·I22·I23·I46.0                → 급성심근경색
-                    #       특정심장질환Ⅱ = I20 / I24·I25 / I30~I33·I38·I40·I41 → 협심증 · 염증
-                    #         ★I24·I25(허혈성)은 <b>협심증 행</b>이다 — 지점장 재확정 2026.08.19
-                    #           «지침에 있다. 심장에 있는 허혈성은 다 협심증이다» = 제84조(v384) 그대로.
-                    #           「허혈성 진단비」 행은 <b>담보명이 허혈성인 단독 담보 전용</b>. 묶음은 안 넣는다.
-                    #       특정15대심장질환 = I05~I09·I34~I37·I39 / I42·I43 / I47·I48 / I50
-                    #                                                        → 심장판막 · 심근병증 · 빈맥 · 심부전
-                    #       기타심장부정맥 = I49                              → 부정맥
-                    #       특정방실차단및전도장애 = I44.1~3·I45.2·I45.3      → <b>전용행 없음 → [확인]</b>
-                    #     ★§8.3.1 공통원칙(묶음은 구성질환 마스터 행에 동일 금액 각각 기재) 그대로다.
-                    #     ★적용 범위 = <b>롯데만</b>. 다른 회사 분기는 한 줄도 건드리지 않는다.
-                    if '롯데' in _co:
-                        _ln521 = re.sub(r'\s', '', _rn).replace('（', '(').replace('）', ')')
-                        _ln521 = _ln521.replace('Ⅰ', 'I').replace('Ⅱ', 'II').replace('Ⅲ', 'III')
-                        if ('방실' in _ln521) or ('전도장애' in _ln521):
-                            _heart_bundle = []            # ★전용행 없음 — 다른 행으로 새지 않게 여기서 끊는다
-                            print(f"[v521 확인큐·롯데심장] '{raw}' {amt} → 전용행 없음(I44·I45). 수기 판정 필요")
-                        elif '15대심장' in _ln521:
-                            _heart_bundle = ['심장판막', '심근병증', '빈맥', '심부전']
-                        elif ('기타심장부정맥' in _ln521) or ('기타부정맥' in _ln521) or ('I49' in _ln521.upper()):
-                            _heart_bundle = ['부정맥']
-                        elif '특정심장질환II' in _ln521:
-                            # ★약관 각주 I20 / I24·I25 / I30~41. 허혈성(I24·25)은 제84조에 따라 협심증 행.
-                            _heart_bundle = ['협심증', '염증']
-                        elif '특정심장질환I' in _ln521:
-                            _heart_bundle = ['급성심근경색']                     # ★약관 각주 I21~23 · I46.0
-                        elif '심근병' in _ln521:
-                            _heart_bundle = ['심근병증']
-                    if _heart_bundle is None and (('흥국' in _co) or ('롯데' in _co)):
+                    if ('흥국' in _co) or ('롯데' in _co):
                         # ★★★★★v386 (지점장 지적 2026.08.12 「흥국을 못읽어낸다」 실측 후속):
                         #   흥국 <b>허혈성심질환진단비Ⅱ</b> 500이 <b>협심증·염증으로 분해</b>됐다.
                         #   원인 = 아래 `_t==2 → 협심증·염증`(롯데 특정심장Ⅱ 규칙)이 <b>묶음 수식어 없이 등급만</b>
@@ -6727,26 +6628,6 @@ def build_excel(data, out):
     for c in range(3, last_col+1):
         ws.column_dimensions[get_column_letter(c)].width = 12
 
-    # ★★★★★v523 제135조 (렌더 육안검수 2026.08.20) — <b>1행 회사·상품명이 잘린다</b>.
-    #   [실측] `무배당 프로미라이프 나에게 맞춘 더좋은 초경증 간편건강보험<b>2607</b>` —
-    #     마스터 1행 높이가 <b>38.25 고정</b>이라 상품명 마지막 줄이 잘려 <b>상품 코드가 안 보인다</b>.
-    #     제v29c 1항은 「상품명 누락 금지」다 — 잘리는 것도 누락이다.
-    #   [수정] 열폭(12)에 맞춰 <b>실제 줄 수를 세어</b> 높이를 계산한다. 계약이 늘어도 따라간다.
-    try:
-        _need = 3
-        for _c in range(3, last_col+1):
-            _tx = str(ws.cell(1,_c).value or '')
-            _ln = 0
-            for _seg in _tx.split('\n'):
-                _w = sum(2 if ord(_ch) > 0x2000 else 1 for _ch in _seg)   # 한글=2칸
-                _ln += max(1, -(-_w // 12))                                # 열폭 12 기준 올림
-            _need = max(_need, _ln)
-        _h1 = min(135.0, max(38.25, _need * 12.6 + 4))   # ★상한 = 10줄 상품명까지 수용
-        ws.row_dimensions[1].height = _h1
-        print('[v523 헤더높이] 최대 %d줄 → 1행 높이 %.1f' % (_need, _h1))
-    except Exception as _eh:
-        print('[v523 헤더높이] 계산 실패', str(_eh)[:50])
-
     # ★ 테두리: A(구분)~끝열(합계) 전체 격자 직접 그림 + 구분(키워드)마다 굵은 구분선.
     #   (마스터 A·B 테두리가 중간행에서 끊겨 '선 없음' 발생 → 전부 새로 그림)
     _thin = Side(style='thin', color='FF000000'); _med = Side(style='medium', color='FF000000')   # ★v29t: 6자리 색은 알파00(투명) 저장돼 일부 뷰어에서 선 사라짐 → FF 필수
@@ -7338,28 +7219,6 @@ def build_excel(data, out):
         print('[v464 인쇄] 가로 1장 · 세로 무제한 (시트 %d개)' % len(wb.worksheets))
     except Exception as _ep:
         print('[v464 인쇄] 설정 실패', str(_ep)[:60])
-    # ★★★★★v522 제131조 (지점장 실측 2026.08.20 «a1세로가 깨졌다 / 초록이 텅비어있다»)
-    #   [결함] 산출 엑셀에서 <b>A열 구분(그룹) 세로 병합이 일부 사라진다</b>.
-    #     [실측] 같은 고객인데 계약 7건 산출물은 `A6:A10(사망)·A54:A66(일당)`이,
-    #            8건 산출물은 `A32:A40(뇌혈관)·A41:A53(심장)`이 빠졌다 — <b>파일마다 다르게</b> 유실된다.
-    #     병합이 풀리면 그룹 둘째 행부터 A열이 <b>흰 빈칸</b>이 되어 초록 구분띠가 끊긴다.
-    #   [수정] <b>마스터 병합이 정본</b>이다. 저장 직전에 A열 세로 병합을 마스터와 대조해 복원한다.
-    #     원인 경로를 쫓지 않고 <b>출력을 보장</b>한다(제v67조 「폼 강제 주입」과 같은 방식).
-    try:
-        _mws = openpyxl.load_workbook(TPL_XL)['보장분석']
-        _want = [str(_x) for _x in _mws.merged_cells.ranges
-                 if re.fullmatch(r'A\d+:A\d+', str(_x))]
-        _have = {str(_x) for _x in ws.merged_cells.ranges}
-        _fix = 0
-        for _rng in _want:
-            if _rng in _have: continue
-            try:
-                ws.merge_cells(_rng); _fix += 1
-            except Exception as _em:
-                print('[v522 A열병합] 복원 실패 %s %s' % (_rng, str(_em)[:40]))
-        print('[v522 A열병합] 마스터 %d구간 · 복원 %d건' % (len(_want), _fix))
-    except Exception as _ea:
-        print('[v522 A열병합] 대조 실패 —', str(_ea)[:60])
     _no_fullcalc(wb)          # ★v51 편집모드 강제 재계산 방지(수식은 유지)
     wb.save(out)
     _force_nocalc_xml(out)    # ★v124 저장 후 XML에 직접 못박음(3중 방어)
@@ -9344,23 +9203,6 @@ def behave_selftest(d=''):
     except Exception as _e:
         bad.append('[제25·28조] 확인 실패 %s' % _e); done.update({25, 28})
 
-    # ★★★★★v523 제133조 (지점장 실측 2026.08.20 «원래 잘되던 마스터 엑셀을 터트렸다»)
-    #   [사고] 배포 zip에 <b>오염된 master.xlsx</b>가 실려 나갔다 —
-    #     정본 <b>106행 · A열 15구분</b> → 오염본 <b>108행 · 8구분</b>.
-    #     A열 구분명 7개(수술·운전·골절·독감·화상·깁스·실손)가 사라져
-    #     산출 엑셀의 <b>초록 구분띠가 통째로 비었다</b>.
-    #   [원인] 값 검사(조문 117개)는 돌면서 <b>폼(마스터) 자체는 한 번도 안 봤다</b>.
-    #     지침 정본에 「15구분 · 담보 101행 · max_row 106」이라고 숫자까지 적혀 있는데 대조하지 않았다.
-    #   ⇒ zip 발행 전에 <b>마스터를 먼저 검사</b>한다. 여기서 걸리면 발행 자체가 막힌다.
-    try:
-        import openpyxl as _op2
-        _mw = _op2.load_workbook(_os.path.join(base, 'master.xlsx'))['보장분석']
-        _mg = [_mw.cell(_r, 1).value for _r in range(6, _mw.max_row + 1) if _mw.cell(_r, 1).value]
-        _t(133, '마스터 max_row', _mw.max_row, 106)
-        _t(133, '마스터 A열 구분 수', len(_mg), 15)
-    except Exception as _e:
-        bad.append('[제133조] master 폼 확인 실패 %s' % _e); done.add(133)
-
     # ⑨ 제62조 마스터 담보행 행높이 (지점장 「골절 이하로 세로폭이 줄었다」)
     try:
         import openpyxl as _op
@@ -9682,27 +9524,18 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
     #   ★검산·실손 세대는 <b>「불가」로 명시하고 건너뛴다</b>(막지 않는다). 지점장 원문: 「불가」.
     #   ★새 후처리 경로를 만들지 않는다 — parse_txt(extra=)로 기존 엔진에 그대로 태운다(영구원칙).
     #   ★구 v371~v372의 「왼쪽 칸 제안서」 경로는 <b>폐기</b>(칸의 뜻이 상황마다 바뀌던 원인).
-    # ★★★★★v523 제137조 (지점장 실측 2026.08.20 «가입제안서를 3개 넣었는데 1개만 인식된다 /
-    #   단독 넣을 때도 3개가 되도록 해달라»)
-    #   [결함] 단독 모드가 <b>`_prop_cts[0]` 하나만</b> 썼다. 위 v385가 3건을 <b>이미 다 만들어 뒀는데</b>
-    #     여기서 첫 건만 꺼내 `extra=[_solo]`로 넘겨 <b>2·3번째 제안서가 조용히 버려졌다</b>.
-    #     보장분석지를 같이 올리면(`extra=_prop_cts`) 3건이 다 살아서 <b>단독일 때만</b> 1건이 됐다.
-    #   [수정] 만들어 둔 <b>전부</b>를 넘긴다. 담보 3건 미만인 것만 개별로 걸러낸다(구 조건 유지).
     if (not data or not data.get('contracts')) and _prop_cts:
-        _solos = [_c for _c in _prop_cts if len(_c.get('dambo') or {}) >= 3]
-        _drops = [_c for _c in _prop_cts if len(_c.get('dambo') or {}) < 3]
-        for _dc in _drops:
-            print(f"[JEAN단독] '{str(_dc.get('product'))[:30]}' 담보 {len(_dc.get('dambo') or {})}건 — 3건 미만이라 제외")
-        if _solos:
+        _solo = _prop_cts[0]
+        if len(_solo.get('dambo') or {}) >= 3:
             try:
-                data = parse_txt('', fname, extra=_solos); src_note='가입제안서 단독'
-                globals()['_JEAN_ONLY'] = ('★ 가입제안서 단독(%d건) — 보장분석지가 없어 '
-                                           '[검산] 불가 · [실손 세대 판정] 불가 · 보유계약 비교 불가' % len(_solos))
-                print('[JEAN단독] 오른쪽 칸 제안서만 %d건 → 단독 모드로 산출 — 검산·실손세대 건너뜀' % len(_solos))
+                data = parse_txt('', fname, extra=[_solo]); src_note='가입제안서 단독'
+                globals()['_JEAN_ONLY'] = ('★ 가입제안서 단독 — 보장분석지가 없어 '
+                                           '[검산] 불가 · [실손 세대 판정] 불가 · 보유계약 비교 불가')
+                print('[JEAN단독] 오른쪽 칸 제안서만 → 단독 모드로 산출 — 검산·실손세대 건너뜀')
             except Exception as _se2:
                 print('[JEAN단독] parse_txt 실패', type(_se2).__name__, _se2)
         else:
-            print('[JEAN단독] 담보 3건 이상인 제안서가 없다 — 단독 모드 미적용')
+            print(f"[JEAN단독] 담보 {len(_solo.get('dambo') or {})}건 — 3건 미만이라 단독 모드 미적용")
 
     try:
         if not data or not data.get('contracts'):
@@ -9838,17 +9671,6 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                             elif '암' in _t7:               _p7put('암통합치료비', _v7)
                         elif ('순환계' in _t7) and ('주요치료' in _t7):
                             _p7put('순환계주요치료비', _v7)
-                        # ★★★★★v523 제136조 (지점장 확정 2026.08.20
-                        #   «간병인질병일당(요양병원)·간병인상해일당(요양병원) →
-                        #    <b>엑셀과 보장분석PPT는 하지 마라. 진단서+리포트만 해라</b>»)
-                        #   ⇒ 마스터에 <b>행을 만들지 않는다</b>(정본 106행 유지 · 「엑셀 더 이상 손대지 마라」).
-                        #     resolve2는 표준명을 돌려주지만 마스터 무행이라 <b>엑셀·보장분석PPT에는 안 실린다</b>.
-                        #     값은 여기서 <b>진단서 전용 채널</b>(p7_only)로만 보낸다 — 순환계 주요치료비와 같은 방식.
-                        #   ★질병·상해 두 담보는 진단서 칸이 하나(`요양병원 간병인`)라 <b>대표값(max) 1건</b>이다
-                        #     (제v421j 「각각의 담보들의 대표값을 넣으라는거다」).
-                        #   ★'요양병원제외'는 <b>일반 간병인</b>이다 — 제110조대로 여기서 제외한다.
-                        elif ('간병인' in _t7) and ('요양병원' in _t7) and ('제외' not in _t7):
-                            _p7put('간병인일당요양병원', _v7)
                         # ★v422c 특정치료비Ⅲ는 <b>엑셀 암주요치료비</b>로 간다(지점장 최종 확정) —
                         #   7p 암 주요치료비 칸은 그 엑셀 값을 읽으므로 전용 주입이 필요 없다.
             except Exception as _e7: print('[v421f 7p전용] 탐색 실패', _e7)
