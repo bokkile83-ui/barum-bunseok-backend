@@ -175,6 +175,22 @@ def _ws_amt(rep, kind):
         return f'<b style="color:#1F7A4D">✓ 가입 · {_html.escape(str(v))}</b>'
     return '<b style="color:#C0444C">× 미가입</b>'
 
+# ★★★★★v524 제138조 (지점장 실측 2026.08.20 «암진단비가 갱신인데 진단서에 블랙으로 나온다»)
+#   [결함] `gen_map`의 키는 <b>마스터 담보명</b>(`일반암`)인데 진단서 칸 라벨은 <b>`암진단비`</b>다.
+#     `_is_gen`은 라벨 문자열로 직접 조회하고 부분일치도 `'암진단비' in '일반암'` → False라
+#     <b>갱신 담보가 전부 검정</b>으로 나갔다. 엑셀은 파랑인데 진단서만 검정 — 4대 산출물 색 연동 파손.
+#   [수정] 라벨 ↔ 마스터명 대응을 여기 <b>한 곳</b>에 둔다(제19조 「같은 판정은 한 곳에서만」).
+_GENLBL = {
+    '암진단비':['일반암'], '통합암진단비':['통합암'], '통합전이암진단비':['통합전이암'],
+    '유사암진단비':['유사암(갑.기.경.제)'], '고액암진단비':['고액암'],
+    '뇌혈관':['뇌혈관진단비'], '뇌졸증':['뇌졸증진단비'], '뇌졸중':['뇌졸증진단비'],
+    '뇌출혈':['뇌출혈진단비'], '허혈성':['허혈성 진단비'], '급성심근':['급성심근경색'],
+    '암 주요치료비':['암주요치료비'], '하이클래스 (비급여)':['하이클래스(암)'],
+    '2대 주요치료비':['2대 주요치료비'], '순환계 주요치료비':['2대 주요치료비'],
+    '산정특례 (뇌)':['산정특례뇌혈관'], '산정특례 (심장)':['산정특례심장'],
+    '산정특례(뇌)':['산정특례뇌혈관'], '산정특례(심장)':['산정특례심장'],
+}
+
 def _is_gen(rep, *names):
     """★v139 담보값 색: 엑셀 글자색(파랑=갱신)을 그대로 이어받는다(4대 산출물 연동).
     gen_map = {마스터 담보명: True}. 라벨이 짧으므로 정확일치 → 부분일치 순으로 본다."""
@@ -182,6 +198,12 @@ def _is_gen(rep, *names):
     if not gm: return False
     import re as _r
     def _n(x): return _r.sub(r'[\s·()\[\]/.]','',str(x))
+    # ★v524 제138조 — 라벨을 마스터 담보명으로 <b>먼저 펼친다</b>.
+    _ex = list(names)
+    for _nm in list(names):
+        for _al in _GENLBL.get(str(_nm).strip(), []):
+            if _al not in _ex: _ex.append(_al)
+    names = tuple(_ex)
     for nm in names:
         if not nm: continue
         if nm in gm: return True
@@ -323,6 +345,13 @@ def _wc_status(rep, lookup):
     #   카드는 엑셀 값만 봤다 — 엑셀에서 뺀 담보는 7p에서도 사라진다(후퇴).
     #   ★v419 교훈: <b>같은 판정은 한 곳에서만 한다</b> → 여기(`_wc_status`) 한 곳에 모은다.
     _p7 = (rep or {}).get('p7_only') or {}
+    # ★★★★★v524 제140조 (지점장 확정 2026.08.20 «롯데는 엑셀과 보장분석PPT 외에는
+    #   진단서+산정특례는 <b>순환계</b>에 넣으라고 했는데 2대주요치료비에 들어간다»)
+    #   엑셀·보장분석PPT = 2대 주요치료비(v421f 유지) / <b>진단서 = 순환계 주요치료비 칸</b>.
+    #   순환계 전용값이 잡혀 있으면 진단서의 「2대 주요치료비」 칸은 <b>비운다</b> —
+    #   같은 금액이 두 칸에 동시에 뜨면 이중보장으로 읽힌다(리모델링 5쪽과 같은 규칙).
+    if _r.sub(r'[\s·()\[\]/]','',str(lookup)) == '2대주요치료비' and _p7.get('순환계주요치료비'):
+        return ('off','')
     _pk = _r.sub(r'[\s·()\[\]/]','',str(lookup))
     if _p7.get(_pk):
         try: return ('on', '{:,}'.format(int(float(_p7[_pk]))))
@@ -709,9 +738,14 @@ def _wcard_sj(rep, title, desc, lookup):
     #   값이 없으면(미가입·0) 종전대로 빈칸 = 현장 수기 기입.
     _st,_vl=_wc_status(rep, lookup)
     _bv=_html.escape(str(_vl)) if (_st=='on' and _vl) else ''
+    # ★★★★★v524 제139조 (지점장 실측 2026.08.20 «산정특례가 블랙이다 → 레드»)
+    #   [결함] 산정특례 카드만 칩이 <b>항상 `wchip n`(회색 '상태')</b>이었다. 값이 있어도 안 바뀐다.
+    #     다른 칸은 전부 값이 있으면 <b>`wchip g`(빨강 '가입')</b>으로 바뀐다 — 산정특례만 빠져 있었다.
+    _chip = ('<span class="wchip g">가입</span>' if (_st=='on' and _bv)
+             else '<span class="wchip n">상태</span>')
     return (f'<div class="wcard plain sj"><div class="wct">{_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
-            f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox">{_bv}</span><span class="wunit">만원</span></div></div>')
+            f'<div class="wcf">{_chip}<span class="wbox">{_bv}</span><span class="wunit">만원</span></div></div>')
 
 # ★v41b 하단 여백 자동 채움 (지점장 2026.07.12: 여백 5% 미만).
 #   페이지별 세로 늘림 계수(mm). 0=원본 유지. 값이 크면 다음 장으로 넘어가니 반드시 25p 유지 확인.
@@ -2313,20 +2347,22 @@ body {{ color:{INK}; }}
                       max-width:204mm; object-fit:contain; }}
 .imgfull.hascap .body img {{ height:254mm; }}
 .ibar {{ height:8mm; background:{NAVY}; border-bottom:2mm solid {GOLD}; }}
-.ibody {{ padding:10mm 22mm 20mm; height:222mm; position:relative; }}   /* ★v72 자체 top 도입에 맞춰 축소 */
+.ibody {{ padding:8mm 20mm 14mm; height:230mm; position:relative; }}   /* ★v72 자체 top 도입에 맞춰 축소 */
 .ieyebrow {{ font-size:9pt; font-weight:800; color:{GOLDD}; letter-spacing:6px; }}
-.ititle2 {{ font-size:50pt; font-weight:900; color:{NAVY}; line-height:1.12; margin-top:4mm; letter-spacing:-1.5px; }}
+/* ★★★★★v523 제132조 (지점장 지시 2026.08.20 «인포메이션이 추가되었으니 리스트도 9번에서 더
+   추가해라 / 글자포인트는 더 줄여도 된다») — 목차 9항목 → <b>14항목</b>. 한 장에 담기게 축소한다. */
+.ititle2 {{ font-size:40pt; font-weight:900; color:{NAVY}; line-height:1.10; margin-top:3mm; letter-spacing:-1.5px; }}
 .ititle2 b {{ color:{GOLDD}; }}
-.irule {{ width:32mm; height:1.8mm; background:{GOLD}; margin:7mm 0 6mm; }}
-.isub {{ font-size:11.5pt; font-weight:700; color:{MUT}; line-height:1.6; margin-bottom:22mm; }}
+.irule {{ width:28mm; height:1.5mm; background:{GOLD}; margin:5mm 0 4mm; }}
+.isub {{ font-size:10pt; font-weight:700; color:{MUT}; line-height:1.5; margin-bottom:8mm; }}
 .isub b {{ color:{NAVY}; }}
-.irow {{ display:table; width:100%; padding:2.1mm 0; border-top:0.6pt solid #E3E7EC; }}
+.irow {{ display:table; width:100%; padding:1.35mm 0; border-top:0.6pt solid #E3E7EC; }}
 .irow:last-of-type {{ border-bottom:0.8pt solid #E3E7EC; }}
-.inum {{ display:table-cell; width:14mm; vertical-align:middle; font-size:11pt; font-weight:900; color:{GOLD}; letter-spacing:-0.5px; }}
+.inum {{ display:table-cell; width:11mm; vertical-align:middle; font-size:9pt; font-weight:900; color:{GOLD}; letter-spacing:-0.5px; }}
 .itx {{ display:table-cell; vertical-align:middle; }}
-.ih {{ font-size:9.5pt; font-weight:900; color:{NAVY}; line-height:1.25; }}
-.ip {{ font-size:7pt; font-weight:700; color:{MUT}; margin-top:0.8mm; }}
-.ipg {{ display:table-cell; width:20mm; vertical-align:middle; text-align:right; font-size:8pt; font-weight:800; color:{NAVY}; }}
+.ih {{ font-size:8.4pt; font-weight:900; color:{NAVY}; line-height:1.2; }}
+.ip {{ font-size:6.2pt; font-weight:700; color:{MUT}; margin-top:0.5mm; }}
+.ipg {{ display:table-cell; width:19mm; vertical-align:middle; text-align:right; font-size:7.4pt; font-weight:800; color:{NAVY}; }}
 .ifoot {{ position:absolute; left:22mm; right:22mm; bottom:14mm; text-align:center; font-size:8.4pt; font-weight:700; color:{MUT}; padding-top:3mm; border-top:0.6pt solid {LINE}; }}
 .flexnote {{ font-size:8pt; font-weight:700; color:{MUT}; background:#F4F6F9; border-left:2.6pt solid {NAVY}; border-radius:1.4mm; padding:1.6mm 2.4mm; margin-top:2.4mm; line-height:1.4; }}
 .flexnote b {{ color:{NAVY}; }}
@@ -3102,48 +3138,73 @@ body {{ color:{INK}; }}
 
   <div class="irow">
    <div class="inum">01</div>
-   <div class="itx"><div class="ih">국민건강보험공단 지원제도</div><div class="ip">산정특례 · 재난적의료비 · 상한제 · 검진 · 상병수당</div></div>
-   <div class="ipg">12 – 13</div>
+   <div class="itx"><div class="ih">국민건강보험공단 지원제도</div><div class="ip">산정특례 · 본인부담상한제 · 재난적의료비</div></div>
+   <div class="ipg">@@IP+1@@ – @@IP+2@@</div>
   </div>
   <div class="irow">
    <div class="inum">02</div>
-   <div class="itx"><div class="ih">5세대 실손보험</div><div class="ip">급여 · 비급여 · 도수 · 체외충격파</div></div>
-   <div class="ipg">14 – 18</div>
+   <div class="itx"><div class="ih">5세대 실손보험</div><div class="ip">급여 · 비급여 · 중증/비중증 · 도표 · 도수치료</div></div>
+   <div class="ipg">@@IP+3@@ – @@IP+7@@</div>
   </div>
   <div class="irow">
    <div class="inum">03</div>
-   <div class="itx"><div class="ih">수술비</div><div class="ip">1~5종 · N대 · 종수술비 비교</div></div>
-   <div class="ipg">19</div>
+   <div class="itx"><div class="ih">수술비</div><div class="ip">1~5종 · N대 · 보상기준</div></div>
+   <div class="ipg">@@IP+8@@</div>
   </div>
   <div class="irow">
    <div class="inum">04</div>
-   <div class="itx"><div class="ih">3대 주요치료비 변천사</div><div class="ip">비례형 → 정액형 → 비급여</div></div>
-   <div class="ipg">20</div>
+   <div class="itx"><div class="ih">알츠하이머 신약 레켐비</div><div class="ip">치료 원리 · 보험 담보 · 실손 미보장</div></div>
+   <div class="ipg">@@IP+9@@</div>
   </div>
   <div class="irow">
    <div class="inum">05</div>
-   <div class="itx"><div class="ih">흥국화재 10억통장</div><div class="ip">[갱신형]플래티넘 건강 리셋월렛II</div></div>
-   <div class="ipg">21</div>
+   <div class="itx"><div class="ih">교통사고 경상환자 처리기준</div><div class="ip">자배법 시행령 개정 (26.09.10 기준)</div></div>
+   <div class="ipg">@@IP+10@@</div>
   </div>
   <div class="irow">
    <div class="inum">06</div>
-   <div class="itx"><div class="ih">MAKEONE LIFE PLAN</div><div class="ip">재무상태 · 미래가치 · 달러자산</div></div>
-   <div class="ipg">22 – 25</div>
+   <div class="itx"><div class="ih">암 치료비 4단계</div><div class="ip">급여 · 선별급여 · 전액본인부담 · 비급여</div></div>
+   <div class="ipg">@@IP+11@@</div>
   </div>
   <div class="irow">
    <div class="inum">07</div>
-   <div class="itx"><div class="ih">회사별 비교표</div><div class="ip">11개 비교표 · 설계사 참고용</div></div>
-   <div class="ipg">부록</div>
+   <div class="itx"><div class="ih">3대 주요치료비 변천사</div><div class="ip">비례형 → 정액형 → 비급여</div></div>
+   <div class="ipg">@@IP+12@@</div>
   </div>
   <div class="irow">
    <div class="inum">08</div>
-   <div class="itx"><div class="ih">심혈관 담보 분류</div><div class="ip">보험사별 · 질병코드 기준</div></div>
-   <div class="ipg">26 – 29</div>
+   <div class="itx"><div class="ih">흥국화재 10억통장</div><div class="ip">[갱신형] 플래티넘 건강 리셋월렛II</div></div>
+   <div class="ipg">@@IP+13@@</div>
   </div>
   <div class="irow">
    <div class="inum">09</div>
    <div class="itx"><div class="ih">암 · 뇌 · 심 치료 용어</div><div class="ip">관혈 · 비관혈 구분 · 수술 · 시술 · 약물</div></div>
-   <div class="ipg">30 – 31</div>
+   <div class="ipg">@@IP+14@@ – @@IP+15@@</div>
+  </div>
+  <div class="irow">
+   <div class="inum">10</div>
+   <div class="itx"><div class="ih">통합치료비 세부보장</div><div class="ip">KB · 삼성화재 특별약관 보장항목</div></div>
+   <div class="ipg">@@IP+16@@ – @@IP+19@@</div>
+  </div>
+  <div class="irow">
+   <div class="inum">11</div>
+   <div class="itx"><div class="ih">순환계 한눈에 정리</div><div class="ip">심장 · 혈관 · 혈액 구조와 순환 경로</div></div>
+   <div class="ipg">@@IP+20@@</div>
+  </div>
+  <div class="irow">
+   <div class="inum">12</div>
+   <div class="itx"><div class="ih">MAKEONE LIFE PLAN</div><div class="ip">재무상태 · 연금세액공제 · 미래가치 · 달러자산</div></div>
+   <div class="ipg">@@IP+21@@ – @@IP+25@@</div>
+  </div>
+  <div class="irow">
+   <div class="inum">13</div>
+   <div class="itx"><div class="ih">회사별 비교표</div><div class="ip">11개 비교표 · 설계사 참고용</div></div>
+   <div class="ipg">부록</div>
+  </div>
+  <div class="irow">
+   <div class="inum">14</div>
+   <div class="itx"><div class="ih">심혈관 담보 분류</div><div class="ip">보험사별 · 질병코드 기준</div></div>
+   <div class="ipg">@@IP+27@@ – @@IP+30@@</div>
   </div>
   </div>
  </div>
@@ -4354,20 +4415,31 @@ body {{ color:{INK}; }}
     #   → 번호도 분모도 <b>실제 페이지에서 센다</b>. 표지는 번호를 갖되 표기하지 않는다.
     _pgs = _re2.split(r'(?=<div class="pg(?=["\s]))', doc)
     _tot = sum(1 for _c in _pgs if _re2.match(r'<div class="pg(?=["\s])', _c))
-    _n = 0; _out = []
+    _n = 0; _out = []; _infopn = 0
     for _c in _pgs:
         if _re2.match(r'<div class="pg(?=["\s])', _c):
             _n += 1
+            # ★★★★★v523 제132조 — 인포메이션 <b>간지</b>의 실제 쪽번호를 잡는다(목차 기준점).
+            if (not _infopn) and ('ieyebrow' in _c): _infopn = _n
             _c = _c.replace('@@PN@@', str(_n))
         _out.append(_c)
     doc = ''.join(_out)
+    # ★★★★★v523 제132조 (지점장 지시 2026.08.20 «인포메이션이 추가되었으니 리스트도 더 추가해라»)
+    #   목차 쪽번호를 <b>하드코딩하지 않는다</b>(제v420조 「고정 페이지 번호는 라벨 하드코딩과 같은 결함」).
+    #   간지 번호 + 상대 오프셋으로 <b>렌더 시점에 계산</b>한다 — 앞쪽 계약 수가 바뀌어도 따라간다.
+    if _infopn:
+        doc = _re2.sub(r'@@IP\+(\d+)@@', lambda _m: str(_infopn + int(_m.group(1))), doc)
+        print('[v523 목차] 인포메이션 간지 %d쪽 기준 · 상대번호 치환' % _infopn)
+    else:
+        doc = _re2.sub(r'@@IP\+(\d+)@@', '?', doc)
+        print('[v523 목차] ★간지를 못 찾았다 — 목차 쪽번호 ? 처리')
     doc = doc.replace('@@TPG@@', str(_tot))
     print(f'[v420 푸터] 실제 페이지 {_tot}쪽 · 번호 자동부여 {_n}개 · 하드코딩 0')
     # ★v67 폼 강제(지점장 지시): 어떤 페이지든 상단 top / 하단 ft 폼이 빠지면 자동 주입한다.
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v521-heartfix-20260820</div>'
+    _VSTAMP = '<div class="vstamp">v525-border-20260820</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
