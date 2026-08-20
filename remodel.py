@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v518-care2row-20260819 =====
+# ===== BARUM remodel.py v521-heartfix-20260820 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -543,12 +543,19 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     _r = 6
     _kk = {(c['company'], c['product']) for c in cmp_['keep']}
     _pk = {(c['company'], c['product']) for c in cmp_['prop']}
+    # ★★★★★v521 제118조 (지점장 실측 2026.08.19
+    #   «기존보험 11만원에서 2번째 엑셀에서 5만원으로 줄여도 전과 후에 금액이 동일하게 나온다»)
+    #   유지 계약의 「후」는 <b>최종 엑셀</b> 값이다. 기존 계약 객체(c)의 보험료를 양쪽에 쓰면
+    #   감액 리모델링이 <b>표에 아예 안 나타나고</b> 합계(prem_new)와도 어긋난다(제2조 등식 위반).
+    _newprem = {(x['company'], x['product']): x['premium'] for x in cmp_['new']['contracts']}
     for c in cmp_['old']['contracts'] + cmp_['prop']:
         key = (c['company'], c['product'])
         if key in _pk:
             before, after, tag, fn = 0, c['premium'], '신규', G
         elif key in _kk or not cmp_['kill']:
-            before = after = c['premium']; tag, fn = '유지', N
+            before = c['premium']
+            after = _newprem.get(key, c['premium'])       # ★v521 제118조
+            tag, fn = '유지', N
         else:
             before, after, tag, fn = c['premium'], 0, '삭제', R
         if key not in _pk and any((k['company'], k['product']) == key for k in cmp_['kill']):
