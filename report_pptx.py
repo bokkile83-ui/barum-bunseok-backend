@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """BARUM 보장진단서 PPT v39 — 뼈대 그대로 · 워크시트 흰칸 전부 편집(빈칸 상자 흰색 채우기로 클릭 가능)."""
-# ★각인 v525-ci-20260819
+# ★각인 v526-grp-20260821
 import os, re, subprocess, tempfile
 import xml.etree.ElementTree as ET
 from collections import Counter

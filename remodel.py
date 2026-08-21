@@ -1,4 +1,4 @@
-# ===== BARUM remodel.py v525-ci-20260819 =====
+# ===== BARUM remodel.py v526-grp-20260821 =====
 # ★★★★★ 보험 리모델링 비교 (지점장 지시 2026.08.15)
 #   지점장 원문: 「새앱을 만들자 / 1버튼 기존 보험 엑셀 / 2버튼 새로 정리된 엑셀
 #                → 그럼 두개를 비교한 진단서 / 틀은 저걸로」
@@ -662,24 +662,56 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #          마지막 쪽은 <b>요약(90) 자리를 빼고</b> 센다.
     _HEAD_PT2, _BANDHD_PT = 41.0, 30.0
     _per_cap = int((_PAGE_PT - _HEAD_PT2 - _BANDHD_PT - _FOOT_PT) // _ROW_PT)
+    # ★★★★★v526 제110조 (지점장 지적 2026.08.21 「여백도 많다」 · 박주하 실측)
+    #   구 v490은 <b>요약 자리를 빼지 않고</b> 쪽수를 나눴다. 그래서 마지막 쪽이 담보로 꽉 차고
+    #   요약이 <b>또 한 쪽으로 밀려</b>, 그 쪽에 <b>요약만 남고 530pt(35행)가 비었다</b>(실측 로그
+    #   `[v478 하단표] … 남은 530pt`). 앞쪽도 꼬리 고정 패딩 때문에 17행씩 비었다.
+    #   ⇒ <b>마지막 쪽은 요약 자리를 뺀 한도</b>로 세고, 그 한도를 배분에 <b>미리</b> 반영한다.
+    #     제100조(틀 고정 · 내용 유동)를 「요약도 틀」로 넓힌 것이다.
+    #   ★요약 배치 판정(제87조)은 `_pgpt(_ptop, r+1)` — <b>아직 안 쓴 행 한 줄</b>을 더 세고,
+    #     거기에 <b>안전 여유 한 줄</b>(v484 제95조)을 또 본다. 실측 3쪽 596pt인데 판정은 611pt.
+    #     그 뒤 v484 제95조 판정(`_need`)은 <b>또 두 줄</b>(`_ROW_PT*2`)을 뺀다.
+    #     ⇒ 실제로 통과하려면 한도에서 <b>세 줄</b>을 빼야 한다.
+    #     실측 이력: 2줄 뺀 [27,38,36]·[27,39,35]·[27,40,34] 모두 요약이 밀렸다.
+    _last_cap = int((_PAGE_PT - _HEAD_PT2 - _BANDHD_PT - _SUM_PT_R - _FOOT_PT - _ROW_PT * 3) // _ROW_PT)
     _n_all   = len(cmp_['all'])
     _first_cap = int((_PAGE_PT - _pgpt(1, r) - _FOOT_PT) // _ROW_PT)   # 1쪽은 앞 표들이 있다
+    # ★★★★★v527 제100조 2항 (지점장 지시 2026.08.21 「마지막 2개에 일배책이 따로 분리다 ·
+    #   공백이 펑 비어서 2페이지의 낭비다 · 늘 공백없이 보기좋게」)
+    #   [실측 박주하] 계산은 「3쪽 · 배분 [25,43,33]」이라 찍고 실제는 <b>[25,42,33,1]</b>이었다.
+    #   중간 몫 43이 <b>높이 한도 _per_cap=42를 넘어</b> 2쪽에서 높이 컷이 먼저 걸렸고,
+    #   밀린 1개가 <b>4쪽에 홀로</b> 남아 그 쪽이 통째로 비었다(일상배상책임 1행).
+    #   ⇒ ①쪽수는 <b>쪽별 실제 한도의 합</b>으로 구한다(구 while 루프는 마지막 쪽 한도를
+    #     중간 쪽에도 섞어 써서 3쪽이라 오판했다) ②몫은 <b>한도를 절대 넘지 않게</b> 라운드로빈으로
+    #     고르게 채운다. 계산과 실제가 어긋나면 그것이 결함이다(제91조).
+    def _caps_for(_k):
+        if _k <= 1: return [min(_first_cap, _last_cap)]
+        return [_first_cap] + [_per_cap] * (_k - 2) + [_last_cap]
     _pages = 1
-    _rest  = _n_all - _first_cap
-    while _rest > 0:
+    while sum(_caps_for(_pages)) < _n_all and _pages < 60:
         _pages += 1
-        _rest  -= _per_cap
-    # 마지막 쪽에 요약이 들어가야 한다 — 안 들어가면 쪽을 하나 더 잡는다
-    _last_used = _n_all - _first_cap - (_pages - 2) * _per_cap if _pages >= 2 else _n_all
-    if _pages >= 2 and (_HEAD_PT2 + _BANDHD_PT + _last_used * _ROW_PT + _SUM_PT_R + _FOOT_PT + _ROW_PT) > _PAGE_PT:
-        _pages += 1
-    # 고르게 나눈다 — 1쪽은 앞 표 때문에 적게, 나머지 쪽은 균등
-    _even = max(1, -(-(_n_all - min(_first_cap, _n_all)) // max(1, _pages - 1))) if _pages > 1 else _n_all
-    _quota = [min(_first_cap, _n_all)] + [_even] * (_pages - 1)
-    print('[v490 균등] 담보 %d개 · %d쪽 · 쪽당 한도 %d/%d → 배분 %s'
-          % (_n_all, _pages, _first_cap, _per_cap, _quota))
+    _caps  = _caps_for(_pages)
+    # ★v527 2항 (지점장 지적 2026.08.21 「비어있다」 · 화면 실측 79~95·126~143·174~182 빈 행)
+    #   균등 배분은 <b>쪽마다 16~17행씩 빈 행</b>을 만든다(꼬리 바닥 고정 패딩, 제101조).
+    #   ⇒ <b>최소 쪽수에서 앞쪽부터 한도까지 꽉 채운다.</b> 빈 행이 생기는 쪽은 마지막 하나뿐이다.
+    # ★★★★★v527 제100조 2항 (지점장 지시 2026.08.21 「페이지는 유동성이라고 계속 말했다」)
+    #   쪽수를 아끼려고 앞쪽에 몰면 <b>마지막 쪽이 담보 1~6개로 텅 빈다</b>(실측 4쪽 33행 공백).
+    #   ⇒ <b>쪽수는 결과일 뿐이다.</b> 전체를 쪽수로 <b>고르게</b> 나누고, 각 쪽은 아래 3항
+    #     (행 높이 확장)으로 <b>꽉 채운다</b>. 한도는 절대 넘지 않는다(넘으면 높이 컷이 먼저 걸린다).
+    _quota = [0] * _pages
+    _left  = _n_all
+    while _left > 0:
+        _moved = False
+        for _ci in range(_pages):
+            if _left <= 0: break
+            if _quota[_ci] < _caps[_ci]:
+                _quota[_ci] += 1; _left -= 1; _moved = True
+        if not _moved: break
+    print('[v527 균등] 담보 %d개 · %d쪽 · 한도 %s → 배분 %s (합 %d)'
+          % (_n_all, _pages, _caps, _quota, sum(_quota)))
 
     _ptop = 1
+    _dstart = 1
     _brks = []
     _qi = 0
     for _one in [None]:
@@ -713,6 +745,16 @@ def build_xlsx(cmp_, client='고객', base_date=''):
                 #   (실측 2·3쪽 65.6% → 꼬리가 2/3 지점). 머리는 늘 맨 위인데 꼬리만 떠다녔다.
                 #   ⇒ 남은 높이만큼 빈 행을 넣어 <b>꼬리를 페이지 맨 아래에 고정</b>한다.
                 #     제87조(요약 바닥 정렬)를 <b>모든 쪽의 꼬리</b>로 넓힌 것이다.
+                # ★★★★★v527 제100조 3항 (지점장 지적 2026.08.21 「비어있다」 · 화면 실측
+                #   79~95·126~143 빈 행) — 구 v491은 남은 높이를 <b>빈 행</b>으로 메워
+                #   화면에 <b>17~18줄짜리 공백</b>이 그대로 보였다.
+                #   ⇒ 빈 행 대신 <b>그 쪽 담보 행의 높이를 고르게 늘려</b> 표가 페이지를 채우게 한다.
+                #     꼬리는 종전대로 맨 아래(제101조). 상한 24pt — 그 이상은 빈 행으로 남긴다.
+                _room = _PAGE_PT - _pgpt(_ptop, r) - _FOOT_PT
+                _nrow = r - _dstart
+                if _room > 0 and _nrow > 0:
+                    _hh = min(24.0, _ROW_PT + _room / _nrow)
+                    for _rr in range(_dstart, r): ws.row_dimensions[_rr].height = _hh
                 _fpad = int((_PAGE_PT - _pgpt(_ptop, r) - _FOOT_PT) // _ROW_PT)
                 if _fpad > 0: r += _fpad
                 r = _pfoot(r)                                  # 앞쪽 꼬리
@@ -724,6 +766,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
                     ws.cell(r + 1, j2, h2).font = B; ws.cell(r + 1, j2).fill = SUB
                     ws.cell(r + 1, j2).border = BD; ws.cell(r + 1, j2).alignment = C
                 r += 2
+                _dstart = r
             _cnt += 1
             _new = (tag == '신규 추가')
             # ★구분이 바뀌면 앞 그룹을 <b>병합</b>하고 경계에 굵은 선을 긋는다
@@ -783,6 +826,13 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #   ★꼬리는 `max_row + 2`부터라 요약표와 꼬리 사이에 <b>빈 행 1개</b>가 더 들어간다 —
     #     그 15pt까지 빼야 페이지를 넘지 않는다(v478 1차 실측 775pt = 101% 초과).
     #   ★v484 제95조 — 마지막 쪽도 <b>한 줄 여유</b>를 남긴다(`_ROW_PT` 하나 더).
+    # ★v527 제100조 3항 — <b>마지막 쪽</b> 담보 행도 같은 방식으로 늘린다(요약·꼬리 자리는 남긴다).
+    _room_l = _PAGE_PT - _pgpt(_ptop, r) - _SUM_PT - _FOOT_PT - _ROW_PT * 3
+    _nrow_l = r - _dstart
+    if _room_l > 0 and _nrow_l > 0:
+        _hl = min(24.0, _ROW_PT + _room_l / _nrow_l)
+        for _rr in range(_dstart, r): ws.row_dimensions[_rr].height = _hl
+        _used_now = _pgpt(_ptop, r + 1)
     _need = _PAGE_PT - _SUM_PT - _FOOT_PT - _ROW_PT * 2 - _used_now
     # ★★★★★v484 제95조 — <b>요약이 안 들어가면 페이지를 넘긴다</b>.
     #   담보 루프의 끊기(cut)는 <b>마지막 쪽에서는 일어나지 않는다</b> — 담보가 남으면 계속 쌓이고
