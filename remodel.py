@@ -85,6 +85,10 @@ def read_sheet(path_or_bytes):
                           #   실측: 종신 판별은 맞았는데 표의 <b>가입날짜·납입기간 칸이 '—'</b>였다.
                           #   read_sheet가 두 키를 안 만들었다. 마스터 헤더 3행=가입년일 · 5행=총납입기간.
                           'contract_date': str(ws.cell(3, c).value or '').strip(),
+                          # ★★★★★v530 제71조 3항 (지점장 지시 2026.08.21 「진단서·리포트에
+                          #   종신·연금 안 나오는 것도 점검」) — 이 경로에만 <b>만기(4행)가 없었다</b>.
+                          #   종신 판별의 정본은 §8.1 <b>만기 9999</b>인데 키가 없어 상품명 글자로만 갈렸다.
+                          'expiry_date': str(ws.cell(4, c).value or '').strip(),
                           'pay_term': str(ws.cell(5, c).value or '').strip(),
                           'premium': _num(ws.cell(2, c).value)})
         premium += _num(ws.cell(2, c).value)
@@ -216,7 +220,10 @@ def contract_kinds(contracts):
         r = str(c.get('renewal') or '')
         if '연금' in p:
             out['연금'].append(c)
-        if '종신' in p or '종신' in r:
+        # ★v530 제71조 3항 — §8.1 정본은 <b>만기 9999(종신)</b>다. 상품명에 「종신」이
+        #   없는 종신계약(실측 교보 `교보3밸런스보장보험`)이 통째로 빠져 있었다.
+        _ex = str(c.get('expiry_date') or '')
+        if '종신' in p or '종신' in r or '9999' in _ex:
             out['종신'].append(c)
         if '저축' in p:
             out['저축'].append(c)
@@ -369,6 +376,15 @@ def build_report(cmp_, client="고객", base_date="", total=9):
     pdfs, pngs = [], []
     import os as _os
     _base = _os.path.dirname(_os.path.abspath(report_pages.__file__)) + '/'
+    # ★★★★★v530 제121조 — 발행 직전 <b>심장 값 대조</b>. 엑셀과 다르면 그 자리에서 멈춘다.
+    #   지점장 지시 2026.08.21 「네 산출물의 담보값을 실제로 대조해 다르면 발행을 막는 검사」
+    _hb = report_pages.heart_audit(cmp_, client, base_date)
+    if _hb:
+        print('[제121조 심장동결] 불일치 %d건 — 발행 차단' % len(_hb))
+        for _x in _hb: print('   ·', _x)
+        raise RuntimeError('제121조 심장동결 위반: ' + ' / '.join(_hb))
+    print('[제121조 심장동결] 진단서 4·5쪽 = 엑셀 · 불일치 0건')
+
     for i, html in enumerate(report_pages.build(cmp_, client, base_date, total), 1):
         f = os.path.join(tmp, 'p%d.pdf' % i)
         HTML(string=html, base_url=_base).write_pdf(f)
@@ -698,17 +714,37 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #   쪽수를 아끼려고 앞쪽에 몰면 <b>마지막 쪽이 담보 1~6개로 텅 빈다</b>(실측 4쪽 33행 공백).
     #   ⇒ <b>쪽수는 결과일 뿐이다.</b> 전체를 쪽수로 <b>고르게</b> 나누고, 각 쪽은 아래 3항
     #     (행 높이 확장)으로 <b>꽉 채운다</b>. 한도는 절대 넘지 않는다(넘으면 높이 컷이 먼저 걸린다).
-    _quota = [0] * _pages
-    _left  = _n_all
-    while _left > 0:
-        _moved = False
-        for _ci in range(_pages):
-            if _left <= 0: break
-            if _quota[_ci] < _caps[_ci]:
-                _quota[_ci] += 1; _left -= 1; _moved = True
-        if not _moved: break
-    print('[v527 균등] 담보 %d개 · %d쪽 · 한도 %s → 배분 %s (합 %d)'
+    # ★★★★★v536 제100조 4항 (지점장 지시 2026.08.21
+    #   「비교엑셀은 <b>절대 공백 주지마라</b> · 페이지는 줄여도 되니까」)
+    #   [실측 101담보] 두 방식을 돌려 <b>빈 행 총수</b>를 셌다.
+    #     ① 앞쪽 꽉 채우기 [25,42,28,6] → 빈행 [5,5,5,33] = <b>48</b>
+    #     ② 고르게 나누기  [25,26,25,25] → 빈행 [5,5,7,10] = <b>27</b>
+    #   ⇒ <b>②가 공백이 적다.</b> 쪽마다 조금씩 남기는 편이, 마지막 쪽에 몰아 <b>한 쪽을 통째로
+    #     비우는 것</b>보다 낫다. 쪽수는 4쪽이 <b>물리적 최소</b>다(25+42+33=100 < 101 → 3쪽 불가).
+    #   ★공백 총수가 판단 기준이다. 배분 방식을 바꿀 때는 <b>반드시 빈 행을 세어 비교</b>한다.
+    # ★★★★★v538 제124조 5항 (지점장 지적 2026.08.21 「왜 칸들의 세로길이가 다 다르냐?」)
+    #   구 v536 균등 배분은 쪽마다 <b>남는 높이가 달라</b> 행 높이가 15.1 / 24 / 24 / 20으로 제각각이었다.
+    #   ⇒ 담보 수를 <b>쪽별 가용 높이(한도)에 비례</b>해 나눈다. 그러면 (가용높이 ÷ 담보수)가
+    #     모든 쪽에서 같아져 <b>행 높이가 저절로 통일</b>되고, 공백도 0으로 유지된다.
+    #   실측 101담보 · 한도 [25,42,42,33] → 배분 [18,30,30,23] → 높이 20.8 / 21.0 / 21.0 / 21.5
+    #   ★1쪽은 위에 계약표·보험료표가 있어 <b>한도 계산이 실제보다 조금 후하다</b>.
+    #     실측 편차 3.4pt(17.8 vs 21.2)가 남아 1쪽 몫에 <b>보정계수 0.86</b>을 준다.
+    _wt = [(_c * 0.86 if _i == 0 else _c) for _i, _c in enumerate(_caps)]
+    _tot_cap = sum(_wt) or 1
+    _quota = [max(1, int(round(_n_all * _w / _tot_cap))) for _w in _wt]
+    for _ci in range(_pages):                     # 한도 초과 금지
+        _quota[_ci] = min(_quota[_ci], _caps[_ci])
+    _d = _n_all - sum(_quota)                     # 반올림 보정
+    _ci = 0
+    while _d != 0 and _ci < _pages * 4:
+        _k = _ci % _pages
+        if _d > 0 and _quota[_k] < _caps[_k]: _quota[_k] += 1; _d -= 1
+        elif _d < 0 and _quota[_k] > 1:          _quota[_k] -= 1; _d += 1
+        _ci += 1
+    print('[v538 높이통일] 담보 %d개 · %d쪽 · 한도 %s → 배분 %s (합 %d)'
           % (_n_all, _pages, _caps, _quota, sum(_quota)))
+
+
 
     _ptop = 1
     _dstart = 1
@@ -755,8 +791,12 @@ def build_xlsx(cmp_, client='고객', base_date=''):
                 if _room > 0 and _nrow > 0:
                     _hh = min(24.0, _ROW_PT + _room / _nrow)
                     for _rr in range(_dstart, r): ws.row_dimensions[_rr].height = _hh
-                _fpad = int((_PAGE_PT - _pgpt(_ptop, r) - _FOOT_PT) // _ROW_PT)
-                if _fpad > 0: r += _fpad
+                # ★★★★★v537 제124조 3항 (지점장 지시 2026.08.21 「공백이란 없다」)
+                #   구 v491은 남은 높이를 <b>빈 행</b>으로 메워 꼬리를 페이지 바닥에 고정했다.
+                #   인쇄에는 안 보여도 <b>엑셀 화면에는 그대로 보인다</b>(실측 27행).
+                #   ⇒ <b>빈 행을 넣지 않는다.</b> 남는 높이는 위에서 <b>행 높이</b>로 이미 채웠고,
+                #     상한(24pt)에 걸려 남는 부분은 <b>그냥 짧은 쪽</b>으로 둔다.
+                #     제101조(꼬리는 맨 아래)보다 <b>공백 0이 우선</b>이다.
                 r = _pfoot(r)                                  # 앞쪽 꼬리
                 _brks.append(r - 1)
                 _ptop = r                                      # ★v473 새 쪽의 첫 행
@@ -827,7 +867,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     #     그 15pt까지 빼야 페이지를 넘지 않는다(v478 1차 실측 775pt = 101% 초과).
     #   ★v484 제95조 — 마지막 쪽도 <b>한 줄 여유</b>를 남긴다(`_ROW_PT` 하나 더).
     # ★v527 제100조 3항 — <b>마지막 쪽</b> 담보 행도 같은 방식으로 늘린다(요약·꼬리 자리는 남긴다).
-    _room_l = _PAGE_PT - _pgpt(_ptop, r) - _SUM_PT - _FOOT_PT - _ROW_PT * 3
+    _room_l = _PAGE_PT - _pgpt(_ptop, r) - _SUM_PT - _FOOT_PT - _ROW_PT * 5
     _nrow_l = r - _dstart
     if _room_l > 0 and _nrow_l > 0:
         _hl = min(24.0, _ROW_PT + _room_l / _nrow_l)
@@ -846,10 +886,9 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         _used_now = _pgpt(_ptop, r + 1)
         _need = _PAGE_PT - _SUM_PT - _FOOT_PT - _ROW_PT * 2 - _used_now
         print('[v484 하단표] 요약 자리가 모자라 새 쪽으로 넘겼다')
-    if _need >= _ROW_PT:                       # 한 줄 이상 남을 때만 민다
-        _pad = int(_need // _ROW_PT)
-        r += _pad
-        print('[v478 하단표] 요약 %d행 아래로 밀어 페이지 바닥 정렬(남은 %.0fpt)' % (_pad, _need))
+    # ★v537 제124조 3항 — 마지막 쪽도 <b>빈 행으로 밀지 않는다</b>. 요약은 담보표 바로 아래.
+    if _need >= _ROW_PT:
+        print('[v537 공백0] 마지막 쪽 여유 %.0fpt — 빈 행을 넣지 않고 요약을 표 바로 아래에 붙인다' % _need)
     band(r + 1, '요약')
     for i, (k, v) in enumerate([('보장 증가 항목', len(cmp_['up'])), ('신규 추가 특약', len(cmp_['add'])),
                                 ('보장 감소 항목', len(cmp_['down'])), ('삭제 특약', len(cmp_['delete'])),
