@@ -405,16 +405,93 @@ def build_report(cmp_, client="고객", base_date="", total=9):
     return open(out, 'rb').read(), pngs
 
 
-def build_report_pptx(pngs):
-    """PNG 7장을 A4 세로 PPT로. <b>빈 장에 순서대로 넣기만</b> 한다 —
-       슬라이드를 지우고 옮기면 순서가 꼬인다(v422 실사고)."""
+# ★★★★★v546 제129조 3항 (지점장 지시 2026.08.22 「입력값 넣는곳은 다 수정이 되도록 · 혹시나 이름도」)
+#   전체 텍스트화(v543)는 파워포인트에서 깨졌다 — 651개 상자가 서로 밀렸다.
+#   ⇒ <b>값이 들어가는 칸만</b> 텍스트로 만든다. <b>숫자가 든 상자 + 고객명</b>만 얹고
+#     제목·라벨·설명은 <b>이미지 그대로</b> 둔다. 상자 수가 1/10로 줄어 밀림이 없다.
+_TEXT_PPT = True         # ★v546 — 값 칸만 텍스트(제129조 3항)
+
+
+def build_report_pptx(pngs, pdf_bytes=None, client=''):
+    """★★★★★v543 제129조 (지점장 지시 2026.08.22 「여전히 리포트ppt는 통으로된 이미지다」)
+       구 코드는 PNG를 <b>그냥 붙이기만</b> 했다 — 슬라이드마다 도형 1개(그림)·텍스트 0개.
+       ⇒ 리포트 PDF의 <b>모든 글자를 좌표대로 뽑아</b> 배경에서 지우고 <b>텍스트 상자로 얹는다</b>.
+         배경 PNG에는 선·표·색만 남고, 글자는 전부 <b>고를 수 있는 텍스트</b>가 된다.
+       pdf_bytes가 없거나 추출이 실패하면 <b>종전대로 통이미지</b>로 낸다(산출물 누락 금지)."""
     from pptx import Presentation
-    from pptx.util import Cm
+    from pptx.util import Cm, Emu, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
     prs = Presentation()
     prs.slide_width, prs.slide_height = Cm(21.0), Cm(29.7)
     bl = prs.slide_layouts[6]
-    for g in pngs:
-        prs.slides.add_slide(bl).shapes.add_picture(g, Cm(0), Cm(0), Cm(21.0), Cm(29.7))
+
+    # ★★★★★v544 제129조 2항 (지점장 실측 2026.08.22 「지금 보이는 이미지 실화냐? 다 깨졌는데」)
+    #   내 검증은 <b>LibreOffice 렌더</b>였고 지점장은 <b>파워포인트</b>로 연다 — 렌더러가 다르면
+    #   글자 폭·줄바꿈이 달라 <b>651개 상자가 서로 밀려 깨진다</b>.
+    #   ⇒ <b>기본은 통이미지</b>로 되돌린다(작동 보장). 텍스트화는 `_TEXT_PPT=True`일 때만 켠다.
+    #   ★「고쳤다」는 <b>지점장이 쓰는 프로그램에서 확인한 뒤</b>에만 쓴다. LibreOffice는 대역이 아니다.
+    boxes = []
+    if pdf_bytes and _TEXT_PPT:
+        try:
+            import subprocess, tempfile, os as _os
+            import report_pptx as _rp
+            _td = tempfile.mkdtemp()
+            _pf = _os.path.join(_td, 'r.pdf'); open(_pf, 'wb').write(pdf_bytes)
+            _xf = _os.path.join(_td, 'r.xml')
+            subprocess.run(['pdftotext', '-bbox-layout', _pf, _xf], check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            _raw = _rp._all_boxes(_xf)
+            # ★v546 제129조 3항 — <b>값 칸만</b> 고른다: 숫자가 든 상자 + 고객명.
+            #   라벨·제목·설명은 이미지 그대로 두어 밀림을 막는다.
+            import re as _re9
+            _cl = str(client or '').strip()
+            boxes = []
+            for _pw, _ph, _ws in _raw:
+                _keep = [w for w in _ws
+                         if _re9.search(r'\d', w[0]) or (_cl and _cl in w[0])]
+                boxes.append((_pw, _ph, _keep))
+            print('[v546 리포트PPT] 값칸 텍스트 %d쪽 · 상자 %d개(전체 %d개 중)'
+                  % (len(boxes), sum(len(b[2]) for b in boxes),
+                     sum(len(b[2]) for b in _raw)))
+        except Exception as e:
+            print('[v543 리포트PPT] 텍스트 추출 실패 → 통이미지 폴백:', e)
+            boxes = []
+
+    from PIL import Image
+    import report_pptx as _rp2
+    EMU_PT = 12700
+    for i, g in enumerate(pngs):
+        s = prs.slides.add_slide(bl)
+        if i < len(boxes) and boxes[i][2]:
+            pw, ph, words = boxes[i]
+            im = Image.open(g).convert('RGB')
+            sx, sy = im.width / pw, im.height / ph
+            meta = []
+            for txt, x0, y0, x1, y1 in words:
+                bx = (int(x0 * sx) - 1, int(y0 * sy) - 1, int(x1 * sx) + 2, int(y1 * sy) + 1)
+                meta.append((txt, x0, y0, x1, y1, _rp2._fg_of(im, bx), _rp2._ink(im, bx), bx))
+            for *_r, bx in meta:
+                _rp2._erase(im, bx)
+            _tp = g + '.txt.png'; im.save(_tp, 'PNG'); im.close()
+            s.shapes.add_picture(_tp, Cm(0), Cm(0), Cm(21.0), Cm(29.7))
+            for txt, x0, y0, x1, y1, fg, ink, _bx in meta:
+                h_pt = y1 - y0
+                fs = max(4.5, round(h_pt * 0.88, 1))
+                _need = _rp2._txt_w(txt, fs); _bw = (x1 - x0) + 2.0
+                if _need > _bw and _need > 0:
+                    fs = max(4.5, round(fs * _bw / _need, 1))
+                sh = s.shapes.add_textbox(Emu(int((x0 - 1.6) * EMU_PT)), Emu(int((y0 - 1.2) * EMU_PT)),
+                                          Emu(int((x1 - x0 + 3.6) * EMU_PT)), Emu(int((h_pt + 2.4) * EMU_PT)))
+                tf = sh.text_frame; tf.word_wrap = False
+                tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+                tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+                p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
+                r = p.add_run(); r.text = txt
+                r.font.size = Pt(fs); r.font.color.rgb = RGBColor(*fg); r.font.bold = (ink > 0.30)
+                _rp2._setfont(r)
+        else:
+            s.shapes.add_picture(g, Cm(0), Cm(0), Cm(21.0), Cm(29.7))
     bio = io.BytesIO(); prs.save(bio)
     return bio.getvalue()
 
@@ -561,10 +638,23 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     _pk = {(c['company'], c['product']) for c in cmp_['prop']}
     for c in cmp_['old']['contracts'] + cmp_['prop']:
         key = (c['company'], c['product'])
+        # ★★★★★v539 제125조 (지점장 실측 2026.08.22 「기존계약에 금액이 줄었는데 동일하게 나온다.
+        #   감액으로 나와야 한다」 · 정답지 대조 — 119,010→43,369이 「유지 119,010」으로 나갔다)
+        #   [원인] 유지 계약을 <b>before = after = 기존 보험료</b>로 박아
+        #     <b>최종 엑셀의 보험료를 아예 읽지 않았다</b>. 「감액」 상태가 구조적으로 나올 수 없었다.
+        #   ⇒ 유지 계약도 <b>최종 엑셀의 보험료</b>를 after로 쓴다. 줄면 <b>감액</b>, 늘면 <b>증액</b>.
+        _newp = None
+        for _nc in cmp_['new']['contracts']:
+            if (_nc.get('company'), _nc.get('product')) == key:
+                _newp = _nc.get('premium'); break
         if key in _pk:
             before, after, tag, fn = 0, c['premium'], '신규', G
         elif key in _kk or not cmp_['kill']:
-            before = after = c['premium']; tag, fn = '유지', N
+            before = c['premium']
+            after  = _newp if _newp is not None else c['premium']
+            if   round(after) < round(before): tag, fn = '감액', R
+            elif round(after) > round(before): tag, fn = '증액', G
+            else:                              tag, fn = '유지', N
         else:
             before, after, tag, fn = c['premium'], 0, '삭제', R
         if key not in _pk and any((k['company'], k['product']) == key for k in cmp_['kill']):
@@ -578,9 +668,13 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         ws.cell(_r, 6, round(after)).font = (G if _new else B)
         ws.cell(_r, 7, tag).font = fn                            # ★v480 상태 = 끝 1칸
         for cc in (5, 6): ws.cell(_r, cc).number_format = '#,##0"원"'
+        # ★v539 제125조 2항 (지점장 「삭제나 감액에 색이 표시되어야 한다」)
+        #   구 코드는 <b>신규만</b> 줄 색을 깔았다. 감액·증액·삭제는 글자색뿐이라 눈에 안 들어왔다.
+        _cfill = (NEWF if tag == '신규' else DNF if tag == '감액'
+                  else UPF if tag == '증액' else DELF if tag == '삭제' else None)
         for cc in range(2, 8):
             ws.cell(_r, cc).border = BD
-            if _new: ws.cell(_r, cc).fill = NEWF
+            if _cfill: ws.cell(_r, cc).fill = _cfill
         ws.merge_cells(start_row=_r, start_column=3, end_row=_r, end_column=4)
         for cc in range(2, 8): ws.cell(_r, cc).alignment = C
         ws.cell(_r, 3).alignment = Alignment('center', 'center', wrap_text=True)  # ★잘림 방지
@@ -1014,7 +1108,7 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     return {'cmp': c,
             'xlsx': build_xlsx(c, client, base_date),
             'pdf': _rp[0], 'pngs': _rp[1],
-            'pptx': build_report_pptx(_rp[1])}
+            'pptx': build_report_pptx(_rp[1], _rp[0], client)}
 
 
 def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
@@ -1027,4 +1121,4 @@ def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
     return {'cmp': c,
             'xlsx': build_xlsx(c, client, base_date),
             'pdf': _rp[0], 'pngs': _rp[1],
-            'pptx': build_report_pptx(_rp[1])}
+            'pptx': build_report_pptx(_rp[1], _rp[0], client)}

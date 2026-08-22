@@ -205,6 +205,33 @@ def _value_boxes(xml_path, V, PG=None):
     return out
 
 
+def _all_boxes(xml_path):
+    """★★★★★v543 제129조 (지점장 지시 2026.08.22 「리포트가 여전히 통이미지다」)
+       페이지의 <b>모든 단어</b>를 좌표와 함께 뽑는다(값만 뽑는 `_value_boxes`의 전수판).
+       같은 줄에서 <b>가까이 붙은 단어는 한 상자로 묶어</b> 조각이 흩어지지 않게 한다."""
+    root = ET.parse(xml_path).getroot()
+    out = []
+    for pg in root.findall('.//x:page', NS):
+        pw, ph = float(pg.get('width')), float(pg.get('height'))
+        found = []
+        for ln in pg.findall('.//x:line', NS):
+            ws = [(w.text or '', float(w.get('xMin')), float(w.get('yMin')),
+                   float(w.get('xMax')), float(w.get('yMax')))
+                  for w in ln.findall('x:word', NS) if (w.text or '').strip()]
+            if not ws: continue
+            cur = list(ws[0])
+            for w in ws[1:]:
+                gap = w[1] - cur[3]
+                if gap <= (cur[4] - cur[2]) * 0.6:          # 글자 높이의 60% 안이면 같은 덩어리
+                    cur[0] += (' ' if gap > (cur[4] - cur[2]) * 0.18 else '') + w[0]
+                    cur[3] = w[3]; cur[2] = min(cur[2], w[2]); cur[4] = max(cur[4], w[4])
+                else:
+                    found.append(tuple(cur)); cur = list(w)
+            found.append(tuple(cur))
+        out.append((pw, ph, found))
+    return out
+
+
 def _fg_of(img, bx):
     x0, y0, x1, y1 = bx
     W, H = img.size

@@ -250,7 +250,7 @@ body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans
 .header{position:relative;z-index:2;display:flex;justify-content:space-between;
 align-items:flex-start;padding:6mm 13mm 2mm}
 .brand-line{font-size:9.5pt;color:var(--gold);font-weight:800;letter-spacing:.08em}
-h1{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:1.5mm 0 2mm;color:#06203f;font-size:23pt;font-weight:900;line-height:1.18;letter-spacing:-.04em}
+h1{font-family:"Noto Sans CJK KR Black","Noto Sans CJK KR",sans-serif;margin:1.5mm 0 2mm;color:#06203f;font-size:23pt;font-weight:900;line-height:1.18;letter-spacing:-.04em;white-space:nowrap}
 .gold-line{display:flex;gap:1.5mm}
 .gold-line span:first-child{width:23mm;height:1.8mm;background:var(--gold);border-radius:5mm}
 .gold-line span:last-child{width:12mm;height:1.8mm;background:#92866e;border-radius:5mm}
@@ -491,7 +491,7 @@ text-align:left;padding:1.1mm}
 .code-name{display:block;font-weight:800;color:#20384c}
 .code-number{display:block;margin-top:.6mm;color:#1e2a38}
 .amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
-border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}
+border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}.amount.red{color:#d52f28}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
 border:.5mm solid #4f5459;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
@@ -516,6 +516,10 @@ BRAIN4 = [
     ('순환계 확장 · 선천', '뇌동맥류 · 정맥류', 'I71 · 72', None, 1, 0),
     ('순환계 확장 · 선천', '선천 뇌혈관기형', 'Q28.0~28.3', None, 0, 1),
     ('순환계 확장 · 선천', '외상성 뇌출혈', 'S06', '외상성뇌출혈', 0, 1),
+    # ★★★★★v548 제119조 2항 — 4쪽 CI 행 추가는 <b>철회</b>했다.
+    #   행을 넣자 4쪽 표가 페이지를 넘쳐 <b>내용이 통째로 다음 쪽으로 밀리고 4쪽이 빈 껍데기</b>가 됐다
+    #   (실측 PDF 9쪽 → 10쪽). 지점장 지시 <b>「틀은 손대지 마라」</b> 위반이다.
+    #   ⇒ CI 자리는 <b>5쪽에 상설</b>로 만든다(아래 제119조 2항).
 ]
 # ★★★★★v529 제116조 5항 (지점장 실측 2026.08.21 「심장부분 계속오류다 · 엑셀·보장분석지·
 #   진단서·리포트 비일치화다 · 계속 2배수로나온다」)
@@ -551,11 +555,22 @@ def _d4(on):
     return '<span class="dot%s"></span>' % (' on' if on else '')
 
 
-def _c4(v):
-    if v:
-        return ('<span class="hold">보장</span>'
-                '<span class="amount">%s만</span>' % format(int(v), ','))
-    return _d4(0)
+def _c4(v, o=None):
+    """★★★★★v540 제127조 (지점장 확정 2026.08.22 「리포트 컨셉은 기존+새담보(레드)」)
+       구 코드는 <b>합계 하나만</b> 검정으로 찍었다(통 블랙). 6쪽만 보유+증가 분리라
+       한 문서 안에서 표기가 달랐다. ⇒ <b>보유(검정) + 제안 증가분(레드)</b>으로 통일한다.
+       o=None이면 종전대로 합계 하나(구 호출 호환)."""
+    v = int(v or 0)
+    if o is None:
+        if v:
+            return ('<span class="hold">보장</span>'
+                    '<span class="amount">%s만</span>' % format(v, ','))
+        return _d4(0)
+    o = int(o or 0)
+    if not v and not o: return _d4(0)
+    _h = ('<span class="amount">%s만</span>' % format(o, ',')) if o else ''
+    _a = ('<span class="amount red">+%s만</span>' % format(v - o, ',')) if v > o else ''
+    return '<span class="hold">보장</span>' + (_h + ('&nbsp;' if _h and _a else '') + _a)
 
 
 # ★★★★★v530 제121조 (지점장 지시 2026.08.21 「네 산출물의 담보값을 실제로 대조해
@@ -571,7 +586,9 @@ HEART_SYNC = [('급성심근경색', '급성심근경색'), ('협심증', '협�
 
 
 def _hv(html, label):
-    """렌더된 HTML에서 그 라벨 행의 금액을 뽑는다. 값이 없으면 0."""
+    """렌더된 HTML에서 그 라벨 행의 금액을 뽑는다. 값이 없으면 0.
+       ★v540 제127조 — 표기가 <b>보유 + 제안증가분(레드)</b> 두 조각이 되었으므로
+       그 행의 <b>모든 금액을 더해</b> 최종(cov)과 대조한다."""
     import re as _re
     m = _re.search(r'<span class="code-name">%s</span>.{0,400}?</tr>'
                    % _re.escape(label), html, _re.S)
@@ -579,8 +596,8 @@ def _hv(html, label):
         m = _re.search(r'>%s</td>.{0,300}?</tr>' % _re.escape(label), html, _re.S)
     if not m:
         return None
-    a = _re.search(r'([\d,]+)\s*만', m.group(0))
-    return int(a.group(1).replace(',', '')) if a else 0
+    a = _re.findall(r'([\d,]+)\s*만', m.group(0))
+    return sum(int(x.replace(',', '')) for x in a) if a else 0
 
 
 def heart_audit(cmp_, client='고객', base_date=''):
@@ -605,10 +622,15 @@ def heart_audit(cmp_, client='고객', base_date=''):
 
 def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
     cov = cmp_['new']['cov']
+    covo = (cmp_.get('old') or {}).get('cov', {}) or {}     # ★v540 제127조 — 보유(기존)
 
     def val(key):
         if not key: return 0
         return cov.get(key[1:] if key.startswith('@') else key, 0)
+
+    def valo(key):
+        if not key: return 0
+        return covo.get(key[1:] if key.startswith('@') else key, 0)
 
     br = ''
     last = None
@@ -619,7 +641,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
         v = val(key)
         br += ('<tr class="%s"><td><span class="code-name">%s</span>'
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td></tr>'
-               % ('highlight' if v else '', nm, cd, _c4(v), _d4(circ), _d4(spc)))
+               % ('highlight' if v else '', nm, cd, _c4(v, valo(key)), _d4(circ), _d4(spc)))
 
     ht = ''
     last = None
@@ -633,7 +655,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td>'
                '<td>%s</td></tr>'
                % ('highlight' if (v and not dot_only) else '', nm, cd,
-                  _d4(1) if dot_only and v else _c4(v),
+                  _d4(1) if dot_only and v else _c4(v, valo(key)),
                   _d4(sph), _d4(circ), _d4(spc)))
 
     lg = ('<div class="legend"><span class="circle on"></span> 보장 &nbsp;'
@@ -844,7 +866,12 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
                                        ('중대한 뇌졸중 (CI)', '중대한 뇌졸증'),
                                        ('중대한 뇌출혈 (CI)', '중대한 뇌출혈'),
                                        ('중대한 급성심근 (CI)', '중대한 급성심근'))
-                       if g(_k)) + '</table>')
+                       # ★★★★★v548 제119조 2항 (지점장 지시 2026.08.22
+                       #   「중대한 암/뇌/심 값 CI가 들어갈 자리도 만들어야한다」)
+                       #   구: CI 3종은 <b>값이 있을 때만</b> 줄이 생겼다 — 자리가 아예 안 보였다.
+                       #   ⇒ CI는 <b>상설</b>이다. 값이 없으면 빈 칸으로 보인다.
+                       #   ★4쪽에 넣으면 표가 넘쳐 페이지가 밀린다(v548 실측) — <b>5쪽에만</b> 둔다.
+                       if (g(_k) or _lb.endswith('(CI)'))) + '</table>')
 
     owned = sum(1 for v in (g('일반암'), g('뇌혈관진단비'), isch) if v)
 
