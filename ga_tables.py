@@ -2,7 +2,7 @@
 """GA채널 회사별 비교표 (설계사 참고용) — 2표/페이지. 보장설명서 부록."""
 import html as _h
 
-# ★각인 v526-grp-20260821
+# ★각인 v563-nofeel-20260823
 def _tbl(head, rows, hl=1):
     th="".join(f"<th>{_h.escape(str(c))}</th>" for c in head)
     body=""
@@ -174,18 +174,216 @@ GA_CSS="""
 .gtalk{background:#EAF2FB;border-left:2.4pt solid #2E5A88;border-radius:1.2mm;padding:1.2mm 2mm;font-size:6pt;line-height:1.35;color:#1B2A4A;}
 """
 
+
+
+# ═══ 암 보장률 인포메이션 3쪽 (지점장 지시 2026.08.22 «표지 뒤») ═══
+# ★_GA_BODY(회사별 비교표 본문 3장)는 계속 False. 이 3쪽은 별개다.
+_CS = """
+<style>
+.ci{padding:0 11mm;}
+.ci .lead{font-size:8.6pt;line-height:1.75;color:#333;margin:3.2mm 0 4mm;}
+.ci h1{font-size:21pt;font-weight:900;color:#1B2A4A;line-height:1.25;margin-top:2mm;}
+.ci h1 .r{color:#C0392B;}
+.ci .kpi{width:100%;border-collapse:separate;border-spacing:2.4mm 0;margin-bottom:5mm;}
+.ci .kpi td{width:25%;border:0.8pt solid #DDE3EC;border-radius:2mm;padding:3mm 2mm;text-align:center;background:#FBFCFE;}
+.ci .kpi .kl{font-size:7pt;color:#6B7A90;font-weight:700;}
+.ci .kpi .kv{font-size:17pt;font-weight:900;color:#1B2A4A;margin:1.2mm 0 0.8mm;}
+.ci .kpi .kd{font-size:7pt;font-weight:700;}
+.ci .dn{color:#C0392B;} .ci .up{color:#1F7A4D;} .ci .fl{color:#6B7A90;}
+.ci .st{font-size:10pt;font-weight:800;color:#1B2A4A;margin:0 0 2.4mm;padding-left:3mm;border-left:3.2pt solid #C9A24B;}
+.ci .st span{font-size:8pt;color:#9c7c2e;font-weight:700;}
+.ci table.d{width:100%;border-collapse:collapse;font-size:7.6pt;margin-bottom:2mm;}
+.ci table.d th{background:#1B2A4A;color:#fff;padding:1.8mm 1mm;font-weight:700;border:0.5pt solid #1B2A4A;}
+.ci table.d td{padding:1.7mm 1mm;border:0.5pt solid #DDE3EC;text-align:center;color:#333;}
+.ci table.d td.l{text-align:left;padding-left:2.6mm;font-weight:700;color:#1B2A4A;}
+.ci table.d tr.hi td{background:#FDF2F2;font-weight:800;color:#C0392B;}
+.ci table.d tr.hi td.l{color:#C0392B;}
+.ci .src{font-size:6.6pt;color:#8892A4;margin:1.4mm 0 4.6mm;}
+.ci .box{border:0.9pt solid #C9A24B;background:#FDFBF4;border-radius:2mm;padding:3.4mm 4mm;font-size:8.2pt;line-height:1.8;color:#333;}
+.ci .box b.t{color:#9c7c2e;}
+.ci .bar{width:100%;border-collapse:collapse;font-size:8pt;margin-bottom:1.5mm;}
+.ci .bar td{padding:1.1mm 0;vertical-align:middle;}
+.ci .bar .yr{width:13mm;font-weight:800;color:#1B2A4A;font-size:8.4pt;}
+.ci .bar .tr{background:#EEF2F7;height:6.2mm;border-radius:1mm;position:relative;}
+.ci .bar .fi{height:6.2mm;border-radius:1mm;background:#1B3A63;}
+.ci .bar .fr{background:#C0392B;}
+.ci .bar .vv{width:16mm;text-align:right;font-weight:900;font-size:9pt;color:#1B2A4A;}
+.ci .bar .vr{color:#C0392B;}
+.ci .ln{width:100%;border-collapse:collapse;font-size:7.4pt;text-align:center;margin-bottom:1.5mm;}
+.ci .ln td{border:0.5pt solid #DDE3EC;padding:1.5mm 0.4mm;color:#333;}
+.ci .ln td.h{background:#F4F6FA;font-weight:800;color:#1B2A4A;}
+.ci .ln td.e{background:#FDF2F2;font-weight:900;color:#C0392B;}
+</style>
+"""
+
+def _hd(sub):
+    return ('<div class="top"><div class="eb">MAKEONE · 보장분석 인포메이션</div>'
+            '<div class="nm">암 <b>보장률 리포트</b></div>'
+            f'<div class="pgn"><b>@@PN@@</b>{sub}</div><div class="bar"></div></div>')
+
+def _ft(r):
+    return (f'<div class="ft"><b>MAKEONE</b> 보장분석 자동화'
+            f'<span class="r">출처: 국민건강보험공단 보도자료(2025.12.30) · {r}</span></div>')
+
+
+def _p1():
+    kp = [("암질환 보장률", "75.0%", '<span class="dn">▼ 1.3%p</span>'),
+          ("암 비급여 본인부담", "16.0%", '<span class="dn">▲ 1.2%p</span>'),
+          ("4대 중증질환", "81.0%", '<span class="dn">▼ 0.8%p</span>'),
+          ("전체 보장률", "64.9%", '<span class="fl">전년 동일</span>')]
+    kh = "".join(f'<td><div class="kl">{a}</div><div class="kv">{b}</div>'
+                 f'<div class="kd">{c}</div></td>' for a, b, c in kp)
+    rows = [("전체", "81.8", "8.3", "9.9", "81.0 (-0.8)", "8.3", "10.7 (+0.8)", 0),
+            ("암질환", "76.3", "8.9", "14.8", "75.0 (-1.3)", "9.0", "16.0 (+1.2)", 1),
+            ("뇌혈관질환", "88.2", "6.7", "5.1", "87.9 (-0.3)", "6.4", "5.7 (+0.6)", 0),
+            ("심장질환", "90.0", "5.1", "4.9", "90.3 (+0.3)", "4.9", "4.8 (-0.1)", 0),
+            ("희귀·중증난치", "89.0", "8.4", "2.6", "89.3 (+0.3)", "8.1", "2.6", 0)]
+    tb = ""
+    for r in rows:
+        cls = ' class="hi"' if r[7] else ''
+        tb += (f'<tr{cls}><td class="l">{r[0]}</td>'
+               + "".join(f"<td>{v}</td>" for v in r[1:7]) + "</tr>")
+    yrs = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"]
+    val = ["63.4", "62.6", "62.7", "63.8", "64.2", "65.3", "64.5", "65.7", "64.9", "64.9"]
+    ln = ('<table class="ln"><tr>' + "".join(f'<td class="h">{y}</td>' for y in yrs) + "</tr><tr>"
+          + "".join(f'<td{" class=e" if i >= 8 else ""}>{v}</td>' for i, v in enumerate(val)) + "</tr></table>")
+    return ('<div class="pg">' + _hd("암 보장률") + '<div class="body ci">'
+            + _CS +
+            '<h1>암, 보장률은 내려가고 <span class="r">비급여는 올라갔다</span></h1>'
+            '<div class="lead">2024년 건강보험 보장률은 <b>64.9%</b>로 전년과 같지만, <b>암질환만 1.3%p 하락</b>했다. '
+            '법정 본인부담은 그대로인데 <b>비급여 본인부담이 14.8% → 16.0%</b>로 뛴 것이 원인이다.</div>'
+            f'<table class="kpi"><tr>{kh}</tr></table>'
+            '<div class="st">4대 중증질환 산정특례대상자 건강보험 보장률 <span>단위: %</span></div>'
+            '<table class="d"><tr><th rowspan="2">구 분</th><th colspan="3">2023년</th><th colspan="3">2024년</th></tr>'
+            '<tr><th>보장률</th><th>법정<br>본인부담</th><th>비급여<br>본인부담</th>'
+            '<th>보장률</th><th>법정<br>본인부담</th><th>비급여<br>본인부담</th></tr>'
+            f'{tb}</table>'
+            '<div class="src">4대 중증질환 보장률은 현금급여(본인부담상한제 사후환급금)를 포함함 · 원문 보도자료 붙임2</div>'
+            '<div class="st">연도별 건강보험 보장률 <span>10년간 63.4% → 64.9%, 1.5%p 상승에 그침</span></div>'
+            f'{ln}'
+            '<div class="src">출처: 국민건강보험공단 보도자료 붙임1 「연도별 건강보험 보장률」</div>'
+            '<div class="box"><b class="t">읽는 법 —</b> 뇌혈관 <b>87.9%</b> · 심장 <b>90.3%</b>는 <b>10만원 중 1만원 안쪽</b>만 내 돈이다. '
+            '그런데 암은 <b>75.0%</b>, 즉 <b>4분의 1이 내 돈</b>이고 그중 대부분(<b>16.0%</b>)이 '
+            '<b>건강보험이 한 푼도 안 내는 비급여</b>다.</div>'
+            '</div>' + _ft("1 / 3") + '</div>')
+
+
+def _p2():
+    a = [("2021", 80.2, 0), ("2022", 75.7, 0), ("2023", 76.3, 0), ("2024", 75.0, 1)]
+    b = [("2021", 11.0, 0), ("2022", 15.0, 0), ("2023", 14.8, 0), ("2024", 16.0, 1)]
+
+    def _bars(data, base):
+        s = '<table class="bar">'
+        for y, v, hi in data:
+            w = v / base * 100.0
+            fc = ' fr' if hi else ''
+            vc = ' vr' if hi else ''
+            s += (f'<tr><td class="yr">{y}</td><td><div class="tr">'
+                  f'<div class="fi{fc}" style="width:{w:.1f}%"></div></div></td>'
+                  f'<td class="vv{vc}">{v:.1f}%</td></tr>')
+        return s + "</table>"
+    rows = [("2017", "52.5조 (7.5%)", "16.9조 (7.2%)", "14.3조 (6.6%)", "83.7조 (7.3%)", 0),
+            ("2018", "59.5조 (13.3%)", "18.3조 (8.1%)", "15.5조 (8.3%)", "93.3조 (11.4%)", 0),
+            ("2019", "66.3조 (11.5%)", "20.3조 (11.2%)", "16.6조 (7.0%)", "103.3조 (10.7%)", 0),
+            ("2020", "67.1조 (1.2%)", "20.1조 (−1.2%)", "15.6조 (−6.2%)", "102.8조 (−0.5%)", 0),
+            ("2021", "71.6조 (6.8%)", "22.1조 (9.9%)", "17.3조 (11.3%)", "111.1조 (8.1%)", 0),
+            ("2022", "79.2조 (10.5%)", "23.7조 (7.5%)", "17.6조 (1.8%)", "120.6조 (8.5%)", 0),
+            ("2023", "86.3조 (9.0%)", "26.5조 (11.7%)", "20.2조 (14.4%)", "133.0조 (10.3%)", 0),
+            ("2024", "90.0조 (4.3%)", "26.8조 (1.0%)", "21.8조 (8.1%)", "138.6조 (4.2%)", 1)]
+    tb = ""
+    for r in rows:
+        cls = ' class="hi"' if r[5] else ''
+        tb += f'<tr{cls}><td class="l">{r[0]}</td>' + "".join(f"<td>{v}</td>" for v in r[1:5]) + "</tr>"
+    return ('<div class="pg">' + _hd("암 4년 추이") + '<div class="body ci">'
+            + _CS +
+            '<h1>암 보장률 <span class="r">4년째 내리막</span></h1>'
+            '<div class="st">암질환 보장률 연도별 추이 <span>4대 중증질환 산정특례대상자</span></div>'
+            + _bars(a, 100.0) +
+            '<div class="src">2021년 80.2% → 2024년 75.0% · <b>4년간 5.2%p 하락</b></div>'
+            '<div class="st">같은 기간 암 비급여 본인부담률 <span>막대는 50% 기준 축</span></div>'
+            + _bars(b, 50.0) +
+            '<div class="src">2021년 11.0% → 2024년 <b>16.0%, 1.45배</b></div>'
+            '<div class="st">연도별 부문별 진료비 규모 변화 <span>괄호는 전년 대비 증가율</span></div>'
+            '<table class="d"><tr><th>연도</th><th>보험자부담금</th><th>법정 본인부담금</th>'
+            '<th>비급여 진료비</th><th>총 진료비</th></tr>'
+            f'{tb}</table>'
+            '<div class="src">출처: 국민건강보험공단 보도자료 2쪽 「연도별 부문별 진료비 규모 변화」</div>'
+            '<div class="box"><b class="t">핵심 —</b> 급여는 <b>4.3%</b> 늘 때 <b>비급여는 8.1%</b> 늘었다. '
+            '공단이 부담을 늘려도 <b>비급여가 더 빨리 커져</b> 보장률이 제자리인 구조다. 그 한가운데에 <b>암</b>이 있다.</div>'
+            '</div>' + _ft("2 / 3") + '</div>')
+
+
+def _p3():
+    kp = [("요양병원 암(산정특례)", "36.3%", '<span class="dn">▼ 1.0%p (’23 37.3)</span>'),
+          ("약국 암(주상병)", "77.7%", '<span class="dn">▼ 4.0%p (’23 81.7)</span>'),
+          ("상급종합 전체", "72.2%", '<span class="up">▲ 1.4%p</span>'),
+          ("요양병원 전체", "67.3%", '<span class="dn">▼ 1.5%p</span>')]
+    kh = "".join(f'<td><div class="kl">{a}</div><div class="kv">{b}</div>'
+                 f'<div class="kd">{c}</div></td>' for a, b, c in kp)
+    rows = [("상급종합", "72.2 (+1.4)", "19.1", "8.7", 0),
+            ("종합병원", "66.7 (+0.6)", "21.7", "11.6", 0),
+            ("병원", "51.1 (+0.9)", "18.1", "30.8", 0),
+            ("요양병원", "67.3 (-1.5)", "18.5", "14.2 (+1.9)", 1),
+            ("의원", "57.5 (+0.2)", "20.1", "22.4", 0),
+            ("약국", "69.1 (-0.3)", "28.0", "2.9 (+0.5)", 1)]
+    tb = ""
+    for r in rows:
+        cls = ' class="hi"' if r[4] else ''
+        tb += f'<tr{cls}><td class="l">{r[0]}</td>' + "".join(f"<td>{v}</td>" for v in r[1:4]) + "</tr>"
+    L = [("1", "백혈병"), ("2", "췌장의 악성신생물"), ("4", "기타 림프·조혈 악성신생물"),
+         ("5", "뇌의 악성신생물"), ("6", "기관·기관지·폐의 악성신생물")]
+    R = [("8", "비호지킨 림프종"), ("11", "기타 소화기관의 악성신생물"),
+         ("12", "간 및 간내담관의 악성신생물"), ("13", "식도의 악성신생물"), ("25", "유방의 악성신생물")]
+    tw = '<table style="width:100%;border-collapse:collapse"><tr><td style="width:49%;vertical-align:top">'
+    for side in (L, R):
+        tw += '<table class="d"><tr><th style="width:16%">순위</th><th>질환</th></tr>'
+        for n, d in side:
+            tw += f'<tr><td>{n}</td><td class="l">{d}</td></tr>'
+        tw += '</table>'
+        if side is L:
+            tw += '</td><td style="width:2%"></td><td style="width:49%;vertical-align:top">'
+    tw += '</td></tr></table>'
+    return ('<div class="pg">' + _hd("치료 장소별") + '<div class="body ci">'
+            + _CS +
+            '<h1>어디서 치료받느냐가 <span class="r">내 돈을 정한다</span></h1>'
+            '<div class="st">암 환자가 실제로 겪는 보장률</div>'
+            f'<table class="kpi"><tr>{kh}</tr></table>'
+            '<div class="src">공단 설명 — 요양병원·약국 보장률 하락은 「암질환 중심으로 비급여 진료비가 증가」한 것이 원인 · 원문 3쪽</div>'
+            '<div class="st">요양기관 종별 건강보험 보장률 (2024년) <span>단위: % · 현금급여 미포함</span></div>'
+            '<table class="d"><tr><th>요양기관 종별</th><th>건강보험 보장률</th>'
+            '<th>법정 본인부담률</th><th>비급여 본인부담률</th></tr>'
+            f'{tb}</table>'
+            '<div class="src">원문 3쪽</div>'
+            '<div class="st">1인당 중증·고액진료비 상위 30위 <span>절반 이상이 암</span></div>'
+            f'{tw}'
+            '<div class="src">상위 30위 내 질환 보장률 80.2%(-0.7%p) · 50위 내 78.5%(-0.5%p) · 원문 붙임3</div>'
+            '<div class="box"><b class="t">상담 포인트 —</b><br>'
+            '• 암 진단 후 <b>요양병원</b>으로 옮기면 보장률이 <b>36.3%</b>까지 떨어진다. 내 돈이 <b>3분의 2</b>다.<br>'
+            '• 암 <b>약값</b>도 보장률이 1년 만에 <b>81.7% → 77.7%</b>로 떨어졌다.<br>'
+            '• 공단이 못 내는 <b>비급여 16.0%</b>는 <b>진단비·주요치료비</b>로만 메울 수 있다.</div>'
+            '</div>' + _ft("3 / 3") + '</div>')
+
+
+def cancer_info_pages():
+    return _p1() + _p2() + _p3()
+
+
 def ga_pages_html():
     out=[GA_CSS.join(['<style>','</style>'])]
-    # 표지
-    out.append('<div class="pg gacover">'
-      '<div class="top itop"><div class="eb">BARUM · 회사별 비교표</div>'
-      '<div class="nm">회사별 <b>비교표 총정리</b></div>'
-      '<div class="pgn"><b>·</b>부록</div><div class="bar"></div></div>'
-      '<div class="gap-cover"><div class="gt">회사별 비교표<br><b>총정리</b></div>'
-      '<div class="gd">유병자 · 비급여 통합치료비 · 항암 · 순환계 · 치매/간병 · 생·손보 수술비<br>11개 비교표 · 회사별 담보·한도·보험료<br>자료기준일 2026.06.30</div>'
-      '<div class="gwarn">⚠ 본 자료는 사내교육 정리본이며 보험안내자료로 사용할 수 없습니다. 수치는 원본(폰 캡처) 판독 기반이므로, 청약·비교설명 전 반드시 최신 상품설명서로 대조 확인 요망. ? 표시 셀은 원본 화면 잘림으로 미확정.</div>'
-      '</div>'
-      '<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 · 표지</span></div></div>')
+    # ★★★★★v553 (지점장 지시 2026.08.22, 영구): <b>회사별 비교표 표지도 삭제</b>한다.
+    #   지점장 원문: "이건 진작버린거야" → "표지도". v328에서 본문 3장을 뺀 데 이어 표지까지 뺀다.
+    #   ★HTML·PAGES 데이터는 지우지 않는다(되돌릴 때 이 스위치만 True로).
+    _GA_COVER = False
+    if _GA_COVER:
+      out.append('<div class="pg gacover">'
+        '<div class="top itop"><div class="eb">BARUM · 회사별 비교표</div>'
+        '<div class="nm">회사별 <b>비교표 총정리</b></div>'
+        '<div class="pgn"><b>·</b>부록</div><div class="bar"></div></div>'
+        '<div class="gap-cover"><div class="gt">회사별 비교표<br><b>총정리</b></div>'
+        '<div class="gd">유병자 · 비급여 통합치료비 · 항암 · 순환계 · 치매/간병 · 생·손보 수술비<br>11개 비교표 · 회사별 담보·한도·보험료<br>자료기준일 2026.06.30</div>'
+        '<div class="gwarn">⚠ 본 자료는 사내교육 정리본이며 보험안내자료로 사용할 수 없습니다. 수치는 원본(폰 캡처) 판독 기반이므로, 청약·비교설명 전 반드시 최신 상품설명서로 대조 확인 요망. ? 표시 셀은 원본 화면 잘림으로 미확정.</div>'
+        '</div>'
+        '<div class="ft"><b>MAKEONE</b> GA채널 비교표 · 사내참고용(보험안내자료 아님)<span class="r">회사별 비교표 · 표지</span></div></div>')
     # ★★★★★v328 (지점장 지시 2026.08.02, 영구): <b>회사별 비교표 1·2·3 본문 3장을 삭제</b>한다.
     #   지점장 원문: "보험인포메이션 회사비교 1.2.3페이지는 삭제 요청했는데 그대로있다".
     #   ★<b>표지(gacover)는 지시에 없어 남긴다</b> — 뺄지는 지점장 확정 후 반영(임의 확장 금지).
