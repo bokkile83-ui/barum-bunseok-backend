@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v572-out5-20260823 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v563-nofeel-20260823 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -377,7 +377,6 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     #   엑셀이 이미 정본이므로 색을 그대로 읽어 설명서·PPT에 전달한다(4대 산출물 연동).
     _gen_map={}; _red_map={}   # ★v370 _red_map = 가입제안서(레드 C00000) 담보
     _own_amt={}; _prop_amt={}  # ★v417 담보별 보유합계 / 제안합계(2줄 분리 표기용)
-    _PROP_ONLY=False           # ★v566 제안서 단독(보유 열 0개) → 전 담보 레드
     try:
         import openpyxl as _ox2
         _w2=_ox2.load_workbook(xlsx_path); _s2=_w2.active
@@ -408,69 +407,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                     _gen_map[_nm2]=True
         _w2.close()
         # ★v417 보유/제안 금액 분리(캐시값) — 진단서 2줄 표기의 유일 원천은 엑셀이다(결과값 동결 #9).
-        # ★★★★★v565 (지점장 실측 2026.08.23 「제안서만 넣으면 진단서가 레드·블랙 섞여 나온다.
-        #   기존이 없으니 100% 레드여야 한다. 엑셀·보장분석지는 정상, 진단서만 문제」):
-        #   [구 결함] 조건이 <b>보유합계 AND 제안합계</b>였다. <b>제안서 단독은 보유 계약이 0이라
-        #   「보유 합계」 열 자체가 없다</b> → 조건 실패 → `_own_amt`·`_prop_amt`가 <b>둘 다 빈 dict</b>
-        #   → `report_weasy._op417`의 `if not _prop: return None`에 걸려 <b>2줄 분리가 통째로 꺼지고</b>
-        #   구 단색 표기로 떨어졌다. 그래서 레드·블랙이 섞였다.
-        #   → <b>제안합계 하나만 있어도</b> 읽는다. 보유합계 열이 없으면 보유는 0(=전부 제안=레드).
-        if _sumc.get('제안합계'):
+        if _sumc.get('보유합계') and _sumc.get('제안합계'):
             _w3=_ox2.load_workbook(xlsx_path, data_only=True); _s3=_w3.active
-            _oc = _sumc.get('보유합계')          # ★없을 수 있다(제안서 단독)
             for _r3 in range(6,_s3.max_row+1):
                 _nm3=_s3.cell(_r3,2).value
                 if not _nm3: continue
                 _nm3=str(_nm3).strip()
-                _ov=_s3.cell(_r3,_oc).value if _oc else None
+                _ov=_s3.cell(_r3,_sumc['보유합계']).value
                 _pv=_s3.cell(_r3,_sumc['제안합계']).value
                 if isinstance(_ov,(int,float)) and _ov: _own_amt[_nm3]=_ov
                 if isinstance(_pv,(int,float)) and _pv: _prop_amt[_nm3]=_pv
             _w3.close()
-            if not _oc:
-                print('[v565 제안단독] 보유합계 열 없음 → 보유 0 · 제안 %d건 전부 레드' % len(_prop_amt))
-        # ★★★★★v565-B <b>합계 열이 `=SUM()` 수식이면 data_only로 못 읽는다</b>(캐시 없음).
-        #   실측: 우리 엑셀은 openpyxl이 만들어 <b>수식 캐시가 아예 없다</b> → `_prop_amt`가 늘 0건이었다.
-        #   ⇒ 합계 열을 못 읽었으면 <b>계약 열에서 직접 합산</b>한다. 제안 계약 열 = 값 글자색 C00000.
-        #   원천은 여전히 엑셀이다(결과값 동결 #9). 새 판정 규칙을 만들지 않는다.
-        if not _prop_amt:
-            _w4=_ox2.load_workbook(xlsx_path); _s4=_w4.active
-            _propc=set(); _ownc=set()
-            for _c4 in _datac:
-                _red=_blk=0
-                for _r4 in range(6,_s4.max_row+1):
-                    _f4=_s4.cell(_r4,_c4).font
-                    _rg=str((_f4.color.rgb if (_f4 and _f4.color and _f4.color.rgb) else '') or '').upper()
-                    if _s4.cell(_r4,_c4).value in (None,'',0): continue
-                    if _rg.endswith('C00000'): _red+=1
-                    else: _blk+=1
-                # ★v566 <b>값이 하나도 없는 열은 어느 쪽도 아니다</b>.
-                #   빈 열을 보유로 세면 제안서 단독인데도 「보유 있음」이 되어 레드가 꺼진다(실측).
-                if _red + _blk == 0: continue
-                (_propc if _red > _blk else _ownc).add(_c4)
-            if _propc:
-                for _r4 in range(6,_s4.max_row+1):
-                    _nm4=_s4.cell(_r4,2).value
-                    if not _nm4: continue
-                    _nm4=str(_nm4).strip()
-                    _ps=sum(v for _c4 in _propc
-                            for v in [_s4.cell(_r4,_c4).value] if isinstance(v,(int,float)))
-                    _os=sum(v for _c4 in _ownc
-                            for v in [_s4.cell(_r4,_c4).value] if isinstance(v,(int,float)))
-                    if _ps: _prop_amt[_nm4]=_ps
-                    if _os: _own_amt[_nm4]=_os
-                print('[v565-B 열합산] 제안 열 %d개 · 보유 열 %d개 → 제안 %d건 · 보유 %d건'
-                      % (len(_propc), len(_ownc), len(_prop_amt), len(_own_amt)))
-            # ★★★★★v566 제22조 이행 (지점장 2026.08.23 「제안서만 넣으면 무조건 올 레드다.
-            #   이것도 지침에 이미 있다」) — DOCTRINE 1120행:
-            #   「헤더가 `제안 합계`인 열은 값이 있는 셀을 <b>전부 레드 C00000</b>으로 확정한다」
-            #   ⇒ <b>보유 열이 0개면 그 분석은 제안서 단독</b>이다. 보유는 존재하지 않으므로
-            #     <b>전 담보가 제안 = 100% 레드</b>. 파일을 받아 확인할 일이 아니다(조문 확정).
-            if _propc and not _ownc:
-                _PROP_ONLY = True
-                _own_amt.clear()                 # 보유는 없다 — 검정 칸을 만들지 않는다
-                print('[v566 제안단독] 보유 열 0개 → <b>전 담보 레드</b> (제22조)')
-            _w4.close()
         print(f'[v417 색원천] 계약열 {len(_datac)}개 · 합산열 제외 {len(_sumc)}개 · red_map {len(_red_map)} · gen_map {len(_gen_map)} · 제안금액 {len(_prop_amt)}건')
     except Exception as _e417:
         print(f'[v417 색원천] 실패 {_e417}')
@@ -736,7 +683,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
         'contracts':headers,   # ★v463 제71조 — 12쪽 재무 표가 읽는 계약 목록(없어서 「미보유」였다)
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'own_amt':_own_amt,'prop_amt':_prop_amt,'prop_only':_PROP_ONLY,'warn_list':_warn,'warn_co':_warn_co,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'own_amt':_own_amt,'prop_amt':_prop_amt,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,

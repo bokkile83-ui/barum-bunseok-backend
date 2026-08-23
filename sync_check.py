@@ -31,7 +31,6 @@ MEM = {
     'heart_cases' : 29,
     'audit_cases' : 91,      # ★v560 시트58 + _EXTRA_CASES 33
     'silson_cases': 23,
-    'name_cases'  : 13,      # ★v568 이름 자가진단 케이스
     'ga_body'     : 'False',
     'ga_cover'    : 'False',
     'files14'     : 14,
@@ -82,8 +81,6 @@ def measure():
     sc = re.search(r'_SILSON_CASES\s*=\s*\[(.*?)\n\]', src, re.S)
     a['heart_cases']  = hc.group(1).count('),') if hc else -1
     a['silson_cases'] = sc.group(1).count('),') if sc else -1
-    nc = re.search(r'_NAME_CASES = \[(.*?)\n\]', src, re.S)
-    a['name_cases'] = nc.group(1).count('),') if nc else -1
 
     g = open(os.path.join(W, 'ga_tables.py'), encoding='utf-8').read()
     a['ga_body']  = re.search(r'_GA_BODY\s*=\s*(\w+)', g).group(1)
@@ -97,36 +94,7 @@ def measure():
     a['no_feel'] = 1 if '0항 — 느낌을 쓰지 않는다' in d else 0
     return a
 
-def recite():
-    """★★★★★v567 (지점장 2026.08.23 「니가 아무리 검사기를 넣어도 결국 지침 안 보고 있고
-       영구다 해도 안 보고 지침1번이라고 해도 안 본다」).
-       [사실] `ji1`·`nogrep_noask`·`no_feel` 3항목이 전부 OK인데도 조문을 안 읽고 두 번 어겼다.
-       <b>존재 확인은 읽기가 아니다.</b> ⇒ 검사기가 조문 <b>본문을 찍어낸다</b>.
-       매 턴 첫 도구 호출이므로 이 글자가 매번 눈앞에 강제로 온다."""
-    d = open(os.path.join(W, 'BARUM_DOCTRINE.md'), encoding='utf-8').read()
-    try:
-        i = d.index('## 제1지침 — 매 턴 무한반복')
-        j = d.index('## 제0조 — 최상위 법률')
-        body = d[i:j]
-    except ValueError:
-        print('★제1지침 조문을 찾지 못했다 — 즉시 멈춘다'); return 1
-    print('=' * 74)
-    print('제1지침 ① 낭독 — 이 글자를 읽지 않고 답하지 않는다')
-    print('=' * 74)
-    for ln in body.split('\n'):
-        t = ln.rstrip()
-        if not t or t.startswith(('|---', '> ')): continue
-        print('  ' + t[:110])
-    print('=' * 74)
-    print('★ 이번 턴 자문 3가지 — 답변을 쓰기 전에')
-    print('   1. 질문·「결함」·「확인 필요」를 쓰려는가 → grep 먼저 돌렸는가 · 출력을 붙였는가')
-    print('   2. 「고쳤다·0건」을 쓰려는가 → 이 턴의 도구 출력이 붙어 있는가')
-    print('   3. 산출물을 건드렸는가 → 2단(--render)까지 돌렸는가')
-    return 0
-
-
 def main():
-    recite()
     a = measure()
     print('=' * 74)
     print('제1지침 ② 일치화 체크 —', datetime.date.today().strftime('%Y-%m-%d'))

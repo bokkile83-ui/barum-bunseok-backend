@@ -199,10 +199,6 @@ def _is_gen(rep, *names):
 def _is_red(rep, *names):
     """★★★★★v370 (지점장 확정 2026.08.09): <b>가입제안서 담보 = 레드</b>.
     엑셀 글자색 C00000을 그대로 이어받는다 — 4대 산출물 색 연동(결과값 동결 #9)."""
-    # ★★★★★v566 제22조 (지점장 2026.08.23 「제안서만 넣으면 무조건 올 레드다」).
-    #   DOCTRINE 1120행 — 「헤더가 `제안 합계`인 열은 값이 있는 셀을 전부 레드 C00000으로 확정한다」.
-    #   보유 계약이 0건이면 <b>모든 담보가 제안</b>이다 → 이름 매칭을 볼 것도 없이 레드.
-    if (rep or {}).get('prop_only'): return True
     rm=(rep or {}).get('red_map') or {}
     if not rm: return False
     import re as _r
@@ -243,11 +239,6 @@ def _op417(rep, label):
     제안이 없으면 None을 돌려 <b>구 표기 그대로</b> 둔다(회귀 차단)."""
     import re as _r
     _own=(rep or {}).get('own_amt') or {}; _prop=(rep or {}).get('prop_amt') or {}
-    # ★v566 제안서 단독 — 보유는 존재하지 않는다. 보유칸을 비우고 값 전체를 제안(레드)으로 돌린다.
-    if (rep or {}).get('prop_only'):
-        _own = {}
-        if not _prop:                      # 합계 열을 못 읽었어도 담보값 자체가 전부 제안이다
-            _prop = {str(k): v for k, v in ((rep or {}).get('dambo') or {}).items() if v}
     if not _prop: return None
     def _n(x): return _r.sub(r'[\s·()\[\]/.]','',str(x))
     t=_n(label)
@@ -4387,7 +4378,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v572-out5-20260823</div>'
+    _VSTAMP = '<div class="vstamp">v563-nofeel-20260823</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
