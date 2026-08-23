@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v563-nofeel-20260823'
+VSTAMP = 'v572-out5-20260823'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -3337,6 +3337,40 @@ def build_proposal_contract(pdf_bytes, fname=''):
             'dambo':dambo,'ci_jugye':[],'ci_sebu':{},'ci_lines':{},
             'proposal':True,'jean_rows':rows}
 
+# ★★★★★v568 이름 자가진단 (지점장 2026.08.23 「이름은 저번부터 계속 오류라고 했는데
+#   오늘은 아예 고객으로 표기다 · 진짜 안 된다 강화해라」).
+#   [배경] 이름은 고쳐도 <b>검사가 없어 매번 다시 깨졌다</b>. 심장·실손처럼 케이스로 고정한다.
+#   형식 = (파일명, 본문 첫줄들, 기대 이름). 실패 1건이라도 있으면 /health 가 FAIL 을 띄운다.
+_NAME_CASES = [
+    ('김순자님.pdf',                 [], '김순자'),
+    ('김순자님_보장분석.pdf',          [], '김순자'),
+    ('보장분석_김순자님.pdf',          [], '김순자'),   # ★제64조 「보장진단」 사고
+    ('보장진단_김순자님.pdf',          [], '김순자'),
+    ('20260823_김순자님.pdf',        [], '김순자'),
+    ('김순자님 (1).pdf',             [], '김순자'),
+    ('%EA%B9%80%EC%88%9C%EC%9E%90%EB%8B%98.pdf', [], '김순자'),  # URL 인코딩
+    ('김순자.pdf',                   [], '김순자'),
+    ('김*자님.pdf',                  [], '김O자'),      # ★제128조 1항 — 지우지 않고 O
+    ('abc123.pdf',    ['김순자 님을 위한 보장분석'],       '김순자'),   # 본문 폴백
+    ('abc123.pdf',    ['피보험자 : 김순자 (42세/여)'],     '김순자'),
+    ('abc123.pdf',    ['계약자 : 김순자'],                '김순자'),
+    ('abc123.pdf',    ['김순자 고객님의 보장분석입니다'],     '김순자'),
+]
+
+
+def name_selftest():
+    """파일명·본문에서 고객명이 제대로 나오는지 검사. 실패 목록을 돌려준다."""
+    bad = []
+    for _fn, _ln, _want in _NAME_CASES:
+        try:
+            _got = parse_txt('\n'.join(_ln), _fn).get('client')
+        except Exception as _e:
+            bad.append('%s → 예외 %s' % (_fn, str(_e)[:40])); continue
+        if _got != _want:
+            bad.append('%s → %r (기대 %r)' % (_fn, _got, _want))
+    return bad
+
+
 def parse_txt(txt, filename='', extra=None):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     lines = _repair_anchor(lines)   # ★v282 유실된 계약 경계 앵커 복구
@@ -3348,9 +3382,34 @@ def parse_txt(txt, filename='', extra=None):
     if _SEBU_CI: print(f'[v237 sebu_ci] 계약 {len(_SEBU_CI)}건 파싱: ' + ', '.join(f"{k}(사망{v['samang']:,})" for k,v in _SEBU_CI.items()))
     client = ''
     # ★ 정본 §2: 고객명 = 파일명 우선
+    # ★★★★★v564 (지점장 실측 2026.08.23 「파일명이 김순자님인데 마음대로 고객으로 했다.
+    #   고객으로 하는 건 새제안서를 넣을 때만이다」):
+    #   [실측] 현행 정규식이 <b>URL 인코딩</b>(`%EA%B9%80...`)과 <b>mojibake</b>(`ê¹€ìˆœìží‹`)에서
+    #   전부 실패해 3405행 `client='고객'`으로 낙하했다. 모바일 업로드에서 흔한 두 형태다.
+    #   → 파일명을 <b>먼저 정규화</b>한다. 정규화는 이름을 지어내지 않는다(제128조).
+    if filename:
+        _fn0 = str(filename)
+        try:                                   # ① URL 인코딩 복구
+            from urllib.parse import unquote
+            if '%' in _fn0:
+                _d = unquote(_fn0)
+                if re.search(r'[가-힣]', _d): _fn0 = _d
+        except Exception: pass
+        if not re.search(r'[가-힣]', _fn0):     # ② mojibake 복구 (utf-8을 latin-1로 읽은 경우)
+            try:
+                _d = _fn0.encode('latin-1', 'ignore').decode('utf-8', 'ignore')
+                if re.search(r'[가-힣]', _d): _fn0 = _d
+            except Exception: pass
+        filename = _fn0
     if filename:
         base = re.sub(r'\.(?:[Tt][Xx][Tt]|[Pp][Dd][Ff])$', '', filename).strip()
-        fm = re.match(r'^([가-힣]{2,4})', base)
+        # ★v564 ③ 잡토큰이 앞에 오면 건너뛰고 <b>「○○님」을 먼저</b> 본다(제64조 「보장진단」 사고 방지).
+        _NOISE = ('보장분석', '보장진단', '보장분석지', '채널리포트', '가입제안서', '상품제안서',
+                  '최종본', '복사본', '설계', '제안서', '고객')
+        _m님 = re.search(r'([가-힣][가-힣A-Za-z*O]{1,3})님', base)
+        if _m님 and re.match(r'^(%s)' % '|'.join(_NOISE), base):
+            client = re.sub(r'님$', '', _m님.group(1))
+        fm = None if client else re.match(r'^([가-힣]{2,4})', base)
         # ★v44: '20260713_백O화님_보장분석' 처럼 날짜·숫자 접두 파일명 대응(구 정규식은 '고객'으로 낙하)
         if not fm: fm = re.search(r'([가-힣][가-힣A-Za-z*O]{1,3})님', base)
         if fm: client = re.sub(r'님$', '', fm.group(1))
@@ -3394,7 +3453,23 @@ def parse_txt(txt, filename='', extra=None):
             print('[v549 고객명] 끊긴 이름 %r → 실명 %r 채택(제128조 3항)' % (client, _pure))
             client = _pure
 
+    # ★★★★★v568 제128조 1항을 <b>analyze 경로에도</b> 적용 (지점장 2026.08.23
+    #   「이름은 저번부터 계속 오류라고 했는데 오늘은 아예 고객으로 표기다」).
+    #   마스킹 문자는 <b>지우지 않고 O로 자리를 지킨다</b>. 지우면 `김*자`→`김자`가 된다.
+    if client:
+        client = re.sub(r'[\*●○◯·・]', 'O', client)
     # 폴백: 내용에서 (마스킹 '박*은' 형태도 허용)
+    #   ★v568 탐색 범위를 30줄 → 200줄로 넓히고 패턴을 3종 추가한다.
+    if not client:
+        for l in lines[:200]:
+            m5 = (re.search(r'([가-힣*OＯ●○]{2,4})\s*(?:님|고객님)\s*(?:을|를)?\s*위한', l)
+                  or re.search(r'주?피보험자\s*[:：]?\s*([가-힣*OＯ●○]{2,4})', l)
+                  or re.search(r'계약자\s*[:：]?\s*([가-힣*OＯ●○]{2,4})', l)
+                  or re.search(r'([가-힣*OＯ●○]{2,4})\s*고객님', l))
+            if m5:
+                _c5 = re.sub(r'[\*●○◯·・]', 'O', m5.group(1))
+                if len(_c5) >= 2 and _c5 not in ('고객', '보장진단', '보장분석'):
+                    client = _c5; break
     if not client:
         for l in lines[:30]:
             l = l.strip()
@@ -3402,7 +3477,14 @@ def parse_txt(txt, filename='', extra=None):
             if m2: client = m2.group(1); break
             m = re.match(r'^([가-힣]{2,5})\s*$', l)
             if m and len(m.group(1)) <= 4: client = m.group(1); break
-    if not client: client = '고객'
+    if not client:
+        # ★v564 조용히 틀리지 않는다 — 왜 '고객'이 됐는지 흔적을 남긴다(영구원칙).
+        print('[v568 고객명] ★파일명·본문에서 이름을 못 찾았다 → 고객 낙하 · 원본 파일명 %r' % (filename,))
+        globals()['_NAME_FALLBACK'] = str(filename or '(파일명 없음)')
+        globals()['_NAME_WARN'] = ('★[확인] 고객명을 찾지 못해 「고객」으로 표기했습니다 — '
+                                   '원본 파일명 %r · 지침상 「고객」은 새 제안서 단독일 때만입니다'
+                                   % (filename or '(없음)'))
+        client = '고객'
 
     # ★ 한장보장표(앞부분)에서 회차 추출 → (회사,가입일,만기일) 키로 맵 구축 (별첨엔 회차 없음)
     paycount_map = {}
@@ -8620,7 +8702,8 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 </div>
 <div class="app" id="app">
   <header><div class="logo">@@BINI@@</div><div style="flex:1"><h1>@@BRAND@@ <b>@@BSUB@@</b></h1>
-    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div></div>
+    <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div>
+    <div id="drobot" style="margin-top:5px;font-size:11px;font-weight:700;letter-spacing:-.2px">@@DROBOT@@</div></div>
     <button id="rst" style="border:1px solid #c5a052;background:transparent;color:#c5a052;
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none;margin-right:6px">새 고객</button>
     <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
@@ -9319,6 +9402,7 @@ def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
     # ★v382 조문 자가진단을 /health에 <b>따로</b> 노출한다(CI 카운트에 묻히지 않게).
     _dtb = doctrine_selftest()
+    _nmb = name_selftest()   # ★v568 이름 자가진단 — 실패하면 즉시 노출
     _DTN = len(_DOCTRINE_SELFTEST)+len(_SOLO5_SELFTEST)+len(_GEN_SELFTEST)+len(_DEDUP_SELFTEST)
     _STN = len(_CI_SELFTEST)+len(_CI_NONLIFE_SELFTEST)+len(_CI_RATE_SELFTEST)+len(_SILSON_SELFTEST)   # ★v446 손보CI 10건 포함
     # ★★★v309 감사 2종을 /health에서도 즉시 돌린다 — 지점장이 링크 한 번으로 확인.
@@ -9335,6 +9419,7 @@ def health():
             'audit': _audit,
             'ci_selftest': ('PASS %d/%d' % (_STN, _STN)) if not _cib else ('FAIL: '+' | '.join(_cib[:6])),
             'doctrine': ('PASS 지침자가진단 %d/%d' % (_DTN, _DTN)) if not _dtb else ('FAIL: '+' | '.join(_dtb[:6])),
+            '고객명': ('PASS %d/%d' % (len(_NAME_CASES), len(_NAME_CASES))) if not _nmb else ('FAIL %d건: ' % len(_nmb))+' | '.join(_nmb[:4]),
             # ★v440 — 「조문 38/38」은 <b>자가진단 개수</b>였다. 지침 조문 수(59)와 혼동됐다(2026.08.17).
             #   조문 수·결번·분량은 /diag의 제55조 검사가 따로 지킨다. 여기서는 이름만 바로잡는다.
             '조문하한': '%d조 이상 (검사는 /diag)' % DOCTRINE_MIN_ART,
@@ -9438,6 +9523,265 @@ def version_bot():
         out['verdict'] = 'PASS — 서버 8파일 = GitHub 8파일 · 3파일 각인 동일 (%s)' % out['stamps'].get('main.py', '')
     return out
 
+# ★★★★★v569 지침 낭독 로봇 (지점장 지시 2026.08.23
+#   「보장분석지 메인화면에 지침=메모리[업뎃날짜/버전] [ ]/100% 다 읽고 했는지 체크하게 하는
+#    로봇 + 화면에 표기해라」).
+#   [배경] 조문을 박아도·검사기를 넣어도 <b>읽지 않으면 소용이 없다</b>(오늘 4회 위반).
+#   ⇒ 매 분석 실행 때 <b>지침 전문을 실제로 읽고</b> 그 결과를 <b>메인화면에 상시 표기</b>한다.
+#   ★「읽었다」의 정의 = <b>파일을 열어 조문·핵심 조항·줄수를 세어 통과</b>. 선언이 아니다.
+# ★★★★★v572 산출물 5종 로봇 검사 (지점장 지시 2026.08.23
+#   「로봇은 엑셀+진단서+보장분석지+비교엑셀+리포트 <b>전체</b>다」).
+#   [배경] v571 로봇은 <b>지침 문서만</b> 봤다 — 진단서·리포트는 검사 0건이라 계속 되돌아갔다
+#     (실측: 로봇 함수 안에 '진단서'·'report_weasy'·'_op417'·'red_map' 전부 0회).
+#   ⇒ 산출물 5종을 <b>실제로 만들어</b> 지침 등식대로인지 본다. 「등식1 = 엑셀 = PPT = 진단서」.
+#   ★한 번이라도 어긋나면 100%가 아니다. 화면이 빨강이 된다.
+_OUT5 = ('엑셀', '보장분석지PPT', '진단서PPT', '비교엑셀', '리모델링리포트')
+
+
+def output_selftest():
+    """산출물 5종을 실제로 만들어 지침 등식·색 규칙을 검사한다. 실패 목록을 돌려준다."""
+    import os as _o, tempfile as _tf, importlib as _il
+    bad = []
+    _d = _tf.mkdtemp(prefix='rb5_')
+    try:
+        # ── ① 엑셀: master.xlsx 를 원천으로 rep 생성이 되는가 (제124조 · 등식2)
+        try:
+            from coverage_benchmark import map_excel_to_report as _m2r
+            _rep = _m2r(TPL_XL, settings={'client': '로봇점검', 'branch': '메이크원',
+                                          'manager': '최은혜', 'title': '지점장', 'phone': ''})
+            if not _rep: bad.append('엑셀 — rep 생성 실패')
+            elif not _rep.get('coverage'): bad.append('엑셀 — coverage 비어 있음')
+        except Exception as _e:
+            bad.append('엑셀 — %s' % str(_e)[:40]); _rep = None
+
+        if _rep:
+            # ── ② 고객명: 「고객」으로 떨어지지 않았는가 (제64·128조)
+            if str(_rep.get('client') or '') in ('', '고객'):
+                bad.append('진단서 — 고객명이 「고객」 (제64·128조)')
+            # ── ③ 제안서 단독이면 보유 칸이 없어야 한다 (제22조 = 올 레드)
+            if _rep.get('prop_only') and (_rep.get('own_amt') or {}):
+                bad.append('진단서 — 제안단독인데 보유 칸이 있다 (제22조)')
+            # ── ④ 진단서 렌더: 실제로 PDF 를 만들어 쪽수·백지를 본다
+            try:
+                from report_weasy import build_report_pdf as _brp
+                _pdf = _o.path.join(_d, 'rb.pdf')
+                _brp(_rep, _pdf)
+                if not _o.path.exists(_pdf) or _o.path.getsize(_pdf) < 50000:
+                    bad.append('진단서 — 렌더 실패/과소')
+            except Exception as _e:
+                bad.append('진단서 — 렌더 예외 %s' % str(_e)[:36])
+            # ── ⑤ 색 원천 연동: 엑셀 red_map/gen_map 을 진단서가 받는가 (결과값 동결 #9)
+            try:
+                from report_weasy import _is_red as _ir
+                if _rep.get('prop_only') and not _ir(_rep, '일반암'):
+                    bad.append('진단서 — 제안단독인데 레드가 아니다 (제22조)')
+            except Exception as _e:
+                bad.append('진단서 — 색 연동 예외 %s' % str(_e)[:30])
+
+        # ── ⑥ 리모델링 2종: 비교엑셀·리포트 진입 함수가 살아 있는가 (제129·52조)
+        try:
+            import remodel as _rm
+            for _fn in ('remodel_all', 'remodel_single', 'build_xlsx', 'build_report'):
+                if not hasattr(_rm, _fn):
+                    bad.append('리모델링 — %s 없음 (제52·129조)' % _fn)
+            if hasattr(_rm, 'build_report_pptx'):
+                import inspect as _ins
+                if 'pngs' not in _ins.signature(_rm.build_report_pptx).parameters:
+                    bad.append('리포트 — build_report_pptx 시그니처 변경 (제129조)')
+        except Exception as _e:
+            bad.append('리모델링 — %s' % str(_e)[:40])
+
+        # ── ⑥-B ★★★제안서 단독을 <b>합성해서</b> 실제로 돌린다 (제22조 = 올 레드).
+        #   master.xlsx 는 제안 열이 없어 위 ③⑤ 조건이 안 걸린다 — 조건이 안 맞으면 검사가 아니다.
+        #   ⇒ 계약 열 하나를 <b>레드(C00000)</b>로 칠한 임시 엑셀을 만들어 prop_only 를 강제 재현한다.
+        try:
+            import openpyxl as _ox
+            from openpyxl.styles import Font as _Ft
+            _tmp = _o.path.join(_d, 'prop.xlsx')
+            _wb = _ox.load_workbook(TPL_XL); _ws = _wb.active
+            _n = 0
+            for _r in range(6, _ws.max_row + 1):
+                if _ws.cell(_r, 2).value:
+                    _ws.cell(_r, 3).value = 1000
+                    _ws.cell(_r, 3).font = _Ft(color='FFC00000', name='맑은 고딕', size=9)
+                    _n += 1
+            _ws.cell(1, 3).value = '테스트손보\n제안상품\n[갱신]'
+            _wb.save(_tmp); _wb.close()
+            from coverage_benchmark import map_excel_to_report as _m2r2
+            _rp = _m2r2(_tmp, settings={'client': '로봇점검', 'branch': '메이크원',
+                                        'manager': '최은혜', 'title': '지점장', 'phone': ''})
+            if not _rp.get('prop_only'):
+                bad.append('진단서 — 제안단독 판정 실패 (제22조)')
+            if (_rp.get('own_amt') or {}):
+                bad.append('진단서 — 제안단독인데 보유 칸이 남았다 (제22조)')
+            from report_weasy import _is_red as _ir2, _op417 as _op2
+            for _lb in ('일반암', '뇌혈관진단비', '급성심근경색', '질병수술비'):
+                if not _ir2(_rp, _lb):
+                    bad.append('진단서 — 제안단독인데 「%s」가 레드가 아니다 (제22조)' % _lb); break
+            _o417 = _op2(_rp, '일반암')
+            if _o417 and _o417[0]:
+                bad.append('진단서 — 제안단독인데 보유 금액이 찍힌다 (제22조)')
+        except Exception as _e:
+            bad.append('진단서 — 제안단독 합성 예외 %s' % str(_e)[:36])
+
+        # ── ⑦ 보장분석지 PPT 폼이 있는가 (빠지면 조용히 소실 — 실사고)
+        try:
+            if not _o.path.exists(_o.path.join(_o.path.dirname(_o.path.abspath(__file__)),
+                                               'ppt_form.pptx')):
+                bad.append('보장분석지PPT — ppt_form.pptx 없음')
+        except Exception: pass
+    finally:
+        try:
+            import shutil as _sh; _sh.rmtree(_d, ignore_errors=True)
+        except Exception: pass
+    return bad
+
+
+def doctrine_robot():
+    """지침=메모리 낭독 로봇.
+       ★★★★★v570 (지점장 2026.08.23 「읽는 건 할 수 있다. 무조건 100%가 나와야 한다 —
+         로봇이 100% 읽도록 <b>행동하게</b> 하라」).
+       [구 결함] v569는 <b>조항 문자열이 있는가</b>만 봤다. 그건 「있다」이지 「읽었다」가 아니다.
+         오늘 4회 위반 때도 조문은 전부 있었다 — 100% 초록이었을 것이다.
+       ⇒ <b>조문마다 실행 검사를 연결</b>한다. 조문을 읽고 <b>그대로 동작하는지 실제로 돌려</b>
+         전부 통과할 때만 100%다. 「읽었다 = 그 조문대로 코드가 움직인다」로 정의를 바꾼다.
+       돌려주는 값: (읽음%, 버전, 갱신일시, 조문수, 실패목록)"""
+    import os as _o, re as _r, datetime as _dt
+    _p = _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), 'BARUM_DOCTRINE.md')
+    try:
+        _d = open(_p, encoding='utf-8').read()
+    except Exception as _e:
+        return (0, VSTAMP, '-', 0, ['★BARUM_DOCTRINE.md 를 열 수 없다: %s' % str(_e)[:40]])
+
+    _bad = []
+    def _has(k): return k in _d
+
+    # ── 조문 → 실행 검사. (이름, 조문이 있는가, 조문대로 도는가)
+    _CHECKS = []
+
+    def _ck(nm, key, fn):
+        """조문 존재 + 실행 검사를 함께 본다. 둘 다 통과해야 1점."""
+        if not _has(key):
+            _CHECKS.append((nm, False, '조문 누락')); return
+        try:
+            _r2 = fn()
+        except Exception as _e:
+            _CHECKS.append((nm, False, '실행 예외 %s' % str(_e)[:30])); return
+        _CHECKS.append((nm, not _r2, _r2 or ''))
+
+    # 1) 제1지침 — 존재 + 3개 하위 조항
+    _ck('제1지침', '## 제1지침 — 매 턴 무한반복',
+        lambda: '' if ('sync_check' in _d and 'FINAL.zip' in _d) else '실행 절차 미기재')
+    # 2) 0항 느낌금지
+    _ck('0항 느낌금지', '0항 — 느낌을 쓰지 않는다',
+        lambda: '' if '느낌은 근거가 아니다' in _d or '느낌이며' in _d else '금지표 미기재')
+    # 3) 질문금지 — grep 선행
+    _ck('질문금지', '질문 금지 조항 — 지침에 있는 것은 묻지 않는다',
+        lambda: '' if 'grep 출력이 붙지 않은 질문' in _d else '판정문 미기재')
+    # 4) 제0조
+    _ck('제0조 서열', '## 제0조 — 최상위 법률',
+        lambda: '' if '지침 = 메모리는 100% 지켜야 할 법률' in _d else '1항 미기재')
+    # 5) ★제64조·제128조 — 이름. <b>실제로 13건을 돌린다</b>
+    def _ckname():
+        _n = len(_NAME_CASES)
+        if _n < 13: return '이름 케이스 %d건 < 13건 (검사가 지워졌다)' % _n
+        _b = name_selftest()
+        return ('name_selftest 실패 %d건' % len(_b)) if _b else ''
+    _ck('이름(제64·128조)', '제128조', _ckname)
+    # 6) ★제123조 — 심장. 29건 실행 + <b>케이스 수</b>
+    #   ★v570-B 실측: 케이스를 지우면 검사 대상이 줄어 실패 0이 된다(고장 ③이 100% 통과했다).
+    #     ⇒ <b>케이스 수 하한</b>을 함께 본다. 검사를 지워서 통과하는 길을 막는다.
+    def _ckheart():
+        _n = len(_HEART_CASES)
+        if _n < 29: return '심장 케이스 %d건 < 29건 (검사가 지워졌다)' % _n
+        _b = heart_case_selftest()
+        return ('heart 실패 %d건' % len(_b)) if _b else ''
+    _ck('심장(제123조)', '제123조', _ckheart)
+    # 7) ★제9조 — 실손. 23건 실행 + 케이스 수
+    def _cksil():
+        _n = len(_SILSON_CASES)
+        if _n < 23: return '실손 케이스 %d건 < 23건 (검사가 지워졌다)' % _n
+        _b = silson_selftest()
+        return ('silson 실패 %d건' % len(_b)) if _b else ''
+    _ck('실손(제9조)', '## 제9조', _cksil)
+    # 7-B) ★규칙 케이스 총수 — 감사 91건
+    def _ckaudit():
+        _n = len(_AUDIT_CASES)
+        return '' if _n >= 91 else '규칙 케이스 %d건 < 91건 (검사가 지워졌다)' % _n
+    _ck('규칙케이스(제0조)', '## 제0조', _ckaudit)
+    # 8) ★제8.4조 — CI. 실행
+    _ck('CI(제8.4조)', '제8',
+        lambda: ('ci 실패 %d건' % len(ci_selftest())) if ci_selftest() else '')
+    # 9) ★제124조 1항 — master.xlsx 를 손대지 않았는가(지문 대조)
+    def _ckmaster():
+        import hashlib as _h
+        try:
+            _m = _h.md5(open(TPL_XL, 'rb').read()).hexdigest()
+        except Exception as _e:
+            return 'master 열기 실패 %s' % str(_e)[:24]
+        return '' if _m == 'a963d8fa243635f0f5142828ee567ad1' else 'master.xlsx 변조 %s' % _m[:8]
+    _ck('엑셀불가침(제124조)', '제124조', _ckmaster)
+    # 9-B) ★★★★★산출물 5종 — 엑셀·보장분석지·진단서·비교엑셀·리포트를 <b>실제로 만들어</b> 본다
+    _ck('산출물5종(등식1)', '## 제0조',
+        lambda: ('산출물 실패 %d건: %s' % (len(output_selftest()), ' / '.join(output_selftest()[:2])))
+                if output_selftest() else '')
+    # 10) ★조문 자가진단 — 조문↔코드 대응 전수
+    _ck('조문↔코드', '## 제0조',
+        lambda: ('doctrine_selftest 실패 %d건' % len(doctrine_selftest())) if doctrine_selftest() else '')
+
+    # ── ★★★★★v571 (지점장 2026.08.23 「로봇은 무조건 지침=메모리를 <b>100% 읽게</b> 해야 한다.
+    #   그게 로봇의 역할이다」).
+    #   [구 결함] v570은 <b>핵심 10조항만</b> 봤다. 131조 중 10조 = 8%를 읽고 100%라 찍었다.
+    #   ⇒ <b>조문 131개를 전수 순회해 본문을 실제로 읽는다.</b>
+    #     읽음의 정의 = ①제목이 있다 ②본문이 비어 있지 않다(최소 40자) ③미결 표시가 없다.
+    #     하나라도 못 읽으면 그만큼 %가 깎인다. <b>131/131이라야 100%다.</b>
+    _arts = sorted({int(x) for x in _r.findall(r'제(\d+)조', _d) if int(x) <= 300})
+    if len(_arts) < DOCTRINE_MIN_ART:
+        _bad.append('조문 %d개 < 하한 %d' % (len(_arts), DOCTRINE_MIN_ART))
+    _miss = [n for n in range(_arts[0], _arts[-1] + 1) if n not in _arts] if _arts else []
+    if _miss: _bad.append('결번 %d개' % len(_miss))
+
+    # 조문 전수 정독 — 제목 위치를 찾아 다음 조문 직전까지를 본문으로 읽는다
+    _pos = []
+    for _m in _r.finditer(r'^#{1,4}[^\n]*?제(\d+)조', _d, _r.M):
+        _no = int(_m.group(1))
+        if _no <= 300: _pos.append((_no, _m.start()))
+    _pos.sort(key=lambda x: x[1])
+    _read, _thin = 0, []
+    for _i2, (_no, _st) in enumerate(_pos):
+        _en = _pos[_i2 + 1][1] if _i2 + 1 < len(_pos) else len(_d)
+        _body = _r.sub(r'\s', '', _d[_st:_en])
+        if len(_body) >= 40 and '[미결]' not in _d[_st:_en]:
+            _read += 1
+        else:
+            _thin.append('제%d조' % _no)
+    _tot = len(_pos) or 1
+    if _thin:
+        _bad.append('본문 미달 %d조(%s)' % (len(_thin), ','.join(_thin[:4])))
+
+    for _nm, _ok, _why in _CHECKS:
+        if not _ok: _bad.append('%s — %s' % (_nm, _why))
+    _cpass = sum(1 for _n2, _o2, _w2 in _CHECKS if _o2)
+    # ★읽음% = <b>조문 전수 정독률</b> × <b>실행검사 통과율</b>. 둘 다 만점이라야 100%.
+    _pct = int(round(_read / _tot * (_cpass / max(1, len(_CHECKS))) * 100))
+    if _bad and _pct == 100: _pct = 99
+    globals()['_ROBOT_READ'] = (_read, _tot, _cpass, len(_CHECKS))
+
+    try:
+        _ts = _dt.datetime.fromtimestamp(_o.path.getmtime(_p)).strftime('%Y.%m.%d %H:%M')
+    except Exception: _ts = '-'
+    return (_pct, VSTAMP, _ts, len(_arts), _bad)
+
+
+@app.get('/robot')
+def robot_page():
+    _pct, _ver, _ts, _n, _bad = doctrine_robot()
+    _rr = globals().get('_ROBOT_READ') or (0, 0, 0, 0)
+    return {'ok': not _bad, '읽음': '%d%%' % _pct, '버전': _ver, '갱신': _ts,
+            '조문': _n, '본문정독': '%d/%d' % (_rr[0], _rr[1]),
+            '실행검사': '%d/%d' % (_rr[2], _rr[3]), '실패': _bad}
+
+
 @app.get('/doctrine')
 def doctrine_bot():
     """지침 체크봇 — 지침 조항별로 담보명→마스터행 케이스를 돌려 통과/실패를 그대로 노출한다."""
@@ -9538,8 +9882,26 @@ def _brand():
 
 def _brandize(html):
     b, sub, ini = _brand()
+    # ★★★★★v569 지침 낭독 로봇 배지 — <b>메인화면 상시 표기</b>(지점장 지시 2026.08.23).
+    #   화면을 열 때마다 지침 파일을 <b>실제로 열어 읽고</b> 그 결과를 찍는다. 선언이 아니다.
+    try:
+        _p, _v, _t, _n, _bad = doctrine_robot()
+    except Exception as _e:
+        _p, _v, _t, _n, _bad = 0, '?', '-', 0, [str(_e)[:30]]
+    _ok = (_p == 100 and not _bad)
+    _col = '#39d98a' if _ok else '#ff6b6b'
+    _box = '■' if _ok else '□'
+    _rr = globals().get('_ROBOT_READ') or (0, 0, 0, 0)
+    _badge = ('<span style="color:%s">%s 지침=메모리 <b>%s</b> · %s · 조문 %d조 '
+              '&nbsp;[%s] <b>%d%%</b> 정독 '
+              '<span style="opacity:.75;font-weight:400">(본문 %d/%d · 실행검사 %d/%d)</span></span>'
+              % (_col, _box, _v, _t, _n, _box, _p, _rr[0], _rr[1], _rr[2], _rr[3]))
+    if _bad:
+        _badge += ('<br><span style="color:#ff6b6b;font-size:10px">★ ' +
+                   ' · '.join(_bad[:3]) + '</span>')
     return (html.replace('@@BRAND@@', b)
                 .replace('@@BSUB@@', sub)
+                .replace('@@DROBOT@@', _badge)
                 .replace('@@BINI@@', ini))
 
 
