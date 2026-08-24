@@ -199,6 +199,10 @@ def _is_gen(rep, *names):
 def _is_red(rep, *names):
     """★★★★★v370 (지점장 확정 2026.08.09): <b>가입제안서 담보 = 레드</b>.
     엑셀 글자색 C00000을 그대로 이어받는다 — 4대 산출물 색 연동(결과값 동결 #9)."""
+    # ★★★★★v566 제22조 (지점장 2026.08.23 「제안서만 넣으면 무조건 올 레드다」).
+    #   DOCTRINE 1120행 — 「헤더가 `제안 합계`인 열은 값이 있는 셀을 전부 레드 C00000으로 확정한다」.
+    #   보유 계약이 0건이면 <b>모든 담보가 제안</b>이다 → 이름 매칭을 볼 것도 없이 레드.
+    if (rep or {}).get('prop_only'): return True
     rm=(rep or {}).get('red_map') or {}
     if not rm: return False
     import re as _r
@@ -239,6 +243,11 @@ def _op417(rep, label):
     제안이 없으면 None을 돌려 <b>구 표기 그대로</b> 둔다(회귀 차단)."""
     import re as _r
     _own=(rep or {}).get('own_amt') or {}; _prop=(rep or {}).get('prop_amt') or {}
+    # ★v566 제안서 단독 — 보유는 존재하지 않는다. 보유칸을 비우고 값 전체를 제안(레드)으로 돌린다.
+    if (rep or {}).get('prop_only'):
+        _own = {}
+        if not _prop:                      # 합계 열을 못 읽었어도 담보값 자체가 전부 제안이다
+            _prop = {str(k): v for k, v in ((rep or {}).get('dambo') or {}).items() if v}
     if not _prop: return None
     def _n(x): return _r.sub(r'[\s·()\[\]/.]','',str(x))
     t=_n(label)
@@ -406,12 +415,27 @@ def _wbox_inner(rep, lookup, bv):
         _os = (_o + _u) if _o else ''
         _ps = ('+' if _o else '') + _pv + _u
         _reg(_os, _ps)
-        _g = ' gen' if (_o and _is_gen(rep, lookup)) else ''
-        return ((f'<span class="nv{_g}">{_html.escape(_os)}</span> ' if _os else '')
+# ★★★★★v575 제127조 이행 (지점장 실측 2026.08.23
+#   「엑셀과 보장분석지 PPT는 100% 정상이다. 진단서의 불일치화고 <b>지침 오류</b>다」).
+#   [지침] 제127조 1항 — <b>「리포트·진단서의 담보 값은 보유(검정) + 제안 증가분(레드)로 적는다」</b>.
+#     진단서는 <b>2색</b>이다: <b>검정 = 보유 / 레드 = 제안</b>. <b>파랑(갱신)은 진단서 규칙이 아니다</b>
+#     — 파랑은 엑셀(제10조)·보장분석지 PPT(제11조) 규칙이다.
+#   [구 결함] v139 `_is_gen`이 엑셀 파랑(gen_map)을 <b>진단서까지 끌어왔다</b>. 제127조(v540)가
+#     그 위에 온 뒤에도 남아 있어 <b>보유가 파랑으로 찍혔다</b> → 블랙·블루·레드가 섞여 보였다.
+#   ⇒ 진단서 값에서 <b>파랑을 뺀다</b>. 보유는 검정, 제안은 레드.
+        return ((f'<span class="nv">{_html.escape(_os)}</span> ' if _os else '')
                 + f'<span class="nv rd">{_html.escape(_ps)}</span>')
     _reg(str(bv))
-    return (f'<span class="nv gen">{bv}</span>' if _is_gen(rep, lookup)
-            else f'<span class="nv">{bv}</span>')
+    # ★★★★★v574 (지점장 실측 2026.08.23 「진단서가 블랙·블루·레드를 잘 구분을 못한다」).
+    #   [구 결함] 여기서 <b>레드를 아예 붙이지 않았다</b>. `_op417`(보유/제안 2줄)이 값을 줄 때만
+    #     `nv rd`가 붙고, <b>None이면 gen(블루) 아니면 무색(블랙) 둘 중 하나</b>였다.
+    #     `prop_amt`가 비는 경우(합계 열이 수식·제안 열 미검출)에는 제안 담보도 블루/블랙이 됐다.
+    #   ⇒ `_op417`이 없어도 <b>`red_map`(엑셀 값 글자색 C00000)</b>이면 레드로 찍는다.
+    #     원천은 엑셀이다(결과값 동결 #9). 3색 = <b>레드 제안 / 블루 갱신 / 블랙 비갱신</b>.
+    # ★v575 제127조 — 진단서는 <b>검정(보유) / 레드(제안)</b> 2색. 파랑은 쓰지 않는다.
+    if _is_red(rep, lookup):
+        return f'<span class="nv rd">{bv}</span>'
+    return f'<span class="nv">{bv}</span>'
 
 
 def _wcard(rep, title, desc, lookup, mode):
@@ -464,7 +488,7 @@ def _wcard(rep, title, desc, lookup, mode):
         #   제안분이 보이지 않았다(「7페이지에는 아예 레드가 없다」). → <b>보유 / +제안(레드)</b>로 분리.
         #   7p는 제로섬이라 줄을 늘리지 않고 <b>같은 행에 두 숫자</b>로 쪼갠다.
         def _dgrow417(l, v):
-            _g=' gen' if _is_gen(rep,l) else ''
+            _g=''   # ★v575 제127조 — 진단서에 파랑 없음. 보유=검정 / 제안=레드
             _op=_op417(rep, l)
             if _op:
                 _o,_p=_op
@@ -4378,7 +4402,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v563-nofeel-20260823</div>'
+    _VSTAMP = '<div class="vstamp">v577-noask-20260823</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

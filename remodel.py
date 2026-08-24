@@ -378,12 +378,21 @@ def build_report(cmp_, client="고객", base_date="", total=9):
     _base = _os.path.dirname(_os.path.abspath(report_pages.__file__)) + '/'
     # ★★★★★v530 제121조 — 발행 직전 <b>심장 값 대조</b>. 엑셀과 다르면 그 자리에서 멈춘다.
     #   지점장 지시 2026.08.21 「네 산출물의 담보값을 실제로 대조해 다르면 발행을 막는 검사」
+    # ★★★★★v573 긴급 (지점장 실측 2026.08.23 「엑셀 2개를 넣는데 심장동결이 계속 떠서
+    #   비교가 안 된다 · 아예 최종 엑셀 업로드 자체가 안 된다 · 심장동결은 기존보험 유지로
+    #   인해 가능한 일이다 · 케이스 4가지는 별개다」).
+    #   [원인] `heart_audit`는 <b>`cmp_['new']['cov']` 하나만</b> 본다. 그런데 리모델링 리포트는
+    #     제127조로 <b>보유(검정) + 제안 증가분(레드)</b>을 함께 찍는다 — <b>기존 유지분이 더해져</b>
+    #     엑셀 500 / 리포트 1,403 처럼 어긋난다. <b>불일치가 아니라 설계다.</b>
+    #   [범위] 제121조는 <b>진단서 4·5쪽</b>(analyze 경로) 조문이다. 리모델링 리포트는 <b>다른 산출물</b>이다.
+    #   ⇒ 리모델링에서는 <b>차단하지 않는다.</b> 대신 로그로 남긴다(조용히 틀리지 않는다).
+    #     진단서 차단(main.py 제121조 게이트)은 <b>그대로 둔다</b>.
     _hb = report_pages.heart_audit(cmp_, client, base_date)
     if _hb:
-        print('[제121조 심장동결] 불일치 %d건 — 발행 차단' % len(_hb))
-        for _x in _hb: print('   ·', _x)
-        raise RuntimeError('제121조 심장동결 위반: ' + ' / '.join(_hb))
-    print('[제121조 심장동결] 진단서 4·5쪽 = 엑셀 · 불일치 0건')
+        print('[제121조 심장] 리모델링 리포트 — 보유+증가분 표기로 차이 %d건 (차단하지 않음)' % len(_hb))
+        for _x in _hb[:6]: print('   ·', _x)
+    else:
+        print('[제121조 심장동결] 리포트 4·5쪽 = 엑셀 · 불일치 0건')
 
     for i, html in enumerate(report_pages.build(cmp_, client, base_date, total), 1):
         f = os.path.join(tmp, 'p%d.pdf' % i)
