@@ -556,7 +556,31 @@ HEART4 = [
 # ★★★★★v582 제131조 — <b>보유 조각의 색을 한 곳에서</b> 만든다(경로 3개가 같은 규칙).
 #   sp = [갱신합, 비갱신합] (엑셀 셀 글자색이 원천 · remodel `cov_split`).
 #   둘 다 있으면 `5,000`(파랑) + `+4,000`(검정) 분할, 한쪽만이면 그 색 단색.
-def _own_span(o, sp=None, unit='만'):
+# ★★★★★v585 제131조 4항 — <b>조회 키를 먼저 의심한다</b>. 리포트 라벨(`뇌출혈`)과
+#   엑셀 담보명(`뇌출혈진단비`)이 달라 색이 안 붙었다(지점장 「5페이지 뇌심이 또 블랙」).
+#   ⇒ 라벨로 못 찾으면 <b>부분일치</b>로 한 번 더 본다. 값을 꺼낼 때 쓰는 이름과 같은 원리.
+def _spl_of(spl, label):
+    if not spl or not label:
+        return None
+    if label in spl:
+        return spl[label]
+    import re as _r
+    _n = lambda x: _r.sub(r'[\s·()\[\]/]', '', str(x))
+    t = _n(label)
+    if len(t) < 2:
+        return None
+    for k, v in spl.items():
+        kn = _n(k)
+        if t == kn or t in kn or kn in t:
+            return v
+    return None
+
+
+def _own_span(o, sp=None, unit=''):
+    # ★★★★★v585 (지점장 지시 2026.08.24 「<b>____만원 인 칸인데 숫자가 500만이라고
+    #   (만)자가 또 적혀있다. 숫자만 적어라</b>」).
+    #   칸 <b>바깥에 이미 `만원` 단위칸</b>이 있다(`<span class="unit">만원</span>` 10곳).
+    #   값에도 '만'을 붙이면 <b>`500만 만원`</b>이 된다 → 값은 <b>숫자만</b>.
     o = int(o or 0)
     if not o:
         return ''
@@ -584,7 +608,7 @@ def _c4(v, o=None, sp=None):
     if o is None:
         if v:
             return ('<span class="hold">보장</span>'
-                    '<span class="amount">%s만</span>' % format(v, ','))
+                    '<span class="amount">%s</span>' % format(v, ','))   # ★v585 숫자만
         return _d4(0)
     o = int(o or 0)
     if not v and not o: return _d4(0)
@@ -605,7 +629,7 @@ def _c4(v, o=None, sp=None):
     #   [원인] 구 코드는 `n - o`(증가분)을 찍었다. 실측 = 기존 메리츠 대인 2,000 +
     #     신규 DB 대인 3,000인데 `2,000 +1,000`으로 나와 <b>3,000이 통째로 새 것</b>이라는
     #     사실이 사라졌다. ⇒ <b>제안은 전액</b>으로 찍는다(진단서는 동결 — 손대지 않는다).
-    _a = ('<span class="amount red">+%s만</span>' % format(v, ',')) if v > o else ''
+    _a = ('<span class="amount red">+%s</span>' % format(v, ',')) if v > o else ''   # ★v585 숫자만
     return '<span class="hold">보장</span>' + (_h + ('&nbsp;' if _h and _a else '') + _a)
 
 
@@ -678,7 +702,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
         v = val(key)
         br += ('<tr class="%s"><td><span class="code-name">%s</span>'
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td></tr>'
-               % ('highlight' if v else '', nm, cd, _c4(v, valo(key), _SPL4.get(key)), _d4(circ), _d4(spc)))
+               % ('highlight' if v else '', nm, cd, _c4(v, valo(key), _spl_of(_SPL4, key)), _d4(circ), _d4(spc)))
 
     ht = ''
     last = None
@@ -692,7 +716,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td>'
                '<td>%s</td></tr>'
                % ('highlight' if (v and not dot_only) else '', nm, cd,
-                  _d4(1) if dot_only and v else _c4(v, valo(key), _SPL4.get(key)),
+                  _d4(1) if dot_only and v else _c4(v, valo(key), _spl_of(_SPL4, key)),
                   _d4(sph), _d4(circ), _d4(spc)))
 
     lg = ('<div class="legend"><span class="circle on"></span> 보장 &nbsp;'
@@ -770,7 +794,7 @@ font-size:11.5pt;font-weight:900}
 .amount-row{display:flex;gap:1.4mm;align-items:center;margin-top:1.4mm}
 .amount-row .st{width:16mm;flex:none}
 .amount-row .lb{flex:1}
-.amount-row .vb{width:24mm;flex:none}
+.amount-row .vb{width:48mm;flex:none}   /* ★v585 지점장 지시 2026.08.24 「5페이지 암 쪽 칸이 너무 좁다 — 지금 가로의 2배로 늘려라」 · 분할표기 `4,000+5,000`이 들어가야 한다 */
 .amount-row .un{width:6mm;flex:none}
 .status{height:5.6mm;white-space:nowrap;border-radius:1.2mm;display:flex;align-items:center;justify-content:center;
 color:#fff;font-size:8.4pt;font-weight:900}
@@ -818,8 +842,21 @@ background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
 """
 
 
-def _m5(v):
-    return (format(int(v), ',') + '만') if v else ''
+def _m5(v, key=None, old=None, sp=None, tx=None):
+    """★★★★★v585 제131조 (지점장 실측 2026.08.24 「<b>5페이지 뇌심이 분명 갱신인데 또 블랙이다</b>」).
+       [원인] 이 함수에는 <b>색 판정이 아예 없었다</b> — 5쪽 전체가 통짜 검정이라
+         갱신 담보(뇌출혈·급성심근)도 블랙으로 나갔다. 6쪽 `_m6`·7쪽 `line`만 고치고
+         <b>5쪽은 함수가 다르다는 걸 못 셌다</b>(같은 일 하는 경로를 또 안 셌다).
+       ⇒ 색은 <b>`_own_span()` 한 곳</b>에서 만든다(4·6·7쪽과 동일). 레드 > 파랑 > 검정.
+       ★단위는 붙이지 않는다(칸 밖에 `만원`이 있다 — v585)."""
+    n = int(v or 0)
+    if not n:
+        return str(tx) if tx else ''
+    try: _o = int(old or 0)
+    except Exception: _o = 0
+    if old is not None and n > _o:
+        return '<span class="amount red">%s</span>' % format(n, ',')
+    return _own_span(n, sp) or format(n, ',')
 
 
 def _s5(on):
@@ -828,6 +865,7 @@ def _s5(on):
 
 
 def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
+    _SPL5 = (cmp_.get('new') or {}).get('cov_split') or {}   # ★v585 제131조 [갱신합, 비갱신합]
     cov = cmp_['new']['cov']
 
     def g(k):
@@ -855,14 +893,14 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
                 '<td style="width:6mm;padding:.7mm 0 .7mm 1.2mm;font-size:7.2pt;'
                 'color:#1e2a38">만원</td></tr>'
                 % (badge, '#1187ca' if blue else '#274958', lb,
-                   ' blue' if blue else '', _m5(v)))
+                   ' blue' if blue else '', _m5(v, sp=_spl_of(_SPL5, lb))))
 
     def arow(lb, v, join=False, red=False):
         return ('<div class="amount-row"><div class="st">%s</div>'
                 '<div class="lb"><div class="label">%s</div></div>'
                 '<div class="vb"><div class="value-box%s">%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (_s5(True) if join else '', lb, ' red' if red else '', _m5(v)))
+                % (_s5(True) if join else '', lb, ' red' if red else '', _m5(v, sp=_spl_of(_SPL5, lb))))
 
     def card(h4, desc, v, join=False, special='', red=False):
         return ('<div class="small-card"><h4>%s</h4><div class="desc">%s</div>%s'
@@ -963,8 +1001,8 @@ def p5(cmp_, client='고객', base_date='', pg=5, totpg=7):
                     special='신특정순환계질환주요치료비ⅢPlus', red=True),
                card('순환계 통합치료비', '검사 · 수술 · 약물 통합', 0),
                card('순환계 생활비', '치료 중 소득보상', 0),
-               _s5(bool(g('산정특례뇌혈관'))), _m5(g('산정특례뇌혈관')),
-               _s5(bool(g('산정특례심장'))), _m5(g('산정특례심장')),
+               _s5(bool(g('산정특례뇌혈관'))), _m5(g('산정특례뇌혈관'), sp=_spl_of(_SPL5,'산정특례뇌혈관')),
+               _s5(bool(g('산정특례심장'))), _m5(g('산정특례심장'), sp=_spl_of(_SPL5,'산정특례심장')),
                client, pg, totpg))
 
 # ═══════════════════ 6 쪽 ═══════════════════
@@ -1053,7 +1091,7 @@ def _m6(v, o=None, tx=None, sp=None):
     if not n:
         # ★v581 제122조 4항 — 숫자가 없어도 <b>글자값(`현물`)</b>이 있으면 그것을 찍는다.
         return str(tx) if tx else ''
-    _t = format(n, ',') + '만'
+    _t = format(n, ',')                          # ★v585 숫자만(단위칸은 밖)
     try: _o = int(o or 0)
     except Exception: _o = 0
     if o is not None and n > _o:
@@ -1063,7 +1101,7 @@ def _m6(v, o=None, tx=None, sp=None):
     if sp:
         _g, _n2 = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n2 > 0:
-            return ('<span class="gen">%s</span><span class="blk">+%s만</span>'
+            return ('<span class="gen">%s</span><span class="blk">+%s</span>'   # ★v585 숫자만
                     % (format(int(_g), ','), format(int(_n2), ',')))
         if _g > 0:
             return '<span class="gen">%s</span>' % _t
@@ -1082,7 +1120,7 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (lb, _m6(g(key), old.get(key, 0), _TXT6.get(key), _SPL6.get(key)) if key else '', extra))
+                % (lb, _m6(g(key), old.get(key, 0), _TXT6.get(key), _spl_of(_SPL6, key)) if key else '', extra))
 
     def r2(l1, k1, l2, k2):
         return ('<div class="row two"><div class="lb"><div class="label">%s</div></div>'
@@ -1091,11 +1129,11 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
                 '<div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (l1, _m6(g(k1), old.get(k1, 0), _TXT6.get(k1), _SPL6.get(k1)) if k1 else '',
-                   l2, _m6(g(k2), old.get(k2, 0), _TXT6.get(k2), _SPL6.get(k2)) if k2 else ''))
+                % (l1, _m6(g(k1), old.get(k1, 0), _TXT6.get(k1), _spl_of(_SPL6, k1)) if k1 else '',
+                   l2, _m6(g(k2), old.get(k2, 0), _TXT6.get(k2), _spl_of(_SPL6, k2)) if k2 else ''))
 
     d = g('상해사망') - old.get('상해사망', 0)
-    inj = ('<span class="red">&nbsp;+%s만</span>' % format(int(d), ',')) if d > 0 else ''
+    inj = ('<span class="red">&nbsp;+%s</span>' % format(int(d), ',')) if d > 0 else ''   # ★v585
     isch = g('허혈성 진단비')
 
     left = ('<div class="panel"><div class="panel-title">사망 · 진단비 · 수술</div>'
@@ -1435,10 +1473,10 @@ def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
                     '<div class="bx"><div class="box">%s</div></div>'
                     '<div class="un"><span class="unit">만원</span></div></div>' % (lb, _tx))
         # ★v582 제131조 — 7쪽도 3색. 보유를 갱신(파랑)+비갱신(검정)으로 쪼갠다.
-        val = _own_span(o, _SPL9.get(key), unit='만') if (o and _KEEP_OWN) else ''
+        val = _own_span(o, _spl_of(_SPL9, key)) if (o and _KEEP_OWN) else ''   # ★v585 숫자만
         if n > o:
             # ★v580 제127조 개정 — 증가분이 아니라 <b>제안 전액</b>(지점장 확정 2026.08.24).
-            add = '<span class="red">+%s만</span>' % format(n, ',')
+            add = '<span class="red">+%s</span>' % format(n, ',')   # ★v585 숫자만
             val = (val + '&nbsp;' + add) if val else add
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s</div></div>'
@@ -1754,7 +1792,11 @@ def _dotfill(html):
     if not _DOT_FIX:
         return html
     import re as _r
-    return _r.sub(r'(<div class="box"[^>]*>)\s*(</div>)', r'\1.\2', html)
+    # ★★★★★v584 (지점장 실측 2026.08.24 「<b>5-6페이지 하나도 수정되는게 없다</b>」).
+    #   [내 결함] v581 정규식이 `class="box"` <b>정확일치</b>만 잡아 <b>`class="value-box box"`
+    #     같은 복합 클래스를 전부 놓쳤다</b> — 5쪽 빈칸 23개가 통째로 그림으로 남았다.
+    #   ⇒ 클래스 <b>목록 안에 box가 있으면</b> 잡는다(단어 경계). 6·7쪽도 같은 규칙으로 통일.
+    return _r.sub(r'(<div class="[^"]*\bbox\b[^"]*"[^>]*>)\s*(</div>)', r'\1.\2', html)
 
 
 def build(cmp_, client='고객', base_date='', total=9):

@@ -450,6 +450,36 @@ _TEXT_PPT = True         # ★v546 — 값 칸만 텍스트(제129조 3항)
 import re as _re581   # ★v581 제131조 분할 표기 판별
 
 
+def _fg_fix(im, bx):
+    """★★★★★v584 (지점장 실측 2026.08.24 「<b>글자가 하얀색으로 표기됐다</b>」).
+       [원인] `report_pptx._fg_of`는 박스 <b>위아래 2px</b>를 배경으로 본다. 그런데 리포트
+         `.value-box`는 <b>0.45mm 진한 테두리(#414c58)</b>가 있어 그 선이 배경으로 잡히고,
+         「배경에서 가장 먼 색」이 <b>흰색</b>이 돼 버렸다 → 흰 배경에 흰 글자 = 안 보임.
+       ⇒ <b>칸 안쪽에서 가장 흔한 색을 배경</b>으로 본다(글자는 소수 픽셀이다).
+         그래도 밝게 나오면 <b>검정으로 떨군다</b> — 안 보이는 글자보다 검정이 낫다.
+       ★진단서는 `_fg_of`를 그대로 쓴다(동결 — 지점장 지시 「진단서는 운전쪽만」)."""
+    try:
+        from collections import Counter as _C
+        x0, y0, x1, y1 = bx
+        W, H = im.size
+        x0, y0 = max(0, x0), max(0, y0); x1, y1 = min(W, x1), min(H, y1)
+        if x1 <= x0 or y1 <= y0:
+            return (0, 0, 0)
+        px = list(im.crop((x0, y0, x1, y1)).convert('RGB').getdata())
+        if not px:
+            return (0, 0, 0)
+        bg = _C(px).most_common(1)[0][0]
+        fg = max(px, key=lambda c: (c[0]-bg[0])**2 + (c[1]-bg[1])**2 + (c[2]-bg[2])**2)
+        # 배경과 거의 같거나(대비 없음) 너무 밝으면 검정
+        if (fg[0]-bg[0])**2 + (fg[1]-bg[1])**2 + (fg[2]-bg[2])**2 < 900:
+            return (11, 35, 64)
+        if fg[0] > 230 and fg[1] > 230 and fg[2] > 230 and sum(bg) > 600:
+            return (11, 35, 64)
+        return fg
+    except Exception:
+        return (0, 0, 0)
+
+
 def build_report_pptx(pngs, pdf_bytes=None, client=''):
     """★★★★★v543 제129조 (지점장 지시 2026.08.22 「여전히 리포트ppt는 통으로된 이미지다」)
        구 코드는 PNG를 <b>그냥 붙이기만</b> 했다 — 슬라이드마다 도형 1개(그림)·텍스트 0개.
@@ -511,7 +541,7 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
             meta = []
             for txt, x0, y0, x1, y1 in words:
                 bx = (int(x0 * sx) - 1, int(y0 * sy) - 1, int(x1 * sx) + 2, int(y1 * sy) + 1)
-                meta.append((txt, x0, y0, x1, y1, _rp2._fg_of(im, bx), _rp2._ink(im, bx), bx))
+                meta.append((txt, x0, y0, x1, y1, _fg_fix(im, bx), _rp2._ink(im, bx), bx))
             for *_r, bx in meta:
                 _rp2._erase(im, bx)
             _tp = g + '.txt.png'; im.save(_tp, 'PNG'); im.close()
@@ -522,6 +552,15 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 _need = _rp2._txt_w(txt, fs); _bw = (x1 - x0) + 2.0
                 if _need > _bw and _need > 0:
                     fs = max(4.5, round(fs * _bw / _need, 1))
+                # ★★★★★v586 (지점장 실측 2026.08.24 「<b>여전히 공란인 칸에 기재가 안 된다</b>」).
+                #   [원인] 빈칸 `.`은 글자가 <b>점 하나</b>라 상자 폭이 <b>7.5pt</b>로 만들어졌다 —
+                #     너무 좁아 클릭·입력이 안 된다. 진단서는 같은 자리에서 <b>32.8pt로 넓혀</b> 두었고
+                #     흰 채우기까지 넣는다(report_pptx `txt=='.'` 분기). <b>리포트엔 그게 없었다.</b>
+                #   ⇒ 빈칸은 <b>왼쪽으로 넓혀</b> 값 칸만큼 잡고 흰 바탕을 깐다.
+                _dot = (txt.strip() == '.')
+                if _dot:
+                    x0 = x1 - 34.0
+                    fs = 8.5
                 sh = s.shapes.add_textbox(Emu(int((x0 - 1.6) * EMU_PT)), Emu(int((y0 - 1.2) * EMU_PT)),
                                           Emu(int((x1 - x0 + 3.6) * EMU_PT)), Emu(int((h_pt + 2.4) * EMU_PT)))
                 tf = sh.text_frame; tf.word_wrap = False
@@ -543,6 +582,10 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 r = p.add_run(); r.text = txt
                 r.font.size = Pt(fs); r.font.color.rgb = RGBColor(*fg); r.font.bold = (ink > 0.30)
                 _rp2._setfont(r)
+                if _dot:
+                    p.alignment = PP_ALIGN.RIGHT
+                    _f = sh.fill; _f.solid(); _f.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
+                    sh.line.fill.background()
         else:
             s.shapes.add_picture(g, Cm(0), Cm(0), Cm(21.0), Cm(29.7))
     bio = io.BytesIO(); prs.save(bio)
