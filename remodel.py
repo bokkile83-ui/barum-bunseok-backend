@@ -190,6 +190,9 @@ def split_sheet(path_or_bytes):
     #   담보명을 dict 키로 쓰면 <b>동명 담보 2행</b>(2대 주요치료비 · 혈전용해치료비)이 1행으로 합쳐진다.
     #   101행 → 99행이 되는 것은 마스터를 재정렬한 것과 같다.
     cov_old, cov_new, rows = {}, {}, []
+    cov_text = {}          # ★v581 담보명 → 엑셀에 든 글자값(예 '현물')
+    cov_split = {}         # ★v581 담보명 → [갱신합, 비갱신합] (엑셀 글자색 원천 · 제131조)
+    import re as _r9
     _grp = ''
     for r in range(6, ws.max_row + 1):
         # ★구분(A열)은 그룹 첫 행에만 있다 — 이어받는다(지점장 「암·뇌·심장처럼 앞에」 2026.08.15)
@@ -202,12 +205,35 @@ def split_sheet(path_or_bytes):
         nm = str(nm).strip()
         o = sum(_num(ws.cell(r, c).value) for c in own_cols)
         n = o + sum(_num(ws.cell(r, c).value) for c in prop_cols)
+        # ★★★★★v581 제122조 4항 (지점장 지시 2026.08.24 「<b>변호사비가 그냥 다 공란이다
+        #   적게라도 해라</b>」). 엑셀에 <b>글자</b>로 든 값(`현물`)은 `_num`이 0으로 죽인다 →
+        #   리포트가 통째로 빈칸이 됐다. ⇒ 글자 값은 <b>따로 모아</b> 리포트가 그대로 쓰게 한다.
+        # ★★★★★v581 제131조 (지점장 실측 2026.08.24 「<b>비갱신+갱신이 여전히 블랙이다</b>」).
+        #   리포트는 엑셀 <b>글자색</b>을 읽지 않아 갱신 정보가 아예 없었다 → 전부 검정.
+        #   ⇒ 진단서와 같은 원천(<b>엑셀 셀 글자색 0070C0</b>)으로 담보별 갱신합·비갱신합을 모은다.
+        for _c9 in list(own_cols):
+            _cv = ws.cell(r, _c9).value
+            if _cv in (None, '') or isinstance(_cv, str) and str(_cv).startswith('='):
+                continue
+            _fv = _num(_cv)
+            if not _fv:
+                continue
+            _fc = ws.cell(r, _c9).font
+            _rgb = str((_fc.color.rgb if (_fc and _fc.color and _fc.color.rgb) else '') or '').upper()
+            _sl = cov_split.setdefault(nm, [0.0, 0.0])
+            if _rgb.endswith('0070C0'): _sl[0] += _fv
+            elif not _rgb.endswith('C00000'): _sl[1] += _fv
+        for _c9 in list(own_cols) + list(prop_cols):
+            _tv = ws.cell(r, _c9).value
+            if isinstance(_tv, str) and _tv.strip() and not _tv.strip().startswith('='):
+                if not _r9.match(r'^[\d,./\s]+$', _tv.strip()):
+                    cov_text.setdefault(nm, _tv.strip())
         rows.append((r, nm, o, n, _grp))
         cov_old[nm] = cov_old.get(nm, 0.0) + o
         cov_new[nm] = cov_new.get(nm, 0.0) + n
 
-    old = {'premium': own_prem, 'contracts': own_ct, 'cov': cov_old, 'rows': rows}
-    new = {'premium': own_prem + prop_prem, 'contracts': own_ct + prop_ct, 'cov': cov_new, 'rows': rows}
+    old = {'premium': own_prem, 'contracts': own_ct, 'cov': cov_old, 'rows': rows, 'cov_text': cov_text, 'cov_split': cov_split}
+    new = {'premium': own_prem + prop_prem, 'contracts': own_ct + prop_ct, 'cov': cov_new, 'rows': rows, 'cov_text': cov_text, 'cov_split': cov_split}
     return old, new, bool(prop_cols)
 
 
@@ -421,6 +447,9 @@ def build_report(cmp_, client="고객", base_date="", total=9):
 _TEXT_PPT = True         # ★v546 — 값 칸만 텍스트(제129조 3항)
 
 
+import re as _re581   # ★v581 제131조 분할 표기 판별
+
+
 def build_report_pptx(pngs, pdf_bytes=None, client=''):
     """★★★★★v543 제129조 (지점장 지시 2026.08.22 「여전히 리포트ppt는 통으로된 이미지다」)
        구 코드는 PNG를 <b>그냥 붙이기만</b> 했다 — 슬라이드마다 도형 1개(그림)·텍스트 0개.
@@ -457,8 +486,11 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
             _cl = str(client or '').strip()
             boxes = []
             for _pw, _ph, _ws in _raw:
+                # ★v581 제129조 4항 — <b>빈 편집칸(`.`)도 값 칸이다</b>(지점장 2026.08.24).
+                #   숫자만 고르면 공란이 배경 그림으로 남아 <b>입력이 안 된다</b>.
                 _keep = [w for w in _ws
-                         if _re9.search(r'\d', w[0]) or (_cl and _cl in w[0])]
+                         if _re9.search(r'\d', w[0]) or w[0].strip() == '.'
+                         or (_cl and _cl in w[0])]
                 boxes.append((_pw, _ph, _keep))
             print('[v546 리포트PPT] 값칸 텍스트 %d쪽 · 상자 %d개(전체 %d개 중)'
                   % (len(boxes), sum(len(b[2]) for b in boxes),
@@ -496,6 +528,18 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 tf.vertical_anchor = MSO_ANCHOR.MIDDLE
                 tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
                 p = tf.paragraphs[0]; p.alignment = PP_ALIGN.LEFT
+                # ★★★★★v581 제131조 — <b>한 칸에 두 색이면 편집칸도 두 조각</b>(진단서 v579d와 동일).
+                #   `5,000+4,000만`은 배경 그림엔 파랑+검정인데 run 1개면 <b>전부 한 색</b>으로 보인다.
+                _m581 = _re581.match(r'^([\d,]+)\+([\d,]+만?)$', txt.strip())
+                if _m581:
+                    r = p.add_run(); r.text = _m581.group(1)          # 앞 = 갱신 → 파랑
+                    r.font.size = Pt(fs); r.font.color.rgb = RGBColor(0x00, 0x70, 0xC0)
+                    r.font.bold = (ink > 0.30)
+                    r2 = p.add_run(); r2.text = '+' + _m581.group(2)  # 뒤 = 비갱신 → 검정
+                    r2.font.size = Pt(fs); r2.font.color.rgb = RGBColor(*fg)
+                    r2.font.bold = (ink > 0.30)
+                    _rp2._setfont(r); _rp2._setfont(r2)   # ★폰트는 두 조각 모두에 붙인다
+                    continue
                 r = p.add_run(); r.text = txt
                 r.font.size = Pt(fs); r.font.color.rgb = RGBColor(*fg); r.font.bold = (ink > 0.30)
                 _rp2._setfont(r)

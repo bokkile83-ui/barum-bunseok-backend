@@ -492,6 +492,8 @@ text-align:left;padding:1.1mm}
 .code-number{display:block;margin-top:.6mm;color:#1e2a38}
 .amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
 border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}.amount.red{color:#d52f28}
+/* ★v582 제131조 — 리포트 전 페이지 3색: 레드(제안) · 블루(갱신 보유) · 블랙(비갱신 보유) */
+.amount.gen{color:#0070C0}.amount.blk{color:#0b2340}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
 border:.5mm solid #4f5459;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
@@ -551,11 +553,29 @@ HEART4 = [
 ]
 
 
+# ★★★★★v582 제131조 — <b>보유 조각의 색을 한 곳에서</b> 만든다(경로 3개가 같은 규칙).
+#   sp = [갱신합, 비갱신합] (엑셀 셀 글자색이 원천 · remodel `cov_split`).
+#   둘 다 있으면 `5,000`(파랑) + `+4,000`(검정) 분할, 한쪽만이면 그 색 단색.
+def _own_span(o, sp=None, unit='만'):
+    o = int(o or 0)
+    if not o:
+        return ''
+    _f = lambda x: format(int(x), ',')
+    if sp:
+        _g, _n = (list(sp) + [0, 0])[:2]
+        if _g > 0 and _n > 0:
+            return ('<span class="amount gen">%s</span>'
+                    '<span class="amount blk">+%s%s</span>' % (_f(_g), _f(_n), unit))
+        if _g > 0:
+            return '<span class="amount gen">%s%s</span>' % (_f(o), unit)
+    return '<span class="amount">%s%s</span>' % (_f(o), unit)
+
+
 def _d4(on):
     return '<span class="dot%s"></span>' % (' on' if on else '')
 
 
-def _c4(v, o=None):
+def _c4(v, o=None, sp=None):
     """★★★★★v540 제127조 (지점장 확정 2026.08.22 「리포트 컨셉은 기존+새담보(레드)」)
        구 코드는 <b>합계 하나만</b> 검정으로 찍었다(통 블랙). 6쪽만 보유+증가 분리라
        한 문서 안에서 표기가 달랐다. ⇒ <b>보유(검정) + 제안 증가분(레드)</b>으로 통일한다.
@@ -572,7 +592,13 @@ def _c4(v, o=None):
     #   [실측] 최종 엑셀 대인 = <b>보유합계 0 · 제안합계 3,000</b>. 기존 메리츠 2,000은 <b>빠진다</b>.
     #   그런데 구 코드는 <b>기존 엑셀 파일</b>의 2,000을 끌어와 `2,000 +3,000`으로 붙였다 —
     #   기존이 남아 있는 것처럼 읽힌다. ⇒ <b>보유 조각은 최종 엑셀에 실제로 남은 값일 때만</b> 찍는다.
-    _h = ('<span class="amount">%s만</span>' % format(o, ',')) if (o and _KEEP_OWN) else ''
+    # ★★★★★v582 제131조 (지점장 지시 2026.08.24 「<b>블랙 레드 블루 / 기존+레드 /
+    #   비갱신+갱신 이런 플랜들에 맞춰서 해줘야 정확한 자료다. 특히 리포트는
+    #   보장분석ppt가 없어서 더 중요하다</b>」).
+    #   [구 동작] 4·5쪽 `_c4`는 <b>검정+레드 2색</b>뿐이었다 — 갱신 보유가 블랙으로 나갔다.
+    #   ⇒ 보유 조각을 <b>갱신(파랑) + 비갱신(검정)</b>으로 쪼갠다. 원천은 6·7쪽과 같은
+    #     `cov_split`(엑셀 셀 글자색). 우선순위 = 레드 > 파랑 > 검정.
+    _h = _own_span(o, sp) if (o and _KEEP_OWN) else ''
     # ★★★★★v580 제127조 개정 (지점장 확정 2026.08.24 「우선 전액으로 가자」).
     #   [지점장 지적] 「운전자 담보가 <b>없는 것에 추가</b>되는 건데 <b>증가로 나온다</b> —
     #     이러면 <b>기존꺼 유지 + 또 추가</b>로 보인다」.
@@ -631,6 +657,7 @@ def heart_audit(cmp_, client='고객', base_date=''):
 
 
 def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
+    _SPL4 = (cmp_.get('new') or {}).get('cov_split') or {}   # ★v582 제131조 [갱신합, 비갱신합]
     cov = cmp_['new']['cov']
     covo = (cmp_.get('old') or {}).get('cov', {}) or {}     # ★v540 제127조 — 보유(기존)
 
@@ -651,7 +678,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
         v = val(key)
         br += ('<tr class="%s"><td><span class="code-name">%s</span>'
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td></tr>'
-               % ('highlight' if v else '', nm, cd, _c4(v, valo(key)), _d4(circ), _d4(spc)))
+               % ('highlight' if v else '', nm, cd, _c4(v, valo(key), _SPL4.get(key)), _d4(circ), _d4(spc)))
 
     ht = ''
     last = None
@@ -665,7 +692,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
                '<span class="code-number">%s</span></td><td>%s</td><td>%s</td><td>%s</td>'
                '<td>%s</td></tr>'
                % ('highlight' if (v and not dot_only) else '', nm, cd,
-                  _d4(1) if dot_only and v else _c4(v, valo(key)),
+                  _d4(1) if dot_only and v else _c4(v, valo(key), _SPL4.get(key)),
                   _d4(sph), _d4(circ), _d4(spc)))
 
     lg = ('<div class="legend"><span class="circle on"></span> 보장 &nbsp;'
@@ -755,6 +782,8 @@ color:#fff;font-size:8.4pt;font-weight:900}
 border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
 font-weight:900;font-size:11pt}
 .value-box.red{color:#d52f28}
+.amount.gen{color:#0070C0}
+.amount.blk{color:#0b2340}   /* ★v582 제131조 */
 .value-box.blue{color:#0c4e75}
 .unit{font-size:7.6pt;color:#474f58}
 .small-card{border:.45mm solid #414c58;border-radius:2mm;padding:2.2mm 2.6mm;margin-bottom:1.4mm;background:#fff}
@@ -985,6 +1014,8 @@ color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
 .row.two .un{width:5mm}
 .unit{font-size:7.2pt;color:#1e2a38}
 .red{color:var(--red)}
+.gen{color:#0070C0}
+.blk{color:#0b2340}   /* ★v581 제131조 — 리포트 3색: 레드(제안) · 블루(갱신 보유) · 블랙(비갱신 보유) */
 .sub-title{margin:.8mm 0 .5mm;padding:.7mm 1.2mm;background:#f0f4f8;font-size:8pt;
 font-weight:900;color:#0d554d}
 .sub-title:before{content:"■ ";color:#087166}
@@ -1012,7 +1043,7 @@ background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
 _KEEP_OWN = True
 
 
-def _m6(v, o=None):
+def _m6(v, o=None, tx=None, sp=None):
     """★★★★★v580 (지점장 실측 2026.08.24 「1-5종이 추가되었는데 <b>블랙</b>으로 나온다」).
        [원인] 이 함수에는 <b>색 판정이 아예 없었다</b> — 6쪽 전체가 통짜 검정이라
          신규 담보도 검정으로 나갔다(제131조 3항에서 잡은 것과 같은 구조).
@@ -1020,17 +1051,29 @@ def _m6(v, o=None):
        o(=기존값)를 받으면 <b>new > old일 때 레드</b>. o가 없으면 종전대로 검정."""
     n = int(v or 0)
     if not n:
-        return ''
+        # ★v581 제122조 4항 — 숫자가 없어도 <b>글자값(`현물`)</b>이 있으면 그것을 찍는다.
+        return str(tx) if tx else ''
     _t = format(n, ',') + '만'
     try: _o = int(o or 0)
     except Exception: _o = 0
     if o is not None and n > _o:
         return '<span class="red">%s</span>' % _t
+    # ★★★★★v581 제131조 — 리포트도 <b>블랙 or 블루 or 레드</b>다(지점장 2026.08.24).
+    #   원천은 진단서와 같은 <b>엑셀 셀 글자색</b>(remodel `cov_split`). 섞이면 분할 표기.
+    if sp:
+        _g, _n2 = (list(sp) + [0, 0])[:2]
+        if _g > 0 and _n2 > 0:
+            return ('<span class="gen">%s</span><span class="blk">+%s만</span>'
+                    % (format(int(_g), ','), format(int(_n2), ',')))
+        if _g > 0:
+            return '<span class="gen">%s</span>' % _t
     return _t
 
 
 def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
     cov, old = cmp_['new']['cov'], cmp_['old']['cov']
+    _TXT6 = (cmp_.get('new') or {}).get('cov_text') or {}   # ★v581 엑셀 글자값(현물)
+    _SPL6 = (cmp_.get('new') or {}).get('cov_split') or {}  # ★v581 [갱신합, 비갱신합]
 
     def g(k):
         return cov.get(k, 0)
@@ -1039,7 +1082,7 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (lb, _m6(g(key), old.get(key, 0)) if key else '', extra))
+                % (lb, _m6(g(key), old.get(key, 0), _TXT6.get(key), _SPL6.get(key)) if key else '', extra))
 
     def r2(l1, k1, l2, k2):
         return ('<div class="row two"><div class="lb"><div class="label">%s</div></div>'
@@ -1048,8 +1091,8 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
                 '<div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (l1, _m6(g(k1), old.get(k1, 0)) if k1 else '',
-                   l2, _m6(g(k2), old.get(k2, 0)) if k2 else ''))
+                % (l1, _m6(g(k1), old.get(k1, 0), _TXT6.get(k1), _SPL6.get(k1)) if k1 else '',
+                   l2, _m6(g(k2), old.get(k2, 0), _TXT6.get(k2), _SPL6.get(k2)) if k2 else ''))
 
     d = g('상해사망') - old.get('상해사망', 0)
     inj = ('<span class="red">&nbsp;+%s만</span>' % format(int(d), ',')) if d > 0 else ''
@@ -1366,6 +1409,7 @@ EXTRA9 = '.ctb{width:100%;border-collapse:collapse;margin:1.4mm 0 2.4mm;font-siz
 
 
 def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
+    _SPL9 = (cmp_.get('new') or {}).get('cov_split') or {}   # ★v582 제131조
     """★★★★★v467 제74조 2항 (지점장 지적 2026.08.17 「PPT도 운전자·간병인 페이지 없는데」)
 
     ★내 잘못: 6쪽에 <b>작은 칸 6개</b>를 끼워넣고 「넣었다」고 보고했다.
@@ -1382,8 +1426,16 @@ def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
         except Exception: o = 0
         try: n = int(float(new.get(key, 0) or 0))
         except Exception: n = 0
-        # ★v580b — 보유 조각은 <b>최종 엑셀에 남은 값</b>일 때만(위 v580b 참조).
-        val = (format(o, ',') + '만') if (o and _KEEP_OWN) else ''
+        # ★★★★★v581 제122조 4항 — 엑셀에 <b>글자</b>로 든 값(`현물`)은 숫자가 0이라
+        #   구 코드가 통째로 빈칸을 냈다(지점장 「변호사비가 그냥 다 공란이다」).
+        #   ⇒ 글자값이 있으면 <b>그 글자를 그대로</b> 찍는다.
+        _tx = ((cmp_.get('new') or {}).get('cov_text') or {}).get(key)
+        if _tx and not o and not n:
+            return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
+                    '<div class="bx"><div class="box">%s</div></div>'
+                    '<div class="un"><span class="unit">만원</span></div></div>' % (lb, _tx))
+        # ★v582 제131조 — 7쪽도 3색. 보유를 갱신(파랑)+비갱신(검정)으로 쪼갠다.
+        val = _own_span(o, _SPL9.get(key), unit='만') if (o and _KEEP_OWN) else ''
         if n > o:
             # ★v580 제127조 개정 — 증가분이 아니라 <b>제안 전액</b>(지점장 확정 2026.08.24).
             add = '<span class="red">+%s만</span>' % format(n, ',')
@@ -1688,8 +1740,29 @@ def p8(cmp_, client='고객', base_date='', pg=7, totpg=8):
             '</footer></article></body></html>')
 
 
+# ★★★★★v581 제129조 4항 (지점장 지시 2026.08.24
+#   「<b>공란에도 입력칸이 진단서처럼 있어야 입력이 된다. 지금 공란은 아예 그림이다</b>」).
+#   [원인] 리포트 PPT(`remodel.build_report_pptx`)는 <b>숫자가 든 상자만</b> 텍스트로 얹는다.
+#     빈칸은 글자가 아예 없어 <b>대상에서 빠지고 배경 그림</b>으로만 남았다 → 입력 불가.
+#   ⇒ 진단서와 같은 방식으로 <b>빈 박스에 `.`을 주입</b>한다(report_pptx `_D`/`_DM`과 동일).
+#     `.`이 있으면 좌표가 잡히고 PPT가 흰 편집칸으로 바꾼다.
+_DOT_FIX = True
+
+
+def _dotfill(html):
+    """빈 `.box` / 빈 `.amount` 자리에 `.`을 넣어 편집칸으로 열어 준다."""
+    if not _DOT_FIX:
+        return html
+    import re as _r
+    return _r.sub(r'(<div class="box"[^>]*>)\s*(</div>)', r'\1.\2', html)
+
+
 def build(cmp_, client='고객', base_date='', total=9):
     """7쪽 HTML을 순서대로 돌려준다. 페이지 번호·분모는 실제 장수에서 온다(하드코딩 금지)."""
+    return [_dotfill(_h) for _h in _build_raw(cmp_, client, base_date, total)]
+
+
+def _build_raw(cmp_, client='고객', base_date='', total=9):
     return [p1(client, base_date, 1, total, cmp_),
             p2(cmp_, client, base_date, 2, total),
             p3(cmp_, client, base_date, 3, total),

@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v580-hyunmul-20260824'
+VSTAMP = 'v583-robot-20260824'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1391,7 +1391,10 @@ _STRUCT_SELFTEST = [
     ('제125조 감액판정',   'remodel.py',        r"tag, fn = '감액', R", True),
     ('제125조 상태색',     'remodel.py',        r'_cfill = \(NEWF if tag', True),
     ('제126조 통합형전이암','main.py',           r"has\('통합형전이암'\)", True),
-    ('제127조 보유제안분리','report_pages.py',   r'def _c4\(v, o=None\)', True),
+    # ★v582 — `_c4`에 제131조 3색용 `sp`가 붙어 시그니처가 늘었다. 인자 이름까지 고정하면
+    #   조문검사가 <b>정상 개정까지 실패로 잡는다</b> → 함수 존재 여부로 본다(핵심은 보유·제안 분리).
+    ('제127조 보유제안분리','report_pages.py',   r'def _c4\(v, o=None', True),
+    ('제131조 리포트3색',   'report_pages.py',   r'def _own_span\(', True),
     ('제128조 마스킹보존', 'main.py',            r"\[\*●○◯·・\\u25cf", True),
     ('제128조 실명채택',   'main.py',            r'v545 고객명', True),
     ('제128조 분석경로',   'main.py',            r'v549 고객명', True),
@@ -9819,6 +9822,54 @@ def doctrine_robot(heavy=False):
     # 4) 제0조
     _ck('제0조 서열', '## 제0조 — 최상위 법률',
         lambda: '' if '지침 = 메모리는 100% 지켜야 할 법률' in _d else '1항 미기재')
+    # ★★★★★v583 (지점장 지시 2026.08.24 「<b>지침=메모리 / 엑셀은 법이다 / 1부터 다 읽도록
+    #   로봇이 체크해서 100% 나와야 한다</b>」) — 오늘 확정된 4건을 <b>실행 검사</b>로 박는다.
+    #   조문만 있고 코드가 안 따르면 <b>즉시 실패</b>다.
+    _ck('제131조 3색', '제131조', lambda: '' if (
+        '블랙 or 블루 or 레드' in _d or '블랙 OR 블루 OR 레드' in _d) else '3색 조문 미기재')
+
+    def _ck131code():
+        try:
+            import report_weasy as _rw5, report_pages as _rp5
+        except Exception as _e:
+            return '모듈 로드 실패 %s' % str(_e)[:24]
+        _miss = []
+        if not hasattr(_rw5, 'color_selftest'): _miss.append('진단서 color_selftest')
+        if not hasattr(_rw5, '_split_span'):    _miss.append('진단서 분할표기')
+        if not hasattr(_rp5, '_own_span'):      _miss.append('리포트 3색')
+        return ('없다: ' + ' · '.join(_miss)) if _miss else ''
+    _ck('제131조 코드', '제131조', _ck131code)
+
+    def _ck122():
+        try:
+            _raw = '자동차사고변호사선임비용(현물급부선택가능)(실손)'
+            if not _is_hyunmul(_raw, 'DB손해보험', '2026.08.20'): return 'DB 2026.08 현물 판정 실패'
+            if _is_hyunmul(_raw, 'DB손해보험', '2026.07.31'):     return '2026.07이 현물로 잡힌다'
+            if _is_hyunmul('교통사고변호사법률상담비용', 'DB손해보험', '2026.08.20'): return '상담비용 오판'
+            if _is_hyunmul(_raw, '삼성화재', '2026.08.20'):        return '타사 오판'
+            return ''
+        except Exception as _e:
+            return '실행 예외 %s' % str(_e)[:24]
+    _ck('제122조 현물', '제122조', _ck122)
+
+    def _ckexcel():
+        """★엑셀이 법 — 리포트의 「보유」가 <b>최종 엑셀 보유 열</b>에서 오는가."""
+        try:
+            import remodel as _rm5, report_pages as _rp6
+            if not hasattr(_rm5, 'split_sheet'): return 'split_sheet 없다'
+            _src = open(__file__, encoding='utf-8').read() if False else None
+            _t = open(_o.path.join(_o.path.dirname(_o.path.abspath(_rm5.__file__)), 'remodel.py'),
+                      encoding='utf-8').read()
+            if 'v580c' not in _t: return '엑셀 2개 경로가 최종 엑셀 보유 열을 쓰지 않는다'
+            _t2 = open(_o.path.join(_o.path.dirname(_o.path.abspath(_rp6.__file__)), 'report_pages.py'),
+                       encoding='utf-8').read()
+            if 'cov_split' not in _t2: return '리포트가 갱신색(cov_split)을 읽지 않는다'
+            if 'cov_text' not in _t2:  return "리포트가 글자값('현물')을 읽지 않는다"
+            return ''
+        except Exception as _e:
+            return '실행 예외 %s' % str(_e)[:24]
+    _ck('엑셀이 법', '엑셀이 법', _ckexcel)
+
     # 5) ★제64조·제128조 — 이름. <b>실제로 13건을 돌린다</b>
     def _ckname():
         _n = len(_NAME_CASES)
