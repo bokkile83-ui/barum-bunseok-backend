@@ -81,7 +81,7 @@ _BCOLS = [('뇌출혈','#C0392B','#F7E0DC'), ('뇌졸중','#1E7A46','#E4F0EA'), 
 
 _BRAIN_TBL=[('grp','출혈성 뇌혈관 (I60~62)',None,None,None),('row','뇌출혈','I60~62','hem',[1,1,1]),('grp','허혈성 뇌혈관 (I63~66)',None,None,None),('row','뇌졸증·뇌경색','I63·65·66','infarct',[1,1,1]),('grp','기타 뇌혈관 (I64·67~69)',None,None,None),('row','뇌혈관','I64·67·68·69','other',[1,1,1]),('grp','순환계 확장·선천',None,None,None),('row','뇌동맥류·정맥류','I71·72','aneur',[0,1,0]),('row','선천 뇌혈관기형','Q28.0~28.3','congen',[0,0,1]),('row','외상성 뇌출혈','S06','trauma',[0,0,1])]
 _HEART_TBL=[('grp','허혈성 심장질환 (I20~25)',None,None,None),('row','급성심근경색','I21~23','ami',[1,1,1,1]),('row','협심증','I20','angina',[1,1,1,1]),('row','허혈성','I24·25','chronic',[1,1,1,1]),('grp','심장특정 (판막·염증·부정맥·심근)',None,None,None),('row','심장판막','I05·I34~37','valve',[0,1,1,1]),('row','심근·심내막 염증','I30~33·I40','inflam',[0,1,1,1]),('row','빈맥','I47·48','tachy',[0,1,1,1]),('row','부정맥','I49','arrhy',[0,1,1,1]),('row','심부전','I50','hf',[0,1,1,1]),('row','심근병증','I42~45','cardiomyo',[0,1,1,1]),('grp','순환계 확장 (2대+동맥류·정맥류 등)',None,None,None),('row','대동맥류·죽상경화','I70·71','aorta',[0,0,1,1]),('row','동맥류·정맥류 등','[확인]','aneur2',[0,0,1,1]),('row','선천 심장기형','Q20~25','congenh',[0,0,0,1])]
-def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None, red=None, prop=None, hz=False):
+def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None, red=None, prop=None, hz=False, gen_rep=None, gen_keys=None):
     # ★★★★★v371 (지점장 지적): 6p 담보별 보장범위 금액박스에 <b>제안=레드</b>가 없었다.
     #   red = 레드로 찍을 슬롯 key 집합(엑셀 C00000이 유일 원천 — 결과값 동결 #9).
     held=set(held or []); amounts=amounts or {}; ci_amounts=ci_amounts or {}; red=set(red or []); ncol=len(headers)+1
@@ -112,7 +112,13 @@ def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None,
                      +_sep+' <span class="mb amtbox rd">'+_html.escape(_pv417)+'</span>') if amt \
                     else ' <span class="mb amtbox rd">'+_html.escape(_pv417)+'</span>'
         else:
-            _amtbox=' <span class="mb amtbox'+(' rd' if key in red else '')+'">'+(_html.escape(amt) if amt else '')+'</span>'
+            # ★★★★★v578 (지점장 확정 2026.08.24 「진단서·리포트 = 블랙 or 블루 or 레드가 맞게 나와야 한다」)
+            #   구 코드는 <b>레드만</b> 있었다 — 갱신 담보가 6p에서 항상 검정이었다(파랑 경로 자체가 없음).
+            # ★v578b — 전역 `_CURREP`은 이 표를 그릴 때 <b>아직 비어 있다</b>(`_asset_body` 821행이
+            #   `build_report_pdf` 1017행보다 먼저 돈다). 실측 = 7p 3,000만 2건이 검정으로 남았다.
+            #   ⇒ 전역에 기대지 않고 <b>호출부가 rep를 직접 넘긴다</b>.
+            _cls6 = ' rd' if key in red else (' gen' if (key in (gen_keys or set()) or _is_gen(gen_rep or _CURREP, key)) else '')
+            _amtbox=' <span class="mb amtbox'+_cls6+'">'+(_html.escape(amt) if amt else '')+'</span>'
         # ★CI 계약일 때만 유동 노출: 'CI' 미니칩 + 진단금액
         _ci = ci_amounts.get(key)
         _cibox=(' <span class="cichip">CI</span><span class="mb amtbox cibox">'+_html.escape(_ci)+'</span>') if _ci else ''
@@ -176,12 +182,76 @@ def _ws_amt(rep, kind):
         return f'<b style="color:#1F7A4D">✓ 가입 · {_html.escape(str(v))}</b>'
     return '<b style="color:#C0444C">× 미가입</b>'
 
+# ★★★★★v578 색 자가검사 (제27조) — 지점장 실측 2026.08.24
+#   「진단서·리포트 글자색 구분도 몇 번 했는데 안 변했다. 블랙 or 블루 or 레드가 맞게 나와야 한다」
+#   [배경] v575에서 내가 <b>지침에 없는 「진단서에 파랑 없음」을 만들어</b> 파랑을 지웠고,
+#     게이트에 <b>색 검사가 0건</b>이라 조용히 통과했다. 같은 실수를 세 번 반복한 원인이 이것이다.
+#   ⇒ <b>산출물에서 실제로 센다.</b> 엑셀 갱신 담보가 있는데 진단서 파랑이 0이면 실패로 시끄럽게 운다.
+COLOR_GEN='#0070C0'; COLOR_RED='#C00000'
+def color_selftest(rep, doc_html):
+    """반환 = 실패 사유 리스트(빈 리스트면 통과). 원천은 엑셀 gen_map·red 집합."""
+    out=[]
+    gm=(rep or {}).get('gen_map') or {}
+    n_gen=doc_html.count('nv gen')+doc_html.count('amtbox gen')+doc_html.count('mb gen')
+    n_red=doc_html.count('nv rd')+doc_html.count('amtbox rd')
+    if gm and n_gen==0:
+        out.append('엑셀 갱신 담보 %d건인데 진단서 파랑 0건 (제27조 위반 · v575 재발)' % len(gm))
+    # ★★★★★v578b 팩폭27 이행 — 구 검사는 <b>「0건」만</b> 잡았다. 6/8 같은 <b>부분 누락은 통과</b>했다.
+    #   실측으로 그런 일이 실제로 났다(7p 3,000만 2건이 검정으로 남았는데 검사는 통과).
+    #   ⇒ <b>갱신 담보가 문서에 실려 있으면 그 값은 파랑이어야 한다</b>를 담보별로 센다.
+    #   ★산출물별 담보 범위가 다른 것은 결함이 아니다 — <b>안 실린 담보는 세지 않는다</b>.
+    import re as _rr
+    # ★★★★★v578c [역검증 실패 자백] 구 검사는 값이 <b>어딘가 한 곳</b>에서 파랑이면 통과시켰다.
+    #   8p 카드의 파랑을 일부러 지우고 돌렸는데 <b>「통과」가 찍혔다</b> — 검사가 도장기계였다.
+    #   ⇒ <b>값이 실린 칸을 전수로 본다.</b> 색칸(`nv`·`amtbox`) 안의 값 하나하나가 대상이고,
+    #     그중 파랑도 레드도 아닌 칸이 하나라도 있으면 실패다.
+    # ★★★★★v578e [3차 자백] 값만으로는 담보를 못 가른다.
+    #   실측 — `통원 100만`과 `교통상해사망 100만`이 같은 숫자라, 사망 칸을 통원으로 <b>오인</b>해
+    #   FAIL을 냈다. ⇒ <b>칸 앞 200자에 그 담보 이름이 있을 때만</b> 그 담보의 칸으로 센다.
+    _CELL = _rr.compile(r'<span class="((?:nv|mb amtbox)[^"]*)">([^<]{1,20})</span>')
+    _cells = [(_m.group(1), _m.group(2).strip(), doc_html[max(0, _m.start()-200):_m.start()])
+              for _m in _CELL.finditer(doc_html)]
+    _miss = []
+    # ★★★★★v578d [2차 자백] `gen_map`은 <b>{담보명: True}</b>다 — 값이 아니다(실측).
+    #   구 코드는 `True`에서 숫자를 뽑으려 해 <b>단 한 건도 세지 않고 늘 통과</b>했다.
+    #   금액은 `rep['dambo']`(정규화 키)에 있다 → <b>거기서 값을 가져와</b> 칸 색을 센다.
+    _dm = (rep or {}).get('dambo') or {}
+    _norm = lambda x: _rr.sub(r'[\s·()\[\]/]', '', str(x))
+    _dmn = {_norm(_dk): _dv for _dk, _dv in _dm.items()}
+    for _k in (gm.keys() if hasattr(gm, 'keys') else []):
+        _vs = _rr.sub(r'[^0-9,]', '', str(_dmn.get(_norm(_k), '') or ''))
+        if not _vs: continue
+        _bad = 0; _seen = 0
+        _kn = _norm(_k)
+        for _cls, _txt, _ctx in _cells:
+            if _rr.sub(r'[^0-9,]', '', _txt) != _vs: continue
+            if _kn not in _norm(_ctx): continue      # 이 칸은 그 담보의 칸이 아니다
+            _seen += 1
+            if ('gen' not in _cls) and ('rd' not in _cls): _bad += 1
+        if _seen and _bad:
+            _miss.append('%s(%s) %d/%d칸 검정' % (_k, _vs, _bad, _seen))
+    if _miss:
+        out.append('갱신인데 파랑이 아닌 칸 %d담보: %s' % (len(_miss), ' · '.join(_miss[:6])))
+    if COLOR_GEN not in doc_html and gm:
+        out.append('CSS에 갱신 파랑 %s 없음' % COLOR_GEN)
+    return out
+
+
 def _is_gen(rep, *names):
     """★v139 담보값 색: 엑셀 글자색(파랑=갱신)을 그대로 이어받는다(4대 산출물 연동).
     gen_map = {마스터 담보명: True}. 라벨이 짧으므로 정확일치 → 부분일치 순으로 본다."""
     gm=(rep or {}).get('gen_map') or {}
     if not gm: return False
     import re as _r
+    # ★★★★★v578 (지점장 실측 2026.08.24 「블랙 or 블루 or 레드가 맞게 나와야 한다」)
+    #   [실측] 6p·7p 암 표의 라벨은 `암진단비`인데 gen_map 키는 마스터명 `일반암`이다.
+    #   `'암진단비' in '일반암'` 도 그 반대도 False라 <b>파랑이 아예 안 붙었다</b> — 색 규칙이 아니라
+    #   <b>조회 키가 안 맞은 것</b>이다. 그 표는 값을 꺼낼 때 이미 `_cov_val(rep,'암','일반암','암진단')`로
+    #   <b>마스터 이름을 알고 있으므로</b>, 색도 같은 이름으로 묻게 한다(새 규칙 아님 · 있는 이름 재사용).
+    _ALIAS = {'암진단비':('일반암',), '통합암진단비':('통합암',), '통합전이암진단비':('통합전이암',),
+              '유사암진단비':('유사암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
+              '뇌졸증':('뇌졸증진단비',), '뇌출혈':('뇌출혈진단비',), '허혈성':('허혈성 진단비','허혈성진단비')}
+    names = tuple(names) + tuple(a for nm in names for a in _ALIAS.get(str(nm), ()))
     def _n(x): return _r.sub(r'[\s·()\[\]/.]','',str(x))
     for nm in names:
         if not nm: continue
@@ -415,15 +485,16 @@ def _wbox_inner(rep, lookup, bv):
         _os = (_o + _u) if _o else ''
         _ps = ('+' if _o else '') + _pv + _u
         _reg(_os, _ps)
-# ★★★★★v575 제127조 이행 (지점장 실측 2026.08.23
-#   「엑셀과 보장분석지 PPT는 100% 정상이다. 진단서의 불일치화고 <b>지침 오류</b>다」).
-#   [지침] 제127조 1항 — <b>「리포트·진단서의 담보 값은 보유(검정) + 제안 증가분(레드)로 적는다」</b>.
-#     진단서는 <b>2색</b>이다: <b>검정 = 보유 / 레드 = 제안</b>. <b>파랑(갱신)은 진단서 규칙이 아니다</b>
-#     — 파랑은 엑셀(제10조)·보장분석지 PPT(제11조) 규칙이다.
-#   [구 결함] v139 `_is_gen`이 엑셀 파랑(gen_map)을 <b>진단서까지 끌어왔다</b>. 제127조(v540)가
-#     그 위에 온 뒤에도 남아 있어 <b>보유가 파랑으로 찍혔다</b> → 블랙·블루·레드가 섞여 보였다.
-#   ⇒ 진단서 값에서 <b>파랑을 뺀다</b>. 보유는 검정, 제안은 레드.
-        return ((f'<span class="nv">{_html.escape(_os)}</span> ' if _os else '')
+        # ★★★★★v578 제27조 복원 (지점장 실측 2026.08.24 「또 갱신이 다 블랙으로 나온다」).
+        #   [자백] v575에서 내가 제127조를 <b>「파랑 금지」로 확대해석</b>해 진단서 파랑을 삭제했다.
+        #     제127조 1항 원문은 <b>「보유(검정) + 제안 증가분(레드)로 적는다」</b> = <b>두 조각으로 쪼개라</b>는
+        #     조문이지 <b>파랑을 금지한 문장이 아니다</b>. 정본은 <b>제27조 색 정의</b>다 —
+        #     <b>파랑 = 기존 보유 갱신 담보 (엑셀 0070C0 / PPT 0000FF / 설명서 1456B0,
+        #     산출물별 코드만 다르다)</b>. 이 함수 docstring(v421c · 지점장 2026.08.14)도
+        #     <b>「제안=레드 / 갱신 보유=블루 / 그 외 보유=블랙」</b>이라고 이미 적고 있었다.
+        #   ⇒ <b>보유 조각은 갱신이면 파랑</b>, 제안 조각은 레드. 우선순위 = 레드 > 파랑 > 검정.
+        _gc = ' gen' if _is_gen(rep, lookup) else ''
+        return ((f'<span class="nv{_gc}">{_html.escape(_os)}</span> ' if _os else '')
                 + f'<span class="nv rd">{_html.escape(_ps)}</span>')
     _reg(str(bv))
     # ★★★★★v574 (지점장 실측 2026.08.23 「진단서가 블랙·블루·레드를 잘 구분을 못한다」).
@@ -432,9 +503,12 @@ def _wbox_inner(rep, lookup, bv):
     #     `prop_amt`가 비는 경우(합계 열이 수식·제안 열 미검출)에는 제안 담보도 블루/블랙이 됐다.
     #   ⇒ `_op417`이 없어도 <b>`red_map`(엑셀 값 글자색 C00000)</b>이면 레드로 찍는다.
     #     원천은 엑셀이다(결과값 동결 #9). 3색 = <b>레드 제안 / 블루 갱신 / 블랙 비갱신</b>.
-    # ★v575 제127조 — 진단서는 <b>검정(보유) / 레드(제안)</b> 2색. 파랑은 쓰지 않는다.
+    # ★v578 제27조 — 3색이다. <b>레드(제안) > 파랑(보유 갱신) > 검정(보유 비갱신)</b>.
+    #   v575에서 내가 지운 파랑을 되돌린다(위 v578 자백 참조).
     if _is_red(rep, lookup):
         return f'<span class="nv rd">{bv}</span>'
+    if _is_gen(rep, lookup):
+        return f'<span class="nv gen">{bv}</span>'
     return f'<span class="nv">{bv}</span>'
 
 
@@ -488,7 +562,8 @@ def _wcard(rep, title, desc, lookup, mode):
         #   제안분이 보이지 않았다(「7페이지에는 아예 레드가 없다」). → <b>보유 / +제안(레드)</b>로 분리.
         #   7p는 제로섬이라 줄을 늘리지 않고 <b>같은 행에 두 숫자</b>로 쪼갠다.
         def _dgrow417(l, v):
-            _g=''   # ★v575 제127조 — 진단서에 파랑 없음. 보유=검정 / 제안=레드
+            # ★v578 제27조 복원 — 7p도 3색이다(레드 > 파랑 > 검정). v575에서 내가 지운 파랑을 되돌린다.
+            _g=' gen' if _is_gen(rep, l) else ''
             _op=_op417(rep, l)
             if _op:
                 _o,_p=_op
@@ -652,10 +727,16 @@ def _wcard_fix_list(title, desc, rows):
                 for _x in (_os,_ps):
                     if _x and _x not in _CURREP['_p7vals']: _CURREP['_p7vals'].append(_x)
             except Exception: pass
-            inner=((f'<span class="nv">{_html.escape(_os)}</span> ' if _os else '')
+            # ★v578 제27조 복원 — 카드 흰칸도 3색이다(레드 > 파랑 > 검정).
+            _gc = ' gen' if (_CURREP and _is_gen(_CURREP, r)) else ''
+            inner=((f'<span class="nv{_gc}">{_html.escape(_os)}</span> ' if _os else '')
                    + f'<span class="nv rd">{_html.escape(_ps)}</span>')
         else:
-            inner=_html.escape(v) if v else ''
+            # ★v578 — 제안이 없는 카드도 <b>갱신이면 파랑</b>(구 코드는 무색=검정 고정이었다).
+            if v and _CURREP and _is_gen(_CURREP, r):
+                inner=f'<span class="nv gen">{_html.escape(v)}</span>'
+            else:
+                inner=_html.escape(v) if v else ''
         return (f'<div class="fxsub"><span class="lbl">{_html.escape(r)}</span>'
                 f'<span class="mb">{inner}</span></div>')
     # ★항목 10개 이상이면 형식(박스칸) 유지하고 가로 2열로 배치 (지점장 2026.07.12)
@@ -679,8 +760,16 @@ def _wcard_fix_group(title, desc, groups):
     import html as _html
     def _cell(r):
         v=_ac(r)
+        # ★★★★★v578 — 이 카드에는 <b>색 판정이 아예 없었다</b>. 값이 무조건 기본색(검정)이라
+        #   갱신 담보도, 제안 담보도 전부 검정으로 나갔다(실측 9p 값 20개 전부 검정).
+        #   지점장 확정 = 블랙 or 블루 or 레드. 우선순위 레드 > 파랑 > 검정.
+        if v and _CURREP:
+            _c = 'nv rd' if _is_red(_CURREP, r) else ('nv gen' if _is_gen(_CURREP, r) else 'nv')
+            _in = f'<span class="{_c}">{_html.escape(v)}</span>'
+        else:
+            _in = _html.escape(v) if v else ''
         return (f'<div class="fxsub"><span class="lbl">{_html.escape(r)}</span>'
-                f'<span class="mb">{_html.escape(v) if v else ""}</span></div>')
+                f'<span class="mb">{_in}</span></div>')
     body=''
     for gname, rows in groups:
         tr=''
@@ -771,6 +860,12 @@ def _apply_fill(doc):
 def _asset_body(rep):
     """★재무 페이지 본문 — <b>고객 데이터에서 생성</b>한다(지점장 확정 2026.08.16, 제45·47조).
        그동안 마크업을 통째로 박아 박미정 값이 고정돼 있었다. 이제 rep에서 뽑는다."""
+    # ★★★★★v578d 제131조 5항 — 이 함수가 `build_report_pdf`보다 <b>먼저</b> 돈다.
+    #   그때 전역 `_CURREP`가 None이라 여기서 그려지는 카드는 <b>색 판정이 통째로 죽었다</b>
+    #   (실측: 통원 100만이 검정 · 7p 3,000만도 같은 원인이었다).
+    #   ⇒ 이 함수 진입 시점에 rep를 심어 <b>아래 모든 카드가 색을 물을 수 있게</b> 한다.
+    global _CURREP
+    if rep: _CURREP = rep
     NAVY, GOLD, LINE = '#06203f', '#c5a052', '#c3ccd8'
     cts = (rep or {}).get('contracts', []) or []
     if not cts:
@@ -2271,6 +2366,7 @@ body {{ color:{INK}; }}
    허혈성 2,000만이 비갱신처럼 보였다 → 칩 전체(금액 포함)를 파랑으로. */
 .items .it.bl {{ color:{BLUE}; }}
 .scvt .amtbox.rd {{ color:#C00000; border-color:#C00000; }}   /* ★v371 6p 담보별 보장범위 = 제안 레드 */
+.scvt .amtbox.gen {{ color:#0070C0; border-color:#0070C0; }}   /* ★v578 6p 갱신 보유 = 파랑(제27조) */
 .items .it.rd {{ color:#C00000; }}          /* ★v370 가입제안서 = 레드 */
 .items .it.rd b {{ color:#C00000; }}
 /* ★v182 세부가입현황 미대조 경고 배너 */
@@ -2495,7 +2591,7 @@ body {{ color:{INK}; }}
                   _fullpage(29,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
-    _amt_brain={}; _amt_heart={}
+    _amt_brain={}; _amt_heart={}; _GENSLOT=set()
     _AMTKEY={'뇌출혈진단비':('b','hem'),'뇌졸증진단비':('b','infarct'),'뇌졸중진단비':('b','infarct'),'급성심근경색':('h','ami'),'뇌혈관진단비':('b','other'),'허혈성 진단비':('h','chronic')}
     for _it in rep.get('p5_own',[]):
         _v=_it.get('v')
@@ -2503,6 +2599,10 @@ body {{ color:{INK}; }}
         _m=_AMTKEY.get(_it.get('t',''))
         if not _m: continue
         (_amt_brain if _m[0]=='b' else _amt_heart)[_m[1]]=_v
+        # ★★★★★v578b 제131조 4항 — 6p 표의 key는 <b>슬롯 코드</b>(`hem`·`ami`)이지 담보명이 아니다.
+        #   `_is_gen(rep,'hem')`은 언제나 False라 <b>7p가 영구히 검정</b>이었다(실측).
+        #   `_AMTKEY`가 이미 담보명↔슬롯 대응을 갖고 있으므로 <b>그 담보명으로 갱신을 물어</b> 슬롯에 옮긴다.
+        if _is_gen(rep, _it.get('t','')): _GENSLOT.add(_m[1])
     # ★v50(2026.07.13): 6p 심장 표 — 묶음 분해분(협심증·심부전·염증·부정맥·심근병증·판막)을
     #   dambo에서 직접 채운다. 기존엔 p5_own(급성심근·허혈성)만 실려 표가 2행만 표시됐다.
     # ★v417 빈맥(I47·48)이 빠져 있었다 — 마스터에 전용행이 있고 6p 표에도 'tachy' 행이 있는데
@@ -2512,6 +2612,7 @@ body {{ color:{INK}; }}
     _dmb = rep.get('dambo') or {}
     for _k,_slot in _HD.items():
         _dv=_dmb.get(_k)
+        if _dv and str(_dv) not in ('0','미가입') and _is_gen(rep,_k): _GENSLOT.add(_slot)
         if _dv and str(_dv) not in ('0','미가입') and _slot not in _amt_heart:
             _amt_heart[_slot]=_dv
     # ★CI 계약(ci status=='ci')일 때만 CI 금액 맵 구성 → 없으면 6p에 CI칸 미표시(유동)
@@ -2578,8 +2679,8 @@ body {{ color:{INK}; }}
     rep['_p8vals'] = [format(int(v), ',') for v in
                       (_p8_cam, _p8_cam // 2, _p8_bgy, _p8_sun, _p8_sun // 2) if v]
     print(f'[v376 8p] 암={_p8_cam} 비급여암={_p8_bgy} 순환계={_p8_sun} (중환자실=1/2) 편집칸값={rep["_p8vals"]}')
-    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap,_spec.get('brain'),_red_b,_prop_b,True)
-    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap,_spec.get('heart'),_red_h,_prop_h)
+    scv_brain=_scv_build(_BRAIN_TBL,['뇌혈관<br>진단비','순환계','산정<br>특례'],rep.get('scope_brain'),_amt_brain,_cimap,_spec.get('brain'),_red_b,_prop_b,True,gen_rep=rep,gen_keys=_GENSLOT)
+    scv_heart=_scv_build(_HEART_TBL,['허혈성<br>진단비','심장<br>(특정)','순환계','산정<br>특례'],rep.get('scope_heart'),_amt_heart,_cimap,_spec.get('heart'),_red_h,_prop_h,gen_rep=rep,gen_keys=_GENSLOT)
     # ★2026.07.11 실손 세대 자동판별(CI식) → 검출 세대 강조 표 + 세대별 맞춤 화법
     _sg=rep.get('silson_gen',{'status':'none'})
     # ★2026.07.11 지점장 확정 세분화: 2세대 3분할 / 1세대 생보·손보 구분(상해의료비)
@@ -4402,7 +4503,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v577-noask-20260823</div>'
+    _VSTAMP = '<div class="vstamp">v578-blue-20260824</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
@@ -4451,6 +4552,15 @@ body {{ color:{INK}; }}
     #   1차로 임시 렌더 → 페이지별 '본문 끝 y'를 실측 → 남은 여백을 그 페이지 표 행에
     #   균등 배분(세로 패딩 증가) → 2차 렌더. 계약 수가 변해도 자동으로 가득 찬다.
     #   (구 _PGFILL은 값이 비어 있어 실제로 동작한 적이 없었다.)
+    # ★★★★★v578b 제131조 6항 — 색 게이트는 <b>렌더 분기 앞</b> 한 곳에서 돈다.
+    #   구 위치(4561 `HTML(...).render()`)는 <b>분기 중 하나</b>라 로그가 아예 안 찍혔다 —
+    #   「같은 일 하는 경로가 몇 개인지 먼저 센다」를 또 안 셌다.
+    try:
+        _cfail = color_selftest(rep, doc)
+        print('[v578 색게이트] ' + ('통과 — 갱신 담보 전부 파랑'
+              if not _cfail else 'FAIL %d건: %s' % (len(_cfail), ' | '.join(_cfail))))
+    except Exception as _ce:
+        print('[v578 색게이트] 검사 자체 실패:', _ce)
     doc = _apply_fill(doc)          # 먼저 #pgN id 부여
     # ★v80 복구(2026.07.18): v79에서 이 호출이 'DIAG: autofill off' 스텁으로 꺼져 있었다.
     #   → 전 페이지 하단 여백이 그대로 남는 회귀. 다시 켜되, 2패스 후 페이지 수가
