@@ -97,6 +97,11 @@ def _patch_worksheet():
     _E = '<span class="wbox"></span>'
     _D = '<span class="wbox">.</span>'
     _RX = re.compile(r'<span class="wbox">(.*?)</span>')
+    # ★★★★★v579 편집칸 수집은 <b>태그를 벗긴 글자</b>로 한다.
+    #   [실측 사고] v578에서 값 안에 `<span class="nv gen">`(색 span)이 들어가자
+    #   `_WS`에 <b>태그째로</b> 담겨 PDF 좌표 매칭이 실패했고, 8p·9p 일반암 칸이
+    #   <b>편집칸 없이 배경 그림으로만</b> 남았다(제25조 위반 · 조용한 소실).
+    _TAG = re.compile(r'<[^>]+>')
     for _fn in ('_wcard', '_wcard_sj', '_wcard_fix'):
         _o = getattr(_rw, _fn, None)
         if _o is None:
@@ -106,7 +111,7 @@ def _patch_worksheet():
             def _w(*a, **k):
                 h = o(*a, **k).replace(_E, _D)
                 for m in _RX.finditer(h):
-                    t = m.group(1).strip().replace(' ', '')
+                    t = _TAG.sub('', m.group(1)).strip().replace(' ', '')
                     if t:
                         _WS.add(t)
                 return h
@@ -121,7 +126,7 @@ def _patch_worksheet():
         def _w(*a, **k):
             h = o(*a, **k).replace(_EM, _DM)
             for m in _RXM.finditer(h):
-                t = m.group(1).strip().replace(' ', '')
+                t = _TAG.sub('', m.group(1)).strip().replace(' ', '')
                 if t and t != '.':
                     _WS.add(t)
             return h
@@ -149,7 +154,14 @@ def _pageset(rep):
     #   0-based 고정 인덱스(2·5·7·8·9·10)가 통째로 밀려 편집칸이 엉뚱한 페이지에 붙었다.
     #   → _detect_pages()가 PDF 본문에서 표식을 찾아 실제 물리 인덱스를 동적으로 잡는다.
     D = {'.'}
-    return {'__bars__': P, '__ws__': set(_WS) | D}
+    # ★v579c 분할 표기(`5,000+4,000만`)는 중첩 span이라 정규식으로 못 줍는다 →
+    #   만든 쪽(`report_weasy.SPLIT_TEXTS`)이 등록한 원문을 그대로 합친다.
+    try:
+        import report_weasy as _rw2
+        _SP = set(getattr(_rw2, 'SPLIT_TEXTS', set()) or set())
+    except Exception:
+        _SP = set()
+    return {'__bars__': P, '__ws__': set(_WS) | D | _SP}
 
 
 # 편집 대상 페이지를 본문 표식으로 식별(순서·페이지수 변동에 자동 대응)
@@ -490,11 +502,30 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
             tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
             p = tf.paragraphs[0]
             p.alignment = PP_ALIGN.RIGHT if txt == '.' else PP_ALIGN.LEFT
-            r = p.add_run(); r.text = txt
-            r.font.size = Pt(fs)
-            r.font.color.rgb = RGBColor(*fg)
-            r.font.bold = (ink > 0.30)
-            _setfont(r)
+            # ★★★★★v579d 제11조·제131조 — <b>한 칸에 두 색이면 편집칸도 두 조각</b>.
+            #   [실측] 분할 표기 `5,000+4,000만`은 배경 그림엔 파랑+검정으로 찍히는데
+            #   편집칸은 `fg` 하나로 run을 1개만 만들어 <b>전부 검정</b>으로 보였다.
+            #   지점장 화면에 보이는 것은 편집칸이므로 그림이 맞아도 소용이 없다.
+            #   판정은 '+' 글자가 아니라 <b>`report_weasy.SPLIT_TEXTS` 등록 여부</b>로 한다.
+            try:
+                import report_weasy as _rw3
+                _isplit = txt in (getattr(_rw3, 'SPLIT_TEXTS', set()) or set())
+            except Exception:
+                _isplit = False
+            if _isplit and '+' in txt:
+                _g0, _n0 = txt.split('+', 1)
+                r = p.add_run(); r.text = _g0          # 앞 = 갱신 → 파랑
+                r.font.size = Pt(fs); r.font.color.rgb = RGBColor(0x00, 0x70, 0xC0)
+                r.font.bold = (ink > 0.30); _setfont(r)
+                r2 = p.add_run(); r2.text = '+' + _n0  # 뒤 = 비갱신 → 검정
+                r2.font.size = Pt(fs); r2.font.color.rgb = RGBColor(*fg)
+                r2.font.bold = (ink > 0.30); _setfont(r2)
+            else:
+                r = p.add_run(); r.text = txt
+                r.font.size = Pt(fs)
+                r.font.color.rgb = RGBColor(*fg)
+                r.font.bold = (ink > 0.30)
+                _setfont(r)
             if txt == '.':
                 f = sh.fill
                 f.solid()

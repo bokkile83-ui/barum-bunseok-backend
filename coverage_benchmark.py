@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v578-blue-20260824 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v579-split-20260824 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -375,7 +375,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
     #   엑셀 헤더 1행(회사\n상품\n[갱신])에 <b>'흥국' AND '리셋월렛'</b>이 둘 다 있으면 가입.
     # ★★★v139 갱신 색 원천(지점장 2026.07.21): 엑셀 값 글자색이 파랑(0070C0)이면 그 담보는 '갱신'.
     #   엑셀이 이미 정본이므로 색을 그대로 읽어 설명서·PPT에 전달한다(4대 산출물 연동).
-    _gen_map={}; _red_map={}   # ★v370 _red_map = 가입제안서(레드 C00000) 담보
+    _gen_map={}; _red_map={}; _gen_split={}   # ★v370 red_map=제안 · ★v579 gen_split[담보]=[갱신합, 비갱신합]
     _own_amt={}; _prop_amt={}  # ★v417 담보별 보유합계 / 제안합계(2줄 분리 표기용)
     _PROP_ONLY=False           # ★v566 제안서 단독(보유 열 0개) → 전 담보 레드
     try:
@@ -406,6 +406,19 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                 if _up2.endswith('C00000') and _hasv: _red_map[_nm2]=True   # ★v370 가입제안서
                 if _up2.endswith('0070C0') and _hasv:
                     _gen_map[_nm2]=True
+                # ★★★★★v579 제11조 색 분할 표기 (지점장 실측 2026.08.24
+                #   「암이 4천은 비갱신 + 5천은 갱신인데 진단서에 올 파랑이다」).
+                #   [구 결함] `gen_map`은 <b>어느 계약이든 파랑이면 True</b>인 불리언이라
+                #     <b>섞인 담보를 통째로 파랑</b>으로 만들었다. 진단서엔 분할 정보가 아예 없었다.
+                #   ⇒ 담보별 <b>갱신합·비갱신합을 엑셀 셀 색으로 각각 누적</b>해 진단서에 넘긴다.
+                #     원천은 엑셀 글자색 하나뿐이다(결과값 동결 #9).
+                if _hasv:
+                    try: _v2 = float(str(_s2.cell(_r2,_c2).value).replace(',','').replace('만',''))
+                    except Exception: _v2 = None
+                    if _v2:
+                        _sl = _gen_split.setdefault(_nm2, [0.0, 0.0])
+                        if _up2.endswith('0070C0'): _sl[0] += _v2
+                        elif not _up2.endswith('C00000'): _sl[1] += _v2
         _w2.close()
         # ★v417 보유/제안 금액 분리(캐시값) — 진단서 2줄 표기의 유일 원천은 엑셀이다(결과값 동결 #9).
         # ★★★★★v565 (지점장 실측 2026.08.23 「제안서만 넣으면 진단서가 레드·블랙 섞여 나온다.
@@ -736,7 +749,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         'branch':settings.get('branch',''),'manager':settings.get('manager',''),
         'title':settings.get('title',''),'phone':settings.get('phone',''),
         'contracts':headers,   # ★v463 제71조 — 12쪽 재무 표가 읽는 계약 목록(없어서 「미보유」였다)
-        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'own_amt':_own_amt,'prop_amt':_prop_amt,'prop_only':_PROP_ONLY,'warn_list':_warn,'warn_co':_warn_co,
+        'n_contract':len(headers),'premium':total_prem,'reset10':_r10,'reset10_amt':settings.get('reset10_amt',0),'gen_map':_gen_map,'red_map':_red_map,'gen_split':_gen_split,'own_amt':_own_amt,'prop_amt':_prop_amt,'prop_only':_PROP_ONLY,'warn_list':_warn,'warn_co':_warn_co,
         'renew':len(renew_list),'nonrenew':len(nonren_list),'gap_count':gap_count,
         'coverage':coverage,'strength':strength,'weak':weak,
         'renew_list':renew_list,'nonrenew_list':nonren_list,

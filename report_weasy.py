@@ -237,6 +237,55 @@ def color_selftest(rep, doc_html):
     return out
 
 
+# ★★★★★v579 제11조 색 분할 표기 (지점장 실측 2026.08.24
+#   「암이 4천은 비갱신 + 5천은 갱신인데 진단서에 올 파랑이다」).
+#   DOCTRINE 4195행 = 값이 `2,000+500`처럼 <b>갱신+비갱신 분할 표기</b>. 이미 있는 조문이다.
+#   원천 = `rep['gen_split'][담보] = [갱신합, 비갱신합]` (엑셀 셀 글자색으로 누적 — 결과값 동결 #9).
+#   ★둘 다 0보다 크면 <b>갱신(파랑) + 비갱신(검정)</b> 두 조각. 한쪽만이면 그 색 한 숫자(종전과 동일).
+def _gen_split_of(rep, *names):
+    """반환 = (갱신합, 비갱신합) 또는 None. 이름은 _is_gen과 같은 방식으로 찾는다."""
+    gs = (rep or {}).get('gen_split') or {}
+    if not gs: return None
+    import re as _r
+    def _n(x): return _r.sub(r'[\s·()\[\]/.]', '', str(x))
+    _ALIAS2 = {'암진단비':('일반암',), '통합암진단비':('통합암',), '통합전이암진단비':('통합전이암',),
+               '유사암진단비':('유사암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
+               '뇌졸증':('뇌졸증진단비',), '뇌출혈':('뇌출혈진단비',), '허혈성':('허혈성 진단비','허혈성진단비')}
+    cand = tuple(names) + tuple(a for nm in names for a in _ALIAS2.get(str(nm), ()))
+    for nm in cand:
+        if nm and nm in gs: return tuple(gs[nm])[:2]
+    for nm in cand:
+        if not nm: continue
+        t = _n(nm)
+        if not t: continue
+        for k, v in gs.items():
+            kn = _n(k)
+            if t == kn or (len(t) >= 2 and (t in kn or kn in t)): return tuple(v)[:2]
+    return None
+
+
+SPLIT_TEXTS = set()   # ★v579c 분할 표기 원문(태그 없는 글자) — 진단서 편집칸이 그대로 받아 쓴다
+
+
+def _split_span(rep, lookup, bv, unit=True):
+    """갱신·비갱신이 섞였으면 `5,000+4,000만`을 두 색으로. 아니면 None(호출부가 종전 처리)."""
+    import html as _h, re as _r
+    sp = _gen_split_of(rep, lookup)
+    if not sp: return None
+    _g, _n2 = (sp + (0, 0))[:2]
+    if not (_g > 0 and _n2 > 0): return None            # 섞이지 않았다 → 단색
+    _unit = ''.join(_r.findall(r'[^0-9,\s]+', str(bv or ''))) if unit else ''
+    _f = lambda x: '{:,}'.format(int(x)) if float(x) == int(x) else '{:,}'.format(x)
+    # ★★★★★v579c 편집칸 등록은 <b>만든 쪽이 직접</b> 한다.
+    #   [실측 사고] 진단서 `_RXM = <span class="mb">(.*?)</span>`은 non-greedy라
+    #   <b>중첩 span의 첫 조각(`5,000`)에서 끊겼다</b> → `5,000+4,000만`이 편집칸 목록에
+    #   없어 8p·9p 값이 <b>그림으로만</b> 남았다(제25조 위반).
+    #   ⇒ HTML을 되파싱하지 않고 <b>원문 글자를 여기서 등록</b>한다.
+    SPLIT_TEXTS.add(f'{_f(_g)}+{_f(_n2)}{_unit}')
+    return (f'<span class="nv gen">{_h.escape(_f(_g))}</span>'
+            f'<span class="nv">+{_h.escape(_f(_n2))}{_h.escape(_unit)}</span>')
+
+
 def _is_gen(rep, *names):
     """★v139 담보값 색: 엑셀 글자색(파랑=갱신)을 그대로 이어받는다(4대 산출물 연동).
     gen_map = {마스터 담보명: True}. 라벨이 짧으므로 정확일치 → 부분일치 순으로 본다."""
@@ -507,6 +556,8 @@ def _wbox_inner(rep, lookup, bv):
     #   v575에서 내가 지운 파랑을 되돌린다(위 v578 자백 참조).
     if _is_red(rep, lookup):
         return f'<span class="nv rd">{bv}</span>'
+    _sp = _split_span(rep, lookup, bv)          # ★v579 제11조 — 갱신+비갱신 섞이면 두 색 분할
+    if _sp: return _sp
     if _is_gen(rep, lookup):
         return f'<span class="nv gen">{bv}</span>'
     return f'<span class="nv">{bv}</span>'
@@ -579,7 +630,11 @@ def _wcard(rep, title, desc, lookup, mode):
                       + (f'<span class="nv{_g}">{_html.escape(_os)}</span> ' if _os else '')
                       + f'<span class="nv rd">{_html.escape(_ps)}</span></span>')
             else:
-                _num=f'<span class="mb{_g}">{_html.escape(v)}</span>'
+                # ★v579b 7p는 단위 '만'을 <b>박스 밖 `.dgu`</b>가 따로 붙인다 →
+                #   분할 문자열에 단위를 넣으면 `5,000+4,000만 만`으로 두 번 찍힌다(실측 480행).
+                _sp7=_split_span(rep, l, v, unit=False)
+                _num=(f'<span class="mb">{_sp7}</span>' if _sp7
+                      else f'<span class="mb{_g}">{_html.escape(v)}</span>')
             return (f'<div class="dgrow"><span class="dglab{_g}">{_html.escape(l)}</span>'
                     f'{_num}<span class="dgu">만</span></div>')
         _rows=''.join(_dgrow417(l,v) for l,v in val)
@@ -733,7 +788,10 @@ def _wcard_fix_list(title, desc, rows):
                    + f'<span class="nv rd">{_html.escape(_ps)}</span>')
         else:
             # ★v578 — 제안이 없는 카드도 <b>갱신이면 파랑</b>(구 코드는 무색=검정 고정이었다).
-            if v and _CURREP and _is_gen(_CURREP, r):
+            _sp9=_split_span(_CURREP, r, v) if (v and _CURREP) else None
+            if _sp9:
+                inner=_sp9                       # ★v579 제11조 분할
+            elif v and _CURREP and _is_gen(_CURREP, r):
                 inner=f'<span class="nv gen">{_html.escape(v)}</span>'
             else:
                 inner=_html.escape(v) if v else ''
@@ -763,7 +821,10 @@ def _wcard_fix_group(title, desc, groups):
         # ★★★★★v578 — 이 카드에는 <b>색 판정이 아예 없었다</b>. 값이 무조건 기본색(검정)이라
         #   갱신 담보도, 제안 담보도 전부 검정으로 나갔다(실측 9p 값 20개 전부 검정).
         #   지점장 확정 = 블랙 or 블루 or 레드. 우선순위 레드 > 파랑 > 검정.
-        if v and _CURREP:
+        _sp8 = _split_span(_CURREP, r, v) if (v and _CURREP) else None
+        if _sp8 and not (_CURREP and _is_red(_CURREP, r)):
+            _in = _sp8                           # ★v579 제11조 분할
+        elif v and _CURREP:
             _c = 'nv rd' if _is_red(_CURREP, r) else ('nv gen' if _is_gen(_CURREP, r) else 'nv')
             _in = f'<span class="{_c}">{_html.escape(v)}</span>'
         else:
@@ -4503,7 +4564,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v578-blue-20260824</div>'
+    _VSTAMP = '<div class="vstamp">v579-split-20260824</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
