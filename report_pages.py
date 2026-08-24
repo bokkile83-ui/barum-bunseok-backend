@@ -568,8 +568,18 @@ def _c4(v, o=None):
         return _d4(0)
     o = int(o or 0)
     if not v and not o: return _d4(0)
-    _h = ('<span class="amount">%s만</span>' % format(o, ',')) if o else ''
-    _a = ('<span class="amount red">+%s만</span>' % format(v - o, ',')) if v > o else ''
+    # ★★★★★v580b (지점장 정정 2026.08.24 「<b>기존건 빼고 3천인거지</b>」).
+    #   [실측] 최종 엑셀 대인 = <b>보유합계 0 · 제안합계 3,000</b>. 기존 메리츠 2,000은 <b>빠진다</b>.
+    #   그런데 구 코드는 <b>기존 엑셀 파일</b>의 2,000을 끌어와 `2,000 +3,000`으로 붙였다 —
+    #   기존이 남아 있는 것처럼 읽힌다. ⇒ <b>보유 조각은 최종 엑셀에 실제로 남은 값일 때만</b> 찍는다.
+    _h = ('<span class="amount">%s만</span>' % format(o, ',')) if (o and _KEEP_OWN) else ''
+    # ★★★★★v580 제127조 개정 (지점장 확정 2026.08.24 「우선 전액으로 가자」).
+    #   [지점장 지적] 「운전자 담보가 <b>없는 것에 추가</b>되는 건데 <b>증가로 나온다</b> —
+    #     이러면 <b>기존꺼 유지 + 또 추가</b>로 보인다」.
+    #   [원인] 구 코드는 `n - o`(증가분)을 찍었다. 실측 = 기존 메리츠 대인 2,000 +
+    #     신규 DB 대인 3,000인데 `2,000 +1,000`으로 나와 <b>3,000이 통째로 새 것</b>이라는
+    #     사실이 사라졌다. ⇒ <b>제안은 전액</b>으로 찍는다(진단서는 동결 — 손대지 않는다).
+    _a = ('<span class="amount red">+%s만</span>' % format(v, ',')) if v > o else ''
     return '<span class="hold">보장</span>' + (_h + ('&nbsp;' if _h and _a else '') + _a)
 
 
@@ -992,10 +1002,31 @@ background:linear-gradient(90deg,#082d59,#123f75);font-size:8.5pt}
 """
 
 
-def _m6(v):
-    # ★시안 표기는 「17,600만」이다 — 억으로 바꾸지 않는다
+# ★★★★★v580b — `cmp_['old']['cov']`는 <b>기존 엑셀 파일</b>의 값이고,
+#   최종 엑셀의 <b>보유합계 열</b>과 다르다(해지된 계약은 최종에서 빠진다).
+#   리포트가 보여야 하는 것은 <b>최종 엑셀 기준</b>이므로 기존 파일 값을 덧붙이지 않는다.
+#   되돌리려면 이 한 줄만 True.
+# ★v580c — 보유 원천이 <b>최종 엑셀 보유 열</b>로 바뀌었으므로(remodel v580c) 다시 켠다.
+#   최종 엑셀에서 빠진 담보는 보유가 0이라 저절로 안 찍히고,
+#   <b>자부상처럼 남아 있는 담보는 그대로 검정</b>으로 찍힌다.
+_KEEP_OWN = True
+
+
+def _m6(v, o=None):
+    """★★★★★v580 (지점장 실측 2026.08.24 「1-5종이 추가되었는데 <b>블랙</b>으로 나온다」).
+       [원인] 이 함수에는 <b>색 판정이 아예 없었다</b> — 6쪽 전체가 통짜 검정이라
+         신규 담보도 검정으로 나갔다(제131조 3항에서 잡은 것과 같은 구조).
+       [조문] 제27조·제127조 — <b>제안(신규·증액)은 레드</b>. 기존 보유는 검정.
+       o(=기존값)를 받으면 <b>new > old일 때 레드</b>. o가 없으면 종전대로 검정."""
     n = int(v or 0)
-    return (format(n, ',') + '만') if n else ''
+    if not n:
+        return ''
+    _t = format(n, ',') + '만'
+    try: _o = int(o or 0)
+    except Exception: _o = 0
+    if o is not None and n > _o:
+        return '<span class="red">%s</span>' % _t
+    return _t
 
 
 def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
@@ -1008,7 +1039,7 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (lb, _m6(g(key)) if key else '', extra))
+                % (lb, _m6(g(key), old.get(key, 0)) if key else '', extra))
 
     def r2(l1, k1, l2, k2):
         return ('<div class="row two"><div class="lb"><div class="label">%s</div></div>'
@@ -1017,7 +1048,8 @@ def p6(cmp_, client='고객', base_date='', pg=6, totpg=7):
                 '<div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s</div></div>'
                 '<div class="un"><span class="unit">만원</span></div></div>'
-                % (l1, _m6(g(k1)) if k1 else '', l2, _m6(g(k2)) if k2 else ''))
+                % (l1, _m6(g(k1), old.get(k1, 0)) if k1 else '',
+                   l2, _m6(g(k2), old.get(k2, 0)) if k2 else ''))
 
     d = g('상해사망') - old.get('상해사망', 0)
     inj = ('<span class="red">&nbsp;+%s만</span>' % format(int(d), ',')) if d > 0 else ''
@@ -1350,9 +1382,11 @@ def p9(cmp_, client='고객', base_date='', pg=7, totpg=9):
         except Exception: o = 0
         try: n = int(float(new.get(key, 0) or 0))
         except Exception: n = 0
-        val = (format(o, ',') + '만') if o else ''
+        # ★v580b — 보유 조각은 <b>최종 엑셀에 남은 값</b>일 때만(위 v580b 참조).
+        val = (format(o, ',') + '만') if (o and _KEEP_OWN) else ''
         if n > o:
-            add = '<span class="red">+%s만</span>' % format(n - o, ',')
+            # ★v580 제127조 개정 — 증가분이 아니라 <b>제안 전액</b>(지점장 확정 2026.08.24).
+            add = '<span class="red">+%s만</span>' % format(n, ',')
             val = (val + '&nbsp;' + add) if val else add
         return ('<div class="row"><div class="lb"><div class="label">%s</div></div>'
                 '<div class="bx"><div class="box">%s</div></div>'

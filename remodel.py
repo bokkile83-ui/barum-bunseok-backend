@@ -1111,7 +1111,22 @@ def _shared_strings(data):
 def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     """★지점장 지시 「최종비교엑셀 · 리포트 · 보장분석지」 — 앞의 둘을 만든다.
        보장분석지는 <b>최종 엑셀 자신</b>이므로 그대로 돌려준다(같은 파일이다)."""
+    # ★★★★★v580c (지점장 확정 2026.08.24 「<b>엑셀이 법이다. 비어있는건 담보가 빠졌다는거다.
+    #   그걸 위해 엑셀 전·후를 넣는것이다</b>」 / 「<b>자부상은 기존거 유지인데 왜</b>」).
+    #   [구 결함] 엑셀 2개 경로는 `read_sheet` ×2라 <b>기존 파일</b>의 값을 「보유」로 썼다.
+    #     최종 엑셀에서 <b>빠진 담보</b>(메리츠 운전자 대인·합의금·변호사 = 전부 None)도
+    #     기존 파일에 있으면 살아 있는 것처럼 붙어 `2,000 +3,000`이 됐다.
+    #   ⇒ 「보유」의 원천은 <b>최종 엑셀의 보유 계약 열</b>이다. 최종 엑셀에 제안 열이 있으면
+    #     `split_sheet`가 그 한 파일 안에서 보유·최종을 정확히 가른다(v422h와 같은 원리).
+    #     제안 열이 없는 최종 엑셀이면 종전대로 두 파일 비교.
     o = read_sheet(old_bytes); n = read_sheet(new_bytes)
+    try:
+        _so, _sn, _has = split_sheet(new_bytes)
+        if _has:
+            print('[v580c] 최종 엑셀에 제안 열 있음 → 보유 원천을 <b>최종 엑셀 보유 열</b>로 교체')
+            o, n = _so, _sn
+    except Exception as _e:
+        print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)
     _rp = build_report(c, client, base_date)
     return {'cmp': c,

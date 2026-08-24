@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v579-split-20260824'
+VSTAMP = 'v580-hyunmul-20260824'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -4575,6 +4575,27 @@ def heart_rows(company, name):
     return None
 
 
+# ★★★★★v580 제122조 4항 — 현물 판정 한 곳 (지점장 지시 2026.08.24)
+#   DB손해보험 · 계약일 2026.08 이후 · 담보명에 `(현물급부선택가능)` — <b>셋 다</b>일 때만.
+#   엑셀은 0 + 노란칸, 산출물 3종은 「현물」. 표시는 `_HYUNMUL`을 보고 각 산출물이 한다.
+_HYUNMUL = set()      # 이번 고객에서 현물로 판정된 담보명
+_CUR_CO = ''          # 지금 처리 중인 계약의 회사명
+_CUR_CD = ''          # 지금 처리 중인 계약의 계약일 (YYYY.MM.DD)
+
+
+def _is_hyunmul(raw, company='', cdate=''):
+    import re as _r
+    _n = _r.sub(r'[\s·]', '', str(raw or ''))
+    if '현물급부선택가능' not in _n:
+        return False
+    if 'DB' not in str(company or '').upper() and '디비' not in str(company or ''):
+        return False
+    _m = _r.search(r'(20\d{2})[.\-/](\d{1,2})', str(cdate or ''))
+    if not _m:
+        return False
+    return (int(_m.group(1)), int(_m.group(2))) >= (2026, 8)
+
+
 def resolve_kw(raw):
     # ★★★★★v370 (지점장 확정 2026.08.09, 영구): <b>순환계질환 주요치료비 = 2대 주요치료비</b>.
     #   지점장 원문: "47-50 은 2대주요치료비다 / 이름의 다양성이다 / 결국 순환계질환 주요치료비 다".
@@ -5282,7 +5303,18 @@ def resolve_kw(raw):
     #   → 지침 원문대로 <b>'벌금'을 필수 조건으로</b> 되돌린다. 위로금은 [확인]큐로 남는다(누락 금지).
     if has('대인') and has('벌금') and no('대물'): return '대인',0
     if has('대물'): return '대물',0
-    if has('변호사'): return '변호사',0
+    if has('변호사'):
+        # ★★★★★v580 제122조 4항 (지점장 지시 2026.08.24 「엑셀은 0으로 하고 노란칸 ·
+        #   진단서·분석지·리포트는 현물 · 디비손보 202608월~ 건만」).
+        #   판정은 <b>여기 한 곳</b>에서 하고 결과를 `_HYUNMUL`에 적는다(같은 판정 두 곳 금지).
+        #   조건 3개를 <b>전부</b> 만족할 때만 — DB손보 · 2026.08 이후 · `(현물급부선택가능)`.
+        if _is_hyunmul(r, _CUR_CO, _CUR_CD):
+            # ★v580b — 두 번째 반환값은 호출부가 금액으로 쓸 수 있으므로 <b>건드리지 않는다</b>.
+            #   현물이라는 사실은 `_HYUNMUL`에만 남기고, 금액 0·노란칸·「현물」 표기는
+            #   각 산출물이 이 집합을 보고 처리한다(구조 가정 금지).
+            _HYUNMUL.add('변호사')
+            return '변호사', 0
+        return '변호사',0
     if has('자부상') or (has('자동차') and (has('부상') or has('자부상'))):
         # ★자부상=자동차 한정. 급수밴드 있으면 14급 포함 밴드만(1~3/1~7 제외).
         _band=re.search(r'(\d+)\s*~\s*(\d+)\s*급', r)
@@ -5985,8 +6017,14 @@ def build_excel(data, out):
     #   <b>덮인다</b>(김순자 v476 실측 — 회사명은 고쳐졌는데 갱신담보 색은 그대로 검정).
     #   → 열별 파랑 행을 <b>루프 바깥에 보관</b>했다가 <b>모든 재기재가 끝난 뒤</b> 마지막에 확정한다.
     _BLUE_ALL = {}
+    _hy_cells = []                 # ★v580 제122조 4항 — 현물 셀(노란칸) 좌표
+    _HYUNMUL.clear()               # ★고객마다 비운다(전역 오염 방지 · v579e와 같은 원리)
     for i, ct in enumerate(contracts):
         col = 3 + i
+        # ★★★★★v580 제122조 4항 — 현물 판정에 필요한 <b>계약 컨텍스트</b>를 심는다.
+        #   `resolve_kw`는 담보명만 받으므로 회사·계약일을 알 수 없다. 전역에 실어 넘긴다.
+        globals()['_CUR_CO'] = str(ct.get('company') or '')
+        globals()['_CUR_CD'] = str(ct.get('contract_date') or '')
         gen  = ct['renewal'] == '갱신'
         paid = not _in_sum(ct)          # ★v199: 헤더 진녹(완납) 판정 = 합계 제외 판정과 동일 근거
         h = ws.cell(1, col)
@@ -6510,6 +6548,14 @@ def build_excel(data, out):
                 continue
             if std == '__무시__':            # ★v30z 지점장 무시지정 담보(전이암진단비·고액항암치료비) = 완전 드롭, [확인]에도 미노출
                 continue
+            # ★★★★★v580 제122조 4항 (지점장 지시 2026.08.24) — <b>엑셀은 0 + 노란칸</b>.
+            #   현물 담보는 금액이 없다(보험사가 변호사를 직접 붙여준다). 숫자로 더하면
+            #   실측처럼 `1,000 + 500 + 30 = 1,530`이라는 <b>있지도 않은 금액</b>이 생긴다.
+            #   ⇒ 그 담보만 0으로 만들고 셀에 노란칸을 남긴다. 「현물」 글자는 산출물 3종이 찍는다.
+            if std == '변호사' and _is_hyunmul(raw, ct.get('company'), ct.get('contract_date')):
+                _HYUNMUL.add('변호사')
+                _hy_cells.append((nm2r.get('변호사'), col))
+                amt = 0
             r = nm2r.get(std)
             if r is None and std=='n대수술비': r = nm2r.get('120대수술비')   # ★v352 구 마스터(120대수술비) 하위호환
             if r is None and std:             # 공백무시 재매칭 (화상 '진 단 비' 등)
@@ -7052,6 +7098,26 @@ def build_excel(data, out):
             if not (_bf and _bf.color and str(_bf.color.rgb or '').endswith('0070C0')):
                 ws.cell(_br2,_bc).font = BL; _bfix += 1
     if _bfix: print('[v477 갱신담보색] 최종 확정 %d셀 (재기재로 덮인 것 되돌림)' % _bfix)
+
+    # ★★★★★v580 제122조 4항 — <b>현물 셀에 노란 채우기</b>(지점장 지시 2026.08.24).
+    #   색 확정이 <b>전부 끝난 뒤</b>에 칠한다. 앞에 두면 위 루프가 폰트를 덮으면서
+    #   같은 셀을 두 규칙이 만지게 된다(「나중 것이 앞 것을 죽인다」).
+    if _hy_cells:
+        from openpyxl.styles import PatternFill as _PF
+        _YEL = _PF('solid', fgColor='FFFF00')
+        # ★v580b 지점장 지시 2026.08.24 「<b>그냥 현물인 경우 가로 한 줄을 노란색으로 해라</b>」
+        #   ⇒ 셀 하나가 아니라 <b>그 담보 행 전체</b>(A열~끝열)를 노랑으로. 금액은 그대로 살고
+        #     현물이라는 사실은 줄 색으로 보인다. 산출물에서 금액이 사라지지 않는다.
+        _rows_hy = sorted({_hr for _hr, _hc in _hy_cells if _hr})
+        for _hr in _rows_hy:
+            for _hc2 in range(1, ws.max_column + 1):
+                ws.cell(_hr, _hc2).fill = _YEL
+        for _hr, _hc in _hy_cells:
+            if _hr and ws.cell(_hr, _hc).value in (None, ''):
+                ws.cell(_hr, _hc).value = 0
+        if _rows_hy:
+            print('[v580 제122조 4항] 현물 — 행 전체 노랑 %d행(행번호 %s) · 현물 담보 금액 0'
+                  % (len(_rows_hy), _rows_hy))
 
     # ★ 합계 = 항상 표 맨 끝 열. 가로 SUM 수식(법칙22, 하드코딩 금지).
     # ★★★★★v388 (지점장 확정 2026.08.12): 「<b>엑셀은 각각 / 보장분석지·보장진단서는 합산.
