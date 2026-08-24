@@ -383,6 +383,14 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
     from pdf2image import convert_from_path
     try:
         _WS.clear()
+        # ★★★★★v579e — `SPLIT_TEXTS`도 <b>고객마다 비운다</b>.
+        #   [위험] 전역 set이라 로봇처럼 <b>여러 건을 연속 처리</b>하면 앞 고객의
+        #   `5,000+4,000만`이 남아 <b>다음 고객 편집칸으로 오인</b>된다(조용한 오염).
+        try:
+            import report_weasy as _rw4
+            getattr(_rw4, 'SPLIT_TEXTS', set()).clear()
+        except Exception:
+            pass
         _patch_worksheet()
     except Exception:
         pass
