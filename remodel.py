@@ -229,8 +229,18 @@ def split_sheet(path_or_bytes):
                 if not _r9.match(r'^[\d,./\s]+$', _tv.strip()):
                     cov_text.setdefault(nm, _tv.strip())
         rows.append((r, nm, o, n, _grp))
-        cov_old[nm] = cov_old.get(nm, 0.0) + o
-        cov_new[nm] = cov_new.get(nm, 0.0) + n
+        # ★★★★★v588 (지점장 실측 2026.08.25 「<b>리포트에 2대주요치료비가 위에는 2천,
+        #   아래는 1천이다. 정답은 1천이다</b>」 / 「<b>더해야할건 안하고 안더해야할건 다하노</b>」).
+        #   [원인] 마스터에 <b>같은 담보명이 두 행</b>인 것이 있다(2대 주요치료비 = 뇌 행 + 심장 행에
+        #     <b>같은 금액을 각각</b> 기재 — 제21조). 엑셀은 `_is_repmax`로 <b>대표(max) 1,000</b>인데
+        #     리포트는 여기서 <b>그냥 더해 2,000</b>을 만들었다. 같은 값을 두 경로가 다르게 계산했다.
+        #   ⇒ <b>엑셀과 같은 판정</b>(`main._is_repmax`)을 그대로 쓴다. 대표행이면 max, 아니면 합산.
+        if _is_repmax_row(nm):
+            cov_old[nm] = max(cov_old.get(nm, 0.0), o)
+            cov_new[nm] = max(cov_new.get(nm, 0.0), n)
+        else:
+            cov_old[nm] = cov_old.get(nm, 0.0) + o
+            cov_new[nm] = cov_new.get(nm, 0.0) + n
 
     old = {'premium': own_prem, 'contracts': own_ct, 'cov': cov_old, 'rows': rows, 'cov_text': cov_text, 'cov_split': cov_split}
     new = {'premium': own_prem + prop_prem, 'contracts': own_ct + prop_ct, 'cov': cov_new, 'rows': rows, 'cov_text': cov_text, 'cov_split': cov_split}
@@ -448,6 +458,16 @@ _TEXT_PPT = True         # ★v546 — 값 칸만 텍스트(제129조 3항)
 
 
 import re as _re581   # ★v581 제131조 분할 표기 판별
+
+
+def _is_repmax_row(nm):
+    """★v588 — 대표(max) 판정은 <b>엑셀과 같은 한 곳</b>(`main._REPMAX_ROWS`)에서 가져온다.
+       여기서 따로 목록을 만들면 엑셀과 리포트가 또 갈린다."""
+    try:
+        import main as _mn
+        return bool(_mn._is_repmax(nm))
+    except Exception:
+        return False
 
 
 def _fg_fix(im, bx):
