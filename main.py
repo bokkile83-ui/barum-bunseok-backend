@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v590-silson-20260825'
+VSTAMP = 'v595-mode4-20260826'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1267,9 +1267,16 @@ _DOCTRINE_SELFTEST = [
     ('심장허혈성진단비',                     '허혈성 진단비'),
     ('갱신형 허혈성심장진단비',              '허혈성 진단비'),
     ('허혈심장질환진단특약ⅢUT(무배당,무해약환급금형)_간편고지3.10.5', '허혈성 진단비'),
-    # ★v384 특정심장Ⅰ = 묶음 → <b>협심증</b>(허혈성은 협심증의 종류). 허혈성 행은 단독 담보 전용.
-    ('특정심장질환진단비Ⅰ',                   '협심증'),
-    ('특정심장질환진단비Ⅱ',                   '급성심근경색'),
+    # ★★★★★v591 (지점장 실측 2026.08.26 「<b>또 협심증이 2배로 나온다</b>」 · 롯데 let:smile).
+    #   [실측 근거표] 협심증 행에 <b>두 줄</b>이 들어갔다 —
+    #     ① `심혈관질환진단비(특정심장질환Ⅰ)(건강체할인형)` 1,000  ← 여기 DMAP(인라인)
+    #     ② `협심증[심장묶음]` 1,000                              ← `_HB` 분해
+    #     ⇒ 합계 <b>2,000</b>. 다른 담보는 `[심장묶음]` 한 줄뿐인데 협심증만 두 줄이었다.
+    #   [조문 위반] DOCTRINE 411행 = <b>롯데 특정심장Ⅰ → 급성심근경색</b>인데
+    #     이 줄이 <b>회사 구분 없이</b> 협심증으로 보냈다. 「특정Ⅰ」의 뜻은 <b>회사마다 다르다</b>
+    #     (제123조 — 라벨 말고 회사별 질병코드로 분해한다).
+    #   ⇒ <b>이 두 줄을 삭제</b>한다. 특정Ⅰ/Ⅱ는 `_HB`(회사별 정본표) <b>한 경로</b>에서만 분해한다.
+    #     회사 정보가 없는 DMAP에서 라벨만 보고 매핑하면 <b>반드시 어느 회사에선가 틀린다</b>.
     ('뇌혈관질환진단비',                     '뇌혈관진단비'),
     ('뇌졸중진단비',                         '뇌졸증진단비'),
     ('뇌출혈진단비',                         '뇌출혈진단비'),
@@ -3876,6 +3883,15 @@ def parse_txt(txt, filename='', extra=None):
             print('[v552 실손] %s — 3세대 이상 계약의 상해의료비 %s → 입원으로 이동(제9조 4항)'
                   % (str(_c.get('company'))[:10], _v))
 
+    # ★★★★★v593 제134조 — <b>일상배상책임은 무조건 1억(10,000만원)</b>
+    #   (지점장 확정 2026.08.26 「<b>일상배상책임은 무조건 1억이다</b>」).
+    #   [실측 결함 · 롯데 let:smile] 확인사항에 `[접힘의심] 가족일상생활배상책임(대물` <b>20</b> —
+    #     담보명이 `(대물`에서 <b>잘렸고</b>, 원문 `(대물 누수 50만원, 누수외 20만원)`의
+    #     <b>자기부담금 20</b>을 가입금액으로 읽었다. 1억이 <b>20만원</b>이 됐다.
+    #   ⇒ 담보가 존재하면 금액은 <b>10,000 고정</b>. 자기부담금·누수한도는 가입금액이 아니다.
+    #     ★값이 이미 10,000이면 그대로. 다르면 <b>고쳐 쓰고 로그로 남긴다</b>(조용히 바꾸지 않는다).
+    _fix_ilbae(deduped)
+
     # ★★★★★v590 제9조 5항 — <b>통합형 실손의 통원은 20</b>(지점장 확정 2026.08.25
     #   「<b>통원 20에 잡아주면 된다</b>」 · 4세대 정본 「통원비 20만원만 있다」).
     #   통합형(`의료비(입원+통원)`)은 입원 한도만 적혀 있고 통원 금액이 별도로 없다.
@@ -4477,6 +4493,13 @@ _HB = {   # ★★★심장 묶음담보 회사별 정본표(지점장 최종본
 #   담보명은 실물 제안서 그대로 — 상품 수식어 괄호까지 붙어 있어야 제120조가 검사된다.
 _HEART_CASES = [
     # (회사, 실물 담보명, 정답 마스터 행)   ※근거: 각 사 약관 질병코드 실측 2026.08.21
+    # ★★★★★v591 — 지점장이 잡은 <b>실물 담보명 원문</b>을 케이스로 박는다(let:smile 4060종합).
+    #   구 결함: 인라인 2곳(DMAP·resolve_kw)이 회사 구분 없이 Ⅰ→협심증으로 보내
+    #   `_HB` 분해분과 <b>겹쳐 협심증이 2,000</b>이 됐다. 케이스에 없어 29건 검사가 통과했다.
+    ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅰ)(건강체할인형)',   ['급성심근경색']),
+    ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅱ)(건강체할인형)',   ['협심증', '주요심장염증']),
+    ('롯데손해보험', '심혈관질환진단비(특정15대심장질환)(건강체할인형)', ['심장판막', '심근병증', '빈맥', '심부전']),
+    ('롯데손해보험', '심혈관질환진단비(기타심장부정맥)(건강체할인형)',   ['부정맥']),
     ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅰ)(간편할인형Ⅱ)',   ['급성심근경색']),
     ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅱ)(간편할인형Ⅱ)',   ['협심증', '주요심장염증']),
     ('롯데손해보험', '심혈관질환진단비(특정15대심장질환)(간편할인형Ⅱ)', ['심장판막', '심근병증', '빈맥', '심부전']),
@@ -4567,10 +4590,32 @@ def silson_selftest():
     return bad
 
 
+def heart_inline_selftest():
+    """★★★★★v591 (지점장 실측 2026.08.26 「또 협심증이 2배로 나온다」).
+       [구멍] `heart_case_selftest`는 <b>`heart_rows`(회사별 표)만</b> 본다.
+         그런데 값을 실제로 넣는 경로는 <b>`resolve2`도</b> 있다. 인라인이 회사 구분 없이
+         Ⅰ→협심증을 반환해 `_HB` 분해분과 <b>겹쳐 2배</b>가 됐는데 로봇은 100%였다.
+       ⇒ <b>묶음 라벨은 `resolve2`가 값을 만들면 안 된다</b>(반드시 None)를 직접 센다.
+         회사마다 뜻이 다른 라벨을 회사 없이 판정하면 어느 회사에선가 반드시 틀린다."""
+    bad = []
+    for _nm in ('심혈관질환진단비(특정심장질환Ⅰ)(건강체할인형)',
+                '심혈관질환진단비(특정심장질환Ⅱ)(건강체할인형)',
+                '심장질환(특정Ⅰ)진단비Ⅲ(간편가입)',
+                '특정심장질환(특정Ⅱ)진단비'):
+        try:
+            _got = resolve2(_nm)[0]
+        except Exception as _e:
+            bad.append('[제123조 인라인] %s — 예외 %s' % (_nm[:26], str(_e)[:20])); continue
+        if _got is not None:
+            bad.append('[제123조 인라인] %s — <b>%s</b> (정답 None · 묶음은 _HB 한 경로에서만)'
+                       % (_nm[:26], _got))
+    return bad
+
+
 def heart_case_selftest():
     """★제123조 2항 — 회사별 심장 묶음 분해가 약관 실측 정답과 같은지 본다.
        값 대조(제121조)는 <b>cov가 처음부터 틀리면</b> 못 잡는다. 그 앞단을 여기서 막는다."""
-    bad = list(heart_bundle_no_isch())
+    bad = list(heart_bundle_no_isch()) + list(heart_inline_selftest())
     for _co, _nm, _want in _HEART_CASES:
         try:
             _got = heart_rows(_co, _nm)
@@ -4903,7 +4948,11 @@ def resolve_kw(raw):
             _core_s2 = re.sub(r'^(?:비)?갱신형', '', _core_s2)
             _core_s2 = re.sub(r'^재해상해', '상해', _core_s2)   # 재해상해=상해(중복 정리)
             _core_s2 = re.sub(r'^재해(입원)?수술', r'상해\1수술', _core_s2)  # ★v65 재해수술비·재해입원수술비=상해수술비(지점장 2026.07.15, '입원' 낀 변형도 포함)
-            _is_pure_s = _core_s2.startswith('상해수술비') or _core_s2.startswith('상해입원수술비')
+            # ★v594 (지점장 확정 2026.08.26 「비가 없어도 수술비다」) — 질병 쪽과 <b>대칭</b>.
+            #   `상해수술(간편건강고지)담보`가 「비」 한 글자 때문에 [확인]큐로 빠졌다.
+            #   ★단 「비」 뒤에 올 수 있는 것은 <b>괄호·접미어(담보)·끝</b>뿐 —
+            #     `상해수술위로금`·`상해수술자금`·`상해수술치료비`는 수술비가 아니다.
+            _is_pure_s = bool(re.match(r'^(?:상해수술|상해입원수술)비?(?:\(|담보|$)', _core_s2))
             if _is_pure_s and no('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','통원','외래','자궁','자녀','자가','교통'):
                 return '상해수술비',0
             return None,0
@@ -4914,7 +4963,17 @@ def resolve_kw(raw):
             _core_strip = _core.strip().replace(' ','')
             _core_strip = re.sub(r'^(?:비)?갱신형', '', _core_strip)   # ★v247 3열 '갱신형' 접두어 제거(KB 실측)
             # 순수 질병수술비/질병입원수술비로 시작해야 함(자XXXX 등 한글 접두 배제)
-            _is_pure_q = _core_strip.startswith('질병수술비') or _core_strip.startswith('질병입원수술비')
+            # ★★★★★v594 (지점장 확정 2026.08.26 「<b>비가 없어도 수술비다</b>」).
+            #   [실측 · 현대해상] `질병수술(간편건강고지)담보` <b>30</b>이 [확인]큐로 빠졌다 —
+            #     조건이 `질병수술<b>비</b>`로 시작을 요구해 <b>「비」 한 글자</b> 때문에 탈락했다.
+            #     `(간편건강고지)`는 심사방식, `담보`는 접미어다. 같은 담보의 다른 표기다.
+            #   ⇒ `질병수술` / `질병입원수술`로 시작해도 받는다. 변형 배제어(`_excl_ok`)는 그대로다
+            #     — `다발성`·`특정`·`부위` 등은 종전대로 [확인]큐로 간다.
+            #   ★v594b — <b>「비」만 빼고 나머지는 그대로 좁게</b> 본다.
+            #     시작만 보면 `질병수술<b>위로금</b>`·`질병수술<b>자금</b>`·`질병수술<b>치료비</b>`·
+            #     `질병수술<b>(재진단)</b>`까지 전부 들어온다(실측). 그건 수술비가 아니다.
+            #     ⇒ 「비」 뒤에 올 수 있는 것은 <b>괄호·접미어(담보)·끝</b>뿐이다.
+            _is_pure_q = bool(re.match(r'^(?:질병수술|질병입원수술)비?(?:\(|담보|$)', _core_strip))
             _excl_ok = not any(k in _core for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
                           '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
                           '2종','3종','4종','5종','부분','관혈','내시경','로봇','통원','외래','5대','자궁','자가','자녀'))
@@ -5137,10 +5196,15 @@ def resolve_kw(raw):
         _rr=str(raw)
         _is2 = ('Ⅱ' in _rr) or ('특정 II' in _rr) or ('특정II' in _rr) or ('특정 2' in _rr) or ('특정2' in _rr) or ('(특정 II)' in _rr) or ('（특정 II）' in _rr)
         _is1 = ('Ⅰ' in _rr) or ('특정 I' in _rr) or ('특정I' in _rr) or ('특정 1' in _rr) or ('특정1' in _rr) or ('(특정 I)' in _rr) or ('（특정 I）' in _rr)
-        # ★v384 특정심장Ⅰ 묶음 = 협심증(허혈성은 협심증의 종류) — 지점장 확정 2026.08.11
-        if _is2 and not _is1: return '급성심근경색',0
-        if _is1 and not _is2: return '협심증',0
-        return '급성심근경색',0   # 구분 불가 시 급성심근경색(보수적)
+        # ★★★★★v591 (지점장 실측 2026.08.26 「또 협심증이 2배로 나온다」 · 롯데 let:smile).
+        #   [실측] 협심증 행에 두 줄 — `심혈관질환진단비(특정심장질환Ⅰ)` 1,000(<b>여기</b>) +
+        #     `협심증[심장묶음]` 1,000(`_HB`) = <b>2,000</b>.
+        #   [조문 위반] 「특정Ⅰ」의 뜻은 <b>회사마다 다르다</b> — DOCTRINE 회사별 정본표 =
+        #     롯데 특정Ⅰ→<b>급성심근경색</b> / DB 특정Ⅰ→협심증+염증 / KB 특정Ⅰ→협심증+허혈성+빈맥+심부전.
+        #     이 분기는 <b>회사를 모른 채 라벨만 보고</b> Ⅰ→협심증으로 단정했다 → 롯데에서 틀렸다.
+        #   ⇒ <b>여기서 값을 만들지 않는다.</b> 묶음 분해는 `_HB`(회사별 정본표) <b>한 경로</b>가 한다.
+        #     `_HB`가 못 잡으면 [확인]큐로 간다 — 제0조 꼭대기(엑셀에 없는 건 만들지 않는다).
+        return None, 0
     if has('일당') and (has('허혈') or has('협심') or has('심부전') or has('부정맥') or has('빈맥') or has('뇌혈관') or has('심뇌')): return None,0   # ★v30b 질환별 입원일당 ≠ 진단비 → [확인] (조성래 허혈일당 오합산 수리)
     if has('협심'): return '협심증',0
     # ★★★v326 허혈성 폴백에도 제외어 — 위 2795행에는 `not has('수술')`이 있었으나
@@ -5399,6 +5463,60 @@ def resolve_kw(raw):
     if has('일상생활') and has('배상') or has('일배책') or has('일상배상'): return '일상배상책임',0
     return None, 0
 
+_SURG_CASES = [
+    # ★★★★★v594 제135조 (지점장 확정 2026.08.26 「비가 없어도 수술비다」 /
+    #   「수술비가 너무 헐렁해서 놀랐다」) — <b>넓힌 만큼 새는 것도 케이스로 고정</b>한다.
+    ('질병수술(간편건강고지)담보', '질병수술비'),   # 실측 · 현대해상 30이 [확인]큐로 빠졌던 건
+    ('상해수술(간편건강고지)담보', '상해수술비'),
+    ('질병수술', '질병수술비'), ('상해수술', '상해수술비'),
+    ('질병수술비', '질병수술비'), ('질병입원수술비', '질병수술비'),
+    ('상해수술비', '상해수술비'), ('상해입원수술비', '상해수술비'),
+    ('질병수술비(연간1회한)', '질병수술비'),
+    # ★아래는 <b>수술비가 아니다</b> — 넓히면 새는 것들(실측으로 확인)
+    ('질병수술위로금', None), ('질병수술자금', None), ('질병수술치료비', None),
+    ('상해수술위로금', None), ('상해수술치료비', None),
+    ('다발성질병수술(3대질병)(간편건강고지)담보', None), ('특정질병수술비', None),
+    ('상해수술비(종합병원)', None), ('상해흉터복원수술비', None), ('교통상해수술비', None),
+]
+
+
+def surg_selftest():
+    """★제135조 — 수술비 매핑이 <b>넓지도 좁지도 않은가</b>를 센다."""
+    bad = []
+    for _nm, _want in _SURG_CASES:
+        try:
+            _got = resolve2(_nm)[0]
+        except Exception as _e:
+            bad.append('[제135조 수술비] %s — 예외 %s' % (_nm[:26], str(_e)[:20])); continue
+        if _got != _want:
+            bad.append('[제135조 수술비] %s — <b>%s</b> (정답 %s)' % (_nm[:26], _got, _want))
+    return bad
+
+
+def _fix_ilbae(contracts):
+    """★★★★★v593 제134조 — <b>일상배상책임은 무조건 1억(10,000)</b>
+       (지점장 확정 2026.08.26 「일상배상책임은 무조건 1억이다」).
+       [실측 · 롯데 let:smile] `[접힘의심] 가족일상생활배상책임(대물` <b>20</b> —
+         담보명이 `(대물`에서 잘렸고 원문 `(대물 누수 50만원, 누수외 20만원)`의
+         <b>자기부담금 20</b>을 가입금액으로 읽었다. 1억이 20만원이 됐다.
+       ⇒ 담보가 있으면 10,000 고정. 자기부담금·누수한도는 가입금액이 아니다.
+       ★게이트가 <b>직접 호출</b>해 값으로 검증할 수 있게 함수로 뺀다."""
+    for _c in (contracts or []):
+        _dm = _c.get('dambo') or {}
+        _v = _dm.get('일상배상책임')
+        if _v in (None, ''):
+            continue
+        try:
+            _n = float(str(_v).replace(',', ''))
+        except Exception:
+            _n = None
+        if _n is not None and _n != 10000:
+            _dm['일상배상책임'] = 10000
+            print('[v593 일상배상] %s — %s → 10,000 고정(제134조)'
+                  % (str(_c.get('company'))[:10], _v))
+    return contracts
+
+
 def resolve2(raw):
     """raw -> (std, jong). DMAP 정확매칭 우선, 없으면 키워드 사전엔진(resolve_kw)."""
     # ★★★★★v298-B (주재현 새마을금고 실측 2026.07.31): 담보명이 '○○특약[재해사망형/만기환급형] : 담보명'
@@ -5417,6 +5535,15 @@ def resolve2(raw):
     #     <b>2열(롯데)은 안 걸렸다</b>. ⇒ 두 경로가 함께 지나가는 <b>여기</b>에 둔다.
     #   ⇒ `의료비` + `입원` + `통원`이 한 담보명에 있으면 <b>입원 행</b>(통합형은 입원 한도가 정본).
     #     통원 20은 세대 판정 후 계약 단위로 채운다(`_silson_tongwon20`).
+    # ★★★★★v593 (지점장 실측 2026.08.26 「<b>일배책이 20으로 찍힌다</b>」).
+    #   [실측] KB 제안서 일상배상책임 아래 <b>안내 문구</b> —
+    #     `※ 자기부담금 : 대물(누수50만원,누수외20만원)` 이 <b>담보로 잡혀 `대물` 20</b>이 됐다.
+    #   [원인] 이 줄은 <b>담보가 아니라 자기부담금 안내</b>인데 차단이 없었다.
+    #     `자기부담금`·`공제금액`만 단독으로 오면 None이었지만, 뒤에 `대물(...)`이 붙자 통과했다.
+    #   ⇒ <b>자기부담금·공제금액·면책금액 줄은 담보가 아니다</b> — 값을 만들지 않는다(제0조 꼭대기).
+    _n593 = re.sub(r'[\s※]', '', str(raw))
+    if re.match(r'^(자기부담금|공제금액|면책금액|자기부담|공제금)', _n593):
+        return None, 0
     _n590 = re.sub(r'\s', '', str(raw))
     if ('의료비' in _n590) and ('입원' in _n590) and ('통원' in _n590) and ('실손' not in _n590):
         return '입원', 0
@@ -6722,9 +6849,15 @@ def build_excel(data, out):
             _rnd = nm2r.get('n대수술비') or nm2r.get('120대수술비')
             if _rnd:
                 _cur = ws.cell(_rnd,col).value
-                if isinstance(_cur,(int,float)) and _cur:      # 등급 없는 단일금액이 이미 있으면 전 칸에 가산
-                    for _k in range(6): ndae_acc[_k] += int(_cur)
-                ws.cell(_rnd,col).value = '/'.join(str(x) for x in ndae_acc)
+                # ★★★★★v595 제136조 (지점장 확정 2026.08.26 「<b>N대수술비는 대표값 넣어줘</b>」).
+                #   [구 동작] 등급 6칸 슬래시 `0/500/0/0/0/0` — 0이 다섯 칸이라 읽기 어렵고
+                #     PPT `_____대 수술` 칸에도 슬래시가 그대로 들어갔다.
+                #   ⇒ <b>등급 중 최댓값 하나</b>만 적는다(`_REPMAX_ROWS`에 이미 `n대수술비`가 있다 — 같은 뜻).
+                #   ★근거는 `근거표` 시트의 `n대수술비 N등급 슬롯` 줄에 그대로 남는다(추적 가능).
+                _nmax = max(int(x or 0) for x in ndae_acc)
+                if isinstance(_cur,(int,float)) and _cur:
+                    _nmax = max(_nmax, int(_cur))
+                ws.cell(_rnd,col).value = _nmax
                 ws.cell(_rnd,col).font = BL if gen else BK
 
         if any(trio_acc):   # ★v29y MRI/도수/주사 슬래시 기재(실손 계열=항상 파랑)
@@ -9077,7 +9210,17 @@ const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
 $("#up").onclick=()=>$("#fi").click();
 $("#upp").onclick=()=>$("#fp").click();
-$("#fi").onchange=e=>{/* ★v385 제안서 복수선택 최대 3건 */files=Array.from(e.target.files||[]).slice(0,3);if((e.target.files||[]).length>3){alert("가입제안서는 최대 3건까지입니다. 앞의 3건만 사용합니다.");}file=files[0]||null;$("#uplabel").textContent=files.length?(files.length>1?(files[0].name+" 외 "+(files.length-1)+"건"):files[0].name):"가입제안서 PDF";_syncSend();};
+$("#fi").onchange=e=>{/* ★★★★★v592 (지점장 2026.08.26 「제안서 3개까지 가능하게 해줘」)
+  [구 동작] `files=Array.from(...)` — 새로 고를 때마다 <b>앞의 선택을 통째로 덮었다</b>.
+    파일선택창에서 Ctrl로 3개를 <b>한 번에</b> 골라야만 3건이 됐고,
+    한 개씩 세 번 누르면 <b>마지막 1건만</b> 남았다 → 지점장이 「1개밖에 인식이 안 돼」.
+  ⇒ <b>누를 때마다 이어붙인다</b>(누적). 같은 이름·크기는 중복으로 보고 한 번만.
+    3건이 차면 알린다. 지우려면 초기화 버튼. */
+ var _add=Array.from(e.target.files||[]);
+ var _seen={};files.forEach(function(f){_seen[f.name+'|'+f.size]=1;});
+ _add.forEach(function(f){var k=f.name+'|'+f.size;if(!_seen[k]&&files.length<3){files.push(f);_seen[k]=1;}});
+ if(files.length>3){files=files.slice(0,3);}
+ file=files[0]||null;e.target.value="";   /* 같은 파일을 다시 고를 수 있게 비운다 */$("#uplabel").textContent=files.length?(files.map(function(f){return f.name;}).join(" · ")+"  ["+files.length+"/3]"):"가입제안서 PDF (최대 3건 · 눌러서 추가)";_syncSend();};
 $("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"보장분석 PDF";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
@@ -9944,6 +10087,88 @@ def doctrine_robot(heavy=False):
             return '실행 예외 %s' % str(_e)[:24]
     _ck('제132조 상급일당', '제132조', _ck132)
 
+    def _ck134():
+        """★v593 제134조 — 일상배상책임 1억 고정이 코드에 살아 있는가."""
+        try:
+            _t = open(_o.path.join(_o.path.dirname(_o.path.abspath(__file__)), 'main.py'),
+                      encoding='utf-8').read()
+        except Exception:
+            return ''
+        if resolve2('가족일상생활배상책임(대물')[0] != '일상배상책임':
+            return '잘린 담보명이 일상배상책임으로 안 간다'
+        # ★v593b — 코드 문자열이 아니라 <b>실제 값</b>으로 센다. 문자열만 보면
+        #   `_dm['일상배상책임'] = 10000` 을 지워도 통과했다(역검증 실패 · 2026.08.26).
+        _fake = [{'company': '테스트', 'product': 'T', 'dambo': {'일상배상책임': 20}}]
+        try:
+            _fix_ilbae(_fake)
+        except Exception as _e:
+            return '고정 함수 없음/예외 %s' % str(_e)[:20]
+        if _fake[0]['dambo'].get('일상배상책임') != 10000:
+            return '일상배상 20 → %s (정답 10000)' % _fake[0]['dambo'].get('일상배상책임')
+        return ''
+    _ck('제134조 일상배상', '제134조', _ck134)
+    _ck('제135조 수술비', '제135조',
+        lambda: '' if not surg_selftest() else ('%d건: %s' % (len(surg_selftest()), surg_selftest()[0])))
+
+    # ★★★★★v595 제137조 (지점장 지시 2026.08.26 「<b>보장분석지 / 보장분석지+제안서 /
+    #   제안서 / 엑셀1·2 비교 — 이 4가지에 대해 로봇이 따로 지정되고 따로 각각 검사해야 한다</b>」).
+    #   [왜 필요한가] 오늘 실사고가 전부 <b>모드별로</b> 났다 —
+    #     ・제안서 단독만 1건 인식(`_prop_cts[0]`) — 조합 모드는 멀쩡했다
+    #     ・4세대 실손은 2열(롯데) 경로만 깨졌다 — 3열은 멀쩡했다
+    #   ⇒ <b>모드마다 진입 함수가 살아 있는지</b>를 각각 센다. 한 모드가 죽어도 나머지는 100%가 된다.
+    def _ck_mode(mode):
+        """4가지 실행 모드가 각각 <b>진입 가능한 상태</b>인가."""
+        def _f():
+            try:
+                if mode == '보장분석지':
+                    if not callable(globals().get('parse_txt')): return 'parse_txt 없음'
+                    if 'extra' not in parse_txt.__code__.co_varnames: return 'parse_txt(extra=) 인자 없음'
+                    return ''
+                if mode == '보장분석지+제안서':
+                    if 'extra' not in parse_txt.__code__.co_varnames: return 'extra 합류 경로 없음'
+                    _t = open(_o.path.join(_o.path.dirname(_o.path.abspath(__file__)), 'main.py'),
+                              encoding='utf-8').read()
+                    if '제안 계약 {len([x for x in extra if x])}건 합류' not in _t:
+                        return '제안 계약 합류부가 없다'
+                    return ''
+                if mode == '제안서단독':
+                    _t = open(_o.path.join(_o.path.dirname(_o.path.abspath(__file__)), 'main.py'),
+                              encoding='utf-8').read()
+                    # ★v595b — <b>주석 문장이 자기 검사에 걸렸다</b>(실측 오탐).
+                    #   문자열만 세면 「그 표현을 설명한 주석」까지 위반으로 잡힌다.
+                    #   ⇒ <b>주석·문자열을 걷어낸 실제 코드 줄</b>에서만 센다.
+                    _code = '\n'.join(_l for _l in _t.split('\n')
+                                      if _l.strip() and not _l.strip().startswith('#'))
+                    if re.search(r'^\s*_solo\s*=\s*_prop_cts\[0\]', _code, re.M):
+                        return '제안서 단독이 첫 건만 쓴다(제133조 위반)'
+                    if '_solos = [_x for _x in _prop_cts' not in _t:
+                        return '제안서 전건 사용 코드가 없다'
+                    return ''
+                if mode == '엑셀2개비교':
+                    import remodel as _rm
+                    for _fn in ('read_sheet', 'split_sheet', 'compare', 'remodel_all'):
+                        if not hasattr(_rm, _fn): return 'remodel.%s 없음' % _fn
+                    # ★v595b — 문자열이 아니라 <b>실제 동작</b>으로 센다.
+                    #   `v580c` 문자열은 주석에도 있어 지워도 통과했다(역검증 실패 2026.08.26).
+                    #   ⇒ `split_sheet`가 <b>보유·제안·글자값·갱신색 4종을 다 만드는가</b>를 본다.
+                    import inspect as _ins
+                    _src = _ins.getsource(_rm.split_sheet)
+                    for _key in ('cov_text', 'cov_split', "'제안 합계'"):
+                        if _key not in _src:
+                            return 'split_sheet에 %s 없음(제9조 5항·제131조)' % _key
+                    #   ★주석·로그 문자열을 걷어낸 <b>실제 호출문</b>만 본다(오탐·미탐 둘 다 막는다).
+                    _rsrc = '\n'.join(_l for _l in _ins.getsource(_rm.remodel_all).split('\n')
+                                      if _l.strip() and not _l.strip().startswith('#'))
+                    if not re.search(r'=\s*split_sheet\s*\(', _rsrc):
+                        return '엑셀 2개 경로가 split_sheet를 호출하지 않는다(제127조 · 최종 엑셀 보유 열)'
+                    return ''
+                return ''
+            except Exception as _e:
+                return '실행 예외 %s' % str(_e)[:24]
+        return _f
+    for _md in ('보장분석지', '보장분석지+제안서', '제안서단독', '엑셀2개비교'):
+        _ck('모드 ' + _md, '제137조', _ck_mode(_md))
+
     # 5) ★제64조·제128조 — 이름. <b>실제로 13건을 돌린다</b>
     def _ckname():
         _n = len(_NAME_CASES)
@@ -10666,17 +10891,26 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
     #   ★새 후처리 경로를 만들지 않는다 — parse_txt(extra=)로 기존 엔진에 그대로 태운다(영구원칙).
     #   ★구 v371~v372의 「왼쪽 칸 제안서」 경로는 <b>폐기</b>(칸의 뜻이 상황마다 바뀌던 원인).
     if (not data or not data.get('contracts')) and _prop_cts:
-        _solo = _prop_cts[0]
-        if len(_solo.get('dambo') or {}) >= 3:
+        # ★★★★★v592 (지점장 2026.08.26 「<b>가입제안서 3개까지 해달라고 했는데 1개밖에 인식이 안 돼</b>」).
+        #   [실측 결함] 로그는 `제안서 1/3 · 2/3 · 3/3 계약 생성`인데 그다음이
+        #     `제안 계약 <b>1건</b> 합류 → 총 1건`이었다. 만들어놓고 <b>첫 건만</b> 넘겼다.
+        #   원인 = 여기 `_solo = _prop_cts[0]` — <b>[0] 하나만</b> `extra`로 태웠다.
+        #   ⇒ <b>담보 3건 이상인 제안 계약을 전부</b> 태운다(최대 3건은 위 `_JEAN_MAX`가 이미 자름).
+        _solos = [_x for _x in _prop_cts if len((_x.get('dambo') or {})) >= 3]
+        _drop = len(_prop_cts) - len(_solos)
+        if _drop:
+            print('[JEAN단독] 담보 3건 미만 %d건 제외 — 나머지 %d건 사용' % (_drop, len(_solos)))
+        if _solos:
             try:
-                data = parse_txt('', fname, extra=[_solo]); src_note='가입제안서 단독'
+                data = parse_txt('', fname, extra=_solos); src_note='가입제안서 단독'
+                print('[JEAN단독] 제안서 %d건 전부 단독 모드로 산출' % len(_solos))
                 globals()['_JEAN_ONLY'] = ('★ 가입제안서 단독 — 보장분석지가 없어 '
                                            '[검산] 불가 · [실손 세대 판정] 불가 · 보유계약 비교 불가')
                 print('[JEAN단독] 오른쪽 칸 제안서만 → 단독 모드로 산출 — 검산·실손세대 건너뜀')
             except Exception as _se2:
                 print('[JEAN단독] parse_txt 실패', type(_se2).__name__, _se2)
         else:
-            print(f"[JEAN단독] 담보 {len(_solo.get('dambo') or {})}건 — 3건 미만이라 단독 모드 미적용")
+            print('[JEAN단독] 담보 3건 이상인 제안 계약이 없다 — 단독 모드 미적용')
 
     try:
         if not data or not data.get('contracts'):
