@@ -484,6 +484,17 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
                 _own_amt.clear()                 # 보유는 없다 — 검정 칸을 만들지 않는다
                 print('[v566 제안단독] 보유 열 0개 → <b>전 담보 레드</b> (제22조)')
             _w4.close()
+        # ★★★★★v596 제22조 보강 (지점장 실측 2026.08.27 「어제 제안서만 넣은거였거든」)
+        #   [구 결함] `_PROP_ONLY`는 <b>계약 열 색을 직접 세는 폴백</b>(483행)에서만 켜졌다.
+        #   그 폴백은 `if not _prop_amt:` 안이라 <b>「제안 합계」 열을 정상적으로 읽어내면
+        #   아예 실행되지 않는다</b> → 제안서 단독인데도 `prop_only=False`로 남아
+        #   진단서가 보유(검정)/제안(레드)을 섞어 찍었다. 434행 주석은 「보유합계 열이 없으면
+        #   보유는 0 = 전부 제안 = 레드」라고 해 놓고 <b>플래그를 켜지 않았다</b>(조문 미이행).
+        #   ⇒ 읽은 경로와 무관하게 <b>제안 금액이 있고 보유 금액이 0이면 제안서 단독</b>이다.
+        if _prop_amt and not _own_amt and not _PROP_ONLY:
+            _PROP_ONLY = True
+            _own_amt.clear()
+            print('[v596 제안단독] 보유 금액 0건 → <b>전 담보 레드</b> (제22조)')
         print(f'[v417 색원천] 계약열 {len(_datac)}개 · 합산열 제외 {len(_sumc)}개 · red_map {len(_red_map)} · gen_map {len(_gen_map)} · 제안금액 {len(_prop_amt)}건')
     except Exception as _e417:
         print(f'[v417 색원천] 실패 {_e417}')

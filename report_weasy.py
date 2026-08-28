@@ -437,6 +437,29 @@ def _wc_status(rep, lookup):
             _own=[(l,v) for l,v in pairs if v]
             if _own: pairs=_own
         return ('list', [(l,(v or '')) for l,v in pairs])
+    # ★★★★★v596 (지점장 지적 2026.08.27 「순환계주요치료비가 2대주요치료비랑 2중으로 잡힌다」)
+    #   엑셀은 「순환계+주요치료비」를 2대 행에 넣는다(v421f, 엑셀은 불변). 진단서 7p는 같은 담보를
+    #   `p7_only['순환계주요치료비']`로 또 실으므로 <b>두 칸에 같은 돈</b>이 찍혔다.
+    #   → 2대 값이 순환계 값과 <b>같거나 작으면</b> 그 값의 출처가 순환계이므로 2대 칸을 비운다.
+    #   ★2대가 <b>더 크면</b> 뇌혈관·심장 이름의 진짜 2대 담보가 따로 있는 것 → 건드리지 않는다.
+    #   ★report_pages.py(리모델링 리포트)에는 같은 규칙이 이미 있다(883~886행) — 진단서에만 빠져 있었다.
+    if str(lookup) == '2대주요치료비':
+        try:
+            _c7 = ((rep or {}).get('p7_only') or {}).get('순환계주요치료비')
+            if _c7:
+                _t7 = None
+                for _c in (rep.get('chiryo') or []):
+                    if _c.get('name') == lookup:
+                        _t7 = _c.get('value'); break
+                if _t7 in (None, ''):
+                    _t7 = ((rep or {}).get('dambo') or {}).get(
+                        _r.sub(r'[\s·()\[\]/]','',str(lookup)))
+                _num = lambda x: int(float(_r.sub(r'[^0-9.]','',str(x)) or 0))
+                if _t7 not in (None, '', '미가입') and _num(_t7) and _num(_t7) <= _num(_c7):
+                    return ('off','')
+        except Exception:
+            pass
+
     for c in rep.get('chiryo',[]):
         if c.get('name')==lookup:
             val=c.get('value')
