@@ -400,7 +400,10 @@ _CO_HEAD = re.compile(r'^(?:\s|/|\d+\s*년?|년납|월납|연납|일시납|분�
 #     `암진단<b>비갱신</b>형` — <b>없던 '비갱신'이 만들어진다</b>. 그래서 뒤에 붙은 갱신형이 통째로 탈락했다.
 #     ★게다가 구 코드의 `re.sub`는 <b>역슬래시가 두 개</b>라 공백을 아예 못 지우고 있었다(조용한 결함).
 #     ⇒ '비갱신'은 <b>단어 경계</b>(문자열 시작 · 공백 · 괄호 · 쉼표 뒤)일 때만 인정한다.
-_NONGEN = re.compile(r'(?:^|[\s\(\[\{,·/])비\s*갱신')
+# ★★★★★v596 제96조 2항 — '비' 앞이 <b>한글이 아니면</b> 진짜 비갱신이다.
+#   `암진단_비갱신`(KDB 실측) · `(비갱신)…` · `비갱신형 …` 은 잡고,
+#   `암진단비`+`갱신형`이 붙은 `암진단비갱신형`은 '비' 앞이 '단'(한글)이라 안 잡힌다.
+_NONGEN = re.compile(r'(?:^|[^가-힣])비\s*갱신')
 
 
 #   ★★★★★v495 제98조 (지점장 확정 2026.08.19) — <b>배상책임 담보는 갱신이다.</b>
@@ -423,6 +426,14 @@ def _is_gen_dambo(raw, contract=''):
       담보명에 '갱신'이 있으면 <b>무조건 갱신</b>이다.
     """
     _t95 = re.sub(r'\s', '', str(raw or ''))
+    # ★★★★★v596 제96조 2항 (지점장 실측 2026.08.28 「암진단비 비갱신인데 갱신으로 인식했다」
+    #   · 김생금님 KDB생명 담보명 `암진단_비갱신`)
+    #   [구 결함] `'갱신' in 이름` 하나로 끝나서 <b>'비갱신'에도 '갱신'이 들어 있어</b>
+    #   비갱신 담보가 통째로 갱신(파랑)으로 뒤집혔다.
+    #   v493의 전제(「담보에 비갱신형이라고 기재는 절대 안 한다」)가 <b>실물과 달랐다</b> — KDB는 기재한다.
+    #   ⇒ 비갱신 가드를 되살린다. 단 v486 사고(`암진단비`+`갱신형`)는 안 걸리게
+    #     <b>'비' 앞이 한글이 아닐 때만</b> 비갱신으로 본다.
+    if _NONGEN.search(str(raw or '')): return False
     if '갱신' in _t95: return True
     # ★★★★★v499 제98조 3항 (지점장 지적 2026.08.19 「흥국화재 10억통장이 갱신인데 블랙으로 나오더라」)
     #   흥국 <b>리셋월렛II(10억 통장)</b>는 담보명에 갱신 표기가 없어도 <b>갱신 담보</b>다.
@@ -445,6 +456,13 @@ _GENDAMBO_SELFTEST = [
     ('재해사망', False),
     ('질병사망', False),
     ('비갱신형 상해수술비', False),
+    # ★v596 제96조 2항 — 실물에 '비갱신'이 기재된다(김생금님 KDB 실측)
+    ('암진단_비갱신', False),
+    ('암진단_비갱신형', False),
+    ('(비갱신)일반암진단비', False),
+    ('일반암진단비 비갱신', False),
+    ('암진단비 갱신형', True),        # ★v486 사고 재발 방지 — 붙어도 갱신이다
+    ('암진단비갱신형', True),
 ]
 
 
@@ -821,17 +839,34 @@ def _unfold_cols(block_lines):
                 nonlocal buf,pend,tail
                 if buf and pend: out.append((buf,pend))
                 buf=''; pend=None; tail=0
+            _prev_pure_amt = False        # ★v596 직전 셀이 '금액만 있는 줄'이었나
             for i,c in cells:
                 m=_AMT_TAIL_UF.search(c)
                 nm=(c[:m.start()] if m else c).strip(); amt=m.group(1) if m else None
                 gap = (prev is not None and i-prev > 1)          # 빈 줄이 끼었다 = 새 담보
                 dup = (pend is not None and amt is not None)      # 금액이 두 번째다 = 새 담보
                 # 금액을 이미 받았는데 또 순수 이름이 오면 꼬리 1개까지만 허용(그 이상은 새 담보)
-                over = (pend is not None and amt is None and nm and tail >= 1 and _paren_bal(buf) <= 0)
+                # ★★★★★v596 제136조 (지점장 실측 2026.08.28 「비급여 도수·주사제·MRI가 안 나온다」
+                #   · 김생금님 삼성생명 실손의료비1.0)
+                #   세로 1열 별첨은 <b>담보명 줄 → 금액만 있는 줄 → 다음 담보명 줄</b>이 빈 줄 없이 이어진다.
+                #   구 조건은 `tail >= 1`이라 <b>첫 꼬리를 무조건 허용</b> → 다음 담보명이 앞 담보에
+                #   이어붙어 이름이 뭉치고 <b>금액이 한 칸씩 밀렸다</b>(상해 3건 소실 · MRI 300 유실).
+                #   ⇒ 직전 셀이 <b>금액만 있는 줄</b>이었으면 그다음 이름은 <b>꼬리가 아니라 새 담보</b>다.
+                #   ★괄호가 안 맞으면(`_paren_bal > 0`) 종전대로 꼬리 — 롯데 3열 복원은 그대로 산다.
+                over = (pend is not None and amt is None and nm
+                        and (tail >= 1 or _prev_pure_amt) and _paren_bal(buf) <= 0)
                 if gap or dup or over: _flush()
+                _prev_pure_amt = (amt is not None and not nm)
                 prev = i
                 if nm:
-                    if buf: buf += nm; tail += 1
+                    # ★★★★★v596 제136조 2항 — 금액을 아직 못 받았고 괄호도 균형이면
+                    #   앞 조각은 담보명이 아니다(별첨 머리말) → <b>덮어쓴다</b>.
+                    #   [실측] `(정상계약 리스트)삼성생명…보장기간` + `상해 입원의료비` 가 한 덩어리가 돼
+                    #   <b>상해 입원의료비 5,000이 통째로 사라졌다</b>(김생금님).
+                    #   ★괄호가 안 맞으면 진짜 접힘이므로 종전대로 이어붙인다(롯데 3열 복원 유지).
+                    if buf and pend is None and _paren_bal(buf) <= 0:
+                        buf = nm; tail = 0
+                    elif buf: buf += nm; tail += 1
                     else: buf = nm
                 if amt: pend = amt
                 if buf and pend and _paren_bal(buf) <= 0 and tail >= 1:
