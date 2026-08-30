@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v601-badge-20260829'
+VSTAMP = 'v602-green-20260830'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9212,11 +9212,19 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
     <button id="lout" style="border:1px solid #3a3f4a;background:transparent;color:#929aa6;
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
   <div class="chat" id="chat">
-    <div class="msg bot"><b>왼쪽 = 보장분석 리포트 PDF · 오른쪽 = 가입제안서 PDF</b> (칸의 역할은 항상 고정입니다)<br>
-      ① 보장분석지만 → 왼쪽만 &nbsp;② 둘 다 → 왼쪽+오른쪽(맨 오른쪽에 <b>제안 계약 열</b> 추가) &nbsp;③ 제안서만 → <b>오른쪽만</b><br><br>
-      <span style="font-size:11px;color:var(--mute)">※ 제안서만 올리면 보유계약이 없어 <b>[검산]·[실손 세대 판정]은 불가</b>로 표시됩니다.<br>
-      ※ 받은 PDF를 <b>그대로</b> 올리세요. 인쇄·재스캔·OCR 변환하면 금액이 깨져 분석이 틀어집니다.<br>
-      ※ 롯데(let:) · KB · 메리츠 리포트 모두 원본 PDF 그대로 인식합니다.</span></div>
+    <!-- ★★★★★v602 (지점장 지시 2026.08.30 「아래 설명 문구도 보기 좋게 정리해줘」).
+         모바일 한 화면에 들어오게 <b>표 형태 3줄 + 주의 2줄</b>로 줄인다. -->
+    <div class="msg bot">
+      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center">
+        <b style="white-space:nowrap">보장분석지만</b><span>왼쪽 칸</span>
+        <b style="white-space:nowrap">둘 다</b><span>왼쪽 + 오른쪽</span>
+        <b style="white-space:nowrap">제안서만</b><span>오른쪽 칸</span>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--mute);line-height:1.6">
+        받은 PDF를 <b>그대로</b> 올리세요 · 재스캔·OCR은 금액이 깨집니다<br>
+        제안서만 올리면 <b>검산 · 실손 세대</b>는 불가로 표시됩니다
+      </div>
+    </div>
   </div>
   <div class="bar">
     <label class="up" id="upp"><span id="upplabel">보장분석 PDF</span></label>
@@ -10610,24 +10618,22 @@ def _brandize(html):
     # ★★★★★v601 제137조 2항 (지점장 지시 2026.08.29 「<b>로봇 4모드는 돌리고 정독이다</b>」).
     #   분석을 한 번도 안 돌렸으면 <b>색을 칠하지 않는다</b>(회색 「대기」).
     #   구 동작은 화면을 열기만 해도 레드가 떠서 <b>지점장이 아무것도 안 했는데 빨갛게</b> 보였다.
+    # ★★★★★v602 (지점장 선택 2026.08.30 「㉠ 분석 전에도 초록으로」).
+    #   v601은 분석 전 회색 「대기」였는데 <b>100%인데도 회색</b>이라 헷갈렸다.
+    #   ⇒ <b>100%면 초록, 실패 있으면 레드</b>. 분석 여부와 무관하게 결과 그대로 보여준다.
     _ran4 = globals().get('_MODE4_LAST') is not None
     _ok = (_p == 100 and not _bad)
-    if not _ran4:
-        _col = '#8b93a1'; _box = '□'
-    else:
-        _col = '#39d98a' if _ok else '#ff6b6b'
-        _box = '■' if _ok else '□'
+    _col = '#39d98a' if _ok else '#ff6b6b'
+    _box = '■' if _ok else '□'
     _rr = globals().get('_ROBOT_READ') or (0, 0, 0, 0)
-    _badge = ('<span style="color:%s">%s 지침=메모리 <b>%s</b> · %s · 조문 %d조 '
-              '&nbsp;[%s] <b>%d%%</b> 정독 '
-              '<span style="opacity:.75;font-weight:400">(본문 %d/%d · 실행검사 %d/%d)</span></span>'
-              % (_col, _box, _v, _t, _n, _box, _p, _rr[0], _rr[1], _rr[2], _rr[3]))
-    if not _ran4:
-        _badge += ('<br><span style="color:#8b93a1;font-size:10px">'
-                   '분석을 돌리면 4모드 결과로 정독을 확정합니다</span>')
-    elif _bad:
-        _badge += ('<br><span style="color:#ff6b6b;font-size:10px">★ ' +
-                   ' · '.join(_bad[:3]) + '</span>')
+    # ★★★★★v602 (지점장 지시 2026.08.30 「<b>문구만 좀더 심플 가자 너무 길다</b>」).
+    #   한 줄로 줄인다 — <b>버전 · 정독% · 검사 통과수</b>만. 날짜·조문수·본문 수치는 뺀다.
+    _badge = ('<span style="color:%s">%s <b>%s</b> · <b>%d%%</b> 정독 · 검사 %d/%d</span>'
+              % (_col, _box, _v, _p, _rr[2], _rr[3]))
+    # ★v602 「<b>안 되는 건 분석 후 좀 크게 표기해줘</b>」 — 실패는 <b>크고 굵게</b>.
+    if _bad:
+        _badge += ('<br><span style="color:#ff6b6b;font-size:15px;font-weight:800;'
+                   'line-height:1.5">★ ' + '<br>★ '.join(_bad[:3]) + '</span>')
     return (html.replace('@@BRAND@@', b)
                 .replace('@@BSUB@@', sub)
                 .replace('@@DROBOT@@', _badge)
