@@ -117,7 +117,12 @@ def _scv_build(tbl, headers, held, amounts=None, ci_amounts=None, spec_amt=None,
             # ★v578b — 전역 `_CURREP`은 이 표를 그릴 때 <b>아직 비어 있다</b>(`_asset_body` 821행이
             #   `build_report_pdf` 1017행보다 먼저 돈다). 실측 = 7p 3,000만 2건이 검정으로 남았다.
             #   ⇒ 전역에 기대지 않고 <b>호출부가 rep를 직접 넘긴다</b>.
-            _cls6 = ' rd' if key in red else (' gen' if (key in (gen_keys or set()) or _is_gen(gen_rep or _CURREP, key)) else '')
+            # ★★★★★v597 제22조·제138조 (지점장 확정 2026.08.26 「제안서만 넣는건 100% 레드다.
+            #   엑셀·보장분석지 ppt는 다 레드인데 <b>진단서만 들쑥날쑥</b>이다」).
+            #   [원인] 이 칸이 `key in red` <b>이름 매칭만</b> 보고 `prop_only`를 안 봤다.
+            #   ⇒ `_is_red`를 통해 본다 — 그 함수가 `prop_only`를 이미 처리한다.
+            _cls6 = ' rd' if (key in red or _is_red(gen_rep or _CURREP, key)) \
+                    else (' gen' if (key in (gen_keys or set()) or _is_gen(gen_rep or _CURREP, key)) else '')
             _amtbox=' <span class="mb amtbox'+_cls6+'">'+(_html.escape(amt) if amt else '')+'</span>'
         # ★CI 계약일 때만 유동 노출: 'CI' 미니칩 + 진단금액
         _ci = ci_amounts.get(key)
@@ -637,7 +642,8 @@ def _wcard(rep, title, desc, lookup, mode):
         #   7p는 제로섬이라 줄을 늘리지 않고 <b>같은 행에 두 숫자</b>로 쪼갠다.
         def _dgrow417(l, v):
             # ★v578 제27조 복원 — 7p도 3색이다(레드 > 파랑 > 검정). v575에서 내가 지운 파랑을 되돌린다.
-            _g=' gen' if _is_gen(rep, l) else ''
+            # ★v597 제22조 — 7p도 `prop_only`를 본다.
+            _g=' rd' if _is_red(rep, l) else (' gen' if _is_gen(rep, l) else '')
             _op=_op417(rep, l)
             if _op:
                 _o,_p=_op
@@ -812,7 +818,9 @@ def _wcard_fix_list(title, desc, rows):
         else:
             # ★v578 — 제안이 없는 카드도 <b>갱신이면 파랑</b>(구 코드는 무색=검정 고정이었다).
             _sp9=_split_span(_CURREP, r, v) if (v and _CURREP) else None
-            if _sp9:
+            if v and _CURREP and _is_red(_CURREP, r):
+                inner=f'<span class="nv rd">{_html.escape(v)}</span>'   # ★v597 레드 최우선
+            elif _sp9:
                 inner=_sp9                       # ★v579 제11조 분할
             elif v and _CURREP and _is_gen(_CURREP, r):
                 inner=f'<span class="nv gen">{_html.escape(v)}</span>'
@@ -907,6 +915,9 @@ def _wcard_sj(rep, title, desc, lookup):
     #   값이 없으면(미가입·0) 종전대로 빈칸 = 현장 수기 기입.
     _st,_vl=_wc_status(rep, lookup)
     _bv=_html.escape(str(_vl)) if (_st=='on' and _vl) else ''
+    # ★v597 제22조 — 산정특례 칸에도 <b>색 판정이 아예 없었다</b>.
+    if _bv:
+        _bv = _wbox_inner(rep, lookup, _bv)
     return (f'<div class="wcard plain sj"><div class="wct">{_html.escape(title)}</div>'
             f'<div class="wcd">{_html.escape(desc)}</div>{_dn}'
             f'<div class="wcf"><span class="wchip n">상태</span><span class="wbox">{_bv}</span><span class="wunit">만원</span></div></div>')
@@ -1189,7 +1200,7 @@ def build_report_pdf(rep, out):
                 for _x in ((_o+_u) if _o else '', ('+' if _o else '')+_p+_u):
                     if _x and _x not in rep['_p7vals']: rep['_p7vals'].append(_x)
             except Exception: pass
-            return (f'<span class="it {("bl" if it.get("blue") else "")}">'
+            return (f'<span class="it {("bl" if it.get("blue") else "")}{(" rd" if (rep or {}).get("prop_only") else "")}">'
                     f'<b>{_html.escape(it["t"])}</b>'
                     + (f' {_html.escape(_o+_u)}' if _o else '')
                     + f' <span class="rd">{"+" if _o else ""}{_html.escape(_p+_u)}</span></span>')
@@ -1287,7 +1298,10 @@ def build_report_pdf(rep, out):
     brows=''.join(
         f'<tr><td class="bn">{_html.escape(d["name"])}'
         + (f'<span class="bbase">{_html.escape(d.get("base",""))}</span>' if d.get("base") else '')
-        + f'</td><td>{_html.escape(d["have"])}</td>'
+        + (f'</td><td><span class="nv rd">{_html.escape(d["have"])}</span></td>'
+           if (rep or {}).get('prop_only') and d.get("have") not in (None,'','미가입')
+           else f'</td><td>{_html.escape(d["have"])}</td>')
+        +
         f'<td>{_html.escape(d["rec"])}</td>'
         f'<td style="color:{bcolor(d["pct"])};font-weight:800">{d["pct"]}%</td></tr>'
         for d in rep.get('donut_detail',[]))
@@ -4587,7 +4601,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v595-mode4-20260826</div>'
+    _VSTAMP = '<div class="vstamp">v601-badge-20260829</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

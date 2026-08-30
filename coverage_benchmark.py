@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v595-mode4-20260826 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v601-badge-20260829 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -495,6 +495,30 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             _PROP_ONLY = True
             _own_amt.clear()
             print('[v596 제안단독] 보유 금액 0건 → <b>전 담보 레드</b> (제22조)')
+        # ★★★★★v600 제22조 (지점장 확정 「제안서만 넣는건 100% 레드다」 · 천미옥 KB 실측).
+        #   [구 결함] 위 조건은 `_own_amt`가 비어야 켜진다. 그런데 <b>보유 합계 열이 존재</b>하면
+        #     `=SUM()` 수식이 `data_only`로 <b>0으로 읽혀</b> `_own_amt`가 비지 않는다
+        #     → `prop_only=False`로 남아 진단서에 검정이 52건 섞였다(실측).
+        #   ⇒ <b>계약 열의 글자색</b>으로 직접 센다. 값 있는 셀이 전부 레드고 검정이 0이면 단독이다.
+        if not _PROP_ONLY:
+            try:
+                #   ★색은 <b>`data_only=False`</b>로 다시 연다 — 값용(`_s3`)엔 글꼴이 없다.
+                _w6 = _ox2.load_workbook(xlsx_path); _s6 = _w6.active
+                _r6 = _b6 = 0
+                for _c6 in _datac:
+                    for _r6i in range(6, _s6.max_row + 1):
+                        if _s6.cell(_r6i, _c6).value in (None, '', 0): continue
+                        _f6 = _s6.cell(_r6i, _c6).font
+                        _g6 = str((_f6.color.rgb if (_f6 and _f6.color and _f6.color.rgb) else '') or '').upper()
+                        if _g6.endswith('C00000'): _r6 += 1
+                        else: _b6 += 1
+                _w6.close()
+                if _r6 and not _b6:
+                    _PROP_ONLY = True
+                    _own_amt.clear()
+                    print('[v600 제안단독] 계약열 값 %d건 <b>전부 레드</b> · 검정 0 → 전 담보 레드 (제22조)' % _r6)
+            except Exception as _e600:
+                print('[v600 제안단독] 판정 실패', _e600)
         print(f'[v417 색원천] 계약열 {len(_datac)}개 · 합산열 제외 {len(_sumc)}개 · red_map {len(_red_map)} · gen_map {len(_gen_map)} · 제안금액 {len(_prop_amt)}건')
     except Exception as _e417:
         print(f'[v417 색원천] 실패 {_e417}')

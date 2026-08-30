@@ -576,6 +576,14 @@ def _spl_of(spl, label):
     return None
 
 
+# ★★★★★v598 제138조 2항 (지점장 확정 2026.08.26
+#   「<b>보장리포트 → 비교 1.2 엑셀 넣을시 기존 "블랙" + 제안서(무조건 레드)</b>」).
+#   v581·v582에서 리포트를 3색으로 만들며 <b>갱신 보유를 파랑</b>으로 칠했다(실측 4건).
+#   [정본] 파랑은 <b>진단서·보장분석지 PPT</b> 규칙이고, 리모델링 리포트는 <b>2색</b>이다.
+#   되돌리려면 이 한 줄만 True.
+_REPORT_BLUE = False
+
+
 def _own_span(o, sp=None, unit=''):
     # ★★★★★v585 (지점장 지시 2026.08.24 「<b>____만원 인 칸인데 숫자가 500만이라고
     #   (만)자가 또 적혀있다. 숫자만 적어라</b>」).
@@ -585,7 +593,7 @@ def _own_span(o, sp=None, unit=''):
     if not o:
         return ''
     _f = lambda x: format(int(x), ',')
-    if sp:
+    if sp and _REPORT_BLUE:
         _g, _n = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n > 0:
             return ('<span class="amount gen">%s</span>'
@@ -1110,7 +1118,7 @@ def _m6(v, o=None, tx=None, sp=None):
         return '<span class="red">%s</span>' % _t
     # ★★★★★v581 제131조 — 리포트도 <b>블랙 or 블루 or 레드</b>다(지점장 2026.08.24).
     #   원천은 진단서와 같은 <b>엑셀 셀 글자색</b>(remodel `cov_split`). 섞이면 분할 표기.
-    if sp:
+    if sp and _REPORT_BLUE:
         _g, _n2 = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n2 > 0:
             return ('<span class="gen">%s</span><span class="blk">+%s</span>'   # ★v585 숫자만
