@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v613-circ-20260830'
+VSTAMP = 'v619-gap-20260830'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9278,7 +9278,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
         <div>
           <div style="font-weight:800;font-size:12.5px;margin-bottom:4px">🔁 엑셀 전 vs 후</div>
           <div style="display:flex;flex-wrap:wrap;gap:5px">
-            <span class="oc">📊 비교엑셀</span><span class="oc">📕 리포트</span>
+            <span class="oc">📊 비교엑셀</span><span class="oc">📕 리포트</span><span class="oc">📑 보장분석지PPT</span>
           </div>
         </div>
       </div>
@@ -10263,6 +10263,69 @@ def output_selftest():
     return bad
 
 
+# ★★★★★v618 제142조 — 로봇2(정답지 대조) (지점장 지시 2026.08.30 「로봇1 로봇2 각 심장 넣어줘」)
+#   [왜 필요한가] 로봇1은 <b>조문이 코드에 있는가</b>만 본다. 그래서 값이 다 틀려도 100%였다.
+#     오늘 지적 20건 중 로봇1이 잡은 것은 <b>0건</b>이다.
+#   ⇒ 로봇2는 <b>지점장이 지정한 정답지</b>와 산출물 값을 대조한다. 다르면 실패다.
+#     정답지는 `_ANSWER` 에 담보명 → 값으로 박는다. 없으면 로봇2는 <b>대기</b>다.
+_ANSWER = {
+    # (고객, 담보명): 정답값 — 지점장 확정 실측치만 넣는다
+    ('정상범', '뇌혈관진단비'): 500,
+    ('정상범', '부정맥'): 500,
+    ('정상범', '심부전'): 500,
+    ('정상범', '일반암'): 1000,
+    ('정상범', '유사암(갑.기.경.제)'): 200,
+    ('윤선경', '입원'): 5000,
+    ('윤선경', '통원'): 20,
+}
+
+# ★심장 정답 — 로봇1(매핑)·로봇2(값) 양쪽에서 본다
+_ANSWER_HEART = [
+    ('흥국화재', '특정3대심장질환진단비(통합간편가입형)', ['부정맥', '심부전']),
+    ('흥국화재', '특정심혈관질환(기타심장부정맥)진단비', ['부정맥']),
+    ('흥국화재', '특정심혈관질환(기타심장부정맥제외)진단비', ['협심증', '빈맥', '심부전']),
+    ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅰ)(건강체할인형)', ['급성심근경색']),
+    ('롯데손해보험', '심혈관질환진단비(특정심장질환Ⅱ)(건강체할인형)', ['협심증', '주요심장염증']),
+    ('롯데손해보험', '심혈관질환진단비(특정15대심장질환)(건강체할인형)',
+     ['협심증', '급성심근경색', '빈맥', '부정맥', '심부전', '주요심장염증', '심장판막']),
+    # ★조문 386행 — KB 특정Ⅰ은 <b>염증 포함</b>이다(내가 정답표를 잘못 적어 실패가 났다)
+    ('KB손해보험', '특정심장질환(특정Ⅰ)진단비', ['협심증', '빈맥', '심부전', '주요심장염증']),
+    ('DB손해보험', '특정심장질환(특정Ⅰ)진단비', ['협심증', '주요심장염증']),
+]
+
+
+def answer_heart_selftest():
+    """★v618 심장 — 회사별 분해가 정답과 같은가(로봇1·로봇2 공용)."""
+    bad = []
+    for _co, _nm, _want in _ANSWER_HEART:
+        try:
+            _got = heart_rows(_co, _nm)
+        except Exception as _e:
+            bad.append('[심장정답] %s %s — 예외 %s' % (_co, _nm[:20], str(_e)[:20])); continue
+        if _got != _want:
+            bad.append('[심장정답] %s %s — <b>%s</b> (정답 %s)' % (_co, _nm[:20], _got, _want))
+    return bad
+
+
+def answer_selftest(client='', cov=None):
+    """★v618 로봇2 — 산출물 값이 정답지와 같은가.
+       cov = {담보명: 값}. 그 고객의 정답이 `_ANSWER`에 없으면 <b>대기</b>(빈 목록)."""
+    if not client or not isinstance(cov, dict):
+        return []
+    bad = []
+    for (_c, _nm), _want in _ANSWER.items():
+        if _c != client:
+            continue
+        _got = cov.get(_nm)
+        try:
+            _gv = int(float(_got or 0))
+        except Exception:
+            _gv = 0
+        if _gv != int(_want):
+            bad.append('[정답지] %s · %s — <b>%s</b> (정답 %s)' % (_c, _nm, _gv or '없음', _want))
+    return bad
+
+
 def doctrine_robot(heavy=False):
     """지침=메모리 낭독 로봇.
        ★★★★★v570 (지점장 2026.08.23 「읽는 건 할 수 있다. 무조건 100%가 나와야 한다 —
@@ -10390,6 +10453,32 @@ def doctrine_robot(heavy=False):
             return '일상배상 20 → %s (정답 10000)' % _fake[0]['dambo'].get('일상배상책임')
         return ''
     _ck('제134조 일상배상', '제134조', _ck134)
+    # ★★★★★v618 로봇2 — <b>값 검사</b>(지점장 지시 2026.08.30 「로봇1 로봇2 각 심장」).
+    #   로봇1은 「조문이 코드에 있는가」만 본다 — 오늘 지적 20건 중 <b>0건</b>을 잡았다.
+    #   로봇2는 <b>정답지 값</b>과 대조한다. 다르면 그 자리에서 운다.
+    #   ★정답은 지점장이 실물로 확정한 것만 넣는다(내가 만들지 않는다).
+    _ANSWER_SET = [
+        # (담보명, 회사, 정답 마스터행)  — 2026.08.30 지점장 확정 실물
+        ('특정3대심장질환진단비(통합간편가입형)', '흥국화재', ['부정맥', '심부전']),
+        ('심혈관질환진단비(특정15대심장질환)(건강체할인형)', '롯데손해보험',
+         ['협심증', '급성심근경색', '빈맥', '부정맥', '심부전', '주요심장염증', '심장판막']),
+        ('심혈관질환진단비(특정심장질환Ⅰ)(건강체할인형)', '롯데손해보험', ['급성심근경색']),
+        ('심혈관질환진단비(특정심장질환Ⅱ)(건강체할인형)', '롯데손해보험', ['협심증', '주요심장염증']),
+    ]
+    globals()['_ANSWER_SET'] = _ANSWER_SET
+
+    def _ck_ans():
+        """★로봇2 — 지점장이 확정한 실물 정답과 값이 같은가."""
+        for _nm, _co, _want in _ANSWER_SET:
+            try:
+                _got = heart_rows(_co, _nm)
+            except Exception as _e:
+                return '[정답지] %s — 예외 %s' % (_nm[:20], str(_e)[:18])
+            if list(_got or []) != list(_want):
+                return '[정답지] %s — %s (정답 %s)' % (_nm[:22], _got, _want)
+        return ''
+    _ck('로봇2 정답지', '제138조', _ck_ans)
+
     _ck('제135조 수술비', '제135조',
         lambda: '' if not surg_selftest() else ('%d건: %s' % (len(surg_selftest()), surg_selftest()[0])))
 
@@ -10478,6 +10567,18 @@ def doctrine_robot(heavy=False):
         _b = heart_case_selftest()
         return ('heart 실패 %d건' % len(_b)) if _b else ''
     _ck('심장(제123조)', '제123조', _ckheart)
+    # ★v618 로봇1 — 회사별 심장 분해 정답 대조
+    _ck('심장정답(로봇1)', '제123조',
+        lambda: '' if not answer_heart_selftest()
+        else ('%d건: %s' % (len(answer_heart_selftest()), answer_heart_selftest()[0])))
+    # ★v618 로봇2 — 정답지 값 대조(직전 분석 결과가 있을 때만)
+    def _ck_ans2():
+        _c2 = globals().get('_ANS_LAST')
+        if not _c2:
+            return ''                      # 분석 전 = 대기
+        _b2 = answer_selftest(_c2.get('client'), _c2.get('cov')) + answer_heart_selftest()
+        return ('%d건: %s' % (len(_b2), _b2[0])) if _b2 else ''
+    _ck('로봇2 정답지', '제142조', _ck_ans2)
     # 7) ★제9조 — 실손. 23건 실행 + 케이스 수
     def _cksil():
         _n = len(_SILSON_CASES)
@@ -10695,11 +10796,26 @@ def _brandize(html):
     #   한 줄로 줄인다 — <b>버전 · 정독% · 검사 통과수</b>만. 날짜·조문수·본문 수치는 뺀다.
     # ★v603b — 아이콘을 넣고, 좁은 화면에서 <b>줄이 끊기지 않게</b> 조각마다 nowrap.
     _icon = '🟢' if _ok else '🔴'
-    _badge = ('<span style="color:%s;display:inline-flex;flex-wrap:wrap;gap:3px 8px;align-items:center">'
-              '<span style="white-space:nowrap">%s <b>%s</b></span>'
-              '<span style="white-space:nowrap"><b>%d%%</b> 정독</span>'
-              '<span style="white-space:nowrap">검사 %d/%d</span></span>'
-              % (_col, _icon, _v, _p, _rr[2], _rr[3]))
+    # ★★★★★v618 (지점장 지시 2026.08.30 「로봇1 로봇2 각 심장 넣어줘 · 게임처럼」).
+    #   <b>로봇1</b> = 지침·코드 검사(조문이 코드대로 도는가)
+    #   <b>로봇2</b> = 값 검사(정답지와 같은 값이 나오는가)
+    #   각 로봇의 <b>심장(HP)</b>을 표시한다. 실패 1건에 심장 하나가 깨진다.
+    def _hp(_pct, _fail, _ready=True):
+        if not _ready:
+            return '🤍🤍🤍🤍🤍', '#8b93a1'
+        _left = max(0, 5 - int(_fail))
+        return ('❤️' * _left) + ('💔' * (5 - _left)), ('#39d98a' if _left == 5 else '#ff6b6b')
+    _n1 = len([x for x in (_bad or []) if '정답지' not in str(x)])
+    _n2 = len([x for x in (_bad or []) if '정답지' in str(x)])
+    _r2ready = bool(globals().get('_ANSWER_SET'))
+    _hp1, _c1 = _hp(_p, _n1)
+    _hp2, _c2 = _hp(_p, _n2, _r2ready)
+    _badge = ('<span style="display:inline-flex;flex-wrap:wrap;gap:2px 10px;align-items:center;font-size:12px">'
+              '<span style="white-space:nowrap;color:%s">🤖1 지침 %s</span>'
+              '<span style="white-space:nowrap;color:%s">🤖2 값 %s</span>'
+              '<span style="white-space:nowrap;color:%s">%s <b>%s</b> · <b>%d%%</b> · 검사 %d/%d</span>'
+              '</span>'
+              % (_c1, _hp1, _c2, _hp2, _col, _icon, _v, _p, _rr[2], _rr[3]))
     # ★v602 「<b>안 되는 건 분석 후 좀 크게 표기해줘</b>」 — 실패는 <b>크고 굵게</b>.
     if _bad:
         _badge += ('<br><span style="color:#ff6b6b;font-size:15px;font-weight:800;'
@@ -11445,6 +11561,18 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         #   정독 %를 확정한다 — 없으면 「대기」다(화면만 열었을 때 색이 뜨지 않게).
         try:
             globals()['_MODE4_LAST'] = list(_miss4)
+            # ★★★★★v618 제142조 — 로봇2가 대조할 <b>이번 분석 값</b>을 남긴다.
+            #   담보명 → 값. 로봇2는 이것이 있을 때만 정답지와 대조한다(없으면 대기).
+            _cv2 = {}
+            for _c2 in (data.get('contracts') or []):
+                for _n2, _v2 in ((_c2 or {}).get('dambo') or {}).items():
+                    try:
+                        _f2 = float(_v2)
+                    except Exception:
+                        continue
+                    if _f2:
+                        _cv2[_n2] = _cv2.get(_n2, 0.0) + _f2
+            globals()['_ANS_LAST'] = {'client': cust, 'cov': _cv2}
         except Exception:
             pass
         try:

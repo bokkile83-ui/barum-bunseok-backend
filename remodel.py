@@ -226,7 +226,16 @@ def split_sheet(path_or_bytes):
             #   구 코드는 엑셀 갱신 파랑(0070C0)을 `_sl[0]`(갱신합)으로 따로 모아
             #   리포트에 <b>파랑 조각</b>이 나갔다(실측 2건 — 정답지는 0건).
             #   ⇒ 보유는 <b>한 칸(_sl[1])</b>으로 합친다. 제안(C00000)은 종전대로 제외.
-            if not _rgb.endswith('C00000'): _sl[1] += _fv
+            if not _rgb.endswith('C00000'): _sl[0] += _fv
+        # ★★★★★v615 (지점장 실측 2026.08.30 · 정답지 대조 — 정답 「1,000 + 1,000」 「500+500」,
+        #   내 것 「2,000」 「1,500」 <b>합쳐서 한 숫자</b>).
+        #   [원인] v608이 「보유를 한 칸으로」 하며 <b>보유를 `_sl[1]`</b>에 넣었고
+        #     <b>제안 열은 아예 세지 않았다</b> → 분할이 `[0, 값]`이 돼 조각이 하나뿐이었다.
+        #   ⇒ <b>`_sl[0]`=보유 · `_sl[1]`=제안</b>. 그래야 「보유 + 제안」 두 조각으로 찍힌다.
+        for _c9 in list(prop_cols):
+            _pv = _num(ws.cell(r, _c9).value)
+            if _pv:
+                cov_split.setdefault(nm, [0.0, 0.0])[1] += _pv
         for _c9 in list(own_cols) + list(prop_cols):
             _tv = ws.cell(r, _c9).value
             if isinstance(_tv, str) and _tv.strip() and not _tv.strip().startswith('='):
@@ -377,6 +386,12 @@ def compare(old, new):
 
     op, np_ = old['premium'], new['premium']
     return {'keep': keep, 'prop': prop, 'kill': kill,
+            # ★★★★★v615 (지점장 실측 2026.08.30 · 정답지 「1,000 + 1,000」인데 내 것은 「2,000」).
+            #   [원인] `split_sheet`가 `cov_split`을 만들어 old/new에 담는데
+            #     `compare` 결과 <b>최상위에는 없었다</b> → 리포트가 `cmp['cov_split']`을
+            #     찾지 못해 <b>분할이 0건</b>, 합친 한 숫자로 찍혔다.
+            'cov_split': (new.get('cov_split') or old.get('cov_split') or {}),
+            'cov_text': (new.get('cov_text') or old.get('cov_text') or {}),
             'prem_keep': sum(c['premium'] for c in keep),
             'prem_prop': sum(c['premium'] for c in prop),
             'old': old, 'new': new,
@@ -585,9 +600,13 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
             for txt, x0, y0, x1, y1, fg, ink, _bx in meta:
                 h_pt = y1 - y0
                 fs = max(4.5, round(h_pt * 0.88, 1))
+                # ★★★★★v617 (지점장 실측 2026.08.30 「추가 입력하는 건 네모칸을 넘어서 삐져나와 있다」
+                #   · 정답지 대조 — 넘침 정답 32건 / 내 것 73건, 같은 글자인데 <b>폰트가 크다</b>).
+                #   [원인] 폭 추정(`_txt_w`)이 실제보다 작아 축소가 늦게 걸린다.
+                #   ⇒ <b>여유 4%</b>를 두고 판정하고, 축소도 그만큼 더 조인다.
                 _need = _rp2._txt_w(txt, fs); _bw = (x1 - x0) + 2.0
-                if _need > _bw and _need > 0:
-                    fs = max(4.5, round(fs * _bw / _need, 1))
+                if _need > _bw * 0.88 and _need > 0:
+                    fs = max(4.5, round(fs * (_bw * 0.88) / _need, 1))
                 # ★★★★★v586 (지점장 실측 2026.08.24 「<b>여전히 공란인 칸에 기재가 안 된다</b>」).
                 #   [원인] 빈칸 `.`은 글자가 <b>점 하나</b>라 상자 폭이 <b>7.5pt</b>로 만들어졌다 —
                 #     너무 좁아 클릭·입력이 안 된다. 진단서는 같은 자리에서 <b>32.8pt로 넓혀</b> 두었고
@@ -628,11 +647,15 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 #   `5,000+4,000만`은 배경 그림엔 파랑+검정인데 run 1개면 <b>전부 한 색</b>으로 보인다.
                 _m581 = _re581.match(r'^([\d,]+)\+([\d,]+만?)$', txt.strip())
                 if _m581:
-                    r = p.add_run(); r.text = _m581.group(1)          # 앞 = 갱신 → 파랑
-                    r.font.size = Pt(fs); r.font.color.rgb = RGBColor(0x00, 0x70, 0xC0)
+                    # ★★★★★v616 (지점장 확정 · 정답지 대조 2026.08.30).
+                    #   리모델링 리포트는 <b>2색</b> — 앞(기존 보유)=검정, 뒤(제안)=레드.
+                    #   구 코드는 앞을 <b>파랑</b>으로 칠했다(제138조 2항 위반).
+                    #   ★정답지 표기 = 「1,000 + 1,000」 — 더하기 앞에 <b>공백</b>이 있다.
+                    r = p.add_run(); r.text = _m581.group(1) + ' '     # 앞 = 기존 → 검정 (정답지 「1,000 + 1,000」)
+                    r.font.size = Pt(fs); r.font.color.rgb = RGBColor(*fg)
                     r.font.bold = (ink > 0.30)
-                    r2 = p.add_run(); r2.text = '+' + _m581.group(2)  # 뒤 = 비갱신 → 검정
-                    r2.font.size = Pt(fs); r2.font.color.rgb = RGBColor(*fg)
+                    r2 = p.add_run(); r2.text = '+\u00a0' + _m581.group(2)  # 뒤 = 제안 → 레드 (NBSP — 일반 공백은 잘린다)
+                    r2.font.size = Pt(fs); r2.font.color.rgb = RGBColor(0xFF, 0x00, 0x00)
                     r2.font.bold = (ink > 0.30)
                     _rp2._setfont(r); _rp2._setfont(r2)   # ★폰트는 두 조각 모두에 붙인다
                     continue
@@ -1334,7 +1357,43 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
             #   [조문 2018행] 「삭제 특약은 묻지 않는다. <b>기존에 있고 최종에 없으면 그것이
             #     삭제다(차집합)</b>」 — 차집합을 내려면 <b>기존 파일의 계약 목록</b>이 있어야 한다.
             #   ⇒ <b>담보 값</b>은 최종 엑셀에서(v580c 유지), <b>계약 목록</b>은 기존 파일에서.
+            #   ★v614 — 담보도 같다. ①에만 있던 담보를 <b>전(前) 값으로 되살려</b>
+            #     차집합이 「삭제」로 잡히게 한다. 값 자체는 최종 엑셀 것을 쓰므로 분할 표기는 그대로다.
+            _oc = list(o.get('contracts') or [])
+            _ov = dict(o.get('cov') or {})
             o, n = _so, _sn
+            _sk = {(c.get('company'), c.get('product')) for c in (o.get('contracts') or [])}
+            _add = [c for c in _oc if (c.get('company'), c.get('product')) not in _sk]
+            if _add:
+                o['contracts'] = list(o.get('contracts') or []) + _add
+                print('[v614 삭제] 기존 파일에만 있는 계약 %d건 복원' % len(_add))
+            _ncov = dict(n.get('cov') or {})
+            _ocov = dict(o.get('cov') or {})
+            _dn = 0
+            for _k, _v in _ov.items():
+                if not _v:
+                    continue
+                if not _ocov.get(_k) and not _ncov.get(_k):
+                    _ocov[_k] = _v
+                    _dn += 1
+            if _dn:
+                o['cov'] = _ocov
+                # ★compare는 `rows`가 있으면 그것을 먼저 본다(275행) — 여기도 같이 채운다.
+                _rw = list(o.get('rows') or [])
+                if _rw:
+                    _rk = {str(_x[1]): _i for _i, _x in enumerate(_rw)}
+                    for _k, _v in _ov.items():
+                        if not _v or _ncov.get(_k):
+                            continue
+                        _i = _rk.get(_k)
+                        if _i is None:
+                            continue
+                        _t = list(_rw[_i])
+                        if not _t[2]:
+                            _t[2] = _v          # 전(前) 값 = 기존 엑셀
+                            _rw[_i] = tuple(_t)
+                    o['rows'] = _rw
+                print('[v614 삭제] 기존 파일에만 있는 담보 %d건 복원 → 차집합으로 삭제 판정' % _dn)
     except Exception as _e:
         print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)

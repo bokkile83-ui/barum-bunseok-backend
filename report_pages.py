@@ -559,11 +559,26 @@ HEART4 = [
 # ★★★★★v585 제131조 4항 — <b>조회 키를 먼저 의심한다</b>. 리포트 라벨(`뇌출혈`)과
 #   엑셀 담보명(`뇌출혈진단비`)이 달라 색이 안 붙었다(지점장 「5페이지 뇌심이 또 블랙」).
 #   ⇒ 라벨로 못 찾으면 <b>부분일치</b>로 한 번 더 본다. 값을 꺼낼 때 쓰는 이름과 같은 원리.
+# ★★★★★v615 제131조 4항 (지점장 실측 2026.08.30 · 정답지 「1,000 + 1,000」인데 「2,000」).
+#   [원인] 리포트 라벨은 <b>`암진단비`</b>인데 `cov_split` 키는 마스터명 <b>`일반암`</b>이다.
+#     서로 포함 관계가 아니라 `_spl_of`가 <b>None</b>을 냈고, 분할이 통째로 꺼졌다.
+#     v578이 <b>진단서</b>에서 같은 사고를 고쳤는데 <b>리포트에는 그 별칭표가 없었다</b>.
+#   ⇒ 진단서와 같은 별칭을 쓴다(새 규칙 아님 · 있는 이름 재사용).
+_SPL_ALIAS = {'암진단비': '일반암', '통합암진단비': '통합암', '통합전이암진단비': '통합전이암',
+              '유사암진단비': '유사암(갑.기.경.제)', '고액암진단비': '고액암',
+              '뇌혈관': '뇌혈관진단비', '뇌졸증': '뇌졸증진단비', '뇌출혈': '뇌출혈진단비',
+              '급성심근': '급성심근경색', '허혈성': '허혈성 진단비',
+              '2대주요치료비': '2대 주요치료비', '일상배상': '일상배상책임'}
+
+
 def _spl_of(spl, label):
     if not spl or not label:
         return None
     if label in spl:
         return spl[label]
+    _al = _SPL_ALIAS.get(str(label).strip())
+    if _al and _al in spl:
+        return spl[_al]
     import re as _r
     _n = lambda x: _r.sub(r'[\s·()\[\]/]', '', str(x))
     t = _n(label)
@@ -593,13 +608,21 @@ def _own_span(o, sp=None, unit=''):
     if not o:
         return ''
     _f = lambda x: format(int(x), ',')
-    if sp and _REPORT_BLUE:
+    # ★★★★★v615 (지점장 실측 2026.08.30 · 정답지 대조 — 정답 「1,000 + 1,000」, 내 것 「2,000」).
+    #   [원인] v598이 리포트를 2색으로 만들며 `_REPORT_BLUE`로 <b>분할 자체를 껐다</b>.
+    #     정답지는 분할이 살아 있다 — <b>보유 + 제안</b>을 두 조각으로 찍는다.
+    #   ⇒ <b>분할은 항상</b> 한다. 색만 2색이다 — 보유 <b>검정</b>, 제안 <b>레드</b>.
+    if sp:
         _g, _n = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n > 0:
+            # ★v615 정답지 표기 = 「1,000 + 1,000」 (더하기 앞에 공백)
+            # ★v615 — 공백은 <b>조각 안</b>에 넣는다. 태그 끝 공백은 PPT에서 잘린다.
             return ('<span class="amount">%s</span>'
-                    '<span class="amount blk">+%s%s</span>' % (_f(_g), _f(_n), unit))
+                    '<span class="amount red">&nbsp;+%s%s</span>' % (_f(_g), _f(_n), unit))
+        if _n > 0 and not _g:
+            return '<span class="amount red">%s%s</span>' % (_f(_n), unit)
         if _g > 0:
-            return '<span class="amount">%s%s</span>' % (_f(o), unit)
+            return '<span class="amount">%s%s</span>' % (_f(_g), unit)
     return '<span class="amount">%s%s</span>' % (_f(o), unit)
 
 
@@ -1118,13 +1141,16 @@ def _m6(v, o=None, tx=None, sp=None):
         return '<span class="red">%s</span>' % _t
     # ★★★★★v581 제131조 — 리포트도 <b>블랙 or 블루 or 레드</b>다(지점장 2026.08.24).
     #   원천은 진단서와 같은 <b>엑셀 셀 글자색</b>(remodel `cov_split`). 섞이면 분할 표기.
-    if sp and _REPORT_BLUE:
+    # ★v615 — 분할은 항상 한다(위와 같은 원칙). 보유 검정 + 제안 레드.
+    if sp:
         _g, _n2 = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n2 > 0:
-            return ('<span class="blk">%s</span><span class="blk">+%s</span>'   # ★v585 숫자만
+            return ('<span class="blk">%s</span><span class="red">+%s</span>'
                     % (format(int(_g), ','), format(int(_n2), ',')))
+        if _n2 > 0 and not _g:
+            return '<span class="red">%s</span>' % format(int(_n2), ',')
         if _g > 0:
-            return '<span class="blk">%s</span>' % _t
+            return '<span class="blk">%s</span>' % format(int(_g), ',')
     return _t
 
 
