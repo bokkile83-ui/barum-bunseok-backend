@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v602-green-20260830'
+VSTAMP = 'v604-icon-20260830'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9161,6 +9161,11 @@ h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;col
 .spin{width:22px;height:22px;border:3px solid var(--line);border-top-color:var(--acc);border-radius:50%;animation:sp .8s linear infinite;display:inline-block;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
 .bar{padding:12px;border-top:1px solid var(--line);display:flex;gap:9px;background:var(--bg)}
+/* ★v603b 산출물 칩 — 줄이 넘치면 자동으로 다음 줄로 흐른다(모바일 대응) */
+.oc{display:inline-flex;align-items:center;gap:3px;font-size:11.5px;line-height:1;
+    padding:5px 8px;border-radius:999px;background:rgba(124,58,237,.13);
+    border:1px solid rgba(124,58,237,.28);color:#cfc4f5;white-space:nowrap}
+@media (max-width:400px){ .oc{font-size:10.5px;padding:4px 7px} }
 .up{flex:1;min-width:0;border:1.5px dashed rgba(124,58,237,.5);border-radius:12px;padding:13px 8px;text-align:center;font-size:13px;font-weight:700;cursor:pointer;color:var(--acc2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .send{white-space:nowrap}
 @media (max-width:520px){ .up{font-size:11.5px;padding:12px 4px;letter-spacing:-.02em}
@@ -9214,15 +9219,36 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
   <div class="chat" id="chat">
     <!-- ★★★★★v602 (지점장 지시 2026.08.30 「아래 설명 문구도 보기 좋게 정리해줘」).
          모바일 한 화면에 들어오게 <b>표 형태 3줄 + 주의 2줄</b>로 줄인다. -->
+    <!-- ★v602b (지점장 지시 2026.08.30) — <b>넣는 것 → 나오는 것</b>을 경로별로 보여준다.
+         엑셀 비교 설명이 아예 없었다. -->
     <div class="msg bot">
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:4px 10px;align-items:center">
-        <b style="white-space:nowrap">보장분석지만</b><span>왼쪽 칸</span>
-        <b style="white-space:nowrap">둘 다</b><span>왼쪽 + 오른쪽</span>
-        <b style="white-space:nowrap">제안서만</b><span>오른쪽 칸</span>
+      <!-- ★v603b (지점장 지시 2026.08.30 「아이콘 좀 넣고 · 줄 넘치면 보기 좋게 정리」).
+           산출물은 <b>칩(chip)</b>으로 감싸 줄이 넘쳐도 자연스럽게 흐르게 한다. -->
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px">📄 보장분석지</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="oc">📊 보장엑셀</span><span class="oc">📑 보장분석지PPT</span>
+            <span class="oc">🩺 진단서</span><span class="oc">📘 인포메이션</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px">📝 제안서</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="oc">📊 보장엑셀</span><span class="oc">📑 보장분석지PPT</span>
+            <span class="oc">🩺 진단서</span><span class="oc">📘 인포메이션</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-weight:800;font-size:12.5px;margin-bottom:4px">🔁 엑셀 전 vs 후</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            <span class="oc">📊 비교엑셀</span><span class="oc">📕 리포트</span>
+          </div>
+        </div>
       </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--mute);line-height:1.6">
-        받은 PDF를 <b>그대로</b> 올리세요 · 재스캔·OCR은 금액이 깨집니다<br>
-        제안서만 올리면 <b>검산 · 실손 세대</b>는 불가로 표시됩니다
+      <div style="margin-top:9px;font-size:11px;color:var(--mute);line-height:1.6">
+        ⚠️ 받은 PDF를 <b>그대로</b> 올리세요 — 재스캔·OCR은 금액이 깨집니다<br>
+        ℹ️ 제안서만 올리면 <b>검산 · 실손 세대</b>는 불가로 표시됩니다
       </div>
     </div>
   </div>
@@ -10628,8 +10654,13 @@ def _brandize(html):
     _rr = globals().get('_ROBOT_READ') or (0, 0, 0, 0)
     # ★★★★★v602 (지점장 지시 2026.08.30 「<b>문구만 좀더 심플 가자 너무 길다</b>」).
     #   한 줄로 줄인다 — <b>버전 · 정독% · 검사 통과수</b>만. 날짜·조문수·본문 수치는 뺀다.
-    _badge = ('<span style="color:%s">%s <b>%s</b> · <b>%d%%</b> 정독 · 검사 %d/%d</span>'
-              % (_col, _box, _v, _p, _rr[2], _rr[3]))
+    # ★v603b — 아이콘을 넣고, 좁은 화면에서 <b>줄이 끊기지 않게</b> 조각마다 nowrap.
+    _icon = '🟢' if _ok else '🔴'
+    _badge = ('<span style="color:%s;display:inline-flex;flex-wrap:wrap;gap:3px 8px;align-items:center">'
+              '<span style="white-space:nowrap">%s <b>%s</b></span>'
+              '<span style="white-space:nowrap"><b>%d%%</b> 정독</span>'
+              '<span style="white-space:nowrap">검사 %d/%d</span></span>'
+              % (_col, _icon, _v, _p, _rr[2], _rr[3]))
     # ★v602 「<b>안 되는 건 분석 후 좀 크게 표기해줘</b>」 — 실패는 <b>크고 굵게</b>.
     if _bad:
         _badge += ('<br><span style="color:#ff6b6b;font-size:15px;font-weight:800;'
