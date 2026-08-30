@@ -1231,7 +1231,21 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
         _so, _sn, _has = split_sheet(new_bytes)
         if _has:
             print('[v580c] 최종 엑셀에 제안 열 있음 → 보유 원천을 <b>최종 엑셀 보유 열</b>로 교체')
+            # ★★★★★v606 제125조 3항 (지점장 지시 2026.08.30 「비교엑셀이 기존보험 삭제는
+            #   안 나와 신규만 나와」 · 정상범 실측).
+            #   [원인] v580c가 <b>계약 목록까지</b> 최종 엑셀로 바꿔, 기존 파일에만 있던
+            #     계약(흥국 25.10 · 202,460원)이 <b>아예 사라져 삭제로 잡히지 않았다</b>.
+            #   [조문 2018행] 「삭제 특약은 묻지 않는다. <b>기존에 있고 최종에 없으면 그것이
+            #     삭제다(차집합)</b>」 — 차집합을 내려면 <b>기존 파일의 계약 목록</b>이 있어야 한다.
+            #   ⇒ <b>담보 값</b>은 최종 엑셀에서(v580c 유지), <b>계약 목록</b>은 기존 파일에서.
+            _oldcts = (o.get('contracts') or [])
             o, n = _so, _sn
+            _sk = {(c.get('company'), c.get('product')) for c in (o.get('contracts') or [])}
+            _add = [c for c in _oldcts if (c.get('company'), c.get('product')) not in _sk]
+            if _add:
+                o['contracts'] = (o.get('contracts') or []) + _add
+                print('[v606 삭제복원] 기존 파일에만 있는 계약 %d건을 보유 목록에 되살림 → 차집합으로 삭제 판정'
+                      % len(_add))
     except Exception as _e:
         print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)
