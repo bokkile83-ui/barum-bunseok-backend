@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v595-mode4-20260826'
+VSTAMP = 'v601-badge-20260829'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -3163,6 +3163,63 @@ def _jn_norm_unitless(seg):
     else: print('[JEAN] v526 (만원) 머리글은 있는데 데이터행 0 — 표 모양 미지원 [확인]')
     return out
 
+def parse_jean_life(txt):
+    """★★★★★v599 제140조 — <b>생보(KB라이프 등) 제안서 표</b> 파서.
+       손보 표(`가입담보요약`)와 형식이 완전히 달라 기존 파서가 담보 0건을 냈다.
+       [실측 · 천미옥 KB라이프] 담보명이 여러 줄로 쪼개지고 금액도 `2,`+`000만원`으로 잘린다.
+       ⇒ ①표 구간(`보험의 종류` ~ `합계`)을 이어붙이고 공백 제거
+         ②`(간편3.10.5)`·`KB3.10.5`·`지정대리청구` 같은 <b>담보 시작 표식</b>으로 자른다
+         ③각 조각의 첫 `N만원`이 가입금액, 그 앞이 담보명.
+       반환은 손보 파서와 <b>같은 모양</b>이라 뒤 로직이 그대로 돈다."""
+    import re as _r
+    _ls = str(txt or '').split('\n')
+    try:
+        _st = next(i for i, l in enumerate(_ls) if '보험의 종류' in l)
+    except StopIteration:
+        return []
+    _en = next((i for i, l in enumerate(_ls[_st:], _st) if _r.search(r'합\s*계', l)), _st + 60)
+    _t = _r.sub(r'\s', '', ''.join(_ls[_st + 1:_en]))
+    if not _t:
+        return []
+    _t = _r.sub(r'(주계약|특약|제도성)', '', _t)
+    # 담보 시작 표식 — 상품코드 괄호 / 사명+코드 / 제도성 특약명
+    _parts = _r.split(r'(?=\(간편[\d.]+\)|\(무배당\)|KB[\d.]+|지정대리청구)', _t)
+    _out = []
+    for _p in _parts:
+        if not _p.strip():
+            continue
+        _m = _r.search(r'([\d,]+)만원', _p)
+        if not _m:
+            continue                      # 금액 없는 제도성 특약은 담보가 아니다
+        _nm = _p.split(_m.group(0))[0]
+        _nm = _r.sub(r'[\d,]+원$', '', _nm).strip()
+        # ★★★★★v599b — 담보명 <b>꼬리의 열린 괄호를 잘라낸다</b>.
+        #   [실측] 생보 표는 담보명이 줄바꿈으로 끊겨 `…(해약환급금미지급형)<b>(계</b>` 처럼
+        #     <b>괄호가 안 닫힌 채</b> 끝난다. 그대로 넘기면 뒤의 `rule_extract`가
+        #     <b>다음 담보까지 한 줄로 삼켜</b> 금액이 0이 됐다(실측 3건 소실).
+        #   ⇒ 마지막 <b>닫히지 않은 `(` 이후</b>를 버린다. 괄호 수식어는 매핑에 필요 없다.
+        while _nm.count('(') > _nm.count(')'):
+            _nm = _nm[:_nm.rfind('(')].strip()
+        _nm = _r.sub(r'[\s·,]+$', '', _nm)
+        if len(_nm) < 4:
+            continue
+        try:
+            _amt = float(_m.group(1).replace(',', ''))
+        except Exception:
+            continue
+        if _amt <= 0:
+            continue
+        # ★키 이름을 <b>손보 파서와 똑같이</b> 맞춘다(`no·name·amt·prem·sec·term·blk`).
+        #   다르면 뒤 로직이 조용히 0으로 읽는다.
+        _tm = ''
+        _mt = _r.search(_r.escape(_m.group(0)) + r'((?:\d+세만기|\d+년만기))((?:전기납\(\d+년납\)|\d+년납))', _p)
+        if _mt:
+            _tm = '%s/%s' % (_mt.group(2), _mt.group(1))
+        _out.append({'no': len(_out) + 1, 'name': _nm, 'amt': _amt, 'prem': 0,
+                     'sec': '', 'term': _tm, 'blk': 0})
+    return _out
+
+
 def parse_jean(txt):
     """가입제안서 텍스트 → [{'name','amt','prem','term'}] 리스트.
     ★v371: 신규 표 파서를 먼저 쓰고, 결과가 빈약하면 구 `\\d+\\.` 규칙으로 폴백한다."""
@@ -3312,7 +3369,16 @@ def build_proposal_contract(pdf_bytes, fname=''):
         except: pass
     except Exception as e:
         print('[JEAN] pdftotext 실패', e); return None
+    _life_rows = None
     rows = parse_jean(full)
+    if not rows:
+        # ★★★★★v600 제140조 (지점장 지시 2026.08.26 「<b>kb라이프 인식해라</b>」).
+        #   생보 제안서는 표 형식이 <b>통째로 다르다</b> — 담보명이 3~5줄로 쪼개지고
+        #   금액도 `2,`+`000만원`으로 잘린다. 손보 파서가 담보 0건을 냈다.
+        rows = parse_jean_life(full)
+        if rows:
+            _life_rows = rows          # ★v600 생보 경로 표식
+            print('[JEAN] 생보 표 형식으로 %d건 인식(제140조)' % len(rows))
     if not rows:
         print('[JEAN] 담보 0건 — 가입담보요약 표를 못 찾음'); return None
     co   = jean_company(full)
@@ -3361,6 +3427,33 @@ def build_proposal_contract(pdf_bytes, fname=''):
     if _mg: print('[JEAN 동명담보 분리] %d건 — %s' % (len(_mg), ' | '.join(_mg[:8])))
     blk  = ["%s  %s" % (k, _agg[k]) for k in _ord]
     dambo= rule_extract(blk, prefolded=True)   # ★v390b 접힘 복원 재적용 금지
+    # ★★★★★v600 제140조 2항 — <b>생보 제안서는 `rule_extract`를 거치지 않는다</b>.
+    #   [실측 · KB라이프] 파서는 7건을 정확히 뽑는데 `rule_extract`가 <b>1건만</b> 냈다.
+    #     생보 담보명은 `(간편3.10.5)…`처럼 <b>괄호로 시작</b>해 손보용 줄 파싱과 맞지 않는다.
+    #   ★그 함수는 <b>손보 전 케이스(규칙 58·실손·심장)가 타므로 고치지 않는다</b>.
+    #   ⇒ 생보 경로만 <b>`resolve2`로 직접 매핑</b>한다(경로를 나눠 손 안 댄 쪽을 지킨다).
+    if _life_rows and len(dambo or {}) < len(_life_rows):
+        _d2 = {}
+        for _x in _life_rows:
+            try:
+                _std = resolve2(_x['name'])[0]
+            except Exception:
+                _std = None
+            if not _std or _std == '__무시__':
+                continue
+            # ★★★★★v600 제140조 2항 — <b>키는 원본 담보명으로 둔다</b>.
+            #   [실측 결함] 마스터 <b>행 이름</b>을 키로 넣었더니 뒤 로직이 그 이름을 다시
+            #     `resolve2`에 태워 <b>`일반암` → None</b>이 됐다(2,000 소실).
+            #     `고액암`·`유사암`·`허혈성 진단비`는 행 이름과 담보명이 겹쳐 우연히 통과했다.
+            #   ⇒ 키를 <b>원본 담보명</b>으로 두면 재매핑이 정상으로 돈다.
+            _k2 = _x['name']
+            while _k2 in _d2:
+                _k2 += ' '
+            _d2[_k2] = float(_x['amt'] or 0)
+        if len(_d2) > len(dambo or {}):
+            print('[JEAN 생보] rule_extract %d건 → 직접 매핑 %d건으로 대체(제140조 2항) %s'
+                  % (len(dambo or {}), len(_d2), _d2))
+            dambo = _d2
     dambo.pop('__DUP__', None)          # ★내부 로그 키 — 계약 dambo에 남으면 확인큐 기재에서 터진다
     # ★★★★★v521 제117조 (지점장 실측 2026.08.19 «DB 참좋은운전자상해보험2607이 비갱신으로 나온다»)
     #   제안서 경로는 `renewal`을 <b>'비갱신'으로 하드코딩</b>하고 있었다 — <b>제5조를 한 번도 타지 않았다</b>.
@@ -4879,7 +4972,16 @@ def resolve_kw(raw):
         if k in n or f'({i}종)' in r: jong = i; break
 
     # 비담보성(보험료 납입면제·일시납입지원) → 매핑 안 함(자부상 등 오매핑 차단)
-    if has('납입') and (has('면제') or has('지원') or has('대상보장')): return None,0
+    # ★★★★★v600 제140조 3항 (지점장 지시 「kb라이프 인식해라」 · 천미옥 실측).
+    #   [실측 결함] 생보 담보명은 <b>`(납입면제형)`·`(해약환급금미지급형)`</b> 같은
+    #     <b>납입·환급 방식 표기</b>를 괄호로 달고 나온다. 이 규칙이 그 괄호까지 보고
+    #     `허혈성심장질환진단Ⅱ(…)(납입면제형)` <b>1,000을 통째로 [확인]큐</b>로 보냈다.
+    #   ⇒ <b>괄호를 걷어낸 본체</b>에서 본다. 진짜 납입면제 담보(`납입면제대상보장(5대기본)`)는
+    #     본체에 「납입」+「면제」가 남아 종전대로 막힌다.
+    _bodyf = _re_sub_paren(raw)
+    _bf = re.sub(r'\s', '', str(_bodyf or ''))
+    if ('납입' in _bf) and (('면제' in _bf) or ('지원' in _bf) or ('대상보장' in _bf)):
+        return None,0
 
     # ★ 상해의료비 = 별개 정액 담보 단독 행(실손 입원/통원/약값과 합치지 말 것) — 지점장 2026.06.28
     if has('상해의료비') and no('입원','통원','외래','실손','처방','약제','도수','비급여'): return '상해의료비',0
@@ -5021,6 +5123,16 @@ def resolve_kw(raw):
             #   ★가드는 <b>괄호를 걷어낸 본체</b>로 본다 — `(간편맞춤형Ⅱ)` 상품명 오탐 차단.
             #   ★'통원'을 가드에서 뺀다(지점장 확정). '외래'는 별개 담보라 그대로 배제.
             _body_s = _re_sub_paren(_core_s2)
+            # ★★★★★v600 제135조 2항 (지점장 화면 실측 2026.08.29 — 서버 실행검사 FAIL 1건
+            #   「[제135조 수술비] 상해수술비(종합병원) — 상해수술비 (정답 None)」).
+            #   [원인] v596이 배제어를 <b>괄호를 걷어낸 본체</b>에서만 보게 바꿨다.
+            #     `(간편맞춤형Ⅱ)` 오탐을 막으려던 것인데, 같이 걷혀 나간 <b>`(종합병원)`</b>도
+            #     안 보이게 돼 병원 규모 변형이 기본 행으로 들어왔다.
+            #   ⇒ <b>병원 규모·통원은 괄호 안에 있어도 담보를 가른다</b> → 원본에서 본다.
+            #     나머지 배제어는 종전대로 본체에서만(상품명 오탐 차단 유지).
+            _HOSP600 = ('상급', '종합병원', '통원')
+            if _is_pure_s and any(k in _core_s2 for k in _HOSP600):
+                return None, 0
             if _is_pure_s and not any(k in _body_s for k in ('흉터','복원','외모','특정','척추','관절','하지','상급','종합병원','안면','머리','목','3대','신경','인대','흉부','연골','외래','자궁','자녀','자가','교통')):
                 return '상해수술비',0
             return None,0
@@ -5048,6 +5160,10 @@ def resolve_kw(raw):
             #   배제어 'Ⅱ'는 `질병수술비Ⅱ` 같은 <b>담보 본체의 변형</b>을 거르려는 것인데
             #   괄호 안 <b>상품명</b>의 Ⅱ까지 잡았다. KB·삼성·메리츠·롯데·현대가 다 이 표기다.
             #   ★'통원'은 배제어에서 뺀다 — 지점장 확정 「질병통원수술비도 질병수술비다」.
+            # ★v600 제135조 2항 — 질병 쪽도 대칭. 병원 규모·통원은 괄호 안에서도 본다.
+            if bool(re.match(r'^(?:질병수술|질병입원수술)비?(?:\(|담보|$)', _core_strip)) \
+               and any(k in _core for k in ('상급', '종합병원', '통원')):
+                return None, 0
             _body_q = _re_sub_paren(_core)
             _excl_ok = not any(k in _body_q for k in ('특정','부위','관절','척추','외모','흉터','복원','신경','인대','연골',
                           '상급','종합','대수술','수술일당','일당','Ⅱ','Ⅲ','ⅱ','ⅲ',
@@ -5087,7 +5203,16 @@ def resolve_kw(raw):
     #   <b>'특정치료비'</b>라고 부를 뿐이다(실측 양예슬 `[건강]종합병원 유사암Ⅱ 특정치료비Ⅲ` 600 → 구 [확인]큐).
     #   ★'유사암<u>제외</u>'는 여전히 유사암이 아니다(v258b) — 위 v422 암 특정치료비와 짝을 이룬다.
     if has('유사암') and no('유사암제외') and (has('주요치료') or has('특정치료비')): return '__무시__',0   # ①유사암 주요치료비=무시(엑셀·PPT·설명지 전부)
-    if has('암주요치료비') and no('유사암','하이클래스','비급여'): return '암주요치료비',0   # ②순수 암주요치료비만 21행 (v396: 하이클래스·비급여는 아래 23행으로)
+    # ★★★★★v600 제0조 꼭대기 (지점장 확정 2026.08.26 「<b>유방주요치료비(…)(중증유방암진단)담보
+    #   1,000 ← 엑셀이 없는 거다</b>」 · 현대해상).
+    #   [실측] 마스터에 <b>「유방」 행이 없다</b>. 그런데 담보명 <b>맨 앞</b>이 `유방주요치료비`인데
+    #     괄호 안 `유방<b>암</b>진단`의 「암」이 들어와 <b>암주요치료비 21행</b>에 앉아 3,100의 일부가 됐다.
+    #   ⇒ <b>담보명이 부위로 시작하면</b> 괄호와 무관하게 [확인]큐(비슷한 행에 임의로 넣지 않는다).
+    _PART600 = ('유방','자궁','전립선','갑상선','생식기','음경','고환','난소','방광','신장','간장')
+    _head600 = re.sub(r'^[\[(][^\])]*[\])]\s*', '', str(raw or '').strip())
+    if re.match(r'^(%s)' % '|'.join(_PART600), _head600) and ('주요치료' in n or '통합치료' in n):
+        return None, 0
+    if has('암주요치료비') and no('유사암','하이클래스','비급여'): return '암주요치료비',0   # ②순수 암주요치료비만 21행
     #   ★v396 `비급여암주요치료비`는 '하이클래스' 글자가 없어 아래 조건만으로는 안 걸린다 — 명시 추가.
     if has('하이클래스') or (has('비급여') and has('암') and has('주요치료')):
         return '하이클래스(암)',0   # ③하이클래스 / 비급여 암주요치료비 → 하이클래스(암) 23행. 2건이면 합산
@@ -5381,6 +5506,15 @@ def resolve_kw(raw):
     #   실측 오분류: '간병인사용지원일당' · '간병인사용비용지원' · '간병인사용 질병입원일당(간병인 지원)'이
     #   아래 `has('간병인') and has('지원')`에 먼저 걸려 <b>간병인지원일당 행에 20만·7만이 찍혔다</b>(지점장 지적).
     #   '간병인사용'은 실제 간병인을 쓴 날에 주는 <b>간병인 담보</b>이고, '간병인지원일당'은 별개 전용 담보다.
+    # ★★★★★v600 제139조 (지점장 확정 2026.08.26 「<b>간병인은 이 계약이 15만원인 거다</b>」).
+    #   [실측 · 현대해상] 같은 담보가 <b>구간별로 6줄</b> —
+    #     (1-180일) <b>15</b> · (181-365일) 20 · (상급종합병원)(1-180일) 5.
+    #   대표(max)라 <b>20</b>이 잡혔다. 그러나 <b>기본 구간은 1-180일</b>이고
+    #   181일 이상은 <b>연장</b>, 상급종합병원은 <b>병원 한정</b>이다 — 기본이 정본이다.
+    #   ⇒ 181일 이상·상급종합병원 변형은 <b>[확인]큐</b>(제0조 — 비슷한 행에 임의로 넣지 않는다).
+    #   ★`간호간병통합서비스`는 위에서 이미 <b>간호통합병동</b>으로 갈라진다.
+    if has('간병인') and (re.search(r'18[1-9]|19\d|[2-9]\d\d\s*일', n) or has('상급')):
+        return None, 0
     if has('간병인') and has('사용'): return '간병인',0
     if has('간병인') and has('지원'): return '간병인지원일당',0   # ★v29w (지점장 2026.07.02) 간병인지원일당 전용행
     if has('간병인'): return '간병인',0
@@ -10148,6 +10282,7 @@ def doctrine_robot(heavy=False):
             return '실행 예외 %s' % str(_e)[:24]
     _ck('엑셀이 법', '엑셀이 법', _ckexcel)
 
+
     def _ck132():
         """★v589 제132조 — 상급병원 일당은 미기재(1인실 예외). 실제로 돌려서 확인한다."""
         try:
@@ -10243,6 +10378,16 @@ def doctrine_robot(heavy=False):
         return _f
     for _md in ('보장분석지', '보장분석지+제안서', '제안서단독', '엑셀2개비교'):
         _ck('모드 ' + _md, '제137조', _ck_mode(_md))
+
+    # ★★★★★v601 제137조 2항 (지점장 지시 2026.08.29 「<b>로봇 4모드는 돌리고 정독이다</b>」).
+    #   [구 동작] 화면을 열 때마다 배지가 떴다(v569 상시 표기). 그래서 <b>분석을 돌리기 전에도</b>
+    #     색이 나왔고, 지점장이 아무것도 안 했는데 레드로 보였다.
+    #   ⇒ <b>4모드를 실제로 돌린 결과가 있을 때만</b> 정독 %를 확정한다.
+    #     직전 분석이 남긴 `_MODE4_LAST`가 없으면 <b>「대기」</b>로 두고 색을 칠하지 않는다.
+    _m4 = globals().get('_MODE4_LAST')
+    if _m4 is not None:
+        _CHECKS.append(('4모드 실행결과', not _m4,
+                        ('4모드 실패 %d건: %s' % (len(_m4), ' / '.join(_m4[:2]))) if _m4 else ''))
 
     # 5) ★제64조·제128조 — 이름. <b>실제로 13건을 돌린다</b>
     def _ckname():
@@ -10462,15 +10607,25 @@ def _brandize(html):
         _p, _v, _t, _n, _bad = doctrine_robot()
     except Exception as _e:
         _p, _v, _t, _n, _bad = 0, '?', '-', 0, [str(_e)[:30]]
+    # ★★★★★v601 제137조 2항 (지점장 지시 2026.08.29 「<b>로봇 4모드는 돌리고 정독이다</b>」).
+    #   분석을 한 번도 안 돌렸으면 <b>색을 칠하지 않는다</b>(회색 「대기」).
+    #   구 동작은 화면을 열기만 해도 레드가 떠서 <b>지점장이 아무것도 안 했는데 빨갛게</b> 보였다.
+    _ran4 = globals().get('_MODE4_LAST') is not None
     _ok = (_p == 100 and not _bad)
-    _col = '#39d98a' if _ok else '#ff6b6b'
-    _box = '■' if _ok else '□'
+    if not _ran4:
+        _col = '#8b93a1'; _box = '□'
+    else:
+        _col = '#39d98a' if _ok else '#ff6b6b'
+        _box = '■' if _ok else '□'
     _rr = globals().get('_ROBOT_READ') or (0, 0, 0, 0)
     _badge = ('<span style="color:%s">%s 지침=메모리 <b>%s</b> · %s · 조문 %d조 '
               '&nbsp;[%s] <b>%d%%</b> 정독 '
               '<span style="opacity:.75;font-weight:400">(본문 %d/%d · 실행검사 %d/%d)</span></span>'
               % (_col, _box, _v, _t, _n, _box, _p, _rr[0], _rr[1], _rr[2], _rr[3]))
-    if _bad:
+    if not _ran4:
+        _badge += ('<br><span style="color:#8b93a1;font-size:10px">'
+                   '분석을 돌리면 4모드 결과로 정독을 확정합니다</span>')
+    elif _bad:
         _badge += ('<br><span style="color:#ff6b6b;font-size:10px">★ ' +
                    ' · '.join(_bad[:3]) + '</span>')
     return (html.replace('@@BRAND@@', b)
@@ -11205,6 +11360,13 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 '[확인] 산출물 누락 %d건: %s' % (len(_miss4), ', '.join(_miss4)))
         else:
             print('[v446 산출물게이트] 4대 산출물 전부 생성')
+        # ★★★★★v601 제137조 2항 (지점장 지시 2026.08.29 「<b>로봇 4모드는 돌리고 정독이다</b>」).
+        #   분석이 실제로 돈 <b>그 순간</b>에 4모드 결과를 남긴다. 배지는 이 값이 있을 때만
+        #   정독 %를 확정한다 — 없으면 「대기」다(화면만 열었을 때 색이 뜨지 않게).
+        try:
+            globals()['_MODE4_LAST'] = list(_miss4)
+        except Exception:
+            pass
         try:
             _aud=[]; _rep=locals().get('rep') or {}
             # ①계약 수 = 엑셀 계약 열 수(합산 열 제외)
