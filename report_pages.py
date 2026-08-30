@@ -241,7 +241,7 @@ _P2FILL = ('.page{display:flex;flex-direction:column}'
 CSS3 = """
 @page{size:A4;margin:0}
 :root{--navy:#0b2d58;--navy2:#123f79;--gold:#c79532;--gold-light:#8f7847;--green:#159263;
---red:#cc5656;--text:#17273c;--gray:#1e2a38;--line:#76787b;--soft:#f5f8fb}
+--red:#ff0000;--text:#17273c;--gray:#1e2a38;--line:#76787b;--soft:#f5f8fb}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .report{width:210mm;height:297mm;background:#fff;position:relative;overflow:hidden;display:flex;flex-direction:column}   /* ★v479 제88조 */
@@ -451,7 +451,7 @@ def p3(cmp_, client='고객', base_date='', pg=3, totpg=7):
 CSS4 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--deepGreen:#0e4b3e;--green:#15865f;--gold:#c6912c;
---goldSoft:#f7f0dc;--red:#bf3434;--line:#737679;--soft:#f4f7fb;--text:#142c49;--muted:#1e2a38}
+--goldSoft:#f7f0dc;--red:#ff0000;--line:#737679;--soft:#f4f7fb;--text:#142c49;--muted:#1e2a38}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
 .page{width:210mm;height:297mm;position:relative;background:#fff;overflow:hidden}
@@ -491,9 +491,9 @@ text-align:left;padding:1.1mm}
 .code-name{display:block;font-weight:800;color:#20384c}
 .code-number{display:block;margin-top:.6mm;color:#1e2a38}
 .amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
-border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}.amount.red{color:#d52f28}
+border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}.amount.red{color:#ff0000}
 /* ★v582 제131조 — 리포트 전 페이지 3색: 레드(제안) · 블루(갱신 보유) · 블랙(비갱신 보유) */
-.amount.gen{color:#0070C0}.amount.blk{color:#0b2340}
+.amount.gen{color:#0b2340}.amount.blk{color:#0b2340}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
 border:.5mm solid #4f5459;background:#fff}
 .dot.on{border-color:var(--green);background:var(--green)}
@@ -596,10 +596,10 @@ def _own_span(o, sp=None, unit=''):
     if sp and _REPORT_BLUE:
         _g, _n = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n > 0:
-            return ('<span class="amount gen">%s</span>'
+            return ('<span class="amount">%s</span>'
                     '<span class="amount blk">+%s%s</span>' % (_f(_g), _f(_n), unit))
         if _g > 0:
-            return '<span class="amount gen">%s%s</span>' % (_f(o), unit)
+            return '<span class="amount">%s%s</span>' % (_f(o), unit)
     return '<span class="amount">%s%s</span>' % (_f(o), unit)
 
 
@@ -769,7 +769,7 @@ def p4(cmp_, client='고객', base_date='', pg=4, totpg=7):
 CSS5 = """
 @page{size:A4 portrait;margin:0}
 :root{--navy:#082d59;--navy2:#123f75;--gold:#c78d22;--gold2:#e8bd61;--green:#0f785e;
---green2:#138c68;--red:#d53b31;--blue:#1686c9;--gray:#5b6b7d;--line:#717679;--soft:#f8fafc;
+--green2:#138c68;--red:#ff0000;--blue:#1686c9;--gray:#5b6b7d;--line:#717679;--soft:#f8fafc;
 --text:#132c49}
 *{box-sizing:border-box}
 body{margin:0;background:#fff;font-family:"Noto Sans CJK KR","Noto Sans KR",sans-serif;color:var(--text);font-weight:600}
@@ -813,8 +813,8 @@ color:#fff;font-size:8.4pt;font-weight:900}
 .value-box{height:6.2mm;display:flex;justify-content:flex-end;align-items:center;
 border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
 font-weight:900;font-size:11pt}
-.value-box.red{color:#d52f28}
-.amount.gen{color:#0070C0}
+.value-box.red{color:#ff0000}
+.amount.gen{color:#0b2340}
 .amount.blk{color:#0b2340}   /* ★v582 제131조 */
 .value-box.blue{color:#0c4e75}
 .unit{font-size:7.6pt;color:#474f58}
@@ -1072,7 +1072,7 @@ color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
 .row.two .un{width:5mm}
 .unit{font-size:7.2pt;color:#1e2a38}
 .red{color:var(--red)}
-.gen{color:#0070C0}
+.gen{color:#0b2340}
 .blk{color:#0b2340}   /* ★v581 제131조 — 리포트 3색: 레드(제안) · 블루(갱신 보유) · 블랙(비갱신 보유) */
 .sub-title{margin:.8mm 0 .5mm;padding:.7mm 1.2mm;background:#f0f4f8;font-size:8pt;
 font-weight:900;color:#0d554d}
@@ -1121,10 +1121,10 @@ def _m6(v, o=None, tx=None, sp=None):
     if sp and _REPORT_BLUE:
         _g, _n2 = (list(sp) + [0, 0])[:2]
         if _g > 0 and _n2 > 0:
-            return ('<span class="gen">%s</span><span class="blk">+%s</span>'   # ★v585 숫자만
+            return ('<span class="blk">%s</span><span class="blk">+%s</span>'   # ★v585 숫자만
                     % (format(int(_g), ','), format(int(_n2), ',')))
         if _g > 0:
-            return '<span class="gen">%s</span>' % _t
+            return '<span class="blk">%s</span>' % _t
     return _t
 
 

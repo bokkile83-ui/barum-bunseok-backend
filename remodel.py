@@ -221,8 +221,12 @@ def split_sheet(path_or_bytes):
             _fc = ws.cell(r, _c9).font
             _rgb = str((_fc.color.rgb if (_fc and _fc.color and _fc.color.rgb) else '') or '').upper()
             _sl = cov_split.setdefault(nm, [0.0, 0.0])
-            if _rgb.endswith('0070C0'): _sl[0] += _fv
-            elif not _rgb.endswith('C00000'): _sl[1] += _fv
+            # ★★★★★v608 (지점장 확정 · 정답지 대조 2026.08.30) — <b>리모델링 리포트는 2색</b>.
+            #   보유는 갱신이든 비갱신이든 <b>검정</b>, 제안만 <b>빨강</b>(제138조 2항).
+            #   구 코드는 엑셀 갱신 파랑(0070C0)을 `_sl[0]`(갱신합)으로 따로 모아
+            #   리포트에 <b>파랑 조각</b>이 나갔다(실측 2건 — 정답지는 0건).
+            #   ⇒ 보유는 <b>한 칸(_sl[1])</b>으로 합친다. 제안(C00000)은 종전대로 제외.
+            if not _rgb.endswith('C00000'): _sl[1] += _fv
         for _c9 in list(own_cols) + list(prop_cols):
             _tv = ws.cell(r, _c9).value
             if isinstance(_tv, str) and _tv.strip() and not _tv.strip().startswith('='):
@@ -489,7 +493,19 @@ def _fg_fix(im, bx):
         if not px:
             return (0, 0, 0)
         bg = _C(px).most_common(1)[0][0]
-        fg = max(px, key=lambda c: (c[0]-bg[0])**2 + (c[1]-bg[1])**2 + (c[2]-bg[2])**2)
+        # ★★★★★v611 (지점장 실측 2026.08.30 「리포트가 몽땅 블랙으로 나와서 기존으로 보인다」
+        #   · 정답지 대조 — 정답 레드 37건 / 내 것 15건).
+        #   [원인] 구 코드는 <b>배경에서 가장 먼 픽셀 하나</b>를 전경으로 썼다.
+        #     빨간 글자라도 가장자리 안티앨리어싱 픽셀이 더 멀면 <b>그 어두운 색</b>이 뽑혀
+        #     레드가 검정으로 떨어졌다(HTML 레드 32건 → PPT 15건).
+        #   ⇒ <b>배경과 충분히 먼 픽셀들을 모아 그 최빈색</b>을 전경으로 본다.
+        #     글자를 이루는 픽셀이 다수이므로 실제 글자색이 뽑힌다.
+        _far = [c for c in px
+                if (c[0]-bg[0])**2 + (c[1]-bg[1])**2 + (c[2]-bg[2])**2 > 4000]
+        if _far:
+            fg = _C(_far).most_common(1)[0][0]
+        else:
+            fg = max(px, key=lambda c: (c[0]-bg[0])**2 + (c[1]-bg[1])**2 + (c[2]-bg[2])**2)
         # 배경과 거의 같거나(대비 없음) 너무 밝으면 검정
         if (fg[0]-bg[0])**2 + (fg[1]-bg[1])**2 + (fg[2]-bg[2])**2 < 900:
             return (11, 35, 64)
@@ -663,7 +679,9 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     W = Font(color='FFFFFFFF', bold=True, name='맑은 고딕', size=10)
     B = Font(bold=True, name='맑은 고딕', size=_FS)
     N = Font(bold=True, name='맑은 고딕', size=_FS)   # ★전부 진하게
-    G = Font(bold=True, color='FF1F7A4D', name='맑은 고딕', size=_FS)
+    # ★★★★★v612 제138조 2항 (지점장 지시 2026.08.30 「<b>비교엑셀은 블랙+레드만</b>」).
+    #   구 코드는 신규·증액을 <b>초록</b>으로 썼다(실측 97건). 리포트와 같은 2색으로 맞춘다.
+    G = Font(bold=True, color='FFC00000', name='맑은 고딕', size=_FS)
     R = Font(bold=True, color='FFC0444C', name='맑은 고딕', size=_FS)
     thin = Side(style='thin', color='FFD9DEE6'); BD = Border(thin, thin, thin, thin)
     med = Side(style='medium', color='FF0B2340')          # ★구분 경계선
@@ -1236,6 +1254,63 @@ def _shared_strings(data):
     return bio.getvalue()
 
 
+def build_analysis_ppt(xlsx_bytes, client='고객'):
+    """★★★★★v612 (지점장 지시 2026.08.30 「비교엑셀 + 리포트 + 보장분석ppt 3가지로」).
+       엑셀 1·2 비교 산출물에 <b>최종 엑셀 기준 보장분석지 PPT</b>를 추가한다.
+       ★보장분석지 PPT는 <b>엑셀만 읽어</b> 만든다(등식2) — 리포트처럼 그림에서 색을 뽑지 않아
+         오류가 훨씬 적다(지점장 제안 근거)."""
+    import io as _io, os as _os, tempfile as _tf
+    try:
+        import openpyxl as _ox
+        _wb = _ox.load_workbook(_io.BytesIO(xlsx_bytes), data_only=True)
+        _ws = _wb.worksheets[0]
+        _cts = []
+        for _c in range(3, _ws.max_column + 1):
+            _h = str(_ws.cell(1, _c).value or '')
+            if not _h.strip():
+                continue
+            if re.search(r'(합계|보유|제안)', _h.split('\n')[0]):
+                continue
+            _p = _h.split('\n')
+            _dm = {}
+            for _r in range(6, _ws.max_row + 1):
+                _nm = str(_ws.cell(_r, 2).value or '').strip()
+                _v = _ws.cell(_r, _c).value
+                if not _nm or _v in (None, '', 0):
+                    continue
+                if isinstance(_v, str) and _v.strip().startswith('='):
+                    continue
+                _dm[_nm] = _v
+            if not _dm:
+                continue
+            _cts.append({'company': (_p[0] if _p else '').strip(),
+                         'product': (_p[1] if len(_p) > 1 else '').strip(),
+                         'renewal': ('갱신' if (len(_p) > 2 and '갱신' in _p[2]
+                                                and '비갱신' not in _p[2]) else '비갱신'),
+                         'contract_date': str(_ws.cell(3, _c).value or ''),
+                         'expiry_date': str(_ws.cell(4, _c).value or ''),
+                         'pay_period': str(_ws.cell(5, _c).value or ''),
+                         'pay_count': '', 'premium': _num(_ws.cell(2, _c).value),
+                         'remain': 1, 'dambo': _dm})
+        if not _cts:
+            print('[v612 보장분석PPT] 계약 0건 — 생성 안 함')
+            return None
+        import main as _mn
+        _d = _tf.mkdtemp()
+        _xl = _os.path.join(_d, 'src.xlsx')
+        open(_xl, 'wb').write(xlsx_bytes)
+        # ★등식2 — PPT는 <b>완성 엑셀만</b> 읽는다. 합계·슬래시·분할도 엑셀에서 가져온다.
+        _tot, _sq, _ss, _spl = _mn.read_excel_totals(_xl)
+        _out = _os.path.join(_d, 'anal.pptx')
+        if _mn.build_ppt({'client': client, 'contracts': _cts}, _out,
+                         _tot, _sq, _ss, _spl) and _os.path.exists(_out):
+            print('[v612 보장분석PPT] 계약 %d건 → 생성' % len(_cts))
+            return open(_out, 'rb').read()
+    except Exception as _e:
+        print('[v612 보장분석PPT] 실패:', str(_e)[:90])
+    return None
+
+
 def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     """★지점장 지시 「최종비교엑셀 · 리포트 · 보장분석지」 — 앞의 둘을 만든다.
        보장분석지는 <b>최종 엑셀 자신</b>이므로 그대로 돌려준다(같은 파일이다)."""
@@ -1267,7 +1342,9 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     return {'cmp': c,
             'xlsx': build_xlsx(c, client, base_date),
             'pdf': _rp[0], 'pngs': _rp[1],
-            'pptx': build_report_pptx(_rp[1], _rp[0], client)}
+            'pptx': build_report_pptx(_rp[1], _rp[0], client),
+            # ★v612 최종 엑셀 기준 보장분석지 PPT(지점장 지시 2026.08.30)
+            'anal_pptx': build_analysis_ppt(new_bytes, client)}
 
 
 def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
