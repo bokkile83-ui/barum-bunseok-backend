@@ -579,7 +579,28 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 #   ⇒ 빈칸은 <b>왼쪽으로 넓혀</b> 값 칸만큼 잡고 흰 바탕을 깐다.
                 _dot = (txt.strip() == '.')
                 if _dot:
-                    x0 = x1 - 34.0
+                    # ★★★★★v608 (지점장 실측 2026.08.30 「추가 입력하는 건 네모칸을 넘어서
+                    #   삐져나와 있고」 · 정답지 빈칸 폭 <b>23.6~37.6 가변</b> / 내 것 <b>37.6 고정</b>).
+                    #   [원인] v586이 왼쪽으로 <b>34pt 무조건</b> 넓혀 좁은 칸에서 박스를 넘었다.
+                    #   ⇒ <b>배경 이미지에서 흰 박스의 왼쪽 경계</b>를 직접 재서 그 안에서만 넓힌다.
+                    try:
+                        _yc = int(((y0 + y1) / 2) * sy)
+                        _xr = int(x1 * sx)
+                        _yc = max(0, min(im.height - 1, _yc))
+                        _px = im.load()
+                        _lx = _xr
+                        _stop = max(0, _xr - int(60 * sx))
+                        while _lx > _stop:
+                            _c = _px[max(0, _lx - 1), _yc]
+                            if not (_c[0] > 235 and _c[1] > 235 and _c[2] > 235):
+                                break          # 흰색이 끊기면 박스 왼쪽 테두리다
+                            _lx -= 1
+                        _wpt = (_xr - _lx) / sx - 2.0
+                    except Exception:
+                        _wpt = 34.0
+                    if not (_wpt and _wpt > 8):
+                        _wpt = 34.0
+                    x0 = x1 - max(10.0, min(34.0, _wpt))
                     fs = 8.5
                 sh = s.shapes.add_textbox(Emu(int((x0 - 1.6) * EMU_PT)), Emu(int((y0 - 1.2) * EMU_PT)),
                                           Emu(int((x1 - x0 + 3.6) * EMU_PT)), Emu(int((h_pt + 2.4) * EMU_PT)))
@@ -1238,14 +1259,7 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
             #   [조문 2018행] 「삭제 특약은 묻지 않는다. <b>기존에 있고 최종에 없으면 그것이
             #     삭제다(차집합)</b>」 — 차집합을 내려면 <b>기존 파일의 계약 목록</b>이 있어야 한다.
             #   ⇒ <b>담보 값</b>은 최종 엑셀에서(v580c 유지), <b>계약 목록</b>은 기존 파일에서.
-            _oldcts = (o.get('contracts') or [])
             o, n = _so, _sn
-            _sk = {(c.get('company'), c.get('product')) for c in (o.get('contracts') or [])}
-            _add = [c for c in _oldcts if (c.get('company'), c.get('product')) not in _sk]
-            if _add:
-                o['contracts'] = (o.get('contracts') or []) + _add
-                print('[v606 삭제복원] 기존 파일에만 있는 계약 %d건을 보유 목록에 되살림 → 차집합으로 삭제 판정'
-                      % len(_add))
     except Exception as _e:
         print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)
