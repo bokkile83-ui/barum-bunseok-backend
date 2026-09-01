@@ -1695,6 +1695,31 @@ body {{ color:{INK}; }}
 .sgone .smn {{ font-weight:600; color:#7C8794; font-size:6.6pt; }}
 .finpg {{ padding:0 !important; }}
 .finimg {{ display:block; height:240mm; width:auto; max-width:100%; margin:7mm auto 0; }}
+/* ★★★★★v622 (지점장 지시 2026.09.01) — 달러 카드 2장 재현 */
+.dol2 {{ display:grid; grid-template-columns:1fr 1fr; gap:9mm; padding:4mm 6mm; }}
+.dcard {{ background:#fff; border:0; border-radius:0; padding:2mm 1mm; color:#17273c; }}
+.dtag {{ display:inline-block; border:0.35mm solid #b8860b; color:#8a6508; border-radius:9mm;
+  padding:1.1mm 3.6mm; font-size:10pt; font-weight:800; margin-bottom:3mm; }}
+.dh {{ font-size:18.5pt; font-weight:900; line-height:1.35; margin-bottom:1.5mm; }}
+.y {{ color:#c8891a; }}
+.dsub {{ font-size:10pt; color:#5b6b7d; margin-bottom:3.5mm; }}
+.drow {{ display:grid; grid-template-columns:1fr 1fr; gap:2.4mm; margin-bottom:3mm; }}
+.dbox {{ background:#f6f8fb; border:0.35mm solid #dde3ec; border-radius:2.4mm; padding:3.2mm 2.6mm; }}
+.dbox.on {{ border-color:#c8891a; background:#fdf8ec; }}
+.dy {{ font-size:10pt; color:#5b6b7d; }}
+.dv {{ font-size:19pt; font-weight:900; margin:0.8mm 0; white-space:nowrap; }}
+.dnl {{ font-size:10pt; color:#5b6b7d; line-height:1.55; }}   /* ★v622b 작은 글씨가 배경에 묻혀 밝게 */
+.dd {{ font-size:15pt; font-weight:800; border-top:0.3mm solid #dde3ec; margin-top:1.6mm; padding-top:1.6mm; }}
+.dpill {{ border-radius:2.2mm; padding:3.2mm 3.5mm; font-size:11.5pt; font-weight:800;
+  display:flex; justify-content:space-between; align-items:center; }}
+.dpill.b {{ background:#eaf1fb; border:0.35mm solid #b9d0ee; color:#1d5aa8; }}
+.dpill.r {{ background:#fbeced; border:0.35mm solid #eebfc4; color:#b3323f; }}
+.dnote {{ font-size:9pt; color:#7d8fa5; text-align:right; margin-bottom:3mm; }}
+.dcalc {{ border:0.35mm dashed #c6d0dd; border-radius:2.4mm; padding:5mm;
+  font-size:11.5pt; font-weight:800; line-height:1.7; margin-bottom:3.5mm; }}
+.dcalc s {{ color:#93a1b3; }}
+.dcalc b {{ font-size:17pt; }}
+.dend {{ font-size:15.5pt; font-weight:900; line-height:1.45; }}
 .dolimg {{ display:block; width:auto; margin:0 auto; border:0.6pt solid #D8DEE6; }}   /* ★v214 달러보험 2탄 */
 .dolimg.a {{ height:118mm; }}
 .dolimg.b {{ height:104mm; margin-top:4mm; }}   /* ★v202 확대: 229→240mm·상단여백 14→7mm. 비율 보존(높이 고정·폭 자동·가운데) */
@@ -4580,8 +4605,51 @@ body {{ color:{INK}; }}
   <div class="nm">달러보험 2탄 <b>— 달러 기준 최저임금</b></div>
   <div class="pgn"><b>@@PN@@</b>달러보험 2탄</div><div class="bar"></div></div>
  <div class="body">
-  <img class="dolimg a" src="data:image/jpeg;base64,{_DOL2_PIC}">
-  <img class="dolimg b" src="data:image/jpeg;base64,{_DOL2_TBL}">
+  <!-- ★★★★★v622 (지점장 지시 2026.09.01 — 카드 2장을 그대로 재현 · 1장으로) -->
+  <div class="dol2">
+    <div class="dcard">
+      <div class="dtag">월급의 착시</div>
+      <div class="dh">월급 <b class="y">50만원</b> 올랐는데<br>왜 통장은 그대로일까?</div>
+      <div class="dsub">세후 월급 · 5년 비교 (2021 → 2026)</div>
+      <div class="drow">
+        <div class="dbox"><div class="dy">2021년</div><div class="dv">250만원</div>
+          <div class="dnl">세후 월급</div><div class="dd">$2,166</div></div>
+        <div class="dbox on"><div class="dy">2026년</div><div class="dv y">300만원</div>
+          <div class="dnl">세후 월급</div><div class="dd">$2,143</div></div>
+      </div>
+      <div class="drow">
+        <div class="dpill b">원화 기준 <b>+20%</b></div>
+        <div class="dpill r">달러 기준 <b>-23달러</b></div>
+      </div>
+      <div class="dnote">환율 기준 · 2021년 1,154원 → 2026년 1,400원</div>
+      <div class="dcalc">5년 물가상승률 반영하면<br>
+        <s>300만원</s> ▶ <b>259만원</b>
+        <div class="dnl">2021년 돈의 가치로 환산한 금액<br>= 5년간 실제로 오른 건 월 9만원 (실질 +4%)</div></div>
+      <div class="dend">월급이 오른 게 아니라<br><b class="y">물가가 먼저 뛴 겁니다.</b></div>
+    </div>
+    <div class="dcard">
+      <div class="dtag">원화의 착시</div>
+      <div class="dh">최저시급 20% 올랐는데<br>달러로는 <b class="y">제자리</b>였습니다</div>
+      <div class="dsub">최저 시급 달러 환산 · 6년 비교 (2020 → 2026)</div>
+      <div class="drow">
+        <div class="dbox"><div class="dy">2020년</div><div class="dv">8,590원</div>
+          <div class="dnl">최저 시급</div><div class="dd">$7.28</div>
+          <div class="dnl">환율 1,180원</div></div>
+        <div class="dbox on"><div class="dy">2026년</div><div class="dv y">10,320원</div>
+          <div class="dnl">최저 시급</div><div class="dd">$7.37</div>
+          <div class="dnl">환율 1,400원</div></div>
+      </div>
+      <div class="drow">
+        <div class="dpill b">원화 기준 <b>+20%</b></div>
+        <div class="dpill r">달러 기준 <b>+1%</b></div>
+      </div>
+      <div class="dnote">환율 기준 · 2020년 평균 1,180원 → 2026년 1,400원</div>
+      <div class="dcalc">같은 1,000달러를 사려면<br>
+        <s>118만원</s> ▶ <b>140만원</b>
+        <div class="dnl">지금은 <b class="y">140만원이 필요합니다</b><br>6년 만에 22만원 더 비싸졌습니다</div></div>
+      <div class="dend">시급이 오른 게 아니라<br><b class="y">원화 가치가 내린 겁니다.</b></div>
+    </div>
+  </div>
  </div>
  <div class="ft"><b>MAKEONE LIFE PLAN</b><span class="r">{cust} 고객님 · @@PN@@ / {tpg}</span></div>
 </div>
@@ -4633,7 +4701,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v621-robot2v-20260831</div>'
+    _VSTAMP = '<div class="vstamp">v622-dollar-20260901</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
