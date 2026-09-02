@@ -353,8 +353,11 @@ def compare(old, new):
         #     「없다」는 것도 상담에서 보여줄 정보다(지점장 시안도 전 담보를 싣는다).
         allrows.append((_grp_of(nm), nm, o, n, n - o,
                         '미가입' if (o == 0 and n == 0) else
+                        # ★★★★★v644 (지점장 지시 2026.09.02 「<b>감액</b>이라는 단어를 써야 한다 ·
+                        #   전후 금액이 다른 경우」). 담보별 표만 `보장 감소`를 쓰고 계약별 보험료 표는
+                        #   이미 `감액`이라 <b>용어가 갈려 있었다</b> → 「감액」으로 통일.
                         '삭제' if n == 0 else '신규 추가' if o == 0 else
-                        '보장 증가' if n > o else '보장 감소' if n < o else '변동 없음'))
+                        '보장 증가' if n > o else '감액' if n < o else '변동 없음'))
         if o == 0 and n == 0:
             continue
         if o > 0 and n == 0:
@@ -404,7 +407,7 @@ def compare(old, new):
             'all': [(_g, nm, o, n, n - o,
                      '미가입' if (o == 0 and n == 0) else
                      '삭제' if n == 0 else '신규 추가' if o == 0 else
-                     '보장 증가' if n > o else '보장 감소' if n < o else '변동 없음')
+                     '보장 증가' if n > o else '감액' if n < o else '변동 없음')
                     for _r, nm, o, n, _g in old.get('rows', [])] or allrows}
 
 
@@ -694,7 +697,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
     SUB = PatternFill('solid', fgColor='FFD6E2F0')    # 표 머리 — 옅은 회청 → 또렷한 하늘남
     NEWF = PatternFill('solid', fgColor='FFC8EBD8')   # 신규 — 연그린 → 진한 민트
     UPF = PatternFill('solid', fgColor='FFDDEBFB')    # 보장 증가 — 하늘
-    DNF = PatternFill('solid', fgColor='FFFDE2C8')    # 보장 감소 — 주황
+    DNF = PatternFill('solid', fgColor='FFFDE2C8')    # 감액 — 주황
     DELF = PatternFill('solid', fgColor='FFF7CFCF')   # 삭제 — 분홍
     GRPF = PatternFill('solid', fgColor='FFE9EEF5')   # 구분(A열 그룹) — 회청
     # ★글자 포인트 (지점장 지시 2026.08.15) — 기본 11pt는 A4 표에서 크다
@@ -1098,7 +1101,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
             # ★★★★★v471 제76조 — 변화 유형마다 <b>줄 전체</b>에 색을 깐다.
             #   숫자만 보고는 무엇이 바뀌었는지 안 보인다. 색이 먼저 눈에 들어와야 한다.
             _fill = (NEWF if tag == '신규 추가' else UPF if tag == '보장 증가'
-                     else DNF if tag == '보장 감소' else DELF if tag == '삭제' else None)
+                     else DNF if tag == '감액' else DELF if tag == '삭제' else None)
             if _fill:
                 for cc in range(2, 8): ws.cell(r, cc).fill = _fill
             elif _head:
@@ -1163,7 +1166,7 @@ def build_xlsx(cmp_, client='고객', base_date=''):
         print('[v537 공백0] 마지막 쪽 여유 %.0fpt — 빈 행을 넣지 않고 요약을 표 바로 아래에 붙인다' % _need)
     band(r + 1, '요약')
     for i, (k, v) in enumerate([('보장 증가 항목', len(cmp_['up'])), ('신규 추가 특약', len(cmp_['add'])),
-                                ('보장 감소 항목', len(cmp_['down'])), ('삭제 특약', len(cmp_['delete'])),
+                                ('감액 항목', len(cmp_['down'])), ('삭제 특약', len(cmp_['delete'])),
                                 ('변동 없는 항목', len(cmp_['same']))], start=r + 2):
         ws.cell(i, 2, k).font = B; ws.cell(i, 5, v).font = N
         for c in range(2, 8): ws.cell(i, c).border = BD
@@ -1316,8 +1319,30 @@ def build_analysis_ppt(xlsx_bytes, client='고객'):
                          'pay_count': '', 'premium': _num(_ws.cell(2, _c).value),
                          'remain': 1, 'dambo': _dm})
         if not _cts:
-            print('[v612 보장분석PPT] 계약 0건 — 생성 안 함')
-            return None
+            # ★★★★★v649 (지점장 지시 2026.09.02 「비교엑셀에 보장분석지 ppt 꼭 나와야 한다」).
+            #   구 코드는 담보값이 한 줄도 없는 계약을 건너뛰어 <b>계약 0건이면 그냥 포기</b>했다.
+            #   ⇒ <b>2차 시도</b> — 합산 열만 제외하고 <b>헤더가 있는 열은 담보가 비어도 계약</b>으로 삼는다.
+            #   보장분석지 PPT는 <b>값을 엑셀 합계에서 따로 읽으므로</b>(등식2)
+            #   계약 메타만 있으면 표가 제대로 만들어진다.
+            for _c in range(3, _ws.max_column + 1):
+                _h = str(_ws.cell(1, _c).value or '').strip()
+                if not _h or re.search(r'(\ud569\uacc4|\ubcf4\uc720|\uc81c\uc548)', _h.split('\n')[0]):
+                    continue
+                _p = _h.split('\n')
+                _cts.append({'company': (_p[0] if _p else '').strip(),
+                             'product': (_p[1] if len(_p) > 1 else '').strip(),
+                             'renewal': ('\uac31\uc2e0' if (len(_p) > 2 and '\uac31\uc2e0' in _p[2]
+                                                    and '\ube44\uac31\uc2e0' not in _p[2]) else '\ube44\uac31\uc2e0'),
+                             'contract_date': str(_ws.cell(3, _c).value or ''),
+                             'expiry_date': str(_ws.cell(4, _c).value or ''),
+                             'pay_period': str(_ws.cell(5, _c).value or ''),
+                             'pay_count': '', 'premium': _num(_ws.cell(2, _c).value),
+                             'remain': 1, 'dambo': {}})
+            if _cts:
+                print('[v649 보장분석 PPT] 1\ucc28 0\uac74 \u2192 <b>2\ucc28 \uc2dc\ub3c4\ub85c \uacc4\uc57d %d\uac74 \ud655\ubcf4</b>' % len(_cts))
+            else:
+                print('[v612 보장분석PPT] 계약 0건 — 생성 안 함(헤더가 전부 비었다)')
+                return None
         import main as _mn
         _d = _tf.mkdtemp()
         _xl = _os.path.join(_d, 'src.xlsx')
@@ -1334,6 +1359,100 @@ def build_analysis_ppt(xlsx_bytes, client='고객'):
     return None
 
 
+# ★★★★★v651 (지점장 지시 2026.09.02 「<b>2번이나 1번은 니가 만든거 외에도 다 읽어내라</b> ·
+#   현장은 늘 예외가 수두룩하다」). ★v650의 <b>차단</b>은 폐기 — <b>읽어낸다</b>.
+#   구 `read_sheet`는 <b>B열=담보명 · 1행=헤더 · 6행부터 데이터</b>를 박아놓았다(구조 가정).
+#   손으로 만든 엑셀·열이 밀린 엑셀은 그대로 <b>값 0</b>이 됐다.
+#   ⇒ 마스터 담보명이 <b>가장 많이 맞는 열</b>을 담보명 열로 잡고,
+#   그 오른쪽 숫자 열들을 계약으로 삼는다. <b>전 시트·전 열</b>을 훑는다.
+_MSTN = None
+
+def _master_names():
+    """master.xlsx B열 담보명 101개(없으면 앵커 12개로 폴백)."""
+    global _MSTN
+    if _MSTN is not None: return _MSTN
+    try:
+        import openpyxl, os as _o
+        _p = _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), 'master.xlsx')
+        _w = openpyxl.load_workbook(_p, data_only=True)
+        _s = _w['보장분석'] if '보장분석' in _w.sheetnames else _w[_w.sheetnames[0]]
+        _MSTN = {str(_s.cell(r, 2).value).strip() for r in range(1, _s.max_row + 1)
+                 if _s.cell(r, 2).value}
+    except Exception as _e:
+        print('[v651] master.xlsx 읽기 실패 — 앵커로 대체:', str(_e)[:60])
+        _MSTN = {'일반사망','일반암','뇌혈관진단비','상해사망','입원','통원',
+                 '상해수술비','질병수술비','협심증','일상배상책임','급성심근경색','유사암(갑.기.경.제)'}
+    return _MSTN
+
+def _rescue_sheet(src):
+    """어떤 엑셀이든 담보명 열을 찾아 읽어낸다. 실패하면 None."""
+    import openpyxl
+    _s0 = io.BytesIO(src) if isinstance(src, (bytes, bytearray)) else src
+    wb = openpyxl.load_workbook(_s0, data_only=True)
+    M = _master_names()
+    best = None
+    for ws in wb.worksheets:
+        for c in range(1, min(ws.max_column, 12) + 1):
+            rows = [(r, str(ws.cell(r, c).value).strip())
+                    for r in range(1, ws.max_row + 1) if ws.cell(r, c).value]
+            hit = [(r, v) for r, v in rows if v in M]
+            if len(hit) > (len(best[2]) if best else 3):
+                best = (ws, c, hit)
+    if not best: return None
+    ws, nc, hit = best
+    r0 = min(r for r, _ in hit)
+    # 값 열 = 담보명 열 오른쪽 중 숫자가 있는 열
+    val_cols = []
+    for c in range(nc + 1, ws.max_column + 1):
+        n = sum(1 for r, _ in hit if isinstance(ws.cell(r, c).value, (int, float)))
+        if n: val_cols.append((c, n))
+    if not val_cols: return None
+    # 맨 오른쪽 큰 열이 합계일 수 있다 — 값이 가장 많은 열들을 계약으로 본다
+    ct_cols = [c for c, _ in val_cols]
+    if len(ct_cols) > 1:
+        _last = ct_cols[-1]
+        _tot = sum(_num(ws.cell(r, _last).value) for r, _ in hit)
+        _rest = sum(_num(ws.cell(r, c).value) for r, _ in hit for c in ct_cols[:-1])
+        if _rest and abs(_tot - _rest) < max(1.0, _rest * 0.02):
+            ct_cols = ct_cols[:-1]          # 마지막 열은 합계다
+    cov = {}
+    for r, nm in hit:
+        cov[nm] = sum(_num(ws.cell(r, c).value) for c in ct_cols)
+    contracts = []
+    for c in ct_cols:
+        h = ''
+        for hr in range(1, r0):
+            v = ws.cell(hr, c).value
+            if v and str(v).strip(): h = str(v).strip(); break
+        p = h.split('\n')
+        contracts.append({'company': (p[0] if p else '').strip(),
+                          'product': (p[1] if len(p) > 1 else '').strip(),
+                          'renewal': '', 'lump_sum': 0, 'contract_date': '',
+                          'expiry_date': '', 'pay_term': '', 'premium': 0.0})
+    print('[v651 구조구조] 시트 %r · 담보명 %d열 · 매치 %d개 · 계약열 %d개 — <b>읽어냈다</b>'
+          % (ws.title, nc, len(cov), len(ct_cols)))
+    return {'premium': 0.0, 'contracts': contracts, 'cov': cov}
+
+def _read_any(src, which):
+    """정규 경로 → 실패하면 구조 탐색. <b>뭐를 넣든 읽어낸다</b>."""
+    d = read_sheet(src)
+    cov = d.get('cov') or {}
+    M = _master_names()
+    hit = sum(1 for k, v in cov.items() if k in M and v)
+    if hit >= 4: return d
+    print('[v651] %s — 정규 읽기로 담보 %d개뿐 → <b>구조 탐색으로 재시도</b>' % (which, hit))
+    try:
+        alt = _rescue_sheet(src)
+    except Exception as _e:
+        alt = None
+        print('[v651] 구조 탐색 실패:', str(_e)[:70])
+    if alt and sum(1 for v in (alt.get('cov') or {}).values() if v) > hit:
+        if not alt.get('premium'): alt['premium'] = d.get('premium') or 0.0
+        if not alt.get('contracts'): alt['contracts'] = d.get('contracts') or []
+        return alt
+    return d
+
+
 def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     """★지점장 지시 「최종비교엑셀 · 리포트 · 보장분석지」 — 앞의 둘을 만든다.
        보장분석지는 <b>최종 엑셀 자신</b>이므로 그대로 돌려준다(같은 파일이다)."""
@@ -1345,7 +1464,8 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     #   ⇒ 「보유」의 원천은 <b>최종 엑셀의 보유 계약 열</b>이다. 최종 엑셀에 제안 열이 있으면
     #     `split_sheet`가 그 한 파일 안에서 보유·최종을 정확히 가른다(v422h와 같은 원리).
     #     제안 열이 없는 최종 엑셀이면 종전대로 두 파일 비교.
-    o = read_sheet(old_bytes); n = read_sheet(new_bytes)
+    o = _read_any(old_bytes, '① 기존 엑셀')          # ★v651 — 뭐를 넣든 읽어낸다
+    n = _read_any(new_bytes, '② 최종 엑셀')
     try:
         _so, _sn, _has = split_sheet(new_bytes)
         if _has:
@@ -1361,6 +1481,22 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
             #     차집합이 「삭제」로 잡히게 한다. 값 자체는 최종 엑셀 것을 쓰므로 분할 표기는 그대로다.
             _oc = list(o.get('contracts') or [])
             _ov = dict(o.get('cov') or {})
+            # ★★★★★v645 (지점장 지적 2026.09.02 「박미정 ①에 <b>없는데</b> 무슨 소리냐」
+            #   · 「맘대로 삭제다 하고 추가로 담보를 넣었다고」).
+            #   [실측] ①이 <b>구 마스터</b>(97담보 · `120대수술비`·`상급병원질병입원일당` 등
+            #   지금 없는 이름)로 만들어졌다. 그 상태로 v614가 ①의 담보를 되살리면
+            #   <b>이름만 바뀜 담보</b>(뇌출혈진단비→외상성뇌출혈 · 120대→n대 ·
+            #   심장묶음 재배정)가 전부 <b>「삭제」로 둔갑</b>한다. 실측 4건.
+            #   ⇒ <b>①의 담보명 중 현 마스터에 없는 이름이 있으면 구 버전 엑셀</b>로 보고
+            #   <b>복원을 하지 않는다</b>. 차집합은 <b>같은 이름 체계</b>에서만 성립한다(제127조).
+            #   ★계약 목록 복원(v606)은 그대로 둔다 — 계약명은 마스터와 무관하다.
+            _mset = set((_sn.get('cov') or {}).keys()) | set((_so.get('cov') or {}).keys())
+            _oldnames = [k for k in _ov.keys() if k not in _mset]
+            _OLDXL = bool(_oldnames)
+            if _OLDXL:
+                print('[v645] ① 기존 엑셀이 <b>구 마스터</b>다 — 현 마스터에 없는 담보명 %d건 %s'
+                      % (len(_oldnames), _oldnames[:6]))
+                print('[v645] → 담보 복원(v614)을 <b>건너뛴다</b>. 이름만 바뀐 담보가 「삭제」로 둔갑한다.')
             o, n = _so, _sn
             _sk = {(c.get('company'), c.get('product')) for c in (o.get('contracts') or [])}
             _add = [c for c in _oc if (c.get('company'), c.get('product')) not in _sk]
@@ -1370,7 +1506,7 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
             _ncov = dict(n.get('cov') or {})
             _ocov = dict(o.get('cov') or {})
             _dn = 0
-            for _k, _v in _ov.items():
+            for _k, _v in ({} if _OLDXL else _ov).items():     # ★v645 구 마스터면 복원 없음
                 if not _v:
                     continue
                 if not _ocov.get(_k) and not _ncov.get(_k):
@@ -1397,13 +1533,35 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     except Exception as _e:
         print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)
-    _rp = build_report(c, client, base_date)
-    return {'cmp': c,
-            'xlsx': build_xlsx(c, client, base_date),
-            'pdf': _rp[0], 'pngs': _rp[1],
-            'pptx': build_report_pptx(_rp[1], _rp[0], client),
-            # ★v612 최종 엑셀 기준 보장분석지 PPT(지점장 지시 2026.08.30)
-            'anal_pptx': build_analysis_ppt(new_bytes, client)}
+    # ★★★★★v645 (지점장 지적 2026.09.02 「보장분석지 ppt가 안나온다」 · 한정환·박미정).
+    #   [원인] 산출물 4개를 <b>한 줄의 return 안</b>에서 만들었다.
+    #   `build_report`가 한 번 터지면 <b>뒤에 서 있는 보장분석지 PPT까지 통째로 죽는다</b>.
+    #   ★보장분석지 PPT는 <b>최종 엑셀만 읽으므로</b> 리포트와 아무 상관이 없다.
+    #   ⇒ v636 다운로드와 같은 원리 — <b>산출물별로 따로 감싸 하나가 죽어도 나머지는 산다</b>.
+    _out = {'cmp': c, 'xlsx': None, 'pdf': None, 'pngs': None, 'pptx': None, 'anal_pptx': None}
+    _fail = []
+    try:
+        _out['xlsx'] = build_xlsx(c, client, base_date)
+    except Exception as _e:
+        _fail.append('비교엑셀:' + str(_e)[:60])
+    _rp = (None, None)
+    try:
+        _rp = build_report(c, client, base_date)
+        _out['pdf'], _out['pngs'] = _rp[0], _rp[1]
+    except Exception as _e:
+        _fail.append('리포트PDF:' + str(_e)[:60])
+    try:
+        if _rp[1]:
+            _out['pptx'] = build_report_pptx(_rp[1], _rp[0], client)
+    except Exception as _e:
+        _fail.append('리포트PPT:' + str(_e)[:60])
+    try:
+        _out['anal_pptx'] = build_analysis_ppt(new_bytes, client)   # ★리포트와 무관
+    except Exception as _e:
+        _fail.append('보장분석지PPT:' + str(_e)[:60])
+    if _fail:
+        print('[v645 산출물] 실패 %d건 :: %s' % (len(_fail), ' | '.join(_fail)))
+    return _out
 
 
 def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
@@ -1412,8 +1570,31 @@ def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
     o, n, has_prop = split_sheet(xlsx_bytes)
     c = compare(o, n)
     c['has_prop'] = has_prop
-    _rp = build_report(c, client, base_date)
-    return {'cmp': c,
-            'xlsx': build_xlsx(c, client, base_date),
-            'pdf': _rp[0], 'pngs': _rp[1],
-            'pptx': build_report_pptx(_rp[1], _rp[0], client)}
+    # ★★★★★v650 — 엑셀 1개 경로도 <b>산출물별 try</b> + <b>보장분석지 PPT</b>.
+    #   구 코드는 한 줄 return이라 리포트가 터지면 전부 죽었고,
+    #   <b>`anal_pptx`가 아예 없어</b> 엑셀 1개로 돌리면 보장분석지 PPT가 나오지 않았다.
+    #   지점장 「비교엑셀에 보장분석지 ppt 꼭 나와야 한다」(2026.09.02).
+    _out = {'cmp': c, 'xlsx': None, 'pdf': None, 'pngs': None, 'pptx': None, 'anal_pptx': None}
+    _fail = []
+    try:
+        _out['xlsx'] = build_xlsx(c, client, base_date)
+    except Exception as _e:
+        _fail.append('비교엑셀:' + str(_e)[:60])
+    _rp = (None, None)
+    try:
+        _rp = build_report(c, client, base_date)
+        _out['pdf'], _out['pngs'] = _rp[0], _rp[1]
+    except Exception as _e:
+        _fail.append('리포트PDF:' + str(_e)[:60])
+    try:
+        if _rp[1]:
+            _out['pptx'] = build_report_pptx(_rp[1], _rp[0], client)
+    except Exception as _e:
+        _fail.append('리포트PPT:' + str(_e)[:60])
+    try:
+        _out['anal_pptx'] = build_analysis_ppt(xlsx_bytes, client)
+    except Exception as _e:
+        _fail.append('보장분석지PPT:' + str(_e)[:60])
+    if _fail:
+        print('[v650 산출물·단일] 실패 %d건 :: %s' % (len(_fail), ' | '.join(_fail)))
+    return _out
