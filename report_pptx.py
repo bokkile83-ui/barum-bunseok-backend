@@ -502,7 +502,12 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
             else:
                 # ★폭 기반 자동 축소: 문자열이 상자폭 넘으면 폰트 줄임(오버 방지)
                 box_w = (x1 - x0) + pad * 1.0   # 가용 폭(pt), 좌우 여백 약간 남김
-                need = _txt_w(txt, fs)
+                # ★★★★★v640 (지점장 실측 2026.09.02 「입력칸이 범위를 넘어선다」 · 조주환)
+                #   [실측] 넘친 칸을 `_txt_w`로 다시 재니 전부 <b>비율 0.91~0.97</b>로
+                #   「들어간다」고 판단해 <b>축소를 건너뛰었다</b>(317,530원 · 3/2 · 5건 · 4영역).
+                #   추정식이 실제보다 <b>좁게</b> 잡는다 → 안전여유 <b>12%</b>를 두고 판정한다.
+                #   ★박스 크기·좌표는 건드리지 않는다 — 글자만 줄인다(제12조 레이아웃 고정).
+                need = _txt_w(txt, fs) * 1.20
                 if need > box_w and need > 0:
                     fs = max(5.0, round(fs * box_w / need, 1))
             sh = s.shapes.add_textbox(Emu(int((x0 - pad) * EMU_PER_PT)),
