@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v640-color-20260902'
+VSTAMP = 'v642-fact-20260902'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9199,7 +9199,7 @@ INDEX_HTML = r'''<!DOCTYPE html>
 <link rel="icon" href="/icon-192.png">
 <script>if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(e){console.log("sw",e);});});}</script>
 <style>
-:root{--bg:#ffffff;--panel:#f6f7f9;--line:#dde2ea;--acc:#06203f;--acc2:#a8863d;--ink:#15202e;--mute:#6c7887;--gold:#c5a052;--red:#b3242c;--green:#06203f;--blue:#a8863d;--sky:#2a6bf2;--sky2:#1a54d0}
+:root{--bg:#ffffff;--panel:#f6f7f9;--line:#dde2ea;--acc:#06203f;--acc2:#a8863d;--ink:#0e1826;--mute:#4a5666;--gold:#c5a052;--red:#b3242c;--green:#06203f;--blue:#a8863d;--sky:#2a6bf2;--sky2:#1a54d0}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans KR',sans-serif;line-height:1.55}
 #gate{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 26px;text-align:center}
@@ -9271,7 +9271,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 /* ★★★★★v624 (지점장 지시 2026.09.02 「맨아래에 4개버튼 넣고 가운데는 새고객」 · 「밝은 블루로」) */
 .tabbar{display:flex;align-items:flex-end;justify-content:space-around;
         background:#fff;border-top:1px solid var(--line);padding:9px 4px 10px;position:relative}
-.tab{width:20%;min-width:0;text-align:center;color:var(--mute);font-size:10px;cursor:pointer;
+.tab{width:20%;min-width:0;text-align:center;color:var(--ink);font-weight:600;font-size:10px;cursor:pointer;
      text-decoration:none;display:block;line-height:1.25;padding:0 2px}
 .tab .ti{display:block;line-height:0;margin-bottom:3px}
 .tab .ti svg{display:inline-block;vertical-align:middle}
@@ -9283,7 +9283,10 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .gobtn{width:100%;border:none;border-radius:12px;padding:15px;font-size:15px;font-weight:800;
        background:var(--sky);color:#fff;cursor:pointer;letter-spacing:.02em}
 .gobtn:hover{background:var(--sky2)}
-.gobtn:disabled{background:#e3e7ee;color:#9aa3af;cursor:default}
+.gobtn:disabled{background:#e3e7ee;color:#7d8898;cursor:default}
+.gobtn .gsp{width:15px;height:15px;border-width:2px;border-top-color:#fff;
+            margin-right:8px;vertical-align:-2px}
+.gobtn:disabled .gsp{border-color:#b9c2cf;border-top-color:var(--sky)}
 .tabc{width:20%;min-width:0;text-align:center;color:#f08c14;font-size:10px;cursor:pointer;
       line-height:1.25;padding:0 2px}
 .tabc .ti{display:block;line-height:0;margin-bottom:3px}
@@ -9337,13 +9340,13 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
            칩 12개를 버리고 <b>넣는 것 → 나오는 것</b>을 한 줄씩 3줄로. -->
       <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.5">
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span>보장분석지</b><br>
-          <span style="color:var(--mute)">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
+          <span style="color:var(--ink);opacity:.86">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><rect x="9.6" y="1.6" width="4.8" height="3" rx="1.4" fill="#9fb2c6"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="2.4" height="2.4" rx=".5"/><rect x="11" y="8.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="12" width="2.4" height="2.4" rx=".5"/><rect x="11" y="12.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="16" width="2.4" height="2.4" rx=".5"/><rect x="11" y="16.6" width="5.6" height="1.2" rx=".6"/></g></svg></span>제안서</b><br>
-          <span style="color:var(--mute)">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
+          <span style="color:var(--ink);opacity:.86">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.4" fill="#1d7044"/><rect x="9.6" y="3.5" width="11.9" height="5.6" fill="#21935a"/><rect x="9.6" y="9.1" width="11.9" height="5.6" fill="#1d7044"/><rect x="9.6" y="14.7" width="11.9" height="5.8" fill="#155c37"/><rect x="2.5" y="7" width="10.5" height="10" rx="1.6" fill="#0f5132"/><text x="7.7" y="15.2" font-size="8.6" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">X</text></svg></span>엑셀 전 vs 후</b><br>
-          <span style="color:var(--mute)">비교엑셀 · 리포트 · 분석지PPT</span></div>
+          <span style="color:var(--ink);opacity:.86">비교엑셀 · 리포트 · 분석지PPT</span></div>
       </div>
-      <div style="margin-top:10px;font-size:9.5px;color:var(--mute);line-height:1.55">
+      <div style="margin-top:10px;font-size:10px;color:var(--ink);line-height:1.55">
         ⚠️ 받은 PDF를 <b>그대로</b> 올리세요 — 재스캔·OCR은 금액이 깨집니다
       </div>
     </div>
@@ -9474,8 +9477,23 @@ _onReady(()=>{
     실행 버튼은 <b>하나</b>다. 엑셀 두 개가 준비되면 리모델링, 아니면 분석.
     기존 #send·#rsend 는 숨겨두고 그대로 눌러 <b>동작 코드는 손대지 않는다</b>. */
  const _gb=$("#gobtn");
+ /* ★★★★★v641 (지점장 지시 2026.09.02 「돌아가는걸 표시해줘」).
+    진행 표시는 이미 있었으나 <b>채팅 영역에 붙어</b> 화면 밖으로 밀려 안 보였다.
+    → <b>항상 보이는 풀폭 버튼에</b> 동그라미 + 단계 + 경과초를 직접 찍는다. */
+ let _t0=0;
  function _syncGo(){
    const sd=$("#send"), rb=$("#rsend"); if(!_gb) return;
+   const _ld=document.getElementById("ldmsg");
+   if(_ld){                                   // ← 돌아가는 중
+     if(!_t0) _t0=Date.now();
+     const _s=Math.floor((Date.now()-_t0)/1000);
+     _gb.disabled=true;
+     _gb.innerHTML='<span class="spin gsp"></span>'
+                 + (_ld.textContent||"분석 중…").replace("…","")
+                 + ' · ' + _s + '초';
+     return;
+   }
+   _t0=0;
    const rOK = rb && !rb.disabled, sOK = sd && !sd.disabled;
    _gb.textContent = rOK ? "리모델링 비교" : "분석하기";
    _gb.disabled = !(rOK || sOK);
@@ -9690,7 +9708,7 @@ function askAI(){
   add("[질문] "+esc(q),"me");
   document.getElementById("qinput").value="";
   document.getElementById("qbtn").disabled=true;
-  const loading=add('<span class="spin"></span> 분석 중…',"bot");
+  const loading=add('<span class="spin"></span> <span id="ldmsg">리모델링 비교 중…</span>',"bot");
   fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({pw:ACCESS,question:q,data:analysisData})})
   .then(r=>r.json()).then(j=>{
