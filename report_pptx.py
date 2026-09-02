@@ -544,11 +544,12 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
                 r.font.color.rgb = RGBColor(*fg)
                 r.font.bold = (ink > 0.30)
                 _setfont(r)
-            if txt == '.':
-                f = sh.fill
-                f.solid()
-                f.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                sh.line.fill.background()
+            # ★★★★★v643 (지점장 지시 2026.09.02 「그냥 색을빼라」).
+            #   빈 칸(`.`)에 <b>흰 사각형을 칠하던 것을 없앱다</b>.
+            #   [실측 조주환] 슬9 흰상자 30개 중 <b>15개가 배경 칸과 어긋나</b>
+            #   격자선 위에 흰 덩어리가 얹혀 「칸이 튀어나온」 모습이 됐다.
+            #   ★상자 크기는 배경에서 찾은 값이라 <b>줄일 수 없다</b>(고정) → 칠하지 않는다.
+            #   배경 칸 자체가 이미 흰색이라 빈 칸은 그대로 비어 보인다.
 
     prs.save(out)
     return True

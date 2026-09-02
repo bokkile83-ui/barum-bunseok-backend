@@ -664,8 +664,8 @@ def build_report_pptx(pngs, pdf_bytes=None, client=''):
                 _rp2._setfont(r)
                 if _dot:
                     p.alignment = PP_ALIGN.RIGHT
-                    _f = sh.fill; _f.solid(); _f.fore_color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-                    sh.line.fill.background()
+                    # ★v643 — 흰 칠 삭제(진단서와 <b>같은 코드가 2곳</b>이라 함께 지운다).
+
         else:
             s.shapes.add_picture(g, Cm(0), Cm(0), Cm(21.0), Cm(29.7))
     bio = io.BytesIO(); prs.save(bio)
