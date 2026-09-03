@@ -1469,67 +1469,21 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
     try:
         _so, _sn, _has = split_sheet(new_bytes)
         if _has:
-            print('[v580c] 최종 엑셀에 제안 열 있음 → 보유 원천을 <b>최종 엑셀 보유 열</b>로 교체')
-            # ★★★★★v606 제125조 3항 (지점장 지시 2026.08.30 「비교엑셀이 기존보험 삭제는
-            #   안 나와 신규만 나와」 · 정상범 실측).
-            #   [원인] v580c가 <b>계약 목록까지</b> 최종 엑셀로 바꿔, 기존 파일에만 있던
-            #     계약(흥국 25.10 · 202,460원)이 <b>아예 사라져 삭제로 잡히지 않았다</b>.
-            #   [조문 2018행] 「삭제 특약은 묻지 않는다. <b>기존에 있고 최종에 없으면 그것이
-            #     삭제다(차집합)</b>」 — 차집합을 내려면 <b>기존 파일의 계약 목록</b>이 있어야 한다.
-            #   ⇒ <b>담보 값</b>은 최종 엑셀에서(v580c 유지), <b>계약 목록</b>은 기존 파일에서.
-            #   ★v614 — 담보도 같다. ①에만 있던 담보를 <b>전(前) 값으로 되살려</b>
-            #     차집합이 「삭제」로 잡히게 한다. 값 자체는 최종 엑셀 것을 쓰므로 분할 표기는 그대로다.
-            _oc = list(o.get('contracts') or [])
-            _ov = dict(o.get('cov') or {})
-            # ★★★★★v645 (지점장 지적 2026.09.02 「박미정 ①에 <b>없는데</b> 무슨 소리냐」
-            #   · 「맘대로 삭제다 하고 추가로 담보를 넣었다고」).
-            #   [실측] ①이 <b>구 마스터</b>(97담보 · `120대수술비`·`상급병원질병입원일당` 등
-            #   지금 없는 이름)로 만들어졌다. 그 상태로 v614가 ①의 담보를 되살리면
-            #   <b>이름만 바뀜 담보</b>(뇌출혈진단비→외상성뇌출혈 · 120대→n대 ·
-            #   심장묶음 재배정)가 전부 <b>「삭제」로 둔갑</b>한다. 실측 4건.
-            #   ⇒ <b>①의 담보명 중 현 마스터에 없는 이름이 있으면 구 버전 엑셀</b>로 보고
-            #   <b>복원을 하지 않는다</b>. 차집합은 <b>같은 이름 체계</b>에서만 성립한다(제127조).
-            #   ★계약 목록 복원(v606)은 그대로 둔다 — 계약명은 마스터와 무관하다.
-            _mset = set((_sn.get('cov') or {}).keys()) | set((_so.get('cov') or {}).keys())
-            _oldnames = [k for k in _ov.keys() if k not in _mset]
-            _OLDXL = bool(_oldnames)
-            if _OLDXL:
-                print('[v645] ① 기존 엑셀이 <b>구 마스터</b>다 — 현 마스터에 없는 담보명 %d건 %s'
-                      % (len(_oldnames), _oldnames[:6]))
-                print('[v645] → 담보 복원(v614)을 <b>건너뛴다</b>. 이름만 바뀐 담보가 「삭제」로 둔갑한다.')
-            o, n = _so, _sn
-            _sk = {(c.get('company'), c.get('product')) for c in (o.get('contracts') or [])}
-            _add = [c for c in _oc if (c.get('company'), c.get('product')) not in _sk]
-            if _add:
-                o['contracts'] = list(o.get('contracts') or []) + _add
-                print('[v614 삭제] 기존 파일에만 있는 계약 %d건 복원' % len(_add))
-            _ncov = dict(n.get('cov') or {})
-            _ocov = dict(o.get('cov') or {})
-            _dn = 0
-            for _k, _v in ({} if _OLDXL else _ov).items():     # ★v645 구 마스터면 복원 없음
-                if not _v:
-                    continue
-                if not _ocov.get(_k) and not _ncov.get(_k):
-                    _ocov[_k] = _v
-                    _dn += 1
-            if _dn:
-                o['cov'] = _ocov
-                # ★compare는 `rows`가 있으면 그것을 먼저 본다(275행) — 여기도 같이 채운다.
-                _rw = list(o.get('rows') or [])
-                if _rw:
-                    _rk = {str(_x[1]): _i for _i, _x in enumerate(_rw)}
-                    for _k, _v in _ov.items():
-                        if not _v or _ncov.get(_k):
-                            continue
-                        _i = _rk.get(_k)
-                        if _i is None:
-                            continue
-                        _t = list(_rw[_i])
-                        if not _t[2]:
-                            _t[2] = _v          # 전(前) 값 = 기존 엑셀
-                            _rw[_i] = tuple(_t)
-                    o['rows'] = _rw
-                print('[v614 삭제] 기존 파일에만 있는 담보 %d건 복원 → 차집합으로 삭제 판정' % _dn)
+            # ★★★★★v659 (지점장 확정 2026.09.03 「<b>비교 ①②는 정답지를 주는 것이다</b>」
+            #   · 「원래는 보험료가 50만원대였다 근데 <b>빼고 준 건데 왜 맘대로 해석하느냐</b>」).
+            #   <b>① = 기존 그대로 · ② = 최종 그대로.</b> 코드가 원천을 바꾸지 않는다.
+            #   <b>「지운 흔적」= ①에 있고 ②에 없는 것</b> — 그것이 삭제다(제127조 3항 차집합).
+            #   ①에 있었으니 <b>기존 합계엔 당연히 들어간다</b>. 그 차이가 곷 절감이다.
+            #   ★폐기 = <b>v580c 보유 원천 교체</b>(→ ①이 준 답을 버렸다) 및 그 위에 쌓은
+            #   v614 담보·계약 복원 · v645 구마스터 차단 · v658 보험료 복원.
+            #   <b>되살릴 것이 없다</b> — 애초에 버리지 않으면 복원도 필요 없다.
+            #   [실측 김현호] ① 425,617 · ② 482,732 → <b>+57,115 (13.4%)</b>.
+            #   ★단 <b>제안 분할 표기</b>(`cov_split`)는 ②의 제안 열에서만 알 수 있으므로 그것만 가져온다.
+            print('[v659 정답지] ①②를 그대로 쓴다 — 원천 교체 없음(기존 %s · 최종 %s)'
+                  % (format(int(o.get('premium') or 0), ','), format(int(n.get('premium') or 0), ',')))
+            for _k in ('cov_split', 'cov_text'):
+                if _sn.get(_k) and not n.get(_k):
+                    n[_k] = _sn[_k]
     except Exception as _e:
         print('[v580c] split_sheet 실패 → 두 파일 비교 유지:', _e)
     c = compare(o, n)
