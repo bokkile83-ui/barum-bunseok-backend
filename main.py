@@ -9458,7 +9458,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .tabc .nm{display:block;font-size:9.5px;font-weight:800}
 
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
-.mkhome{position:fixed;right:10px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:9999;background:#0f3fa0;color:#fff;border:0;border-radius:22px;padding:9px 13px;font-size:12.5px;font-weight:800;box-shadow:0 6px 16px rgba(15,63,160,.35);cursor:pointer;text-decoration:none}
+.mkhome{position:sticky;top:0;z-index:9999;display:block;text-align:center;background:#0f3fa0;color:#fff;padding:7px 10px;font-size:12.5px;font-weight:800;text-decoration:none;letter-spacing:.02em}
 </style></head><body>
 <a class="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.parent.postMessage({mk:'home'},'*');return false;}}catch(e){}">🏠 MAKEONE 홈</a>
 <div id="gate">
