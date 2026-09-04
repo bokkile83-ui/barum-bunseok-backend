@@ -4106,77 +4106,84 @@ body {{ color:{INK}; }}
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · @@PN@@ / {tpg}</span></div>
 </div>
 
-<!-- INFO 교통사고 경상환자 처리기준 개정 (지점장 지시 2026.08.19 «수술비 다음») -->
+<!-- INFO 교통사고 경상환자 처리기준 개정 (지점장 지시 2026.08.19 «수술비 다음»)
+     ★★★★★v663 (지점장 지시 2026.09.03) — 금감원 2026.9.2. 보도자료 반영 + 「두 개를 하나로」.
+     버린 것 = 「8주는 끝이 아니다」·「실무 핵심」·「개정 전·후 표」·「상해급수 표」·「시점별 표」 — 전부 중복이었다.
+     ★이모지 금지(#12) — v663에서 넣었다가 <b>surrogate로 파일을 0바이트로 날렸다</b>. 허용=★※◆· -->
 <div class="pg surgpg">
  <div class="top"><div class="eb">MAKEONE 보장분석 · 인포메이션</div>
-  <div class="nm">교통사고 <b>경상환자 처리기준 대폭 개정</b></div>
+  <div class="nm">교통사고 <b>경상환자 처리기준 개정</b></div>
   <div class="pgn"><b>@@PN@@</b>경상환자</div><div class="bar"></div></div>
  <div class="body sbody">
-  <div class="vsh">자배법 시행령 개정 — 제11조 개정 · 제11조의2·3·4 신설 &nbsp;(26.09.10 기준)</div>
+  <div class="vsh">자배법 시행령 · 자동차보험 표준약관 개정 &nbsp;(금감원 2026.9.2. 보도자료)</div>
   <div class="sg2">
    <div class="sgcol">
-    <div class="sgsec">① 8주 초과 치료 제한</div>
-    <div class="cbx"><div class="cbh">8주를 넘기면 <span>전문의 검토</span></div>
-     <div class="cbl"><b>대상</b> <b class="r">12~14급 경상환자</b>가 8주를 넘겨 치료받을 때</div>
-     <div class="cbl"><b>제출</b> 진단서 · 진료기록 · 영상CD 등을 <b>자배원</b>(자동차손해배상진흥원)에 제출</div>
-     <div class="cbl"><b>인정</b> 자배원 전문의 심의를 거쳐 <b class="r">「치료 필요성」 인정</b>을 받아야 계속 치료</div>
-     <div class="cbl"><b>예외</b> 임산부 · 만 7세 이하 영유아는 <b>검토 제외</b></div></div>
-    <div class="sgsec">② 심사 · 공제 기준 강화</div>
-    <div class="cbx"><div class="cbh">환자 입장에서 바뀌는 것</div>
-     <div class="cbl"><b>서류</b> 서류 발급비와 심사 기간이 <b>늘어날 수 있다</b></div>
-     <div class="cbl"><b>치료비</b> 보험사 · 공제조합 부담 — <b>기존과 동일</b></div>
-     <div class="cbl"><b>불복</b> 심사 결과 불인정 시 <b class="r">이의제기 가능</b>(공제분쟁조정분과위)</div></div>
+    <div class="sgsec">① 8주 초과 치료 — 26.09.10 <span>사고일</span> 기준</div>
+    <div class="cbx"><div class="cbh">8주를 넘기면 <span>자배원 심사</span></div>
+     <div class="cbl"><b>대상</b> <b class="r">12~14급 경상</b>(염좌 · 단순타박상)이 8주를 넘겨 치료받을 때</div>
+     <div class="cbl"><b>절차</b> 자배원(자동차손해배상진흥원) <b>전문의 심사</b>를 거쳐야 계속 치료</div>
+     <div class="cbl"><b>제외</b> 골절 · 장기손상 등 <b class="g2">중상(1~11급)</b> · 임산부 · 영유아</div>
+     <div class="cbl"><b>불복</b> 불인정 시 <b>이의제기 가능</b></div></div>
+    <div class="sgsec">② 서류 — <span>7주 이내</span> 제출</div>
+    <div class="cbx"><div class="cbh">기한은 사고일로부터 <span>7주</span></div>
+     <div class="cbl"><b>서류</b> 진단서 · 진료기록부 사본 · 영상CD(있을 시) · 개인정보 동의서</div>
+     <div class="cbl"><b>비용</b> 발급비는 <b class="g2">보험회사가 부담</b>한다</div>
+     <div class="cbl"><b>통보</b> 심사 결과는 제출일로부터 <b>7일 이내</b></div></div>
    </div>
    <div class="sgcol">
-    <div class="sgsec">③ 실무 핵심 포인트</div>
-    <div class="cbx"><div class="cbh">치료의 질과 <span>보장 범위</span></div>
-     <div class="cbl"><b>치료비</b> 금감원 세칙 개정으로 <b class="r">중상환자 위주 보장</b>으로 이동</div>
-     <div class="cbl"><b>전환</b> 아프면 <b>8주 안에 집중 치료</b>를 받는다</div>
-     <div class="cbl"><b>연장</b> 상태가 안 좋으면 <b>정밀검사 · 추가 상병 입증</b>이 필수</div></div>
-    <div class="cbx"><div class="cbh">8주는 끝이 아니다</div>
-     <div class="cbl">「정말 치료가 더 필요한지 <b class="r">확인하는 기준점</b>」이다</div>
-     <div class="cbl"><b>준비</b> 초기부터 진료기록 · 영상자료를 <b>빠짐없이 남긴다</b></div></div>
+    <div class="sgsec">③ 향후치료비 폐지 — 26.10.25 <span>보험개시</span> 기준</div>
+    <div class="cbx"><div class="cbh">경상은 <span>미리 받는 돈</span>이 없어진다</div>
+     <div class="cbl"><b>지급</b> 향후치료비는 <b class="g2">중상(1~11급)에게만</b> 지급된다</div>
+     <div class="cbl"><b>경상</b> 치료가 끝날 때까지 <b class="r">실제 발생한 치료비</b>만 보장</div>
+     <div class="cbl"><b>영향</b> 합의 상담 방식이 달라진다 — <b>목돈 합의금이 사라진다</b></div></div>
     <div class="sgsec">④ 보장분석 시사점</div>
-    <div class="cbx"><div class="cbh">운전자 담보를 다시 본다</div>
-     <div class="cbl"><b>자부상</b> 12~14급 경상 구간이 <b class="r">치료 제한을 받는다</b> → 정액 담보의 가치가 커진다</div>
-     <div class="cbl"><b>합의금</b> 치료 기간이 줄면 <b>합의 시점이 앞당겨진다</b></div>
-     <div class="cbl"><b>점검</b> 자동차부상치료비 · 교통상해 담보의 <b>가입금액과 급수 범위</b>를 확인한다</div></div>
+    <div class="cbx"><div class="cbh">정액 담보의 <span>가치가 커진다</span></div>
+     <div class="cbl"><b>자부상</b> 12~14급 경상이 <b class="r">치료 · 보상 제한</b>을 받는다</div>
+     <div class="cbl"><b>점검</b> 자동차부상치료비 · 교통상해 담보의 <b>가입금액과 급수 범위</b></div>
+     <div class="cbl"><b>준비</b> 초진부터 <b>진료기록 · 영상자료</b>를 빠짐없이 남긴다</div></div>
    </div>
   </div>
   <div class="vsfull">
-   <div class="vsh">개정 전 · 후 — 무엇이 달라지나</div>
+   <div class="vsh">기억할 숫자 네 개</div>
    <table class="vst">
-    <colgroup><col style="width:16%"><col style="width:21%"><col style="width:21%"><col style="width:21%"><col style="width:21%"></colgroup>
-    <tr class="h"><td>구분</td><td>8주 이내</td><td>8주 초과</td><td>필요 서류</td><td>치료비 부담</td></tr>
-    <tr><td class="n a">개정 전</td><td>제한 없음</td><td><b class="g2">제한 없음</b></td><td>없음</td><td>보험사 · 공제조합</td></tr>
-    <tr><td class="n b">개정 후</td><td>제한 없음</td><td><b class="r">자배원 전문의 검토 통과 시에만</b></td><td><b>진단서 · 진료기록 · 영상CD</b></td><td>보험사 · 공제조합 <span class="smn">(변동 없음)</span></td></tr>
+    <colgroup><col style="width:14%"><col style="width:43%"><col style="width:43%"></colgroup>
+    <tr class="h"><td>숫자</td><td>무엇인가</td><td>놓치면 생기는 일</td></tr>
+    <tr><td class="n a"><b>7주</b></td><td>사고일로부터 <b class="r">서류 제출 기한</b></td><td>심사 자체를 못 받을 수 있다</td></tr>
+    <tr><td class="n b"><b>7일</b></td><td>제출 후 <b>심사 결과 통보</b>까지</td><td>답변이 없으면 보험사에 확인한다</td></tr>
+    <tr><td class="n a"><b>8주</b></td><td>경상 <b class="r">자배원 심사 기준점</b></td><td>서류 없이는 치료를 이어가기 어렵다</td></tr>
+    <tr><td class="n b"><b>12~14급</b></td><td><b>경상</b> — 이번 개정의 대상</td><td>1~11급 중상은 <b class="g2">해당 없음</b></td></tr>
    </table>
-   <div class="vsn"><b>★ 상담 한 줄</b> "8주가 <b>치료 종료 시점</b>이 아니라 <b class="r">「더 필요한지 확인하는 기준점」</b>입니다. 8주 안에 집중 치료를 받으시고, 더 필요하면 <b>정밀검사로 입증</b>하면 됩니다."</div>
+   <div class="vsn"><b>★ 상담 한 줄</b> "치료는 <b>8주</b>, 서류는 <b class="r">7주</b>입니다. 경상은 이제 <b class="r">미리 받는 향후치료비가 없으니</b>, <b>자동차부상치료비 · 교통상해 정액 담보</b>가 그 자리를 대신합니다."</div>
+   <div class="vsn"><b>※ 배경</b> 자동차보험 손익 <b>’25년 7,080억 적자</b> · <b>’26년 1~5월 1,637억 적자</b> — 보험금 누수를 막지 않으면 선의의 가입자 보험료가 오른다. <span class="smn">세부 절차는 자배원 · 각 보험사 안내를 따른다.</span></div>
   </div>
-  <div class="vsfull">
-   <div class="vsh">상해급수와 이번 개정의 관계</div>
-   <table class="vst">
-    <colgroup><col style="width:16%"><col style="width:28%"><col style="width:28%"><col style="width:28%"></colgroup>
-    <tr class="h"><td>급수</td><td>해당 상해</td><td>이번 개정 적용</td><td>보장분석 관점</td></tr>
-    <tr><td class="n a">1~11급</td><td>중상 · 골절 · 수술 동반</td><td><b class="g2">해당 없음</b></td><td>기존과 동일</td></tr>
-    <tr><td class="n b">12~14급</td><td><b>경상</b> — 염좌 · 타박 등</td><td><b class="r">8주 초과 시 전문의 검토</b></td><td><b>자부상 정액 담보</b>의 가치가 커진다</td></tr>
-   </table>
-   <div class="vsn"><b>※ 확인</b> 시행 시기 · 세부 절차는 <b>자배원 및 각 보험사 안내</b>를 따른다. 본 페이지는 <b>이해를 돕기 위한 요약</b>이며 보험금 지급 근거가 되지 않는다.</div>
-  </div>
-  <div class="vsfull">
-   <div class="vsh">사고가 났을 때 — 시점별로 할 일</div>
-   <table class="vst">
-    <colgroup><col style="width:18%"><col style="width:41%"><col style="width:41%"></colgroup>
-    <tr class="h"><td>시점</td><td>해야 할 일</td><td>남겨야 할 것</td></tr>
-    <tr><td class="n a">사고 직후</td><td>경찰 신고 · 병원 <b>초진</b>을 미루지 않는다</td><td>초진기록 · 사고사실확인원</td></tr>
-    <tr><td class="n b">1~8주</td><td><b class="r">집중 치료 구간</b> — 이 안에 필요한 치료를 받는다</td><td>진료기록 · 영상자료(X-ray · MRI 등)</td></tr>
-    <tr><td class="n b">8주 임박</td><td>추가 치료가 필요하면 <b>정밀검사 · 추가 상병</b>을 확인한다</td><td>진단서 · 영상CD</td></tr>
-    <tr><td class="n b">8주 초과</td><td>자배원에 제출 → <b class="r">전문의 검토</b></td><td>불인정 시 <b>이의제기</b> 준비</td></tr>
+  <!-- ★★★★★v664 (지점장 지시 2026.09.03 「<b>중요를 더더 강조 · 포인트 있게 · 글자 더 크게</b>」).
+       페이지 아래가 30% 비어 있어 그 공간을 쓴다. 날짜 15pt · 본문 10.5pt · 굵은 테두리. -->
+  <div class="vsfull" style="border:2.4pt solid #B3242C;border-radius:2.4mm;padding:3.4mm 4mm;margin-top:4mm;background:#FFF8F8">
+   <div style="font-size:13.5pt;font-weight:800;color:#B3242C;letter-spacing:-0.2pt;margin-bottom:2.6mm">◆ 중요 &nbsp;<span style="font-size:10.5pt;color:#0e1826">날짜와 할 일</span></div>
+   <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+    <tr>
+     <td style="vertical-align:top;padding-right:2.6mm">
+      <div style="font-size:10.5pt;font-weight:800;color:#8A6D0B;margin-bottom:1.8mm">언제부터 바뀌나</div>
+      <div style="font-size:15pt;font-weight:800;color:#B3242C;line-height:1.25">9월 10일부터</div>
+      <div style="font-size:10.5pt;color:#0e1826;line-height:1.4;margin-bottom:2.4mm">경상 <b>8주 초과 치료 → 자배원 심사</b> <span style="font-size:9pt;color:#4a5666">(사고일 기준)</span></div>
+      <div style="font-size:15pt;font-weight:800;color:#B3242C;line-height:1.25">10월 25일부터</div>
+      <div style="font-size:10.5pt;color:#0e1826;line-height:1.4">경상 <b>향후치료비 폐지</b> <span style="font-size:9pt;color:#4a5666">(보험개시 기준)</span></div>
+     </td>
+     <td style="vertical-align:top;padding-left:4mm;border-left:1.2pt dashed #E0B8BB">
+      <div style="font-size:10.5pt;font-weight:800;color:#06203f;margin-bottom:1.8mm">그래서 지금 할 일</div>
+      <div style="font-size:12.5pt;font-weight:800;color:#06203f;line-height:1.35;margin-bottom:1.2mm">운전자보험 <span style="color:#B3242C">「자동차부상위로금」</span> 보유 필수</div>
+      <div style="font-size:10pt;color:#4a5666;line-height:1.4;margin-bottom:2.6mm">경상 치료비가 막힐수록 <b style="color:#0e1826">정액으로 받는 담보</b>가 대안이 된다</div>
+      <div style="font-size:12.5pt;font-weight:800;color:#06203f;line-height:1.35;margin-bottom:1.2mm">현재 <span style="color:#B3242C">12~14급 30만원까지</span> 가입 가능</div>
+      <div style="font-size:10pt;color:#4a5666;line-height:1.4">지금 보유 금액과 <b style="color:#0e1826">급수 범위</b>를 바로 확인한다</div>
+     </td>
+    </tr>
    </table>
   </div>
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · @@PN@@ / {tpg}</span></div>
 </div>
+
 
 
 <div class="pg">
@@ -4749,7 +4756,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v659-answer-20260903</div>'
+    _VSTAMP = '<div class="vstamp">v664-emph-20260903</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
