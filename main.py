@@ -1,7 +1,7 @@
 # ===== BARUM main.py v41-fix12-20260712 (CI 상품명 공백무시·주계약/CI추가보장특약 다열 finditer) =====  BARUM main.py v33-ci-fix-20260708 (암주요치료비 매핑+수술 통원변형 차단+암/수술 감사로그 / 한화심혈관특정=확인) ===== (v29n + 심장묶음 6사 정본매핑·I20→협심증/허혈성=단독전용/순환계=전체5/급성심근=묶음제외 + 간병인MAX·요양드롭·간호통합7) =====
 # -*- coding: utf-8 -*-
 import os, re, tempfile, datetime, base64, traceback, json, httpx, urllib.parse
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, Request
 from typing import List          # ★v385 제안서 복수(최대 3건) 업로드용
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 import openpyxl
@@ -84,6 +84,9 @@ def _db_init():
             # ★v665 MAKEONE AI SYSTEM 허브 설정(카드 목록) — /admin/hub 에서 편집, /hub/config 로 배포
             k.execute("""CREATE TABLE IF NOT EXISTS hub_config(
                 k TEXT PRIMARY KEY, v TEXT, updated TIMESTAMP DEFAULT NOW())""")
+            # ★v665 허브 메모 — 회원 번호별 저장(폰·PC 공용)
+            k.execute("""CREATE TABLE IF NOT EXISTS hub_notes(
+                code TEXT PRIMARY KEY, v TEXT, updated TIMESTAMP DEFAULT NOW())""")
         print('[v429 DB] members · uselog · hub_config 준비 완료')
         return True
     except Exception as _e:
@@ -9764,6 +9767,8 @@ $("#jgo").onclick=async function(){
   else { $("#jmsg").textContent="신청되었습니다. 지점장 승인 후 이 화면에 코드가 나옵니다."; }
 };$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>{
   var sv=null; try{sv=localStorage.getItem("barum_code");}catch(e){}
+  /* ★v665 MAKEONE AI SYSTEM 허브에서 온 경우(#mk=이름|번호) 그 번호로 바로 */
+  try{var hk=/[#&]mk=([^&]+)/.exec(location.hash||"");if(hk){var pp=decodeURIComponent(hk[1]).split("|");if(pp[1]){sv=pp[1];history.replaceState(null,"",location.pathname+location.search);}}}catch(e){}
   if(sv){unlock(sv);}else{$("#pw").focus();}});
 const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 제안서 최대 3건 */
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
@@ -10184,8 +10189,8 @@ async def member_check_status(name: str = Form(''), phone: str = Form('')):
 @app.post('/member/login')
 async def member_login(code: str = Form(''), pw: str = Form('')):
     """설계사 로그인 — 코드 또는 화면비번(0101)."""
-    if pw == PW and not code:
-        return JSONResponse({'ok': True, 'name': '', 'mode': 'pw'})
+    if (pw == PW and not code) or code.strip() in (PW, ADMIN_PW):   # ★v665 코드 칸에 0101·관리자번호를 넣어도 통과
+        return JSONResponse({'ok': True, 'name': '지점장' if code.strip() == ADMIN_PW else '', 'mode': 'pw'})
     ok, nm, why = _member_check(code)
     return JSONResponse({'ok': ok, 'name': nm, 'mode': 'code'} if ok
                         else {'ok': False, 'error': why})
@@ -10276,13 +10281,13 @@ async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''
 
 # ═══════════ v665 MAKEONE AI SYSTEM 허브 관리자 (/admin/hub) ═══════════
 _HUB_DEF = [
-    {"k":"anal","ic":"📊","nm":"보장분석 리포트","ds":"채널 보고서·제안서 PDF를 올리면 보장분석 엑셀·분석지 PPT·진단서 PPT·설명서 PDF 4개를 만든다. 비밀번호 0101.","ur":"https://web-production-4a155.up.railway.app"},
-    {"k":"silson","ic":"🧮","nm":"실손계산기","ds":"1~5세대 실손 환급액 계산. 지원제도·정리표·도수·체외충격파 게시판 포함. 비밀번호 1009.","ur":"https://statuesque-figolla-0264ec.netlify.app"},
+    {"k":"anal","ic":"📊","nm":"보장분석 리포트","ds":"채널 보고서·제안서 PDF를 올리면 보장분석 엑셀·분석지 PPT·진단서 PPT·설명서 PDF 4개를 만든다.","ur":"https://web-production-4a155.up.railway.app"},
+    {"k":"silson","ic":"🧮","nm":"실손계산기","ds":"1~5세대 실손 환급액 계산. 지원제도·정리표·도수·체외충격파 게시판 포함.","ur":"https://statuesque-figolla-0264ec.netlify.app"},
     {"k":"ai","ic":"🔍","nm":"AI 검색포털","ds":"담보·질병코드·약관 내용을 검색한다.","ur":"https://stunning-eclair-dec9fc.netlify.app"},
-    {"k":"lib","ic":"📁","nm":"자료실","ds":"상담 자료·상품 설명서·교육 자료·인포메이션. 비밀번호 1024.","ur":"https://deft-crostata-6c7312.netlify.app"},
-    {"k":"life","ic":"💵","nm":"재무 LIFE PLAN","ds":"진단·행동·분산 3단계 재무 설계. 종신·연금 비교 시뮬레이터·120일 지출기록.","ur":"life/index.html"},
+    {"k":"lib","ic":"📁","nm":"자료실","ds":"상담 자료·상품 설명서·교육 자료·인포메이션.","ur":"https://deft-crostata-6c7312.netlify.app"},
+    {"k":"life","ic":"💵","nm":"LIFE PLAN","ds":"진단·행동·분산 3단계 재무 설계. 종신·연금 비교 시뮬레이터·120일 지출기록.","ur":"life/index.html"},
     {"k":"dollar","ic":"💲","nm":"종신","ds":"달러연금·종신과 원화저축을 나란히 비교한다.","ur":"life/files/dollar_calc.html"},
-    {"k":"pension","ic":"🏛","nm":"연금 비교 시뮬레이터","ds":"생명보험사 연금을 한눈에 비교한다.","ur":"life/files/pension_sim.html"},
+    {"k":"pension","ic":"🏛","nm":"연금","ds":"생명보험사 연금을 한눈에 비교한다.","ur":"life/files/pension_sim.html"},
 ]
 _HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
 
@@ -10361,6 +10366,8 @@ async def hub_login(name: str = Form(''), code: str = Form('')):
     nm = (name or '').strip(); cd = (code or '').strip()
     if cd == ADMIN_PW:
         return JSONResponse({'ok': True, 'name': nm or '관리자', 'admin': True}, headers=_HUB_CORS)
+    if cd == PW:   # ★v665 분석실 화면비번 0101도 입장(일반 회원 자격)
+        return JSONResponse({'ok': True, 'name': nm or '회원', 'admin': False}, headers=_HUB_CORS)
     ok, mnm, why = _member_check(cd)
     if not ok:
         return JSONResponse({'ok': False, 'error': why}, headers=_HUB_CORS)
@@ -10380,6 +10387,109 @@ async def hub_login(name: str = Form(''), code: str = Form('')):
 def hub_login_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
+_HUB_NOTES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_notes.json')
+
+def _hub_owner(code):
+    """번호 → 저장 키. 관리자 번호는 'ADMIN', 회원은 검증된 코드. 실패면 None."""
+    cd = (code or '').strip()
+    if cd == ADMIN_PW: return 'ADMIN'
+    if cd == PW: return 'PW0101'
+    ok, nm, why = _member_check(cd)
+    return cd.upper() if ok else None
+
+@app.get('/hub/notes')
+def hub_notes_get(code: str = ''):
+    """★v665 메모 내려받기 — 폰·PC 어디서 열어도 같은 메모. 번호가 틀리면 빈손."""
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v, to_char(updated,'YYYY-MM-DD HH24:MI') FROM hub_notes WHERE code=%s", (own,))
+                r = k.fetchone()
+                return JSONResponse({'ok': True, 'notes': json.loads(r[0]) if r and r[0] else None,
+                                     'updated': r[1] if r else None, 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v665 notes] DB 읽기 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    return JSONResponse({'ok': True, 'notes': allv.get(own), 'updated': None, 'src': 'file'}, headers=_HUB_CORS)
+
+@app.post('/hub/notes')
+async def hub_notes_post(code: str = Form(''), notes: str = Form('')):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    try:
+        arr = json.loads(notes); assert isinstance(arr, list)
+        if len(notes) > 4_000_000:
+            return JSONResponse({'ok': False, 'error': '메모가 너무 크다(4MB)'}, headers=_HUB_CORS)
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) "
+                          "ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()", (own, notes))
+            return JSONResponse({'ok': True, 'n': len(arr), 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v665 notes] DB 저장 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    allv[own] = arr
+    json.dump(allv, open(_HUB_NOTES_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
+    return JSONResponse({'ok': True, 'n': len(arr), 'src': 'file'}, headers=_HUB_CORS)
+
+@app.options('/hub/notes')
+def hub_notes_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+@app.post('/verify')
+async def hub_verify(request: Request):
+    """★v665 자료실·AI·LIFE PLAN·실손계산기 공용 입장 — 구 makeone-auth `/verify` 규격 그대로(JSON {name,code} → {ok,exp,why}).
+       번호 정본 = 이 서버 회원 DB(/admin). 관리자 번호는 이름 무관 통과."""
+    try:
+        j = await request.json()
+    except Exception:
+        j = {}
+    nm = str(j.get('name') or '').strip(); cd = str(j.get('code') or '').strip()
+    hdr = _HUB_CORS
+    if cd == ADMIN_PW:
+        return JSONResponse({'ok': True, 'exp': 99, 'name': nm or '관리자', 'admin': True}, headers=hdr)
+    if cd == PW:
+        return JSONResponse({'ok': True, 'exp': 99, 'name': nm or '회원', 'admin': False}, headers=hdr)
+    ok, mnm, why = _member_check(cd)
+    if not ok:
+        return JSONResponse({'ok': False, 'why': why}, headers=hdr)
+    if nm and mnm and re.sub(r'\s', '', nm) != re.sub(r'\s', '', mnm):
+        return JSONResponse({'ok': False, 'why': '이름이 번호와 다릅니다'}, headers=hdr)
+    try:
+        c = _db()
+        if c:
+            with c, c.cursor() as k:
+                k.execute("UPDATE members SET last_used=NOW(), use_count=COALESCE(use_count,0)+1 WHERE code=%s", (cd.upper(),))
+                k.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'verify')", (cd.upper(), mnm))
+            c.close()
+    except Exception: pass
+    return JSONResponse({'ok': True, 'exp': 99, 'name': mnm, 'admin': False}, headers=hdr)
+
+@app.options('/verify')
+def hub_verify_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
 @app.get('/admin/hub')
 def admin_hub_page():
     """★MAKEONE AI SYSTEM 허브 관리자 — 카드 편집·추가·숨김·순서. 비번 = 관리자 비번(821024)."""
@@ -10396,10 +10506,11 @@ label{font-size:12px;color:#6a7590;display:block;margin-top:8px}
 button{border:0;border-radius:8px;padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer;background:#1f5fd6;color:#fff}
 button.g{background:#fff;color:#17223b;border:1px solid #e3e8f2}button.y{background:#ffd23f;color:#17223b}button.r{background:#fff;color:#d94a4a;border:1px solid #f3c2c2}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.it{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid #e3e8f2;border-radius:10px;margin-bottom:8px;background:#fff}
-.it.hide{opacity:.45}.it .ic{font-size:24px;text-align:center}.it b{display:block;font-size:14px;color:#0f3fa0}.it small{color:#6a7590;font-size:12px;display:block}
+.it{display:grid;grid-template-columns:44px 1fr;gap:8px 10px;align-items:center;padding:10px;border:1px solid #e3e8f2;border-radius:10px;margin-bottom:8px;background:#fff}
+.it .btns{grid-column:1/-1;justify-content:flex-start}
+.it.hide{opacity:.45}.it .ic{font-size:24px;text-align:center}.it b{display:block;font-size:14px;color:#0f3fa0}.it small{color:#6a7590;font-size:12px;display:block;line-height:1.45}
 .it .ur{font-size:11px;color:#1f5fd6;word-break:break-all}
-.it .btns{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.it .btns button{padding:6px 9px;font-size:12px}
+.it .btns{display:flex;gap:4px;flex-wrap:wrap}.it .btns button{padding:6px 9px;font-size:12px}
 #msg{font-size:13px;color:#6a7590;margin-left:auto}
 .gate{max-width:360px;margin:60px auto}
 </style></head><body><div class="wrap">
