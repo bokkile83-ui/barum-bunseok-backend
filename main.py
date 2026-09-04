@@ -81,7 +81,10 @@ def _db_init():
                 id SERIAL PRIMARY KEY,
                 code TEXT, name TEXT, act TEXT,
                 at TIMESTAMP DEFAULT NOW())""")
-        print('[v429 DB] members · uselog 준비 완료')
+            # ★v665 MAKEONE AI SYSTEM 허브 설정(카드 목록) — /admin/hub 에서 편집, /hub/config 로 배포
+            k.execute("""CREATE TABLE IF NOT EXISTS hub_config(
+                k TEXT PRIMARY KEY, v TEXT, updated TIMESTAMP DEFAULT NOW())""")
+        print('[v429 DB] members · uselog · hub_config 준비 완료')
         return True
     except Exception as _e:
         print('[v429 DB] 초기화 실패:', str(_e)[:100])
@@ -10269,6 +10272,174 @@ async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''
         try: c.close()
         except Exception: pass
 
+
+
+# ═══════════ v665 MAKEONE AI SYSTEM 허브 관리자 (/admin/hub) ═══════════
+_HUB_DEF = [
+    {"k":"anal","ic":"📊","nm":"보장분석 리포트","ds":"채널 보고서·제안서 PDF를 올리면 보장분석 엑셀·분석지 PPT·진단서 PPT·설명서 PDF 4개를 만든다. 비밀번호 0101.","ur":"https://web-production-4a155.up.railway.app"},
+    {"k":"silson","ic":"🧮","nm":"실손계산기","ds":"1~5세대 실손 환급액 계산. 지원제도·정리표·도수·체외충격파 게시판 포함. 비밀번호 1009.","ur":"https://statuesque-figolla-0264ec.netlify.app"},
+    {"k":"ai","ic":"🔍","nm":"AI 검색포털","ds":"담보·질병코드·약관 내용을 검색한다.","ur":"https://stunning-eclair-dec9fc.netlify.app"},
+    {"k":"lib","ic":"📁","nm":"자료실","ds":"상담 자료·상품 설명서·교육 자료·인포메이션. 비밀번호 1024.","ur":"https://deft-crostata-6c7312.netlify.app"},
+    {"k":"life","ic":"💵","nm":"재무 LIFE PLAN","ds":"진단·행동·분산 3단계 재무 설계. 종신·연금 비교 시뮬레이터·120일 지출기록.","ur":"life/index.html"},
+    {"k":"dollar","ic":"💲","nm":"종신","ds":"달러연금·종신과 원화저축을 나란히 비교한다.","ur":"life/files/dollar_calc.html"},
+    {"k":"pension","ic":"🏛","nm":"연금 비교 시뮬레이터","ds":"생명보험사 연금을 한눈에 비교한다.","ur":"life/files/pension_sim.html"},
+]
+_HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
+
+def _hub_load():
+    """DB 우선, 없으면 파일, 그것도 없으면 기본 7장."""
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v FROM hub_config WHERE k='cards'")
+                r = k.fetchone()
+                if r and r[0]:
+                    return json.loads(r[0]), 'db'
+        except Exception as _e:
+            print('[v665 hub] DB 읽기 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        if os.path.exists(_HUB_FILE):
+            return json.load(open(_HUB_FILE, encoding='utf-8')), 'file'
+    except Exception:
+        pass
+    return _copy.deepcopy(_HUB_DEF), 'default'
+
+def _hub_save(cards):
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO hub_config(k,v,updated) VALUES('cards',%s,NOW()) "
+                          "ON CONFLICT (k) DO UPDATE SET v=EXCLUDED.v, updated=NOW()",
+                          (json.dumps(cards, ensure_ascii=False),))
+            return 'db'
+        except Exception as _e:
+            print('[v665 hub] DB 저장 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    json.dump(cards, open(_HUB_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
+    return 'file'
+
+_HUB_CORS = {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+             'Access-Control-Allow-Headers': 'Content-Type', 'Cache-Control': 'no-store'}
+
+@app.get('/hub/config')
+def hub_config_get():
+    cards, src = _hub_load()
+    return JSONResponse({'ok': True, 'cards': cards, 'src': src}, headers=_HUB_CORS)
+
+@app.options('/hub/config')
+def hub_config_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+@app.post('/hub/config')
+async def hub_config_post(pw: str = Form(''), cards: str = Form('')):
+    if pw != ADMIN_PW:
+        return JSONResponse({'ok': False, 'error': '관리자 비밀번호 오류'}, headers=_HUB_CORS)
+    try:
+        arr = json.loads(cards)
+        assert isinstance(arr, list)
+        clean = []
+        for c in arr:
+            if not isinstance(c, dict) or not str(c.get('nm', '')).strip(): continue
+            clean.append({'k': str(c.get('k') or ('c%d' % len(clean))), 'ic': str(c.get('ic') or '🔗')[:4],
+                          'nm': str(c.get('nm'))[:40], 'ds': str(c.get('ds') or '')[:200],
+                          'ur': str(c.get('ur') or '')[:300], 'hide': bool(c.get('hide'))})
+        src = _hub_save(clean)
+        return JSONResponse({'ok': True, 'n': len(clean), 'src': src}, headers=_HUB_CORS)
+    except Exception as _e:
+        return JSONResponse({'ok': False, 'error': str(_e)[:120]}, headers=_HUB_CORS)
+
+@app.post('/hub/login')
+async def hub_login(name: str = Form(''), code: str = Form('')):
+    """★v665 MAKEONE AI SYSTEM 입장 — 이름 + 번호(회원 코드 6자리, /admin에서 발급). 관리자 비번(821024)은 이름 무관 통과."""
+    nm = (name or '').strip(); cd = (code or '').strip()
+    if cd == ADMIN_PW:
+        return JSONResponse({'ok': True, 'name': nm or '관리자', 'admin': True}, headers=_HUB_CORS)
+    ok, mnm, why = _member_check(cd)
+    if not ok:
+        return JSONResponse({'ok': False, 'error': why}, headers=_HUB_CORS)
+    if nm and mnm and re.sub(r'\s', '', nm) != re.sub(r'\s', '', mnm):
+        return JSONResponse({'ok': False, 'error': '이름이 번호와 다릅니다'}, headers=_HUB_CORS)
+    try:
+        c = _db()
+        if c:
+            with c, c.cursor() as k:
+                k.execute("UPDATE members SET last_used=NOW(), use_count=COALESCE(use_count,0)+1 WHERE code=%s", (cd.upper(),))
+                k.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'hub')", (cd.upper(), mnm))
+            c.close()
+    except Exception: pass
+    return JSONResponse({'ok': True, 'name': mnm, 'admin': False}, headers=_HUB_CORS)
+
+@app.options('/hub/login')
+def hub_login_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+@app.get('/admin/hub')
+def admin_hub_page():
+    """★MAKEONE AI SYSTEM 허브 관리자 — 카드 편집·추가·숨김·순서. 비번 = 관리자 비번(821024)."""
+    return HTMLResponse("""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>MAKEONE AI SYSTEM 관리자</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,"Noto Sans KR",sans-serif}
+body{margin:0;background:#fffdf5;color:#17223b;padding:14px}
+.wrap{max-width:900px;margin:0 auto}
+h1{font-size:20px;color:#0f3fa0;margin:6px 0 12px}h1 em{font-style:normal;color:#f3b400}
+.card{background:#fff;border:1px solid #e3e8f2;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(31,95,214,.06)}
+input,textarea{width:100%;border:1px solid #e3e8f2;border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;margin-top:4px}
+label{font-size:12px;color:#6a7590;display:block;margin-top:8px}
+button{border:0;border-radius:8px;padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer;background:#1f5fd6;color:#fff}
+button.g{background:#fff;color:#17223b;border:1px solid #e3e8f2}button.y{background:#ffd23f;color:#17223b}button.r{background:#fff;color:#d94a4a;border:1px solid #f3c2c2}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.it{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:10px;border:1px solid #e3e8f2;border-radius:10px;margin-bottom:8px;background:#fff}
+.it.hide{opacity:.45}.it .ic{font-size:24px;text-align:center}.it b{display:block;font-size:14px;color:#0f3fa0}.it small{color:#6a7590;font-size:12px;display:block}
+.it .ur{font-size:11px;color:#1f5fd6;word-break:break-all}
+.it .btns{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.it .btns button{padding:6px 9px;font-size:12px}
+#msg{font-size:13px;color:#6a7590;margin-left:auto}
+.gate{max-width:360px;margin:60px auto}
+</style></head><body><div class="wrap">
+<h1>MAKEONE <em>AI</em> SYSTEM 관리자</h1>
+<div class="card gate" id="gate"><label>관리자 비밀번호</label><input id="pw" type="password" inputmode="numeric"><div class="row"><button id="go">들어가기</button></div></div>
+<div id="main" style="display:none">
+ <div class="card"><div class="row"><b>카드 목록</b><span id="msg"></span></div><div id="list"></div>
+  <div class="row"><button class="y" id="add">+ 카드 추가</button><button id="save">서버에 저장</button><button class="g" id="reset">기본값 7장으로</button><a class="g" style="margin-left:auto;font-size:12px;color:#6a7590" href="/admin">회원 관리자 →</a></div>
+  <div style="font-size:12px;color:#6a7590;margin-top:8px">저장하면 MAKEONE AI SYSTEM 앱을 여는 모든 폰에 바로 반영된다. 주소는 https://… 또는 앱 안 경로(life/index.html).</div></div>
+ <div class="card" id="ed" style="display:none"><b id="edT">카드 편집</b>
+  <label>아이콘(이모지 1개)</label><input id="eIc"><label>이름</label><input id="eNm"><label>설명</label><textarea id="eDs" rows="2"></textarea><label>주소</label><input id="eUr">
+  <div class="row"><button id="eOk">적용</button><button class="g" id="eNo">취소</button></div></div>
+</div></div>
+<script>
+var PW='',C=[],ei=-1;const $=s=>document.querySelector(s);
+function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+function render(){var L=$('#list');L.innerHTML='';C.forEach(function(c,i){var d=document.createElement('div');d.className='it'+(c.hide?' hide':'');
+ d.innerHTML='<div class="ic">'+esc(c.ic)+'</div><div><b>'+esc(c.nm)+(c.hide?' (숨김)':'')+'</b><small>'+esc(c.ds)+'</small><span class="ur">'+esc(c.ur)+'</span></div>'+
+ '<div class="btns"><button class="g" data-a="edit">편집</button><button class="g" data-a="hide">'+(c.hide?'보이기':'숨기기')+'</button><button class="g" data-a="up">▲</button><button class="g" data-a="down">▼</button><button class="r" data-a="del">삭제</button></div>';
+ d.onclick=function(e){var b=e.target.closest('button');if(!b)return;var a=b.dataset.a;
+  if(a=='edit')edit(i);else if(a=='hide'){c.hide=!c.hide;render()}else if(a=='up'&&i>0){C.splice(i-1,0,C.splice(i,1)[0]);render()}
+  else if(a=='down'&&i<C.length-1){C.splice(i+1,0,C.splice(i,1)[0]);render()}else if(a=='del'){if(confirm('「'+c.nm+'」 삭제?')){C.splice(i,1);render()}}};
+ L.appendChild(d)});$('#msg').textContent='카드 '+C.length+'장 · 저장 전';}
+function edit(i){ei=i;var c=i>=0?C[i]:{ic:'🔗',nm:'',ds:'',ur:''};$('#edT').textContent=i>=0?'카드 편집':'카드 추가';$('#eIc').value=c.ic;$('#eNm').value=c.nm;$('#eDs').value=c.ds;$('#eUr').value=c.ur;$('#ed').style.display='block';$('#eNm').focus();window.scrollTo(0,document.body.scrollHeight)}
+$('#eNo').onclick=function(){$('#ed').style.display='none'};
+$('#eOk').onclick=function(){var nm=$('#eNm').value.trim();if(!nm){alert('이름');return}var c=ei>=0?C[ei]:{k:'c'+Date.now()};c.ic=$('#eIc').value.trim()||'🔗';c.nm=nm;c.ds=$('#eDs').value.trim();c.ur=$('#eUr').value.trim();if(ei<0)C.push(c);$('#ed').style.display='none';render()};
+$('#add').onclick=function(){edit(-1)};
+$('#reset').onclick=function(){if(confirm('기본 7장으로 되돌릴까? (저장을 눌러야 반영)')){C=JSON.parse(JSON.stringify(DEF));render()}};
+var DEF=__HUBDEF__;
+$('#go').onclick=function(){PW=$('#pw').value.trim();var fd=new FormData();fd.append('pw',PW);fd.append('cards','[]');
+ fetch('/hub/config').then(r=>r.json()).then(function(j){C=j.cards||[];
+  /* 비번 검증: 빈 저장 대신 잘못된 카드로 검사 */
+  var f2=new FormData();f2.append('pw',PW);f2.append('cards','x');
+  return fetch('/hub/config',{method:'POST',body:f2}).then(r=>r.json())}).then(function(j){
+  if(j.error&&j.error.indexOf('비밀번호')>-1){alert('비밀번호가 틀렸다');return}
+  $('#gate').style.display='none';$('#main').style.display='block';render()})};
+$('#pw').onkeydown=function(e){if(e.key=='Enter')$('#go').onclick()};
+$('#save').onclick=function(){var fd=new FormData();fd.append('pw',PW);fd.append('cards',JSON.stringify(C));
+ fetch('/hub/config',{method:'POST',body:fd}).then(r=>r.json()).then(function(j){if(!j.ok){alert(j.error||'실패');return}$('#msg').textContent='저장됨 '+new Date().toLocaleTimeString()+' ('+j.n+'장 · '+j.src+')';alert('저장됐다. 앱을 새로 열면 반영된다.')})};
+</script></body></html>""".replace("__HUBDEF__", json.dumps(_HUB_DEF, ensure_ascii=False)))
 
 @app.get('/health')
 def health():
