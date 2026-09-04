@@ -9460,7 +9460,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
 .mkhome{position:sticky;top:0;z-index:9999;display:block;text-align:center;background:#0f3fa0;color:#fff;padding:7px 10px;font-size:12.5px;font-weight:800;text-decoration:none;letter-spacing:.02em}
 </style></head><body>
-<a class="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.parent.postMessage({mk:'home'},'*');return false;}}catch(e){}">🏠 MAKEONE 홈</a>
+<a class="mkhome" id="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.parent.postMessage({mk:'home'},'*');return false;}}catch(e){}">🏠 MAKEONE 홈</a>
 <div id="gate">
   <div class="kick">@@BRAND@@</div><h1>@@BRAND@@ @@BSUB@@</h1>
   <div class="s">이름과 번호를 입력하세요 (MAKEONE AI SYSTEM과 같은 번호)</div>
@@ -9897,7 +9897,7 @@ _onReady(function(){
      매 로드마다 통째로 unregister 했다. 그래서 크롬이 「앱 설치」를 영영 띄우지 않았다.
      서비스워커는 캐시를 하지 않으므로(no-store) 해제할 이유가 없다. 삭제한다. -->
 
-</body></html>'''
+<script>/*mkhomeHide*/try{if(window.top!==window){var _m=document.getElementById('mkhome');if(_m)_m.style.display='none';}}catch(e){}</script></body></html>'''
 
 # ═══════════ v428 PWA (제53조) — manifest · 아이콘 · 서비스워커 ═══════════
 _PWA_ICON = None
