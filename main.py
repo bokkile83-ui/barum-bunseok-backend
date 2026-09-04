@@ -9460,7 +9460,7 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
 .mkhome{position:fixed;right:10px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:9999;background:#0f3fa0;color:#fff;border:0;border-radius:22px;padding:9px 13px;font-size:12.5px;font-weight:800;box-shadow:0 6px 16px rgba(15,63,160,.35);cursor:pointer;text-decoration:none}
 </style></head><body>
-<a class="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.top.location.href=this.href;return false;}}catch(e){}">🏠 MAKEONE 홈</a>
+<a class="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.parent.postMessage({mk:'home'},'*');return false;}}catch(e){}">🏠 MAKEONE 홈</a>
 <div id="gate">
   <div class="kick">@@BRAND@@</div><h1>@@BRAND@@ @@BSUB@@</h1>
   <div class="s">이름과 번호를 입력하세요 (MAKEONE AI SYSTEM과 같은 번호)</div>
@@ -9896,9 +9896,6 @@ _onReady(function(){
 <!-- ★v440 (2026.08.17 실측) — 여기 있던 <script>가 7577행에서 등록한 서비스워커를
      매 로드마다 통째로 unregister 했다. 그래서 크롬이 「앱 설치」를 영영 띄우지 않았다.
      서비스워커는 캐시를 하지 않으므로(no-store) 해제할 이유가 없다. 삭제한다. -->
-<!-- ★MAKEONE AI SYSTEM 홈 버튼 — 허브 안(창 안)이면 허브에 「닫아라」 신호, 새 창이면 허브로 이동 -->
-<a id="mkHomeBtn" href="https://singular-smakager-0caac1.netlify.app" style="position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483000;background:#0f3fa0;color:#fff;font:800 13px/1 -apple-system,'Noto Sans KR',sans-serif;padding:10px 14px;border-radius:22px;text-decoration:none;box-shadow:0 6px 18px rgba(15,63,160,.35);display:inline-flex;align-items:center;gap:6px">🏠 홈</a>
-<script>(function(){var a=document.getElementById('mkHomeBtn');if(!a)return;a.addEventListener('click',function(e){try{if(window.top!==window){e.preventDefault();window.parent.postMessage({mk:'home'},'*');}}catch(x){}});})();</script>
 
 </body></html>'''
 
@@ -10302,6 +10299,20 @@ _HUB_DEF = [
 ]
 _HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
 
+def _hub_norm(cards):
+    """★v665 기본 7장(k가 같은 카드)은 이름·설명을 기본값으로 강제 — 지점장 확정 이름(LIFE PLAN·연금·종신) + 비밀번호 문구 삭제. 주소·순서·숨김은 저장값 유지."""
+    dm = {d['k']: d for d in _HUB_DEF}
+    out, seen = [], set()
+    for c in cards or []:
+        if not isinstance(c, dict): continue
+        k = c.get('k')
+        if k in dm:
+            if k in seen: continue          # 같은 카드 중복(종신 2장) 제거
+            seen.add(k)
+            c = dict(c); c['nm'] = dm[k]['nm']; c['ds'] = dm[k]['ds']; c['ic'] = dm[k]['ic']
+        out.append(c)
+    return out
+
 def _hub_load():
     """DB 우선, 없으면 파일, 그것도 없으면 기본 7장."""
     c = _db()
@@ -10347,7 +10358,7 @@ _HUB_CORS = {'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods':
 @app.get('/hub/config')
 def hub_config_get():
     cards, src = _hub_load()
-    return JSONResponse({'ok': True, 'cards': cards, 'src': src}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'cards': _hub_norm(cards), 'src': src}, headers=_HUB_CORS)
 
 @app.options('/hub/config')
 def hub_config_opt():
