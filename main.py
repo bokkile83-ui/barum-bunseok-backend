@@ -9458,11 +9458,14 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .tabc .nm{display:block;font-size:9.5px;font-weight:800}
 
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
+.mkhome{position:fixed;right:10px;bottom:calc(74px + env(safe-area-inset-bottom));z-index:9999;background:#0f3fa0;color:#fff;border:0;border-radius:22px;padding:9px 13px;font-size:12.5px;font-weight:800;box-shadow:0 6px 16px rgba(15,63,160,.35);cursor:pointer;text-decoration:none}
 </style></head><body>
+<a class="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.top.location.href=this.href;return false;}}catch(e){}">🏠 MAKEONE 홈</a>
 <div id="gate">
   <div class="kick">@@BRAND@@</div><h1>@@BRAND@@ @@BSUB@@</h1>
-  <div class="s">회원코드 6자리를 입력하세요</div>
-  <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="회원코드 6자리" autocomplete="off">
+  <div class="s">이름과 번호를 입력하세요 (MAKEONE AI SYSTEM과 같은 번호)</div>
+  <input id="pwn" class="pw" type="text" placeholder="이름" autocomplete="name" style="letter-spacing:0;font-size:16px;margin-bottom:8px">
+  <input id="pw" class="pw" type="text" inputmode="numeric" placeholder="번호 6자리" autocomplete="off">
   <button id="go" class="go">접속</button><div id="gerr" class="err"></div>
   <div id="joinbox" style="margin-top:18px;width:100%;max-width:420px">
    <div id="joinopen" style="text-align:center;font-size:13px;color:var(--mute);cursor:pointer;
@@ -9695,10 +9698,11 @@ async function unlock(v2){const src=(typeof v2==="string"&&v2)?v2:$("#pw").value
   try{
     const fd=new FormData();
     if(v===MPW){fd.append("pw",v);}else{fd.append("code",v);}
+    try{var _nm=($("#pwn")&&$("#pwn").value||"").trim();if(_nm){fd.append("name",_nm);localStorage.setItem("barum_name",_nm);}else{_nm=localStorage.getItem("barum_name")||"";if(_nm)fd.append("name",_nm);}}catch(e){}
     const r=await fetch("/member/login",{method:"POST",body:fd});
     const j=await r.json();
     if(j.ok){ACCESS=MPW; try{localStorage.setItem("barum_code",v);}catch(e){}
-      if(j.name)$(".sub").textContent=j.name+" 님 · 보장분석 자동화";
+      try{var _shown=j.name||localStorage.getItem("barum_name")||"";if(_shown)$(".sub").textContent=_shown+" 님 · 보장분석 자동화";}catch(e){}
       $("#gerr").textContent="";$("#gate").style.display="none";$("#app").style.display="flex";}
     else{try{localStorage.removeItem("barum_code");}catch(e){} fail(j.error);}}
   catch(e){$("#gerr").textContent="서버 연결 실패";}}
@@ -9768,7 +9772,7 @@ $("#jgo").onclick=async function(){
 };$("#pw").addEventListener("keydown",e=>{if(e.key==="Enter")unlock();});window.addEventListener("load",()=>{
   var sv=null; try{sv=localStorage.getItem("barum_code");}catch(e){}
   /* ★v665 MAKEONE AI SYSTEM 허브에서 온 경우(#mk=이름|번호) 그 번호로 바로 */
-  try{var hk=/[#&]mk=([^&]+)/.exec(location.hash||"");if(hk){var pp=decodeURIComponent(hk[1]).split("|");if(pp[1]){sv=pp[1];history.replaceState(null,"",location.pathname+location.search);}}}catch(e){}
+  try{var hk=/[#&]mk=([^&]+)/.exec(location.hash||"");if(hk){var pp=decodeURIComponent(hk[1]).split("|");if(pp[1]){sv=pp[1];try{if(pp[0]){localStorage.setItem("barum_name",pp[0]);if($("#pwn"))$("#pwn").value=pp[0];}}catch(e){}history.replaceState(null,"",location.pathname+location.search);}}}catch(e){}
   if(sv){unlock(sv);}else{$("#pw").focus();}});
 const chat=$("#chat");let file=null;let pdfFile=null;let files=[];   /* ★v385 제안서 최대 3건 */
 function _syncSend(){$("#send").disabled=!(file||pdfFile);}
@@ -9892,6 +9896,10 @@ _onReady(function(){
 <!-- ★v440 (2026.08.17 실측) — 여기 있던 <script>가 7577행에서 등록한 서비스워커를
      매 로드마다 통째로 unregister 했다. 그래서 크롬이 「앱 설치」를 영영 띄우지 않았다.
      서비스워커는 캐시를 하지 않으므로(no-store) 해제할 이유가 없다. 삭제한다. -->
+<!-- ★MAKEONE AI SYSTEM 홈 버튼 — 허브 안(창 안)이면 허브에 「닫아라」 신호, 새 창이면 허브로 이동 -->
+<a id="mkHomeBtn" href="https://singular-smakager-0caac1.netlify.app" style="position:fixed;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483000;background:#0f3fa0;color:#fff;font:800 13px/1 -apple-system,'Noto Sans KR',sans-serif;padding:10px 14px;border-radius:22px;text-decoration:none;box-shadow:0 6px 18px rgba(15,63,160,.35);display:inline-flex;align-items:center;gap:6px">🏠 홈</a>
+<script>(function(){var a=document.getElementById('mkHomeBtn');if(!a)return;a.addEventListener('click',function(e){try{if(window.top!==window){e.preventDefault();window.parent.postMessage({mk:'home'},'*');}}catch(x){}});})();</script>
+
 </body></html>'''
 
 # ═══════════ v428 PWA (제53조) — manifest · 아이콘 · 서비스워커 ═══════════
@@ -10187,11 +10195,14 @@ async def member_check_status(name: str = Form(''), phone: str = Form('')):
 
 
 @app.post('/member/login')
-async def member_login(code: str = Form(''), pw: str = Form('')):
-    """설계사 로그인 — 코드 또는 화면비번(0101)."""
+async def member_login(code: str = Form(''), pw: str = Form(''), name: str = Form('')):
+    """설계사 로그인 — 이름 + 번호(회원코드) / 0101·관리자번호는 이름 무관."""
     if (pw == PW and not code) or code.strip() in (PW, ADMIN_PW):   # ★v665 코드 칸에 0101·관리자번호를 넣어도 통과
-        return JSONResponse({'ok': True, 'name': '지점장' if code.strip() == ADMIN_PW else '', 'mode': 'pw'})
+        return JSONResponse({'ok': True, 'name': name.strip() or ('지점장' if code.strip() == ADMIN_PW else ''), 'mode': 'pw'})
     ok, nm, why = _member_check(code)
+    if ok and name.strip() and nm and re.sub(r'\s', '', name) != re.sub(r'\s', '', nm):
+        ok, why = False, '이름이 번호와 다릅니다'
+    
     return JSONResponse({'ok': ok, 'name': nm, 'mode': 'code'} if ok
                         else {'ok': False, 'error': why})
 
@@ -10490,43 +10501,150 @@ async def hub_verify(request: Request):
 def hub_verify_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
+@app.post('/issue')
+async def hub_issue(request: Request):
+    """★v665 실손·AI·자료실 앱 안 「지점장 관리자 모드」가 부르는 발급 API — 같은 회원 DB에 번호를 만든다."""
+    pw = request.headers.get('X-Admin-Pw', '') or request.headers.get('x-admin-pw', '')
+    try: j = await request.json()
+    except Exception: j = {}
+    if pw != ADMIN_PW:
+        return JSONResponse({'ok': False, 'why': '관리자 번호 오류'}, status_code=403, headers=_HUB_CORS)
+    nm = str(j.get('name') or '').strip()
+    try: months = int(float(j.get('months') or 12))
+    except Exception: months = 12
+    memo = str(j.get('memo') or '')[:100]
+    if not nm:
+        return JSONResponse({'ok': False, 'why': '이름'}, headers=_HUB_CORS)
+    c = _db()
+    if not c:
+        return JSONResponse({'ok': False, 'why': 'DB 미연결'}, headers=_HUB_CORS)
+    try:
+        import datetime as _d
+        with c, c.cursor() as k:
+            exp = _d.date.today() + _d.timedelta(days=months * 30)
+            for _ in range(20):
+                cd = _mk_code()
+                k.execute("SELECT 1 FROM members WHERE code=%s", (cd,))
+                if not k.fetchone(): break
+            k.execute("INSERT INTO members(name,code,expires,memo) VALUES(%s,%s,%s,%s)", (nm, cd, exp, memo))
+        return JSONResponse({'ok': True, 'code': cd, 'exp': 99, 'name': nm, 'expires': str(exp)}, headers=_HUB_CORS)
+    except Exception as _e:
+        return JSONResponse({'ok': False, 'why': str(_e)[:100]}, headers=_HUB_CORS)
+    finally:
+        try: c.close()
+        except Exception: pass
+
+@app.options('/issue')
+def hub_issue_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
 @app.get('/admin/hub')
 def admin_hub_page():
-    """★MAKEONE AI SYSTEM 허브 관리자 — 카드 편집·추가·숨김·순서. 비번 = 관리자 비번(821024)."""
+    """★MAKEONE AI SYSTEM 관리자 — ①카드 ②회원 번호. 비번 = 관리자 번호(821024)."""
     return HTMLResponse("""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>MAKEONE AI SYSTEM 관리자</title>
 <style>
 *{box-sizing:border-box;font-family:-apple-system,"Noto Sans KR",sans-serif}
-body{margin:0;background:#fffdf5;color:#17223b;padding:14px}
-.wrap{max-width:900px;margin:0 auto}
-h1{font-size:20px;color:#0f3fa0;margin:6px 0 12px}h1 em{font-style:normal;color:#f3b400}
-.card{background:#fff;border:1px solid #e3e8f2;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(31,95,214,.06)}
-input,textarea{width:100%;border:1px solid #e3e8f2;border-radius:8px;padding:9px 10px;font:inherit;font-size:14px;margin-top:4px}
-label{font-size:12px;color:#6a7590;display:block;margin-top:8px}
-button{border:0;border-radius:8px;padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer;background:#1f5fd6;color:#fff}
-button.g{background:#fff;color:#17223b;border:1px solid #e3e8f2}button.y{background:#ffd23f;color:#17223b}button.r{background:#fff;color:#d94a4a;border:1px solid #f3c2c2}
+body{margin:0;background:#f2f5fb;color:#111a2e}
+.hd{background:#0f3fa0;color:#fff;padding:16px 18px 0}
+.hd h1{font-size:19px;margin:0 0 12px;letter-spacing:-.01em}.hd h1 em{font-style:normal;color:#ffd23f}
+.tabs{display:flex;gap:6px}
+.tabs button{flex:1;border:0;background:rgba(255,255,255,.14);color:#dbe6ff;padding:12px 8px;font-size:15px;font-weight:800;border-radius:12px 12px 0 0;cursor:pointer}
+.tabs button.on{background:#f2f5fb;color:#0f3fa0}
+.wrap{max-width:900px;margin:0 auto;padding:14px}
+.gate{max-width:380px;margin:60px auto;background:#fff;border-radius:16px;padding:26px 22px;box-shadow:0 10px 30px rgba(15,63,160,.15);text-align:center}
+.gate h2{margin:0 0 4px;font-size:22px;color:#0f3fa0}.gate h2 em{font-style:normal;color:#f3b400}
+.gate p{margin:0 0 16px;color:#6a7590;font-size:13px}
+input,textarea,select{width:100%;border:2px solid #d9e0ee;border-radius:10px;padding:11px 12px;font:inherit;font-size:15px;background:#fff}
+input:focus,textarea:focus{outline:0;border-color:#1f5fd6}
+label{font-size:12px;font-weight:700;color:#5b6a88;display:block;margin:10px 0 4px}
+button.b{border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:800;cursor:pointer;background:#1f5fd6;color:#fff}
+button.y{background:#ffd23f;color:#111a2e}button.g{background:#fff;color:#111a2e;border:2px solid #d9e0ee}button.r{background:#fff;color:#d94a4a;border:2px solid #f3c2c2}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
-.it{display:grid;grid-template-columns:44px 1fr;gap:8px 10px;align-items:center;padding:10px;border:1px solid #e3e8f2;border-radius:10px;margin-bottom:8px;background:#fff}
-.it .btns{grid-column:1/-1;justify-content:flex-start}
-.it.hide{opacity:.45}.it .ic{font-size:24px;text-align:center}.it b{display:block;font-size:14px;color:#0f3fa0}.it small{color:#6a7590;font-size:12px;display:block;line-height:1.45}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 4px 14px rgba(15,63,160,.06)}
+.card h3{margin:0 0 10px;font-size:16px;color:#0f3fa0;display:flex;align-items:center;gap:8px}
+.card h3 .n{margin-left:auto;font-size:12px;font-weight:600;color:#6a7590}
+.it{display:grid;grid-template-columns:44px 1fr;gap:6px 10px;align-items:center;padding:12px;border:2px solid #e6ebf5;border-radius:12px;margin-bottom:8px;background:#fff}
+.it.hide{opacity:.45}.it .ic{font-size:26px;text-align:center}.it b{display:block;font-size:15px;color:#0f3fa0}.it small{color:#5b6a88;font-size:12px;display:block;line-height:1.45}
 .it .ur{font-size:11px;color:#1f5fd6;word-break:break-all}
-.it .btns{display:flex;gap:4px;flex-wrap:wrap}.it .btns button{padding:6px 9px;font-size:12px}
+.it .btns{grid-column:1/-1;display:flex;gap:4px;flex-wrap:wrap}.it .btns button{padding:7px 10px;font-size:12px;border-radius:8px}
 #msg{font-size:13px;color:#6a7590;margin-left:auto}
-.gate{max-width:360px;margin:60px auto}
-</style></head><body><div class="wrap">
-<h1>MAKEONE <em>AI</em> SYSTEM 관리자</h1>
-<div class="card gate" id="gate"><label>관리자 비밀번호</label><input id="pw" type="password" inputmode="numeric"><div class="row"><button id="go">들어가기</button></div></div>
-<div id="main" style="display:none">
- <div class="card"><div class="row"><b>카드 목록</b><span id="msg"></span></div><div id="list"></div>
-  <div class="row"><button class="y" id="add">+ 카드 추가</button><button id="save">서버에 저장</button><button class="g" id="reset">기본값 7장으로</button><a class="g" style="margin-left:auto;font-size:12px;color:#6a7590" href="/admin">회원 관리자 →</a></div>
-  <div style="font-size:12px;color:#6a7590;margin-top:8px">저장하면 MAKEONE AI SYSTEM 앱을 여는 모든 폰에 바로 반영된다. 주소는 https://… 또는 앱 안 경로(life/index.html).</div></div>
- <div class="card" id="ed" style="display:none"><b id="edT">카드 편집</b>
-  <label>아이콘(이모지 1개)</label><input id="eIc"><label>이름</label><input id="eNm"><label>설명</label><textarea id="eDs" rows="2"></textarea><label>주소</label><input id="eUr">
-  <div class="row"><button id="eOk">적용</button><button class="g" id="eNo">취소</button></div></div>
-</div></div>
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.stat div{background:#0f3fa0;color:#fff;border-radius:12px;padding:12px;text-align:center}
+.stat div b{display:block;font-size:24px}.stat div span{font-size:12px;color:#c9d8ff}
+.stat div.y{background:#ffd23f;color:#111a2e}.stat div.y span{color:#5b4a00}.stat div.r{background:#d94a4a}.stat div.r span{color:#ffd9d9}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#eef2fb;color:#0f3fa0;text-align:left;padding:9px 8px;font-size:12px}
+td{padding:9px 8px;border-bottom:1px solid #eef2fb;vertical-align:middle}
+td .code{font-family:ui-monospace,Menlo,monospace;font-weight:800;font-size:15px;letter-spacing:2px;color:#0f3fa0;cursor:pointer}
+tr.blk td{color:#aaa;text-decoration:line-through}
+td .mini{border:1px solid #d9e0ee;background:#fff;border-radius:6px;padding:4px 8px;font-size:11.5px;cursor:pointer;margin-right:3px}
+td .mini.r{color:#d94a4a;border-color:#f3c2c2}
+.big{background:#eef2fb;border:2px dashed #1f5fd6;border-radius:12px;padding:14px;margin-top:10px;text-align:center}
+.big .c{font-size:34px;font-weight:900;letter-spacing:6px;color:#0f3fa0;font-family:ui-monospace,Menlo,monospace}
+.big small{display:block;color:#5b6a88;margin-top:4px}
+.sec{display:none}.sec.on{display:block}
+@media(max-width:600px){th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){display:none}}
+</style></head><body>
+<div class="hd"><h1>MAKEONE <em>AI</em> SYSTEM 관리자</h1>
+ <div class="tabs" id="tabs" style="display:none"><button data-t="mem" class="on">👥 회원 번호</button><button data-t="card">▦ 카드</button></div></div>
+<div class="wrap">
+ <div class="gate" id="gate"><h2>MAKEONE <em>AI</em> SYSTEM</h2><p>관리자 번호</p><input id="pw" type="password" inputmode="numeric" placeholder="관리자 번호"><div class="row"><button class="b" id="go" style="width:100%">들어가기</button></div></div>
+
+ <div class="sec" id="sec-mem">
+  <div class="stat"><div><b id="stT">0</b><span>회원</span></div><div class="y"><b id="stP">0</b><span>가입 대기</span></div><div class="r"><b id="stB">0</b><span>차단</span></div></div>
+  <div class="card"><h3>➕ 번호 발급 <span class="n">이름으로 구분한다</span></h3>
+   <label>이름</label><input id="iNm" placeholder="예) 김신인">
+   <div class="row"><div style="flex:1"><label>기간(개월)</label><input id="iMo" type="number" value="12" min="1" max="99"></div><div style="flex:2"><label>메모(선택)</label><input id="iMemo" placeholder="소속·비고"></div></div>
+   <div class="row"><button class="b" id="iGo">번호 만들기</button><span id="iMsg" style="font-size:13px;color:#6a7590"></span></div>
+   <div class="big" id="iOut" style="display:none"><div class="c" id="iCode"></div><small id="iInfo"></small><div class="row" style="justify-content:center"><button class="g" id="iCopy">번호 복사</button><button class="g" id="iShare">문자로 보내기</button></div></div>
+  </div>
+  <div class="card" id="pendCard" style="display:none"><h3>⏳ 가입 대기 <span class="n">앱에서 가입 신청한 사람</span></h3><div id="pend"></div></div>
+  <div class="card"><h3>👥 회원 목록 <span class="n" id="memN"></span></h3><div style="overflow:auto"><table><thead><tr><th>이름</th><th>번호</th><th>상태</th><th>만료</th><th>최근·횟수</th><th></th></tr></thead><tbody id="mem"></tbody></table></div>
+   <div style="font-size:12px;color:#6a7590;margin-top:8px">같은 번호로 MAKEONE AI SYSTEM · 보장분석실 · 실손계산기 · AI · 자료실 · LIFE PLAN 전부 들어간다. 관리자 번호(821024)와 0101도 통과.</div></div>
+ </div>
+
+ <div class="sec" id="sec-card">
+  <div class="card"><h3>▦ 카드 목록 <span class="n" id="msg"></span></h3><div id="list"></div>
+   <div class="row"><button class="y" id="add">+ 카드 추가</button><button class="b" id="save">서버에 저장</button><button class="g" id="reset">기본값 7장으로</button></div>
+   <div style="font-size:12px;color:#6a7590;margin-top:8px">저장하면 앱을 여는 모든 폰에 바로 반영된다. 주소는 https://… 또는 앱 안 경로(life/index.html).</div></div>
+  <div class="card" id="ed" style="display:none"><h3 id="edT">카드 편집</h3>
+   <label>아이콘(이모지 1개)</label><input id="eIc"><label>이름</label><input id="eNm"><label>설명</label><textarea id="eDs" rows="2"></textarea><label>주소</label><input id="eUr">
+   <div class="row"><button class="b" id="eOk">적용</button><button class="g" id="eNo">취소</button></div></div>
+ </div>
+</div>
 <script>
 var PW='',C=[],ei=-1;const $=s=>document.querySelector(s);
 function esc(t){return String(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+/* ── 탭 ── */
+document.querySelectorAll('#tabs button').forEach(function(b){b.onclick=function(){document.querySelectorAll('#tabs button').forEach(function(x){x.classList.toggle('on',x===b)});document.querySelectorAll('.sec').forEach(function(s){s.classList.toggle('on',s.id==='sec-'+b.dataset.t)})}});
+/* ── 입장 ── */
+function fd(o){var f=new FormData();for(var k in o)f.append(k,o[k]);return f}
+$('#go').onclick=function(){PW=$('#pw').value.trim();
+ fetch('/admin/api',{method:'POST',body:fd({pw:PW,act:'list'})}).then(r=>r.json()).then(function(j){
+  if(!j.ok&&(j.error||'').indexOf('비밀번호')>-1){alert('관리자 번호가 틀렸다');return}
+  $('#gate').style.display='none';$('#tabs').style.display='flex';$('#sec-mem').classList.add('on');memRender(j);
+  fetch('/hub/config').then(r=>r.json()).then(function(c){C=c.cards||[];render()})})};
+$('#pw').onkeydown=function(e){if(e.key=='Enter')$('#go').onclick()};
+/* ── 회원 ── */
+function memLoad(){fetch('/admin/api',{method:'POST',body:fd({pw:PW,act:'list'})}).then(r=>r.json()).then(memRender)}
+function memRender(j){if(!j.ok){$('#memN').textContent=j.error||'';return}
+ $('#stT').textContent=j.total||0;$('#stP').textContent=j.npend||0;$('#stB').textContent=j.blocked||0;$('#memN').textContent=(j.total||0)+'명';
+ var tb=$('#mem');tb.innerHTML='';(j.rows||[]).forEach(function(r){var tr=document.createElement('tr');if(r.blocked)tr.className='blk';
+  tr.innerHTML='<td><b>'+esc(r.name)+'</b>'+(r.memo?'<br><small style="color:#888">'+esc(r.memo)+'</small>':'')+'</td><td><span class="code" title="누르면 복사">'+esc(r.code)+'</span></td><td>'+(r.blocked?'<span style="color:#d94a4a;font-weight:800">차단</span>':'<span style="color:#1f9d5a;font-weight:800">사용중</span>')+'</td><td>'+esc(r.expires)+'</td><td>'+esc(r.last)+' · '+(r.cnt||0)+'회</td><td style="white-space:nowrap">'+(r.blocked?'<button class="mini" data-a="unblock">해제</button>':'<button class="mini" data-a="block">차단</button>')+'<button class="mini r" data-a="delete">삭제</button></td>';
+  tr.querySelector('.code').onclick=function(){copy(r.code)};
+  tr.querySelectorAll('button').forEach(function(b){b.onclick=function(){var a=b.dataset.a;if(a==='delete'&&!confirm(r.name+' 삭제? 되돌릴 수 없다'))return;fetch('/admin/api',{method:'POST',body:fd({pw:PW,act:a,code:r.code})}).then(r=>r.json()).then(memLoad)}});
+  tb.appendChild(tr)});
+ var pc=$('#pendCard'),pd=$('#pend');pd.innerHTML='';pc.style.display=(j.pend&&j.pend.length)?'block':'none';
+ (j.pend||[]).forEach(function(p){var d=document.createElement('div');d.className='row';d.innerHTML='<b>'+esc(p.name)+'</b><span style="color:#6a7590">'+esc(p.phone)+'</span><button class="b" data-a="approve">승인(12개월)</button><button class="r" data-a="reject">거절</button>';
+  d.querySelectorAll('button').forEach(function(b){b.onclick=function(){fetch('/admin/api',{method:'POST',body:fd({pw:PW,act:b.dataset.a,name:p.name,memo:p.phone,months:12})}).then(r=>r.json()).then(function(j2){if(j2.code)alert(p.name+' 번호: '+j2.code);memLoad()})}});pd.appendChild(d)});}
+$('#iGo').onclick=function(){var nm=$('#iNm').value.trim();if(!nm){alert('이름');return}$('#iMsg').textContent='만드는 중…';
+ fetch('/admin/api',{method:'POST',body:fd({pw:PW,act:'issue',name:nm,months:$('#iMo').value||12,memo:$('#iMemo').value})}).then(r=>r.json()).then(function(j){$('#iMsg').textContent='';if(!j.ok){alert(j.error||'실패');return}
+  $('#iOut').style.display='block';$('#iCode').textContent=j.code;$('#iInfo').textContent=nm+' · '+j.expires+' 까지';LAST={nm:nm,code:j.code};$('#iNm').value='';memLoad()})};
+var LAST=null;function copy(t){try{navigator.clipboard.writeText(t).then(function(){alert('복사됨: '+t)})}catch(e){prompt('번호',t)}}
+$('#iCopy').onclick=function(){if(LAST)copy(LAST.code)};
+$('#iShare').onclick=function(){if(!LAST)return;var t='[MAKEONE AI SYSTEM]\\n'+LAST.nm+'님 번호: '+LAST.code+'\\n앱: https://singular-smakager-0caac1.netlify.app\\n이름과 번호로 들어가면 됩니다.';if(navigator.share){navigator.share({text:t})}else{location.href='sms:?body='+encodeURIComponent(t)}};
+/* ── 카드 ── */
 function render(){var L=$('#list');L.innerHTML='';C.forEach(function(c,i){var d=document.createElement('div');d.className='it'+(c.hide?' hide':'');
  d.innerHTML='<div class="ic">'+esc(c.ic)+'</div><div><b>'+esc(c.nm)+(c.hide?' (숨김)':'')+'</b><small>'+esc(c.ds)+'</small><span class="ur">'+esc(c.ur)+'</span></div>'+
  '<div class="btns"><button class="g" data-a="edit">편집</button><button class="g" data-a="hide">'+(c.hide?'보이기':'숨기기')+'</button><button class="g" data-a="up">▲</button><button class="g" data-a="down">▼</button><button class="r" data-a="del">삭제</button></div>';
@@ -10534,22 +10652,13 @@ function render(){var L=$('#list');L.innerHTML='';C.forEach(function(c,i){var d=
   if(a=='edit')edit(i);else if(a=='hide'){c.hide=!c.hide;render()}else if(a=='up'&&i>0){C.splice(i-1,0,C.splice(i,1)[0]);render()}
   else if(a=='down'&&i<C.length-1){C.splice(i+1,0,C.splice(i,1)[0]);render()}else if(a=='del'){if(confirm('「'+c.nm+'」 삭제?')){C.splice(i,1);render()}}};
  L.appendChild(d)});$('#msg').textContent='카드 '+C.length+'장 · 저장 전';}
-function edit(i){ei=i;var c=i>=0?C[i]:{ic:'🔗',nm:'',ds:'',ur:''};$('#edT').textContent=i>=0?'카드 편집':'카드 추가';$('#eIc').value=c.ic;$('#eNm').value=c.nm;$('#eDs').value=c.ds;$('#eUr').value=c.ur;$('#ed').style.display='block';$('#eNm').focus();window.scrollTo(0,document.body.scrollHeight)}
+function edit(i){ei=i;var c=i>=0?C[i]:{ic:'🔗',nm:'',ds:'',ur:''};$('#edT').textContent=i>=0?'카드 편집':'카드 추가';$('#eIc').value=c.ic;$('#eNm').value=c.nm;$('#eDs').value=c.ds;$('#eUr').value=c.ur;$('#ed').style.display='block';$('#eNm').focus();$('#ed').scrollIntoView({behavior:'smooth'})}
 $('#eNo').onclick=function(){$('#ed').style.display='none'};
 $('#eOk').onclick=function(){var nm=$('#eNm').value.trim();if(!nm){alert('이름');return}var c=ei>=0?C[ei]:{k:'c'+Date.now()};c.ic=$('#eIc').value.trim()||'🔗';c.nm=nm;c.ds=$('#eDs').value.trim();c.ur=$('#eUr').value.trim();if(ei<0)C.push(c);$('#ed').style.display='none';render()};
 $('#add').onclick=function(){edit(-1)};
-$('#reset').onclick=function(){if(confirm('기본 7장으로 되돌릴까? (저장을 눌러야 반영)')){C=JSON.parse(JSON.stringify(DEF));render()}};
 var DEF=__HUBDEF__;
-$('#go').onclick=function(){PW=$('#pw').value.trim();var fd=new FormData();fd.append('pw',PW);fd.append('cards','[]');
- fetch('/hub/config').then(r=>r.json()).then(function(j){C=j.cards||[];
-  /* 비번 검증: 빈 저장 대신 잘못된 카드로 검사 */
-  var f2=new FormData();f2.append('pw',PW);f2.append('cards','x');
-  return fetch('/hub/config',{method:'POST',body:f2}).then(r=>r.json())}).then(function(j){
-  if(j.error&&j.error.indexOf('비밀번호')>-1){alert('비밀번호가 틀렸다');return}
-  $('#gate').style.display='none';$('#main').style.display='block';render()})};
-$('#pw').onkeydown=function(e){if(e.key=='Enter')$('#go').onclick()};
-$('#save').onclick=function(){var fd=new FormData();fd.append('pw',PW);fd.append('cards',JSON.stringify(C));
- fetch('/hub/config',{method:'POST',body:fd}).then(r=>r.json()).then(function(j){if(!j.ok){alert(j.error||'실패');return}$('#msg').textContent='저장됨 '+new Date().toLocaleTimeString()+' ('+j.n+'장 · '+j.src+')';alert('저장됐다. 앱을 새로 열면 반영된다.')})};
+$('#reset').onclick=function(){if(confirm('기본 7장으로 되돌릴까? (저장을 눌러야 반영)')){C=JSON.parse(JSON.stringify(DEF));render()}};
+$('#save').onclick=function(){fetch('/hub/config',{method:'POST',body:fd({pw:PW,cards:JSON.stringify(C)})}).then(r=>r.json()).then(function(j){if(!j.ok){alert(j.error||'실패');return}$('#msg').textContent='저장됨 '+new Date().toLocaleTimeString()+' ('+j.n+'장)';alert('저장됐다. 앱을 새로 열면 반영된다.')})};
 </script></body></html>""".replace("__HUBDEF__", json.dumps(_HUB_DEF, ensure_ascii=False)))
 
 @app.get('/health')
