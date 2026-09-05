@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v674-zipall-20260905'
+VSTAMP = 'v677-fin-20260905'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9375,7 +9375,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans K
 #gate .go{width:100%;max-width:420px;margin-top:14px;border:none;border-radius:14px;padding:18px;font-size:17px;font-weight:800;color:#fff;background:var(--acc);cursor:pointer}
 #gate .err{color:var(--red);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
 .shake{animation:sh .35s}@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-.app{max-width:520px;margin:0 auto;height:100vh;display:none;flex-direction:column}
+.app{max-width:520px;margin:0 auto;min-height:100vh;display:none;flex-direction:column}/* ★v675 (지점장 2026.09.05): height:100vh였다 → 안내카드와 분석하기 사이가 화면만큼 비었다. 내용 높이만큼만 쓴다. */
 @media (min-width:900px){ .app{max-width:1000px;padding:0 16px}
  .msg{max-width:78%;font-size:14px} .chat{padding:18px 8px}
  #gate .pw,#gate .go{max-width:460px} }
@@ -9392,7 +9392,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans K
 header{padding:14px 18px;border-bottom:2px solid var(--gold);background:#ffffff;display:flex;align-items:center;gap:10px}
 .logo{width:32px;height:32px;border-radius:9px;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:16px}
 h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;color:var(--mute)}
-.chat{flex:1;overflow-y:auto;padding:16px 12px;display:flex;flex-direction:column;gap:12px}
+.chat{flex:0 0 auto;overflow:visible;padding:16px 12px;display:flex;flex-direction:column;gap:12px}/* ★v675: flex:1 = 남는 높이 전부 차지 → 빈 공백의 원인. 내용만큼만. */
 .msg{max-width:90%;font-size:13px}
 .me{align-self:flex-end;background:rgba(6,32,63,.05);border:1px solid rgba(6,32,63,.16);border-radius:14px 14px 4px 14px;padding:9px 13px}
 .bot{align-self:flex-start;background:#ffffff;border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:11px 14px;width:100%;box-shadow:0 1px 3px rgba(6,32,63,.06)}
@@ -12344,8 +12344,10 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                         _txt = _sp9.run(['pdftotext', rpdf, '-'],
                                         capture_output=True).stdout.decode('utf-8', 'replace')
                         _pgs = _txt.split('\f')
-                        _drop = [i for i, t in enumerate(_pgs)
-                                 if 'ASSET & FINANCE' in t and '돈을 보내고 있나요' in t]
+                        # ★★★★★v677 (지점장 지시 2026.09.05 「재무도 넣어라」):
+                        #   v424의 <b>재무 페이지 제거를 중단</b>한다. 설명서(참고자료)에도
+                        #   LIFE PLAN 4장이 들어간다 — 목차 14번 항목과 일치시킨다.
+                        _drop = []
                         if not _drop:
                             # ★v425 (제49조) 정정: 설명서는 <b>인포메이션 구간만</b> 잘라 쓰므로
                             #   재무 페이지가 애초에 없다. 다만 <b>있는데 못 지운 경우</b>는 사고다.

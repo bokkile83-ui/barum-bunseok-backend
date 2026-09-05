@@ -4910,6 +4910,10 @@ def _render_exact(doc, out):
        무관하므로 이 방식으로 100% 보장된다."""
     import re as _r
     expect = len(_r.findall(r'<div class="pg(?=["\s])', doc))
+    # ★★★★★v676 (2026.09.05 실측): 아래 분할 정규식이 `[^"]*">`라 <b>id 속성이 붙은 뒤로
+    #   한 장도 못 잡았다</b>(실제 마크업 `<div class="pg cvpg" id="pg1">`). 분할 0개 →
+    #   페이지 단위 렌더가 통째로 무력화 → 통짜 렌더 폴백 → 47쪽 중 11쪽(연금·재무·심혈관)
+    #   이 조용히 사라졌다. `[^>]*>`로 고친다(속성에 > 는 오지 않는다).
     # ★★v88 (지점장 지시 2026.07.19): "그냥 표지+6장 넣기 끝".
     #   한 번에 렌더하면 서버 환경에 따라 페이지가 통째로 사라지거나 두 장이 겹쳐 찍힌다.
     #   원인 추적을 포기하고 <b>처음부터 페이지를 한 장씩 따로 렌더해 이어 붙인다</b>.
@@ -4925,7 +4929,7 @@ def _render_exact(doc, out):
     # ── 폴백: 페이지 단위 개별 렌더 후 병합(추가 라이브러리 불필요)
     i0 = doc.index('<div class="pg')
     head = doc[:i0]
-    parts = _r.split(r'(<div class="pg(?=["\s])[^"]*">)', doc)
+    parts = _r.split(r'(<div class="pg(?=["\s])[^>]*>)', doc)
     segs = []
     for k in range(1, len(parts), 2):
         body = parts[k + 1]
@@ -4973,15 +4977,22 @@ def _render_exact(doc, out):
         for sg in chunk:                       # 폴백: 한 장씩
             try:
                 d1 = HTML(string=_head + sg + '</body></html>').render(stylesheets=_sheets)
-                out_pages += list(d1.pages[:1])
-            except Exception:
-                pass
+                _pp = list(d1.pages)
+                if not _pp:
+                    print('[PAGE_MISS] 렌더 0쪽 —', sg[:90].replace('\n',' '))
+                out_pages += _pp[:1]
+            except Exception as _pe:
+                # ★★★★★v676 (제49조): 조용히 페이지를 버리던 자리. 흔적을 남긴다.
+                print('[PAGE_MISS] 렌더 실패:', str(_pe)[:120], '|', sg[:90].replace('\n',' '))
         return out_pages
 
     base = None
     allpages = []
     for gch in groups:
         allpages += _render_chunk(gch)
+    if len(allpages) != len(segs):
+        print('[PAGE_MISS] ★조립 %d쪽 → 렌더 %d쪽 (%d쪽 소실)'
+              % (len(segs), len(allpages), len(segs) - len(allpages)))
     try:
         base = HTML(string=_head + segs[0] + '</body></html>').render(stylesheets=_sheets)
         base.pages[:] = allpages
