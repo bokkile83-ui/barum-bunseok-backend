@@ -3490,6 +3490,61 @@ body {{ color:{INK}; }}
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 참고자료</span></div>
 </div>
+<!-- P-GOJI: 가입 전 고지의무 체크리스트 (표지 다음) · 보험사 표기 없음 · v49 2026.09.05 -->
+<div class="pg infopg">
+ <div class="top itop"><div class="eb">INSURANCE INFORMATION</div><div class="nm">보험 가입 전 <b>고지의무 체크리스트</b></div><div class="pgn"><b>@@PN@@</b> · 고지의무</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 8mm">
+  <div style="font-size:3.3mm;color:#345;margin:3mm 0 4mm">정확한 고지는 고객님의 권리를 지키는 가장 중요한 시작입니다. 해당되는 항목에 체크하고, 반드시 청약서에 직접 기재하세요.</div>
+  <div style="column-count:2;column-gap:9mm;font-size:3.0mm;line-height:1.62;color:#22314d">
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">① 최근 3개월 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 병원(의원·한의원 등)에 다녀온 적이 있다<br>☐ 건강검진에서 이상소견을 들었다<br>☐ 새로운 질병명을 진단받았다<br>☐ 의사에게 질병이 의심된다는 말을 들었다<br>☐ 치료를 받았다 (주사·물리치료 포함)<br>☐ 약을 처방받았다 (약국 조제약 포함)<br>☐ 입원했다<br>☐ 수술했다 (내시경·시술 포함)<br>☐ 추가검사·재검사가 필요하다는 말을 들었다</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">② 최근 1년 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 건강검진 후 추가검사를 받았다<br>☐ 초음파·CT·MRI·내시경 등을 추가로 했다<br>☐ 혈액검사 이상으로 재검사를 했다<br>☐ 혹·결절·용종·수치 이상 등으로 재검사를 받았다<br>☐ 검사 결과를 추적관찰하고 있다</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 단순 정기검진·상태확인 검진은 상품에 따라 고지대상이 아닐 수 있으니 정확한 판단을 위해 반드시 알려주세요.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">③ 최근 5년 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 입원한 적이 있다<br>☐ 수술한 적이 있다<br>☐ 같은 질병·사고로 7일 이상 치료받았다<br>☐ 같은 질병으로 30일 이상 약을 처방받았다<br>☐ 장기간 통원치료를 받은 적이 있다</div>
+    <div style="border:0.22mm solid #d9c9a8;background:#fdf8ee;border-radius:1mm;padding:2mm 2.4mm;margin-top:2mm;font-size:2.9mm;line-height:1.6">주요 질병의 진단·치료·입원·수술·투약 여부<br>☐ 암 ☐ 뇌혈관병 ☐ 고혈압 ☐ 협심증 ☐ 심근경색<br>☐ 심장판막증 ☐ 간경화 ☐ 뇌졸중증 ☐ 당뇨병 ☐ HIV/AIDS</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">④ 최근 6~10년 이내</div>
+    <div style="padding:2.2mm 1mm 0">입원 또는 수술을 받은 적이 있나요?<br>☐ 6년 ☐ 7년 ☐ 8년 ☐ 9년 ☐ 10년 이내 입원·수술</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 건강고지항(6~10년)은 가입일 기준으로 정확한 입원일·수술일 확인이 필요합니다.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑤ 현재 복용 중인 약</div>
+    <div style="padding:2.2mm 1mm 0">☐ 혈압약 ☐ 당뇨약 ☐ 고지혈증약 ☐ 갑상선약<br>☐ 정신건강의학과 약 (우울증·불안 등)<br>☐ 수면제 ☐ 진통제 ☐ 호르몬제<br>☐ 기타 장기복용약 (　　　　　　　　　)</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑥ 건강검진 결과</div>
+    <div style="padding:2.2mm 1mm 0">☐ 재검 권유를 받은 적이 있다<br>☐ 추가검사 권유를 받은 적이 있다<br>☐ 결과 이상이 발견되었다<br>☐ 간수치·혈당·혈압 등 수치 이상이 있다<br>☐ 혈뇨·단백뇨 등 이상소견이 있다<br>☐ 검진 후 추적관찰 중이다</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 건강검진 결과도 상품에 따라 고지대상이 될 수 있습니다.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑦ 기타 확인사항 (청약서 질문 시)</div>
+    <div style="padding:2.2mm 1mm 0">☐ 현재 직업 및 직무 (변경 예정 포함)<br>☐ 오토바이·이륜차 운전 여부<br>☐ 위험한 취미·스포츠 활동<br>☐ 장애 또는 신체 상해 관련 사항<br>☐ 다른 보험 가입 및 청약 관련 사항</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑧ 많이 놓치는 수술·시술 예시</div>
+    <div style="padding:2.2mm 1mm 0">☐ 제왕절개 ☐ 용종절제(내시경 포함) ☐ 백내장수술<br>☐ 치질수술 ☐ 맹장수술 ☐ 골절수술<br>☐ 자궁·난소 관련 수술 ☐ 피부종양 제거<br>☐ 내시경적 시술·수술 ☐ 기타 마취가 필요한 수술·시술</div>
+    <div style="color:#b3261e;font-size:2.9mm;font-weight:700;margin-top:1.8mm">작은 수술이나 시술도 꼭 함께 알려주세요!</div>
+   </div>
+  </div>
+  <div style="border:0.3mm solid #12305e;border-radius:1.5mm;padding:3mm 3.5mm;margin-top:4mm;font-size:2.95mm;line-height:1.65;color:#22314d">
+   <b style="color:#12305e">꼭 기억하세요</b><br>
+   ① 청약서 질문사항에 사실대로 알리는 것이 고객님의 권리를 지키는 가장 중요한 방법입니다.
+   ② 고지내용은 가입 가능여부·보험료를 정하는 심사정보이며, 고지했다고 무조건 거절되지 않습니다.
+   ③ 가입이 어려운 경우 보장 내용을 정확히 확인해 협의할 수 있도록 안내해 드립니다.
+   ④ <b style="color:#b3261e">보험설계사는 고지의무 수령권이 없습니다.</b> 반드시 청약서에 직접 기재하거나 정확히 반영되었는지 확인하세요.
+   ⑤ 사실과 다르게 고지한 경우 계약 해지 또는 보험금 지급이 제한될 수 있습니다.
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 참고자료</span></div>
+</div>
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE 보장분석 · 건강보험 지원제도 (1/2)</div>
   <div class="nm">국민건강보험공단 <b>지원제도</b></div>
