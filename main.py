@@ -19,17 +19,44 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v678-width-20260905'
+VSTAMP = 'v680-adm-20260905'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
 
+# ★★★★★v679 보안 강화 (지점장 지시 2026.09.05 「보안을 아주 강화해라」)
+#   ① 검색엔진 수집 차단 — 구글에 우리 주소·화면이 뜨지 않는다
+#   ② 클릭재킹 차단 — 남의 사이트가 우리 화면을 몰래 감싸 쓰지 못한다(우리 앱만 허용)
+#   ③ Referrer 차단 — 밖으로 나갈 때 우리 주소가 넘어가지 않는다
+#   ④ MIME 스니핑·불필요 권한 차단 / HTTPS 고정
+_MK_APP_ORIGIN = "https://singular-smakager-0caac1.netlify.app"
+
+@app.middleware("http")
+async def _mk_security_headers(request, call_next):
+    resp = await call_next(request)
+    h = resp.headers
+    h["X-Robots-Tag"] = "noindex, nofollow, noarchive, nosnippet"
+    h["X-Content-Type-Options"] = "nosniff"
+    h["Referrer-Policy"] = "no-referrer"
+    h["Permissions-Policy"] = "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+    h["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    h["Content-Security-Policy"] = "frame-ancestors 'self' " + _MK_APP_ORIGIN
+    h["Cross-Origin-Opener-Policy"] = "same-origin"
+    return resp
+
+
+@app.get("/robots.txt")
+def _mk_robots():
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse("User-agent: *\nDisallow: /\n")
+
+
 PW   = "0101"
 
 # ═══════════ v429 회원 DB (제54조) — Railway Postgres ═══════════
-#   ★권한자 = 최은혜 지점장. 마스터 비번 821024. 화면 비번은 0101 그대로.
+#   ★권한자 = 최은혜 지점장. 마스터 비번 130624. 화면 비번은 0101 그대로.
 #   DATABASE_URL이 없으면 <b>DB 없이도 앱은 돈다</b>(0101 게이트만 작동) — 배포 사고 방지.
-ADMIN_PW = "821024"
+ADMIN_PW = "130624"
 
 # ★제55조 — 지침 하한선(2026.08.16 실측). 조문이 줄면 배포를 막는다.
 DOCTRINE_MIN_ART = 77        # 조문 개수 하한
@@ -1558,7 +1585,7 @@ _STRUCT_SELFTEST = [
     ('제53조 매니페스트',  'main.py', r'manifest\.webmanifest', True),
     ('제53조 아이콘생성',  'main.py', r'def _pwa_icon', True),
     ('제53조 SW무캐시',    'main.py', r'no-store', True),
-    ('제54조 관리자비번',  'main.py', r'ADMIN_PW = "821024"', True),
+    ('제54조 관리자비번',  'main.py', r'ADMIN_PW = "130624"', True),
     ('제54조 회원테이블',  'main.py', r'CREATE TABLE IF NOT EXISTS members', True),
     ('제54조 쉬운코드',    'main.py', r'def _mk_code', True),
     ('제54조 DB없어도뜸',  'main.py', r'DATABASE_URL 없음', True),
@@ -10051,7 +10078,7 @@ def _startup_db():
 
 @app.get('/admin')
 def admin_page():
-    """★권한자 화면(최은혜 지점장). 비번 821024 · 코드 발급 · 차단 · 사용 이력."""
+    """★권한자 화면(최은혜 지점장). 비번 130624 · 코드 발급 · 차단 · 사용 이력."""
     return HTMLResponse("""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>BARUM 관리자</title><style>
@@ -10266,7 +10293,7 @@ async def member_login(code: str = Form(''), pw: str = Form(''), name: str = For
 @app.post('/admin/api')
 async def admin_api(pw: str = Form(''), act: str = Form(''), name: str = Form(''),
                     code: str = Form(''), months: int = Form(12), memo: str = Form('')):
-    """★권한자 전용(최은혜 지점장 · 821024). 발급 · 목록 · 차단 · 해제 · 삭제."""
+    """★권한자 전용(최은혜 지점장 · 130624). 발급 · 목록 · 차단 · 해제 · 삭제."""
     if pw != ADMIN_PW:
         return JSONResponse({'ok': False, 'error': '관리자 비밀번호 오류'})
     c = _db()
@@ -10443,7 +10470,7 @@ async def hub_config_post(pw: str = Form(''), cards: str = Form('')):
 
 @app.post('/hub/login')
 async def hub_login(name: str = Form(''), code: str = Form('')):
-    """★v665 MAKEONE AI SYSTEM 입장 — 이름 + 번호(회원 코드 6자리, /admin에서 발급). 관리자 비번(821024)은 이름 무관 통과."""
+    """★v665 MAKEONE AI SYSTEM 입장 — 이름 + 번호(회원 코드 6자리, /admin에서 발급). 관리자 비번(130624)은 이름 무관 통과."""
     nm = (name or '').strip(); cd = (code or '').strip()
     if cd == ADMIN_PW:
         return JSONResponse({'ok': True, 'name': nm or '관리자', 'admin': True}, headers=_HUB_CORS)
@@ -10610,7 +10637,7 @@ def hub_issue_opt():
 
 @app.get('/admin/hub')
 def admin_hub_page():
-    """★MAKEONE AI SYSTEM 관리자 — ①카드 ②회원 번호. 비번 = 관리자 번호(821024)."""
+    """★MAKEONE AI SYSTEM 관리자 — ①카드 ②회원 번호. 비번 = 관리자 번호(130624)."""
     return HTMLResponse("""<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>MAKEONE AI SYSTEM 관리자</title>
 <style>
@@ -10683,7 +10710,7 @@ window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night'
   </div>
   <div class="card" id="pendCard" style="display:none"><h3>⏳ 가입 대기 <span class="n">앱에서 가입 신청한 사람</span></h3><div id="pend"></div></div>
   <div class="card"><h3>👥 회원 목록 <span class="n" id="memN"></span></h3><div style="overflow:auto"><table><thead><tr><th>이름</th><th>번호</th><th>상태</th><th>만료</th><th>최근·횟수</th><th></th></tr></thead><tbody id="mem"></tbody></table></div>
-   <div style="font-size:12px;color:#6a7590;margin-top:8px">같은 번호로 MAKEONE AI SYSTEM · 보장분석실 · 실손계산기 · AI · 자료실 · LIFE PLAN 전부 들어간다. 관리자 번호(821024)와 0101도 통과.</div></div>
+   <div style="font-size:12px;color:#6a7590;margin-top:8px">같은 번호로 MAKEONE AI SYSTEM · 보장분석실 · 실손계산기 · AI · 자료실 · LIFE PLAN 전부 들어간다. 관리자 번호(130624)와 0101도 통과.</div></div>
  </div>
 
  <div class="sec" id="sec-card">
