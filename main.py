@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v677-fin-20260905'
+VSTAMP = 'v678-width-20260905'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9376,19 +9376,19 @@ body{background:var(--bg);color:var(--ink);font-family:'Pretendard','Noto Sans K
 #gate .err{color:var(--red);font-size:13px;font-weight:700;margin-top:14px;min-height:18px}
 .shake{animation:sh .35s}@keyframes sh{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 .app{max-width:520px;margin:0 auto;min-height:100vh;display:none;flex-direction:column}/* ★v675 (지점장 2026.09.05): height:100vh였다 → 안내카드와 분석하기 사이가 화면만큼 비었다. 내용 높이만큼만 쓴다. */
-@media (min-width:900px){ .app{max-width:1000px;padding:0 16px}
+@media (min-width:900px){ .app{max-width:700px;padding:0 16px}
  .msg{max-width:78%;font-size:14px} .chat{padding:18px 8px}
  #gate .pw,#gate .go{max-width:460px} }
-@media (min-width:1400px){ .app{max-width:1200px} }
+@media (min-width:1400px){ .app{max-width:760px} }
 /* ★v435 PC 대응 — 넓은 화면에서 폭·글자를 키운다(제56조) */
 @media (min-width:900px){
- .app{max-width:1000px;padding:0 16px}
+ .app{max-width:700px;padding:0 16px}
  .msg{max-width:78%;font-size:14px}
  .chat{padding:18px 8px}
  #gate .pw,#gate .go{max-width:460px}
  .file-card{font-size:13px}
 }
-@media (min-width:1400px){ .app{max-width:1200px} }
+@media (min-width:1400px){ .app{max-width:760px} }
 header{padding:14px 18px;border-bottom:2px solid var(--gold);background:#ffffff;display:flex;align-items:center;gap:10px}
 .logo{width:32px;height:32px;border-radius:9px;border:1.5px solid var(--gold);display:flex;align-items:center;justify-content:center;font-size:16px}
 h1{font-size:14px;font-weight:800}h1 b{color:var(--acc2)}.sub{font-size:10px;color:var(--mute)}
