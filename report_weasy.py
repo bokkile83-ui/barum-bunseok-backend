@@ -2614,6 +2614,15 @@ body {{ color:{INK}; }}
 .gdnt2 b {{ color:{GAP}; }}
 /* ── 보험 인포메이션 간지 (화이트) ── */
 .infopg {{ background:#fff; }}
+/* ★상급종합병원 47곳 — 권역별 카드 (v51) */
+.hnote{{font-size:3.6mm;line-height:1.65;color:#22314d;background:#f4f7fc;border-left:1.2mm solid #12305e;border-radius:1.4mm;padding:2.6mm 3mm;margin:3mm 0 4mm}}
+.hnote b{{color:#12305e}}
+.rgns{{column-count:3;column-gap:6mm}}
+.rgn{{break-inside:avoid;margin-bottom:7.5mm;border:0.25mm solid #dde5f2;border-left:1.4mm solid var(--c);border-radius:1.6mm;padding:3.0mm 3.6mm}}
+.rgn .rh{{font-size:4.1mm;font-weight:800;color:#12305e;margin-bottom:1.2mm}}
+.rgn .rh b{{color:var(--c)}}
+.rgn ul{{margin:0;padding-left:4mm;font-size:3.75mm;line-height:1.75;color:#22314d}}
+.hfoot{{font-size:2.7mm;color:#8a2a2a;line-height:1.5;margin-top:2mm}}
 .ibar {{ height:8mm; background:{NAVY}; border-bottom:2mm solid {GOLD}; }}
 .ibody {{ padding:10mm 22mm 20mm; height:222mm; position:relative; }}   /* ★v72 자체 top 도입에 맞춰 축소 */
 .ieyebrow {{ font-size:9pt; font-weight:800; color:{GOLDD}; letter-spacing:6px; }}
@@ -3492,8 +3501,8 @@ body {{ color:{INK}; }}
 </div>
 <!-- P-GOJI: 가입 전 고지의무 체크리스트 (표지 다음) · 보험사 표기 없음 · v49 2026.09.05 -->
 <div class="pg infopg">
- <div class="top itop"><div class="eb">INSURANCE INFORMATION</div><div class="nm">보험 가입 전 <b>고지의무 체크리스트</b></div><div class="pgn"><b>@@PN@@</b> · 고지의무</div><div class="bar"></div></div>
- <div class="body" style="padding:0 8mm">
+ <div class="top"><div class="eb">MAKEONE 보장분석 · 참고자료</div><div class="nm">보험 가입 전 <b>고지의무 체크리스트</b></div><div class="pgn"><b>@@PN@@</b> · 고지의무</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
   <div style="font-size:3.3mm;color:#345;margin:3mm 0 4mm">정확한 고지는 고객님의 권리를 지키는 가장 중요한 시작입니다. 해당되는 항목에 체크하고, 반드시 청약서에 직접 기재하세요.</div>
   <div style="column-count:2;column-gap:9mm;font-size:3.0mm;line-height:1.62;color:#22314d">
    <div style="break-inside:avoid;margin-bottom:6.5mm">
@@ -4573,10 +4582,17 @@ body {{ color:{INK}; }}
   <img src="data:image/png;base64,{_CANCER4_IMG}" style="height:265mm;width:auto;max-width:208mm;display:inline-block">
  </div>
  <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">참고자료 · @@PN@@ / {tpg}</span></div>
+<!-- P-HOSP: 상급종합병원 47곳 권역별 (암 통계 다음) · v51 2026.09.05 -->
+<div class="pg infopg">
+ <div class="top"><div class="eb">MAKEONE 보장분석 · 참고자료</div><div class="nm">대한민국 <b>상급종합병원 47곳</b></div><div class="pgn"><b>@@PN@@</b> · 2026년 기준</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
+  <div class="hnote">보건복지부 지정 <b>제5기 (2024.1.1. ~ 2026.12.31.)</b> · 11개 진료권역 <b>47곳</b><br>
+   상급종합병원은 중증질환에 대해 난이도가 높은 의료행위를 전문적으로 하는 종합병원 중 보건복지부가 지정한 병원입니다. 진단비·수술비 특약 중 <b>상급종합병원 조건</b>이 붙은 담보는 아래 병원에서 받은 진료만 해당됩니다.</div>
+  <div class="rgns"><div class="rgn" style="--c:#1f5fd6"><div class="rh">서울 <b>14곳</b></div><ul><li>가톨릭대 서울성모</li><li>강북삼성</li><li>건국대</li><li>경희대</li><li>고려대 구로</li><li>고려대 안암</li><li>삼성서울</li><li>서울대</li><li>서울아산</li><li>세브란스</li><li>강남세브란스</li><li>이대목동</li><li>중앙대</li><li>한양대</li></ul></div><div class="rgn" style="--c:#0e8f7e"><div class="rh">인천·경기 서북부 <b>4곳</b></div><ul><li>가톨릭대 인천성모 (인천)</li><li>가천대 길 (인천)</li><li>인하대 (인천)</li><li>순천향대 부천 (부천)</li></ul></div><div class="rgn" style="--c:#0e8f7e"><div class="rh">경기 남부 <b>5곳</b></div><ul><li>가톨릭대 성빈센트 (수원)</li><li>아주대 (수원)</li><li>분당서울대 (성남)</li><li>고려대 안산 (안산)</li><li>한림대 성심 (안양)</li></ul></div><div class="rgn" style="--c:#7a4fd0"><div class="rh">강원 <b>2곳</b></div><ul><li>강릉아산 (강릉)</li><li>연세대 원주세브란스기독 (원주)</li></ul></div><div class="rgn" style="--c:#c9457a"><div class="rh">충북 <b>1곳</b></div><ul><li>충북대 (청주)</li></ul></div><div class="rgn" style="--c:#e07b1a"><div class="rh">충남·대전 <b>3곳</b></div><ul><li>충남대 (대전)</li><li>건양대 (대전)</li><li>단국대 (천안)</li></ul></div><div class="rgn" style="--c:#2f8f4e"><div class="rh">전북 <b>2곳</b></div><ul><li>전북대 (전주)</li><li>원광대 (익산)</li></ul></div><div class="rgn" style="--c:#d1682a"><div class="rh">전남·광주 <b>3곳</b></div><ul><li>전남대 (광주)</li><li>조선대 (광주)</li><li>화순전남대 (화순)</li></ul></div><div class="rgn" style="--c:#a13a3a"><div class="rh">경북·대구 <b>5곳</b></div><ul><li>경북대 (대구)</li><li>칠곡경북대 (대구)</li><li>계명대 동산 (대구)</li><li>대구가톨릭대 (대구)</li><li>영남대 (대구)</li></ul></div><div class="rgn" style="--c:#0f5fa0"><div class="rh">경남 동부 · 부산·울산 <b>6곳</b></div><ul><li>고신대복음 (부산)</li><li>동아대 (부산)</li><li>부산대 (부산)</li><li>인제대 부산백 (부산)</li><li>양산부산대 (양산)</li><li>울산대 (울산)</li></ul></div><div class="rgn" style="--c:#3f6ea8"><div class="rh">경남 서부 <b>2곳</b></div><ul><li>경상국립대 (진주)</li><li>삼성창원 (창원)</li></ul></div></div>
+  <div class="hfoot">※ 제주권은 지정 병원이 없습니다. · 지정 기간이 2026.12.31.에 끝나므로 이후 명단이 바뀔 수 있습니다. 청약·청구 전 최신 고시를 확인하세요.</div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">참고자료 · @@PN@@ / {tpg}</span></div>
 </div>
-
-
-
 <!-- INFO-TBL 통합치료비 ① -->
 <div class="pg infopg">
  <div class="top"><div class="eb">MAKEONE 보장분석 · 통합치료비 세부보장항목</div><div class="nm">① <b>암 통합치료비Plus(기본형)</b></div><div class="pgn"><b>@@PN@@</b>통합치료비 ①</div><div class="bar"></div></div>

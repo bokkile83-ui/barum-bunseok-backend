@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v667-goji2-20260905'
+VSTAMP = 'v672-frame-20260905'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9460,6 +9460,18 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
 .mkhome{position:sticky;top:0;z-index:9999;display:block;text-align:center;background:#0f3fa0;color:#fff;padding:7px 10px;font-size:12.5px;font-weight:800;text-decoration:none;letter-spacing:.02em}
 </style></head><body>
+<script>
+/* ★MAKEONE 야간모드 수신기(20260905c) — 화면에 뜨는 버튼 없음. 허브에서 켜면 같이 어두워진다 */
+(function(){var NK='mk_night';
+var st=document.createElement('style');st.textContent='html.mk-night{filter:invert(.92) hue-rotate(180deg);background:#111}html.mk-night img,html.mk-night video,html.mk-night canvas,html.mk-night iframe,html.mk-night [data-mk-noinv]{filter:invert(1) hue-rotate(180deg)}';document.head.appendChild(st);
+function get(){var h=/[#&?]night=([01])/.exec((location.hash||'')+(location.search||''));if(h)return h[1]==='1';try{return localStorage.getItem(NK)==='1'}catch(e){return false}}
+function set(on,save){on=!!on;document.documentElement.classList.toggle('mk-night',on);if(save)try{localStorage.setItem(NK,on?'1':'0')}catch(e){}
+ try{var fs=document.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage({mk:'night',on:on},'*')}catch(x){}}}catch(e){}}
+window.mkNightSet=set;window.mkNightOn=function(){return document.documentElement.classList.contains('mk-night')};
+set(get(),false);
+window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night')set(!!e.data.on,true)}catch(x){}});
+})();
+</script>
 <a class="mkhome" id="mkhome" href="https://singular-smakager-0caac1.netlify.app" onclick="try{if(window.top!==window){window.parent.postMessage({mk:'home'},'*');return false;}}catch(e){}">🏠 MAKEONE 홈</a>
 <div id="gate">
   <div class="kick">@@BRAND@@</div><h1>@@BRAND@@ @@BSUB@@</h1>
@@ -10043,6 +10055,18 @@ td{padding:7px 5px;border-bottom:1px solid #1c2c3f}
 .err{color:#ff8a8a;font-size:13px;margin-top:8px}
 .sum{font-size:12px;color:#9fb0c4;margin-bottom:6px}
 </style></head><body>
+<script>
+/* ★MAKEONE 야간모드 수신기(20260905c) — 화면에 뜨는 버튼 없음. 허브에서 켜면 같이 어두워진다 */
+(function(){var NK='mk_night';
+var st=document.createElement('style');st.textContent='html.mk-night{filter:invert(.92) hue-rotate(180deg);background:#111}html.mk-night img,html.mk-night video,html.mk-night canvas,html.mk-night iframe,html.mk-night [data-mk-noinv]{filter:invert(1) hue-rotate(180deg)}';document.head.appendChild(st);
+function get(){var h=/[#&?]night=([01])/.exec((location.hash||'')+(location.search||''));if(h)return h[1]==='1';try{return localStorage.getItem(NK)==='1'}catch(e){return false}}
+function set(on,save){on=!!on;document.documentElement.classList.toggle('mk-night',on);if(save)try{localStorage.setItem(NK,on?'1':'0')}catch(e){}
+ try{var fs=document.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage({mk:'night',on:on},'*')}catch(x){}}}catch(e){}}
+window.mkNightSet=set;window.mkNightOn=function(){return document.documentElement.classList.contains('mk-night')};
+set(get(),false);
+window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night')set(!!e.data.on,true)}catch(x){}});
+})();
+</script>
 <h1>BARUM 관리자</h1>
 <div class="wrap">
 <div class="card" id="gate">
@@ -10597,6 +10621,18 @@ td .mini.r{color:#d94a4a;border-color:#f3c2c2}
 .sec{display:none}.sec.on{display:block}
 @media(max-width:600px){th:nth-child(4),td:nth-child(4),th:nth-child(5),td:nth-child(5){display:none}}
 </style></head><body>
+<script>
+/* ★MAKEONE 야간모드 수신기(20260905c) — 화면에 뜨는 버튼 없음. 허브에서 켜면 같이 어두워진다 */
+(function(){var NK='mk_night';
+var st=document.createElement('style');st.textContent='html.mk-night{filter:invert(.92) hue-rotate(180deg);background:#111}html.mk-night img,html.mk-night video,html.mk-night canvas,html.mk-night iframe,html.mk-night [data-mk-noinv]{filter:invert(1) hue-rotate(180deg)}';document.head.appendChild(st);
+function get(){var h=/[#&?]night=([01])/.exec((location.hash||'')+(location.search||''));if(h)return h[1]==='1';try{return localStorage.getItem(NK)==='1'}catch(e){return false}}
+function set(on,save){on=!!on;document.documentElement.classList.toggle('mk-night',on);if(save)try{localStorage.setItem(NK,on?'1':'0')}catch(e){}
+ try{var fs=document.querySelectorAll('iframe');for(var i=0;i<fs.length;i++){try{fs[i].contentWindow.postMessage({mk:'night',on:on},'*')}catch(x){}}}catch(e){}}
+window.mkNightSet=set;window.mkNightOn=function(){return document.documentElement.classList.contains('mk-night')};
+set(get(),false);
+window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night')set(!!e.data.on,true)}catch(x){}});
+})();
+</script>
 <div class="hd"><h1>MAKEONE <em>AI</em> SYSTEM 관리자</h1>
  <div class="tabs" id="tabs" style="display:none"><button data-t="mem" class="on">👥 회원 번호</button><button data-t="card">▦ 카드</button></div></div>
 <div class="wrap">
