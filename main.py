@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v672-frame-20260905'
+VSTAMP = 'v674-zipall-20260905'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9570,10 +9570,19 @@ _onReady(()=>{
  f1.onchange=e=>{R1=e.target.files[0];$("#upr1label").textContent=R1?R1.name:"엑셀(전)";rchk();};
  f2.onchange=e=>{R2=e.target.files[0];$("#upr2label").textContent=R2?R2.name:"엑셀(후)";rchk();};
  rb.onclick=async()=>{
-  if(!(R1&&R2))return; rb.disabled=true; rb.textContent="비교 중…";
+  if(!(R1&&R2))return; rb.disabled=true; rb.textContent="분석 중…";
+  /* ★v673 비교엑셀에도 도는 표시 — 예전엔 눌러도 아무 반응이 없어 멈춘 줄 알았다 */
+  var _rt0=Date.now();
+  var _rload=(typeof add==="function")?add('<div style="display:flex;align-items:center;gap:11px">'
+    +'<span class="spin"></span><div style="flex:1"><div style="font-weight:800">엑셀 전·후 비교 중</div>'
+    +'<div id="rldtime" style="font-size:11px;color:var(--mute)">0초</div></div></div>',"bot"):null;
+  var _rtimer=setInterval(function(){var el=document.getElementById("rldtime");
+    if(el)el.textContent=Math.floor((Date.now()-_rt0)/1000)+"초";},1000);
+  var _rdone=function(){clearInterval(_rtimer);try{if(_rload&&_rload.remove)_rload.remove();}catch(e){}};
   const fd=new FormData(); fd.append("old_xlsx",R1); fd.append("new_xlsx",R2); fd.append("pw",ACCESS);
   try{
    const r=await fetch("/remodel",{method:"POST",body:fd}); const j=await r.json();
+   _rdone();
    if(!j.ok){alert(j.error||"실패");}
    else{
     /* ★★★★★v473 제78조 (지점장 지적 2026.08.18 「리모델링비교하면 계속 아래에 파란색글짜로만 뜬다」)
@@ -9599,6 +9608,7 @@ _onReady(()=>{
       +(j.save_y||0).toLocaleString()+'원<br>'
       +'보장 증가 '+j.n_up+' · 신규 '+j.n_add+' · 감소 '+j.n_down+' · 삭제 '+j.n_del
       +'</div><div class="file-cards">'
+      +(j.all?('<a class="file-card xl" href="'+j.all+'" download style="cursor:pointer;text-decoration:none;color:inherit;border:1.5px solid rgba(6,32,63,.55);background:rgba(197,160,82,.18)"><span class="ic">📦</span><span class="nm">전체 저장 (ZIP)<br><span style="font-size:10px;color:var(--mute)">비교 결과 전부를 한 번에</span></span><span class="dl">저장</span></a>'):'')
       +_rc(j.xlsx,_rn+'_비교.xlsx','비교 엑셀','xl')
       +_rc(j.pptx,_rn+'_리포트.pptx','리모델링 리포트 PPT','pt')
       +_rc(j.pdf, _rn+'_리포트.pdf', '리모델링 리포트 PDF','pt')
@@ -9627,7 +9637,8 @@ _onReady(()=>{
           else { document.body.insertAdjacentHTML("beforeend",h); } }
     if(_el) _el.scrollIntoView({behavior:"smooth",block:"center"});
    }
-  }catch(e){alert("오류: "+e);}
+  }catch(e){_rdone();alert("오류: "+e);}
+  _rdone();
   rb.disabled=false; rb.textContent="리모델링 비교";
  };
  /* ★★★★★v450 제65조 (지점장 지시 2026.08.17 「리셋 버튼도 필요하다 ·
@@ -9810,6 +9821,23 @@ const XLMIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 const PTMIME="application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PDFMIME="application/pdf";
 let savedFiles={};
+/* ★v673 모바일 저장 고침: 앱(iframe) 안에서는 download 링크가 막혀 아무 일도 안 일어난다.
+   → 파일 카드를 누르면 새 탭으로 열어 브라우저가 직접 내려받게 한다. 엑셀만 되고 PPT·PDF가 안 되던 원인. */
+(function(){
+  var _M=/Android|iPhone|iPad|iPod|Mobile|SamsungBrowser/i.test(navigator.userAgent)
+        ||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent));
+  var _emb=false; try{_emb=(window.top!==window);}catch(e){_emb=true;}
+  if(!_M&&!_emb) return;
+  document.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a.file-card'):null;
+    if(!a)return;
+    var u=a.getAttribute('href')||'';
+    if(!u||u.indexOf('javascript')===0)return;
+    e.preventDefault();
+    var w=null; try{w=window.open(u,'_blank');}catch(x){}
+    if(!w){ try{ location.href=u; }catch(x2){} }
+  },true);
+})();
 function reDL(k){const f=savedFiles[k];
   /* ★v636 — 모바일은 blob 다운로드가 막혀 <b>눌러도 아무 반응이 없었다</b>.
      조용히 죽지 말고 왜 안 되는지를 말한다. */
@@ -9874,7 +9902,14 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
       if(j.report_pptx_b64){
         savedFiles.reportpptx={b64:j.report_pptx_b64,name:j.report_pptx_name,mime:PTMIME};
         ptCard+=`<a class="file-card pt" ${_mk(j.report_pptx_url,'reportpptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.report_pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단서 PPT (편집가능)</span></span><span class="dl">저장</span></a>`;}
-      add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★휴대폰은 <b>카드를 하나씩 눌러</b> 저장하세요 (연속 저장이 차단됩니다)':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+
+      /* ★v674 (지점장 지시 2026.09.05 「하나 할 때마다 6개씩 저장해야 하나」)
+         → 맨 위에 「전체 저장 (ZIP)」 카드 하나. 한 번 누르면 전부 내려받는다. */
+      const allCard = j.all_url ? ('<a class="file-card xl" href="'+j.all_url+'" download'
+        +' style="cursor:pointer;text-decoration:none;color:inherit;border:1.5px solid rgba(6,32,63,.55);background:rgba(197,160,82,.18)">'
+        +'<span class="ic">📦</span><span class="nm">전체 저장 (ZIP)<br>'
+        +'<span style="font-size:10px;color:var(--mute)">'+(j.all_n||0)+'개 파일을 한 번에</span></span>'
+        +'<span class="dl">저장</span></a>') : '';
+      add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★<b>전체 저장(ZIP)</b> 한 번이면 전부 받습니다':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+allCard+
         `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`+ptCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
@@ -12478,6 +12513,23 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                     response[_uk] = '/dl/%s/%s' % (_tok, urllib.parse.quote(_fn))
                 except Exception as _e1:
                     _dlerr.append('%s:%s' % (_bk, str(_e1)[:60]))
+            # ★v674 산출물 전부를 ZIP 하나로 묶는다 (전체 저장)
+            try:
+                import zipfile as _zf
+                _cl2 = str(response.get('client') or '고객')
+                _zname = '보장분석_전체_%s.zip' % _cl2
+                _zpath = os.path.join(_dir, _zname)
+                _cnt = 0
+                with _zf.ZipFile(_zpath, 'w', _zf.ZIP_DEFLATED) as _z:
+                    for _f2 in sorted(os.listdir(_dir)):
+                        if _f2.lower().endswith('.zip'): continue
+                        _z.write(os.path.join(_dir, _f2), _f2); _cnt += 1
+                if _cnt:
+                    response['all_url'] = '/dl/%s/%s' % (_tok, urllib.parse.quote(_zname))
+                    response['all_name'] = _zname
+                    response['all_n'] = _cnt
+            except Exception as _ez:
+                print('[v674 zip] 전체 저장 묶기 실패:', str(_ez)[:80])
             if _dlerr:
                 print('[v636 dl] 개별 저장 실패 %d건 :: %s' % (len(_dlerr), ' | '.join(_dlerr)))
                 response.setdefault('audit', []).extend('다운로드 URL 생성 실패 ' + x for x in _dlerr)
@@ -12520,6 +12572,25 @@ def build_context(data):
         lines.append("\n자동매핑 실패 담보 (약관 확인 필요):")
         for u in sorted(set(unmapped)): lines.append(f"  - {u}")
     return '\n'.join(lines)
+
+def _zip_dl(items, zname: str) -> str:
+    """★v674 여러 산출물을 ZIP 하나로 묶어 /dl URL 하나로 준다(전체 저장)."""
+    try:
+        import uuid as _uuid, zipfile as _zf
+        _its = [(b, n) for (b, n) in items if b]
+        if not _its:
+            return ''
+        _tok = _uuid.uuid4().hex[:12]
+        _dir = os.path.join(tempfile.gettempdir(), 'barum_dl', _tok)
+        os.makedirs(_dir, exist_ok=True)
+        _p = os.path.join(_dir, zname)
+        with _zf.ZipFile(_p, 'w', _zf.ZIP_DEFLATED) as _z:
+            for _b, _n in _its:
+                _z.writestr(_n, _b)
+        return '/dl/%s/%s' % (_tok, urllib.parse.quote(zname))
+    except Exception as _e:
+        print('[v674 zip] 묶기 실패:', str(_e)[:80]); return ''
+
 
 def _save_dl(data: bytes, fname: str) -> str:
     """산출물 1개를 임시 저장하고 /dl URL을 돌려준다(기존 analyze와 같은 방식)."""
@@ -12611,7 +12682,12 @@ async def remodel_route(xlsx: UploadFile = File(None),
                              'save_pct': c['save_pct'],
                              'n_up': len(c['up']), 'n_add': len(c['add']),
                              'n_down': len(c['down']), 'n_del': len(c['delete']),
-                             'xlsx': _x, 'pptx': _p, 'pdf': _d, 'anal': _ap})
+                             'xlsx': _x, 'pptx': _p, 'pdf': _d, 'anal': _ap,
+                             'all': _zip_dl([(r['xlsx'], f'{_cl}_리모델링_비교.xlsx'),
+                                             (r['pptx'], f'{_cl}_리모델링_리포트.pptx'),
+                                             (r.get('pdf'), f'{_cl}_리모델링_리포트.pdf'),
+                                             (r.get('anal_pptx'), f'보장분석지_{_cl}(최종).pptx')],
+                                            f'리모델링_전체_{_cl}.zip')})
     except Exception as e:
         traceback.print_exc()
         return JSONResponse({'ok': False, 'error': f'{type(e).__name__}: {e}'})
