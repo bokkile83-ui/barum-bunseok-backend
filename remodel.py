@@ -1350,13 +1350,19 @@ def build_analysis_ppt(xlsx_bytes, client='고객'):
         # ★등식2 — PPT는 <b>완성 엑셀만</b> 읽는다. 합계·슬래시·분할도 엑셀에서 가져온다.
         _tot, _sq, _ss, _spl = _mn.read_excel_totals(_xl)
         _out = _os.path.join(_d, 'anal.pptx')
-        if _mn.build_ppt({'client': client, 'contracts': _cts}, _out,
-                         _tot, _sq, _ss, _spl) and _os.path.exists(_out):
+        # ★★★★★v687 (지점장 실측 2026.09.07 「비교엑셀 넣었는데 보장분석ppt가 아예 없었다 — 오류다」)
+        #   구 코드는 build_ppt가 False를 주거나 예외가 나면 <b>None을 돌려주고 끝</b> → 카드가 조용히 사라졌다.
+        #   ⇒ 실패 사유를 <b>예외로 올린다</b>. remodel_single/_all이 받아 `fail`에 싣고 화면에 빨갛게 띄운다.
+        if not _os.path.exists(_mn.TPL_PPT):
+            raise RuntimeError('ppt_form.pptx 없음 — 배포 14파일 확인')
+        _ok = _mn.build_ppt({'client': client, 'contracts': _cts}, _out, _tot, _sq, _ss, _spl)
+        if _ok and _os.path.exists(_out):
             print('[v612 보장분석PPT] 계약 %d건 → 생성' % len(_cts))
             return open(_out, 'rb').read()
+        raise RuntimeError('build_ppt False — 계약 %d건 · 합계키 %d개' % (len(_cts), len(_tot or {})))
     except Exception as _e:
-        print('[v612 보장분석PPT] 실패:', str(_e)[:90])
-    return None
+        print('[v612 보장분석PPT] 실패:', str(_e)[:120])
+        raise
 
 
 # ★★★★★v651 (지점장 지시 2026.09.02 「<b>2번이나 1번은 니가 만든거 외에도 다 읽어내라</b> ·
@@ -1515,6 +1521,7 @@ def remodel_all(old_bytes, new_bytes, client='고객', base_date=''):
         _fail.append('보장분석지PPT:' + str(_e)[:60])
     if _fail:
         print('[v645 산출물] 실패 %d건 :: %s' % (len(_fail), ' | '.join(_fail)))
+    _out['fail'] = list(_fail)   # ★v687 화면에 띄운다 — 조용히 사라지지 않는다
     return _out
 
 
@@ -1551,4 +1558,5 @@ def remodel_single(xlsx_bytes, client='고객', base_date='', totpg=3):
         _fail.append('보장분석지PPT:' + str(_e)[:60])
     if _fail:
         print('[v650 산출물·단일] 실패 %d건 :: %s' % (len(_fail), ' | '.join(_fail)))
+    _out['fail'] = list(_fail)   # ★v687 화면에 띄운다 — 조용히 사라지지 않는다
     return _out

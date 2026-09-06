@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v683-notraffic-20260906'
+VSTAMP = 'v688-calsync-20260907'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -181,9 +181,9 @@ FILL_GREEN = PatternFill('solid', fgColor='375623')
 _BLUE_ROWS = {'입원','통원','약값','MRI트리오','도수치료','비급여주사','상해의료비','일상배상책임'}
 # ★v682 세부보충 화이트리스트 사본(재구성 보존 판정용 · 원본 _SEBU_WIN과 동일 유지)
 _SEBU_WIN_682 = {
-    '상해사망','상해후유3%','질병후유3%','입원','일반암','암수술','유사암(갑.기.경.제)',
+    '상해사망','입원','일반암','암수술','유사암(갑.기.경.제)',
     '통합전이암','뇌혈관진단비','뇌혈관수술비','뇌졸증진단비','허혈성 진단비','심장수술비',
-    '급성심근경색','질병수술비','상해수술비','질병일당','상해일당','간병인',
+    '급성심근경색','질병수술비','상해수술비','질병일당','상해일당',
     '합의금','변호사','대인','대물','자부상','일상배상책임','깁스진단비',
 }
 FILL_SUM   = PatternFill('solid', fgColor='2E75B6')
@@ -1654,11 +1654,53 @@ _STRUCT_SELFTEST = [
     ('제41조 대괄호담보행','main.py',           r'┖\|\\\[\[\^', True),
     ('제41조 특정치료비',  'main.py',            r"has\('특정치료비'\)", True),
     ('제41조 삼성자료',    'report_weasy.py',    r'INFO-TBL 통합치료비 4', True),
+    # ★★★★★v686 제154조 구조 검사 — 지점장 지적 14건 중 매핑이 아닌 것. 코드가 되돌아가면 잡힌다.
+    ('제154조① 간병인세부보충금지', 'main.py', r"_SEBU_WIN = \{\n\s*'상해사망','입원'", True),
+    ('제154조① 사본동기화',        'main.py', r"_SEBU_WIN_682 = \{[^}]*'간병인'", False),
+    ('제154조② 교통가드resolve2',  'main.py', r'v684 제154조 ① \(지점장 원문 2026\.09\.07', True),
+    ('제154조④ 간호통합한칸',      'report_weasy.py', r'v684 간호통합병동은 지원 칸 한 곳만', True),
+    ('제154조⑥ 결번감시',          'BARUM_DOCTRINE.md', r'제153조', True),
+    ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
+    ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
+    ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
+    ('제154조⑪ dl만료HTML',        'main.py',    r"headers=\{'Content-Disposition': 'inline'\}", True),
+    ('제154조⑤ 달력서버저장',       'main.py',    r"@app\.post\('/hub/events'\)", True),
 ]
 
 # ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
 _JOMUN_SELFTEST = [
     # (담보명, 기대 마스터행, 조문)
+    # ★★★★★v686 제154조 — 지점장 지적 14건(2026.09.07) 중 매핑으로 검사되는 것 전부. 하나라도 깨지면 로봇1 ✕.
+    ('교통상해골절수술비',                   None,            '제154조② 교통'),
+    ('교통상해5대골절수술비',                None,            '제154조② 교통'),
+    ('교통상해골절진단비(치아파절포함)',     None,            '제154조② 교통'),
+    ('교통상해5대골절진단비',                None,            '제154조② 교통'),
+    ('교통상해후유장해(3~100%)',             None,            '제154조② 교통'),
+    ('교통상해사망',                         '교통상해사망',  '제154조② 교통예외'),
+    ('교통사고처리지원금(6주미만)',          '6주미만',       '제154조② 교통예외'),
+    ('자동차사고부상위로금(1~14급)',         '자부상',        '제154조② 교통예외'),
+    ('교통사고처리지원금(6주이상)',          None,            '제154조 6주이상'),
+    ('질병후유장해(80세)',                   '질병후유3%',    '제154조⑦ 80세=3%'),
+    ('질병후유장해(80%)',                    '질병후유80%',   '제154조⑦ 80%'),
+    ('고도질병후유장해',                     '질병후유80%',   '제154조⑦ 고도'),
+    ('질병후유장해(20%이상)',                None,            '제154조⑩ 20%무행'),
+    ('상해후유장해(20~100%)',                None,            '제154조⑩ 20%무행'),
+    ('상해후유장해(3~100%)',                 '상해후유3%',    '제154조⑩ 3%'),
+    ('고액치료비암진단비',                   '고액암',        '제154조⑧ 고액암'),
+    ('고액암진단비',                         '고액암',        '제154조⑧ 고액암'),
+    ('5대고액암진단비',                      '고액암',        '제154조⑧ 고액암'),
+    ('10대고액치료비암진단비(간편가입)',     '고액암',        '제154조⑧ 고액암'),
+    ('7대질병수술비',                        'n대수술비',     '제154조⑨ n대'),
+    ('질병간병인일당(요양병원)',             None,            '제154조① 요양병원무행'),
+    ('간병인사용질병입원일당(요양병원)',     None,            '제154조① 요양병원무행'),
+    ('다빈치로봇암수술비',                   '다빈치로봇수술비','제154조 다빈치'),
+    ('질병특정고도장해재활치료비',           '질병후유80%',   '제154조 재활=80%'),
+    ('간호간병통합서비스사용질병입원일당(1-180일)', '간호통합병동', '제154조④ 간호통합'),
+    ('중증질환자(심장질환)산정특례대상진단비', '산정특례심장', '제154조 마스터-2 52행'),
+    ('[갱신형]플래티넘 건강 리셋월렛Ⅱ',     '10억 플랜',     '제154조⑬ 흥국10억통장'),
+    ('리셋월렛Ⅱ 10억통장',                  '10억 플랜',     '제154조⑬ 흥국10억통장'),
+    ('순환계질환주요치료비',                 '2대 주요치료비','제154조⑬ 순환계주요치료비'),
+    ('순환계주요치료비(연간1회한)',          '2대 주요치료비','제154조⑬ 순환계주요치료비'),
     ('상급종합병원Ⅲ하이클래스암주요치료비(연간1회한,진단후10년)', '하이클래스(암)', '제20조 하이클래스'),
     ('하이클래스암주요치료비Ⅱ(상급종합병원(국립암센터포함))',      '하이클래스(암)', '제20조 하이클래스'),
     ('비급여암주요치료비',                                        '하이클래스(암)', '제20조 하이클래스'),
@@ -2757,7 +2799,7 @@ def parse_sinjeong(lines):
                 # ★★★★★v424: 상한 500만은 <b>월보험료</b> 기준이다. 일시납(1,100만 등)이 여기서 버려졌다.
                 #   월보험료(premium)와 <b>일시납(lump_sum)을 분리</b>해 담는다 — 합계에 섞이면 안 된다.
                 if 1000 < pv < 5000000: premium = pv
-                elif '일시' in re.sub(r'\\s','',str(pay_period or '')): lump_sum = pv   # ★v425 주기 우선
+                elif '일시' in re.sub(r'\s','',str(pay_period or '')): lump_sum = pv   # ★v425 주기 우선
                 elif 5000000 <= pv < 10**10: lump_sum = pv        # ★v424 금액 2순위
                 elif pv >= 5000000 and '일시' in re.sub(r'\s','',str(pay_period or '')): lump_sum = pv
             except: pass
@@ -4402,6 +4444,12 @@ def parse_txt(txt, filename='', extra=None):
             _hi = ('80%이상' in _kk) or ('고도' in _kk)
             _dead = f'{_ax}사망[결합]'
             _dis  = f'{_ax}{"80%이상" if _hi else ""}후유장해[결합]'
+            # ★★★★★v684 제154조 ① (조영선 흥국 실측): `대중교통이용중교통상해사망후유장해` 20,000이 결합 분해로
+            #   상해후유3%에 들어가 한장표 13,000 ≠ 43,000. 교통 결합담보는 <b>사망 = 교통상해사망(9행)</b>,
+            #   <b>후유장해 = 무행 → [확인]큐</b>(resolve2 교통 가드는 분해 뒤라 못 막는다).
+            if '교통' in _kk:
+                _dead = '교통상해사망[결합]'
+                _dis  = re.sub(r'사망', '', str(_k)) + '(결합분해)'   # '사망'을 빼면 resolve2 교통 가드가 None → [확인]큐
             _c['dambo'].pop(_k)
             _c['dambo'][_dead] = _c['dambo'].get(_dead, 0) + _v
             _c['dambo'][_dis]  = _c['dambo'].get(_dis, 0) + _v
@@ -5095,7 +5143,9 @@ def resolve_kw(raw):
     # ④ <b>10대고액암도 고액암이다</b>(지점장 확정 2026.09.05).
     #   ★v682: KB 원문은 `10대고액치료비암진단비`라 '고액암' 글자가 없다 → `10대고액`+`암`도 고액암.
     #     흥국 `고액치료비암진단비`(10대 표기 없음)는 지점장 미확정 → 종전대로 [확인]큐.
-    if ('고액암' in _v154) or ('10대고액' in _v154 and '암' in _v154):
+    #   ★v684 (지점장 2026.09.07): 「<b>고액치료비암진단비 = 고액암진단비 = 5대고액암진단비 다 고액암진단비다</b>」
+    #     → '고액'+'암'+'진단'이면 전부 고액암 행.
+    if ('고액암' in _v154) or ('고액' in _v154 and '암' in _v154 and '진단' in _v154):
         return ('고액암', 0)
 
     # ⑤ <b>질병특정고도장해재활치료비 = 질병후유80%</b>(지점장 확정 2026.09.05).
@@ -5351,7 +5401,9 @@ def resolve_kw(raw):
         #   <b>마스터 이름으로 통일</b>해 어긋날 여지를 없앤다). 실측 = AIG 86대질병수술비 6건·롯데 16대 미기재.
         # ★v352b: 마스터 라벨 자체('n대수술비')도 자기 행으로 돌아와야 한다(커버리지 감사 FAIL 방지).
         if re.sub(r'\s','',r) in ('n대수술비','N대수술비','120대수술비'): return 'n대수술비',0
-        if re.search(r'(?<!\d)\d{2,3}\s*대', r): return 'n대수술비',0   # ★v352 마스터 행 이름을 'n대수술비'로 통일(지점장 지시 2026.08.02)
+        if re.search(r'(?<!\d)\d{2,3}\s*대', r): return 'n대수술비',0
+        # ★v684 (지점장 2026.09.07 「7대질병수술비 = n대수술비에 기재」): 한 자리 N대질병수술비도 n대수술비(골절·기관은 제 행).
+        if re.search(r'(?<!\d)\d\s*대\s*질병\s*수술비', r) and not re.search(r'골절|기관', r): return 'n대수술비',0   # ★v352 마스터 행 이름을 'n대수술비'로 통일(지점장 지시 2026.08.02)
         # ★★★★★v326b (지점장 확정 2026.08.02): <b>뇌혈관수술비 = 담보명에 '뇌혈관'이라고 적힌 것만</b>.
         #   ★내 오류 정정 — v325에서 `뇌출혈`을 여기 넣었으나 지점장이 바로잡았다: "<b>뇌출혈도 엑셀에 없다</b>".
         #   마스터에 「뇌출혈 수술비」 행이 <b>없으므로 [확인]큐</b>가 정답이다.
@@ -5761,7 +5813,9 @@ def resolve_kw(raw):
         # ★★v92 (장혜경 실측): '질병후유장해(80%미만)Ⅱ'가 '80' 글자 때문에 80%행으로 잘못 갔다.
         #   → '80%미만'/'80% 미만'이면 3% 행. (한장보장표 질병3% 100과 일치)
         _u80 = ('80%미만' in n.replace(' ','')) or has('미만')
-        sev = '3' if _u80 else ('80' if ('80' in n or has('고도')) else '3')
+        # ★v684 (지점장 2026.09.07): 「<b>질병후유장해(80세)는 3%다. 80%는 질병후유장해(80%)거나 고도질병후유장해여야 한다</b>」
+        #   구 코드 `'80' in n`이 '80세'를 80%로 읽었다.
+        sev = '3' if _u80 else ('80' if (re.search(r'80\s*%', n) or has('고도')) else '3')
         body = '상해' if (has('상해') or has('재해') or has('교통')) else '질병'
         return f'{body}후유{sev}%',0
 
@@ -6052,6 +6106,13 @@ def resolve2(raw):
     _n593 = re.sub(r'[\s※]', '', str(raw))
     if re.match(r'^(자기부담금|공제금액|면책금액|자기부담|공제금)', _n593):
         return None, 0
+    # ★★★★★v684 제154조 ① (지점장 원문 2026.09.07 「<b>교통**은 다 빼라고 했는데 골절·5대골절·골절수술비·5대골절수술비에 다 포함된다</b>」)
+    #   교통○○ 담보는 일반 행에 합산하지 않는다 → [확인]큐. 예외 = 제 행이 있는 것(교통상해사망 9행 · 운전자 5종 · 교통상해입원일당).
+    #   ★v683에서 내가 지점장 말을 오독해 이 가드를 폐기했다 — 복원. DMAP 부분일치보다 앞(두 경로 공통).
+    _n154 = re.sub(r'\s', '', str(raw))
+    if _n154.startswith('교통') or '교통상해' in _n154:
+        if not any(k in _n154 for k in ('사망','벌금','합의금','처리지원금','변호사','부상치료비','사고부상','위로금','입원일당','일당')):
+            return None, 0
     _n590 = re.sub(r'\s', '', str(raw))
     if ('의료비' in _n590) and ('입원' in _n590) and ('통원' in _n590) and ('실손' not in _n590):
         return '입원', 0
@@ -7699,11 +7760,11 @@ def build_excel(data, out):
             #     ㉠사망 3행(일반/질병(80세)/상해) ㉡골절 2행(치아파절 포함/제외)
             #     ㉢<b>통원</b>(세부 30 = 통원25 + 약값5 합산표기 — 덮으면 약값이 이중계산된다)
             _SEBU_WIN = {
-                '상해사망','상해후유3%','질병후유3%','입원','일반암','암수술','유사암(갑.기.경.제)',
+                '상해사망','입원','일반암','암수술','유사암(갑.기.경.제)',
                 '통합전이암','뇌혈관진단비','뇌혈관수술비','뇌졸증진단비','허혈성 진단비','심장수술비',
-                '급성심근경색','질병수술비','상해수술비','질병일당','상해일당','간병인',
+                '급성심근경색','질병수술비','상해수술비','질병일당','상해일당',
                 '합의금','변호사','대인','대물','자부상','일상배상책임','깁스진단비',
-            }
+            }   # ★v684 '간병인'·'상해후유3%'·'질병후유3%' 제거 — 세부표가 요양병원 5·교통후유 3,000·20%후유를 합쳐 싣는다(지점장 2026.09.07 ①②⑩)
             _SEBU_DEATH = ('일반사망','질병사망(80세)')
             _ci_on = bool(nm2r.get('중대한CI적용')) and \
                      ws.cell(nm2r.get('중대한CI적용') or 1, _cl2).value not in (None, '')
@@ -8132,6 +8193,9 @@ def build_excel(data, out):
            (('질병수술비' in _n) and not _n.startswith('질병수술비')):
             return ('규칙제외', '수술비 변형(부위·특정·병원규모) = 기재금지(§8.5)')
         if _nt.strip(): return ('규칙제외', _nt.strip()[:40])
+        if (_n.startswith('교통') or '교통상해' in _n) and \
+           not any(k in _n for k in ('사망','벌금','합의금','처리지원금','변호사','부상치료비','사고부상','위로금','입원일당','일당')):
+            return ('규칙제외', '교통○○ 담보 = 일반 행 합산 금지(제154조 ①)')
         for _b, _lab in _MASTER_KEYS:
             if _b in _n: return ('★결함의심', '마스터 「%s」 행 있음 → 그 행에 들어갔어야 함' % _lab)
         return ('마스터 무행', '해당 담보 행 없음 — 기재 대상 아님')
@@ -9284,10 +9348,11 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     # ★★★★★v243(지점장 지시 2026.07.25): <b>보장분석지 PPT 뇌 칸도 축을 따라간다</b>.
     #   구 코드는 `중대한 뇌졸증`만 봐서, 축이 뇌출혈인 CI(신한·DB 실측)는 <b>PPT에 아무것도 안 찍혔다</b>.
     #   → 끝열 합계에 <b>중대한 뇌출혈</b>이 있으면 그 축으로 라벨·값을 바꾼다.
-    if (totals.get('중대한 뇌출혈',0) or 0) > (totals.get('중대한 뇌졸증',0) or 0):
-        _ci_split('TextBox 47','뇌출혈','중대한 뇌출혈','뇌출혈진단비')
-    else:
-        _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
+    # ★★★★★v684 (지점장 2026.09.07 「<b>중대한뇌출혈은 PPT가 인식을 못해서 중대한뇌졸증에 기재되고 이름을 뇌출혈로 맘대로 바꾼다</b>」)
+    #   구 v243은 축이 뇌출혈이면 <b>뇌졸증 칸(TextBox 47)의 라벨을 뇌출혈로 바꿔</b> 썼다. 폼엔 뇌출혈 칸(TextBox 48)이 따로 있다.
+    #   → 중대한 뇌졸증 = TextBox 47 / 중대한 뇌출혈 = TextBox 48. 라벨은 폼 그대로. 둘 다 있으면 둘 다.
+    _ci_split('TextBox 47','뇌졸증','중대한 뇌졸증','뇌졸증진단비')
+    _ci_split('TextBox 48','뇌출혈','중대한 뇌출혈','뇌출혈진단비')
     _ci_split('TextBox 55','급성심근','중대한 급성심근','급성심근경색')
     _ci_run('TextBox 14',0,'중대한 암','+')
     _ci_run('TextBox 10',3,'중대한CI적용','+')
@@ -9703,7 +9768,11 @@ _onReady(()=>{
       +_rc(j.pdf, _rn+'_리포트.pdf', '리모델링 리포트 PDF','pt')
       /* ★v612 (지점장 지시 2026.08.30) — 최종 엑셀 기준 보장분석지 PPT 추가 */
       +_rc(j.anal, '보장분석지_'+_rn+'(최종).pptx', '보장분석지 PPT (최종)','pt')
-      +'</div>';
+      +'</div>'
+      /* ★v687 산출물이 빠지면 빨갛게 사유를 띄운다 — 카드가 조용히 사라지지 않는다 */
+      +((j.fail&&j.fail.length)?('<div style="margin-top:6px;color:#c0392b;font-weight:700;font-size:12px">★ 산출물 실패 '
+        +j.fail.length+'건: '+j.fail.map(x=>String(x).replace(/</g,'&lt;')).join(' | ')+'</div>'):'')
+      +((!j.anal&&!(j.fail&&j.fail.length))?'<div style="margin-top:6px;color:#c0392b;font-weight:700;font-size:12px">★ 보장분석지 PPT가 생성되지 않았다(사유 미기록)</div>':'');
     if(!_rM){
       const _q=[[j.xlsx,_rn+'_비교.xlsx'],[j.pptx,_rn+'_리포트.pptx'],[j.pdf,_rn+'_리포트.pdf'],
                 [j.anal,'보장분석지_'+_rn+'(최종).pptx']]
@@ -10627,6 +10696,72 @@ async def hub_notes_post(code: str = Form(''), notes: str = Form('')):
 def hub_notes_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
+# ★★★★★v688 제154조 ⑤ (지점장 지시 2026.09.07 「통합앱 달력 스케줄이 휴대폰과 PC가 연동이 안 된다 — 방법 찾아라」)
+#   메모는 v665부터 /hub/notes로 서버에 저장돼 폰·PC가 같았는데 <b>달력 일정은 localStorage(barum_hub_events)에만</b> 있었다.
+#   ⇒ 같은 저장소(hub_notes 표)에 키 `번호#EV`로 일정을 따로 저장한다. 형식 = {"YYYY-MM-DD":[...]}.
+def _hub_ev_key(own): return own + '#EV'
+
+@app.get('/hub/events')
+def hub_events_get(code: str = ''):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    key = _hub_ev_key(own)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v, to_char(updated,'YYYY-MM-DD HH24:MI') FROM hub_notes WHERE code=%s", (key,))
+                r = k.fetchone()
+                return JSONResponse({'ok': True, 'events': json.loads(r[0]) if r and r[0] else None,
+                                     'updated': r[1] if r else None, 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v688 events] DB 읽기 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    return JSONResponse({'ok': True, 'events': allv.get(key), 'updated': None, 'src': 'file'}, headers=_HUB_CORS)
+
+@app.post('/hub/events')
+async def hub_events_post(code: str = Form(''), events: str = Form('')):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    try:
+        obj = json.loads(events); assert isinstance(obj, dict)
+        if len(events) > 2_000_000:
+            return JSONResponse({'ok': False, 'error': '일정이 너무 크다(2MB)'}, headers=_HUB_CORS)
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
+    key = _hub_ev_key(own)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) "
+                          "ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()", (key, events))
+            return JSONResponse({'ok': True, 'n': len(obj), 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v688 events] DB 저장 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    allv[key] = obj
+    json.dump(allv, open(_HUB_NOTES_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
+    return JSONResponse({'ok': True, 'n': len(obj), 'src': 'file'}, headers=_HUB_CORS)
+
+@app.options('/hub/events')
+def hub_events_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
 @app.post('/verify')
 async def hub_verify(request: Request):
     """★v665 자료실·AI·LIFE PLAN·실손계산기 공용 입장 — 구 makeone-auth `/verify` 규격 그대로(JSON {name,code} → {ok,exp,why}).
@@ -10881,9 +11016,17 @@ def dl_file(token: str, fname: str):
     _base = os.path.join(tempfile.gettempdir(), 'barum_dl', token)
     _p = os.path.join(_base, os.path.basename(urllib.parse.unquote(fname)))
     if not os.path.isfile(_p):
-        return JSONResponse({'ok': False,
-                             'error': '파일이 만료되었습니다. 화면에서 다시 분석해 주세요.'},
-                            status_code=404)
+        # ★★★★★v687 (지점장 실측 2026.09.07 「이상한 TMP 파일이 나타났다」): 구 코드는 파일이 없으면
+        #   JSON 404를 돌려줬고 폰 브라우저는 `download` 링크로 받은 그 JSON을 <b>이름 없는 파일(tmp)</b>로 저장했다.
+        #   ⇒ 파일이 아니라 <b>사람이 읽는 HTML 안내</b>로 바꾼다(다운로드가 아니라 화면에 뜬다).
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">'
+                            '<div style="font:15px/1.6 sans-serif;padding:24px;max-width:520px">'
+                            '<b style="color:#c0392b;font-size:18px">파일이 만료되었습니다</b><br>'
+                            '산출물은 서버 임시폴더에 잠시만 보관됩니다. 서버가 재시작됐거나 시간이 지났습니다.<br>'
+                            '<b>화면에서 다시 분석</b>한 뒤 카드를 눌러 저장해 주세요.<br>'
+                            '<span style="color:#888;font-size:12px">' + os.path.basename(_p) + '</span></div>',
+                            status_code=404, headers={'Content-Disposition': 'inline'})
     return FileResponse(_p, filename=os.path.basename(_p),
                         media_type='application/octet-stream')
 
@@ -12774,6 +12917,7 @@ async def remodel_route(xlsx: UploadFile = File(None),
                              'n_up': len(c['up']), 'n_add': len(c['add']),
                              'n_down': len(c['down']), 'n_del': len(c['delete']),
                              'xlsx': _x, 'pptx': _p, 'pdf': _d, 'anal': _ap,
+                             'fail': r.get('fail') or [],   # ★v687 산출물 실패 사유 — 화면 표시
                              'all': _zip_dl([(r['xlsx'], f'{_cl}_리모델링_비교.xlsx'),
                                              (r['pptx'], f'{_cl}_리모델링_리포트.pptx'),
                                              (r.get('pdf'), f'{_cl}_리모델링_리포트.pdf'),

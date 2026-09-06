@@ -3334,7 +3334,7 @@ body {{ color:{INK}; }}
   <div class="wscap n2 wsectcap gap2">■ 간병비 담보</div>
   <div class="ws2">
    {_wcard_fix_list('간병인 지원','보험사 파견',['간병인지원일당','간호통합병동'])}
-   {_wcard_fix_list('간병인 사용','직접 고용',['간병인 사용일당','요양병원 간병인','간호통합병동일당'])}   <!-- ★v512 제110조 -->
+   {_wcard_fix_list('간병인 사용','직접 고용',['간병인 사용일당','요양병원 간병인'])}   <!-- ★v684 간호통합병동은 지원 칸 한 곳만(지점장 2026.09.07) -->   <!-- ★v512 제110조 -->
   </div>
   <table class="st cmp"><tr><th style="width:20%">구분</th><th>간병인지원일당</th><th>간병인사용일당</th></tr>
    <tr><td class="g">방식</td><td>보험사가 간병인 <b>직접 배정</b></td><td>내가 <b>직접 고용</b> 후 정액 지급</td></tr>
@@ -4827,7 +4827,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v683-notraffic-20260906</div>'
+    _VSTAMP = '<div class="vstamp">v688-calsync-20260907</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

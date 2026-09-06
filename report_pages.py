@@ -687,7 +687,12 @@ def _hv(html, label):
         m = _re.search(r'>%s</td>.{0,300}?</tr>' % _re.escape(label), html, _re.S)
     if not m:
         return None
-    a = _re.findall(r'([\d,]+)\s*만', m.group(0))
+    # ★v685 (조영선 실측 2026.09.07): v585부터 `_c4`가 <span class="amount">1,000</span> 「숫자만」 찍는데
+    #   이 검사는 여전히 '만'이 붙은 숫자만 세어 <b>보장 1,000을 0으로 읽었다</b> → 「엑셀 1,000 / 진단서 0」 거짓 경보.
+    #   검사가 산출물 형식을 따라가지 못하면 검사가 거짓말을 한다. 두 형식 모두 읽는다.
+    a = _re.findall(r'class="amount">\s*([\d,]+)\s*<', m.group(0))
+    if not a:
+        a = _re.findall(r'([\d,]+)\s*만', m.group(0))
     return sum(int(x.replace(',', '')) for x in a) if a else 0
 
 
