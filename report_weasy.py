@@ -3168,23 +3168,23 @@ body {{ color:{INK}; }}
     <div class="spcv brn">
      <div class="spcvt">산정특례 (뇌) <span>V191 · 급여 5%</span></div>
      <table class="spcv2">
-      <tr><td class="k">① 수술</td><td>개두술·뇌동맥류·혈전제거 등</td><td class="d">30일</td></tr>
-      <tr><td class="k">② 약제</td><td><b>혈전용해제 투여</b> (외래도 인정)</td><td class="d">30일</td></tr>
-      <tr><td class="k">③ 뇌출혈</td><td><b>I60~62</b> 급성기 입원</td><td class="d">30일</td></tr>
-      <tr><td class="k">④ 뇌경색</td><td><b>I63</b> 24h 내 도착 + <b>NIHSS 5점↑</b></td><td class="d">30일</td></tr>
-      <tr class="f"><td colspan="3">대상 <b>I60~67 · I72.0 · Q28.0~28.3 · S06</b> → <b class="g">상해(S06)도 보상</b></td></tr>
-      <tr class="n"><td colspan="3"><b>★ 진단비가 아니다</b> — 건강보험 산정특례에 <b>등록</b>되어야 지급.<br>뇌는 수술·약제가 없어도 등록되는 길이 있다 → <b class="g">문턱이 낮다</b></td></tr>
+      <tr><td class="k">① 수술</td><td>개두·클립·코일·스텐트·혈전제거 <b>(입원 필수)</b></td><td class="d">30일</td></tr>
+      <tr><td class="k">② 약제</td><td><b>혈전용해제(tPA)</b> 투여 <b>(입원 필수)</b></td><td class="d">30일</td></tr>
+      <tr><td class="k">③ 뇌출혈</td><td><b>I60·I61</b> 급성기 입원만으로도 적용</td><td class="d">30일</td></tr>
+      <tr><td class="k">④ 뇌경색</td><td><b>I63</b> 24h 내 + <b>NIHSS 5점↑</b> 입원 (V275)</td><td class="d">30일</td></tr>
+      <tr class="f"><td colspan="3">재수술·재투여 <b>+30일</b> · <b class="r">미적용</b>: 급성기 지난 입원·재활 / 외래 / TIA / I67.1 / I69</td></tr>
+      <tr class="n"><td colspan="3"><b>★ 진단비가 아니다</b> — 산정특례 <b>등록</b>되어야 지급 · 뇌는 <b class="g">문턱이 낮다</b> · 청구: <b>상병코드·V191/V275·기간·수술명+EDI·NIHSS</b></td></tr>
      </table>
     </div>
     <div class="spcv hrt">
      <div class="spcvt">산정특례 (심장) <span>V192 · 급여 5%</span></div>
      <table class="spcv2">
-      <tr><td class="k">① 수술</td><td>카테터·판막·부정맥·개흉 등</td><td class="d">30일</td></tr>
-      <tr><td class="k">② 약제</td><td>고시 약제 투여 (외래 인정)</td><td class="d">30일</td></tr>
+      <tr><td class="k">① 수술·시술</td><td>PCI·CABG·판막·TAVI·심박기·ICD 등 <b>(입원 필수)</b></td><td class="d">30일</td></tr>
+      <tr><td class="k">② 약제</td><td>고시 약제(혈전용해제 등) <b>(입원 필수)</b></td><td class="d">30일</td></tr>
       <tr><td class="k">③ 심장이식술</td><td>심장이식술을 받은 경우</td><td class="d">60일</td></tr>
       <tr><td class="k">④ 복잡선천성</td><td>복잡 선천성 심기형 수술·약제</td><td class="d">60일</td></tr>
-      <tr class="f"><td colspan="3"><b class="r">수술·약제가 없으면 대상 아님</b> — 진단만으로는 등록 불가</td></tr>
-      <tr class="n"><td colspan="3"><b class="r">★ 수술·고시약제가 없으면 진단만으론 못 받는다</b><br><b>급여 본인부담만 5%</b>로 낮춘다(<b class="r">비급여는 그대로</b>) · <b>최대 30일</b> → <b>혈전용해·수술비</b>로 보완</td></tr>
+      <tr class="f"><td colspan="3"><b class="r">심장은 뇌와 다르다 — 입원만으론 미적용</b>(이뇨·약물·조영술만 = 20%)</td></tr>
+      <tr class="n"><td colspan="3"><b class="r">★ 진단만으론 못 받는다</b> · <b>급여만 5%</b>(비급여 그대로) · <b>30일</b> → 혈전용해·수술비 보완 · 청구: <b>상병코드·V192·기간·EDI</b></td></tr>
      </table>
     </div>
    </div>
@@ -3261,7 +3261,7 @@ body {{ color:{INK}; }}
    </div>
   </div>
   <div class="wssj">
-   <div class="cap">산정특례 — 뇌·심 각각 개별 담보 · 진단만으로 지급</div>
+   <div class="cap">산정특례 — 뇌·심 각각 개별 담보 · <b>건보 산정특례 등록</b>되어야 지급 (진단만으론 아님)</div>
    <div class="ws2">
     {_wcard_sj(rep,'산정특례 (뇌)','뇌혈관질환 I60~69 전체 · Q28 · S06','산정특례(뇌혈관)')}
     {_wcard_sj(rep,'산정특례 (심장)','심혈관질환 I20~50 · 판막 전체','산정특례(심장)')}
@@ -4513,7 +4513,7 @@ body {{ color:{INK}; }}
     <div class="cbx nt"><div class="cbh">재발이 진짜 리스크 <span>1회성이 아니다</span></div>
      <div class="cbl"><b>뇌경색</b> 1년 내 <b class="r">10%</b> · 5년 내 <b class="r">20~30%</b> 재발</div>
      <div class="cbl"><b>급성심근경색</b> 1년 내 <b class="r">30%</b> · 3년 내 <b class="r">50%</b> 재발</div>
-     <div class="cbl"><b>산정특례</b> 뇌 · 심은 <b class="r">최대 30일</b>만 — 장기 치료비는 본인 몫</div>
+     <div class="cbl"><b>산정특례</b> 암은 5년 · 뇌 · 심은 <b class="r">최대 30일</b>(재수술 +30)만 — 그 뒤 수십 년은 보험이 낸다</div>
      <div class="cbl"><b>연간 1회</b> 산정특례대상 진단비는 <b class="g2">매년 반복 지급</b> 가능</div>
     </div>
    </div>
@@ -4827,7 +4827,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v688-calsync-20260907</div>'
+    _VSTAMP = '<div class="vstamp">v691-sjcard-20260910</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

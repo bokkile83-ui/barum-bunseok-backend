@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v688-calsync-20260907'
+VSTAMP = 'v691-sjcard-20260910'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1665,6 +1665,11 @@ _STRUCT_SELFTEST = [
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
     ('제154조⑪ dl만료HTML',        'main.py',    r"headers=\{'Content-Disposition': 'inline'\}", True),
     ('제154조⑤ 달력서버저장',       'main.py',    r"@app\.post\('/hub/events'\)", True),
+    ('제0조0항 지점장4법',           'BARUM_DOCTRINE.md', r'비교엑셀은 절대 정답지니 더 추가 말자', True),
+    ('제155조 산정특례정본',          'BARUM_DOCTRINE.md', r'심장은 뇌와 다르다', True),
+    ('제155조 진단서카드 약제입원',    'report_weasy.py',   r'혈전용해제\(tPA\)</b> 투여 <b>\(입원 필수\)', True),
+    ('제155조 진단서카드 외래인정삭제', 'report_weasy.py',   r'외래도 인정|외래 인정\)', False),
+    ('제155조 진단서 진단만으로지급삭제','report_weasy.py',  r'개별 담보 · 진단만으로 지급', False),
 ]
 
 # ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
