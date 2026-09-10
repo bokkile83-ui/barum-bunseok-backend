@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v691-sjcard-20260910'
+VSTAMP = 'v692-hub8-20260910'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1670,6 +1670,7 @@ _STRUCT_SELFTEST = [
     ('제155조 진단서카드 약제입원',    'report_weasy.py',   r'혈전용해제\(tPA\)</b> 투여 <b>\(입원 필수\)', True),
     ('제155조 진단서카드 외래인정삭제', 'report_weasy.py',   r'외래도 인정|외래 인정\)', False),
     ('제155조 진단서 진단만으로지급삭제','report_weasy.py',  r'개별 담보 · 진단만으로 지급', False),
+    ('허브8 MEDICARE카드',              'main.py',   r'"k":"medicare"', True),
 ]
 
 # ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
@@ -10518,6 +10519,8 @@ _HUB_DEF = [
     {"k":"life","ic":"💵","nm":"LIFE PLAN","ds":"진단·행동·분산 3단계 재무 설계. 종신·연금 비교 시뮬레이터·120일 지출기록.","ur":"life/index.html"},
     {"k":"dollar","ic":"💲","nm":"종신","ds":"달러연금·종신과 원화저축을 나란히 비교한다.","ur":"life/files/dollar_calc.html"},
     {"k":"pension","ic":"🏛","nm":"연금","ds":"생명보험사 연금을 한눈에 비교한다.","ur":"life/files/pension_sim.html"},
+    # ★v692 (지점장 지시 2026.09.10 「통합앱에 8번이 되게 해줘」) — MEDICARE 카드. 인증은 서버 /verify 공통.
+    {"k":"medicare","ic":"🩺","nm":"MEDICARE","ds":"암·뇌·심 치료비와 보장 점검 리포트. 산정특례·실손·소득 공백까지 한 장.","ur":"https://guileless-longma-1bde76.netlify.app"},
 ]
 _HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
 
@@ -10533,6 +10536,10 @@ def _hub_norm(cards):
             seen.add(k)
             c = dict(c); c['nm'] = dm[k]['nm']; c['ds'] = dm[k]['ds']; c['ic'] = dm[k]['ic']
         out.append(c)
+    # ★v692: DB에 저장된 카드 목록(구 7장)에 없는 기본 카드(MEDICARE)는 뒤에 붙인다 → 8번째.
+    for d in _HUB_DEF:
+        if d['k'] not in seen:
+            out.append(dict(d)); seen.add(d['k'])
     return out
 
 def _hub_load():
