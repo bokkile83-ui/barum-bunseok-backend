@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v692-hub8-20260910'
+VSTAMP = 'v695-chipdedupe-20260915'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1671,6 +1671,7 @@ _STRUCT_SELFTEST = [
     ('제155조 진단서카드 외래인정삭제', 'report_weasy.py',   r'외래도 인정|외래 인정\)', False),
     ('제155조 진단서 진단만으로지급삭제','report_weasy.py',  r'개별 담보 · 진단만으로 지급', False),
     ('허브8 MEDICARE카드',              'main.py',   r'"k":"medicare"', True),
+    ('제156조 제안서회사 담보명조각거부', 'main.py',   r"표지에 없는 조각 → 거부\(v693\)", True),
 ]
 
 # ★★★★★v404 조문 강제 테이블 — <b>조문을 넣을 때 여기 한 줄을 같이 넣는다.</b>
@@ -1703,6 +1704,10 @@ _JOMUN_SELFTEST = [
     ('질병특정고도장해재활치료비',           '질병후유80%',   '제154조 재활=80%'),
     ('간호간병통합서비스사용질병입원일당(1-180일)', '간호통합병동', '제154조④ 간호통합'),
     ('중증질환자(심장질환)산정특례대상진단비', '산정특례심장', '제154조 마스터-2 52행'),
+    ('무배당일상생활중배상책임Ⅴ(가족)(누수사고제외)(대물,누수외)(갱신형)담보', '일상배상책임', '제156조 이화미 배상책임≠대물'),
+    ('골절(치아파절제외)부목치료담보',       '반깁스',        '제156조 이화미 부목=반깁스'),
+    ('독감(인플루엔자)입원일당(1-30일)담보', None,            '제156조 이화미 독감일당 제외'),
+    ('심혈관질환(대동맥판막협착증)진단담보', '심장판막',      '제156조 이화미 판막 단독'),
     ('[갱신형]플래티넘 건강 리셋월렛Ⅱ',     '10억 플랜',     '제154조⑬ 흥국10억통장'),
     ('리셋월렛Ⅱ 10억통장',                  '10억 플랜',     '제154조⑬ 흥국10억통장'),
     ('순환계질환주요치료비',                 '2대 주요치료비','제154조⑬ 순환계주요치료비'),
@@ -3563,6 +3568,15 @@ def jean_company(txt):
         #   <b>상품 수식어까지 회사명으로</b> 잡혔다(`무배당삼성화재간편365…` → 회사 `무배당삼성화재`).
         #   정본 회사명은 <b>삼성화재</b>다. 접두 수식어만 벗긴다(회사표를 새로 만들지 않는다).
         c = re.sub(r'^(?:무배당|유배당|무|유)(?=[가-힣A-Za-z]{2,})', '', c)
+        # ★★★★★v693 (이화미 현대 제안서 실측 2026.09.15): 담보명 `가족화재벌금담보`의 '가족화재'가
+        #   `…화재` 규칙에 걸려 <b>회사=가족화재</b> → `_heart_hbkey` None → <b>현대 심장 정본표 분해 통째 사망</b>
+        #   (특정Ⅰ·특정Ⅱ·특정2대 전부 [확인]). 정본 회사키를 하나도 안 품은 '○○화재/○○손보'는 회사명이 아니다.
+        #   ⇒ ①은 <b>표지(1쪽)에 그 회사명이 실제로 있을 때만</b> 인정한다. 본문 담보명·안내문 조각(`가족화재`·
+        #     `장기손해보험`)은 표지에 없으므로 거부 → ② 표지 정본 회사키(현대해상)로 넘어간다.
+        _p1 = re.sub(r'\s', '', (txt or '').split('\f')[0])
+        if re.sub(r'\s', '', c) not in _p1:
+            print(f'[JEAN 회사] {c!r} = 표지에 없는 조각 → 거부(v693)')
+            continue
         return c
     # ★★v389b 스캔 범위 = <b>표지 1페이지</b>. 전문을 훑으면 오탐이 난다 —
     #   실측: 현대 발행자코드 `4BKB27` → <b>KB</b>, 롯데 본문 문장 → <b>한화</b>.
@@ -5965,6 +5979,9 @@ def resolve_kw(raw):
     #     대인에 합류시킨 것은 <b>오류</b>다. 구 v29q-7 배제어를 <b>그대로 원복</b>한다.
     #   <b>과실치사상 벌금 · 업무상 과실치상해실치사상 벌금 = 대인벌금과 별개 담보</b> → 대인에 넣지 않는다.
     #   (누락 방지 원칙에 따라 [확인]큐에는 그대로 남는다.)
+    # ★v693 (이화미 현대 정답지): `일상생활중배상책임Ⅴ(대물,누수외)` 1억이 아래 대물 규칙에 걸려 운전자 대물 10,000.
+    #   배상책임은 운전자 대인·대물이 아니다 → 일상배상책임 행.
+    if has('배상책임'): return '일상배상책임',0
     if has('벌금') and no('화재','과실','치사','업무'): return '대인',0
     # ★★★★★v288 (이명순 실측 2026.07.31 · 지점장 확정 "대인 2,000+1,000 총 3,000"):
     #   지침 §8.6은 <b>"벌금(대인)·벌금(대인대물 미표기)→대인"</b> — 즉 <b>벌금 담보</b>의 대인/대물 구분 규칙이다.
@@ -6000,6 +6017,7 @@ def resolve_kw(raw):
         return '자부상',0        # 급 표기 자체가 없는 순수 자동차부상위로금 → 자부상
 
     # ── 골절/응급/독감/화상/깁스 ──
+    if has('부목'): return '반깁스',0   # ★v693 정답지: 골절(치아파절제외)부목치료 5 = 반깁스(골절 행 아님)
     if has('5대골절') and has('진단'): return '5대골절진단비',0
     # ★★★★★v665 제154조 (지점장 확정 2026.09.04 장유진 DB) — <b>「척추골절진단비」(신정원 중대골절진단) 200은 골절이 아니다</b>.
     #   마스터 골절 행은 골절(치아파절포함)·골절(치아파절제외)·5대골절진단비 셋뿐. 부위·등급을 지정한 골절 변형
@@ -6014,7 +6032,7 @@ def resolve_kw(raw):
     if has('골절') and has('진단'): return '골절(치아파절포함)',0
     if _norm(raw)=='골절' or has('골절') and no('수술','일당','입원','깁스','부목'): return '골절(치아파절포함)',0
     if (has('응급실') or (has('응급') and has('내원'))) and no('비응급'): return '응급실(응급)',0   # ★v29q-11 응급 단독, 비응급 합산 차단→[확인]
-    if has('독감') or has('인플루엔자'): return '독감',0
+    if (has('독감') or has('인플루엔자')) and no('일당'): return '독감',0   # ★v693 정답지: 독감입원일당 3은 독감 20에 안 더한다 → [확인]
     if has('화상') and (has('중증') or has('심재성') or has('중대한') or has('부식')): return '중증화상진단비',0
     if has('화상') and has('진단'): return '화상진단비',0
     if has('부목') or has('반깁스'): return '반깁스',0   # ★v29q-5 골절부목치료비=반깁스
@@ -6268,7 +6286,7 @@ def inject_sum_cache(path):
     import zipfile, shutil, tempfile
     try:
         wb = openpyxl.load_workbook(path)
-        ws = wb['보장분석']; last = ws.max_column
+        ws = (wb['보장분석'] if '보장분석' in wb.sheetnames else wb[wb.sheetnames[0]]); last = ws.max_column
         vals = {}
         for r in range(2, ws.max_row+1):
             f = ws.cell(r,last).value
@@ -6672,7 +6690,7 @@ def audit_run(labels=None):
 def build_excel(data, out):
     _ci_diag = []   # ★v238 CI 진단표(확인사항 상시 출력) — 함수 최상단에서 확실히 초기화
     wb = openpyxl.load_workbook(TPL_XL)
-    ws = wb['보장분석']
+    ws = (wb['보장분석'] if '보장분석' in wb.sheetnames else wb[wb.sheetnames[0]])
     client = data['client']; contracts = _fix_silson(data['contracts'])
 
     # 담보명 -> 행번호 맵 (A/B열 유지)
@@ -7188,7 +7206,9 @@ def build_excel(data, out):
                         elif ('주요' in _rn and ('염증' in _rn or '심장염' in _rn)): _heart_bundle=['염증']
                         elif ('특정2대' in _rn) or ('방실' in _rn) or ('전도' in _rn) or _i49: _heart_bundle=['부정맥']   # 특정2대+기타부정맥(I49) 병합→부정맥(전도장애 전용행無)
                         elif _t==2: _heart_bundle=['급성심근경색']   # ★현대 특정Ⅱ=급성심근경색(정본 재수정)
-                        elif _t==1 or '심혈관' in _rn: _heart_bundle=['빈맥','심부전']
+                        # ★v693 (이화미 현대 정답지 2026.09.15): 구 `or '심혈관' in _rn` 포괄이 <b>심혈관질환(대동맥판막협착증)</b> 100을
+                        #   빈맥·심부전에 얹었다(심부전·빈맥 1,100 / 심장판막 0). 포괄 삭제 — 판막은 resolve가 심장판막 행으로.
+                        elif _t==1: _heart_bundle=['협심증','빈맥','심부전']
                     # ★v379 삼성·메리츠 별도 단독판정 <b>폐기</b> — 위 v379 전역 가드가 전 회사를 처리한다.
                     #   구 코드는 여기서만 단독을 봐서 <b>회사가 삼성·메리츠가 아니면 분해</b>됐다.
                     #   (v206 '갱신형' 접두 · v378 접미 수식어 회귀도 전역 가드가 함께 흡수한다.)
@@ -7390,6 +7410,9 @@ def build_excel(data, out):
                 #   ★구 기본값(합산)이면 `10 + 10 = 20`으로 <b>2배</b>가 됐다.
                 #   ★v344 기본 대표(max)는 <b>담보명이 완전히 같은 줄</b>에만 걸려서 이 둘(이름이 다르다)은 안 걸렸다.
                 _rep1 = _rep1 or (std == '암일당')
+                # ★v693 (이화미 현대 정답지 2026.09.15): 일상생활배상책임이 (대인)·(대물) 두 담보로 갈라져 오면
+                #   같은 배상책임 한도다 → 합산(20,000) 금지 · <b>대표(max) 10,000</b>. 지점장 정답지 그대로.
+                _rep1 = _rep1 or (std == '일상배상책임')
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
@@ -8617,7 +8640,7 @@ def build_excel(data, out):
     # ★★★★★v337b: <b>저장 직전</b>에 실손·일배책 행의 <b>끝열 합계 색을 파랑으로 확정</b>한다.
     #   중간에 넣으면 뒤 로직(세부보충·역기재 등)이 덮을 수 있어 지점장이 두 번 같은 지적을 했다.
     try:
-        _ws0 = wb['보장분석']
+        _ws0 = (wb['보장분석'] if '보장분석' in wb.sheetnames else wb[wb.sheetnames[0]])
         _lc0 = _ws0.max_column
         for _r9 in range(6, _ws0.max_row+1):
             if str(_ws0.cell(_r9,2).value or '').strip() in _BLUE_ROWS:
@@ -8634,7 +8657,7 @@ def build_excel(data, out):
     try:
         _pidx = [i for i, _c in enumerate(contracts) if _c.get('proposal')]
         if _pidx:
-            _ws0 = wb['보장분석']
+            _ws0 = (wb['보장분석'] if '보장분석' in wb.sheetnames else wb[wb.sheetnames[0]])
             _ORG = PatternFill('solid', fgColor='ED7D31')
             _RD  = Font(color='C00000', name='맑은 고딕', size=9)
             for _i in _pidx:
@@ -8735,7 +8758,10 @@ def read_excel_totals(path):
        <b>뒤엣것이 앞엣것을 덮어쓴다</b> → PPT엔 한 칸뿐이므로 <b>두 행 중 대표(max)</b>로 병합한다."""
     wb = openpyxl.load_workbook(path, data_only=True)
     wbf = openpyxl.load_workbook(path)            # ★v218 수식 원문 판독용(data_only=False)
-    ws = wb['보장분석']; wsf = wbf['보장분석']; last = ws.max_column
+    # ★v694 (지점장 실측 2026.09.15 「비교엑셀에서 보장분석지PPT: Worksheet 보장분석 does not exist」):
+    #   지점장이 손본 비교엑셀은 시트 이름이 다를 수 있다 → 첫 시트로 폴백(remodel.py와 동일).
+    ws = wb['보장분석'] if '보장분석' in wb.sheetnames else wb[wb.sheetnames[0]]
+    wsf = wbf['보장분석'] if '보장분석' in wbf.sheetnames else wbf[wbf.sheetnames[0]]; last = ws.max_column
     out = {}; sq=[0]*5; ss=[0]*5; splits={}   # ★v370 splits[담보]=(갱신합, 비갱신합, 제안합) — 엑셀 글자색 근거(0070C0/검정/C00000)
 
     def _fallback(r):
@@ -11676,7 +11702,8 @@ def doctrine_robot(heavy=False):
             _m = _h.md5(open(TPL_XL, 'rb').read()).hexdigest()
         except Exception as _e:
             return 'master 열기 실패 %s' % str(_e)[:24]
-        return '' if _m == 'a963d8fa243635f0f5142828ee567ad1' else 'master.xlsx 변조 %s' % _m[:8]
+        # ★v693 (2026.09.15): 정본 = 지점장 master-2 + 51·52행 라벨(09.07) + 법칙시트 9행 갱신규칙 정정(09.15). 제124조 3항과 동일.
+        return '' if _m == '8cf0185b112ad79e7c1502041a6b0b82' else 'master.xlsx 변조 %s' % _m[:8]
     _ck('엑셀불가침(제124조)', '제124조', _ckmaster)
     # 9-B) ★★★★★산출물 5종.
     #   ★★★★★v573 긴급 (지점장 2026.08.23 「니가 마지막 준 거는 앱이 멈춘다 · 열리지도 않아」):

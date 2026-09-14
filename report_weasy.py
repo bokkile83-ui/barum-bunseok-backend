@@ -680,6 +680,22 @@ def _wcard(rep, title, desc, lookup, mode):
         for _ck in _cand:
             if _p7o.get(_ck):
                 _st='on'; _vl='{:,}만'.format(int(_p7o[_ck])); break
+        # ★★★★★v693 제155조 2.3 (지점장 지적 2026.09.15 이화미 「진단서 치료비가 또 다 2·3중 기재된다」)
+        #   KB `암 통합치료비Plus` 5,000이 <b>암 주요치료비 칸</b>(엑셀 행)과 <b>암 통합치료비 칸</b>(p7_only)에 동시에,
+        #   `비급여 암 통합치료비Plus` 10,000이 <b>하이클래스</b>와 <b>비급여 암 통합</b>에, 현대 `심뇌혈관주요치료비Ⅱ`
+        #   1,000이 <b>2대</b>와 <b>순환계 주요</b>에 동시에 찍혔다. 담보 하나는 칸 하나(제155조 2.3 「통합 성격 담보는 한 곳에만」).
+        #   ⇒ 통합·순환계 칸 값이 <b>짝 칸(암주요치료비·하이클래스·2대)의 값과 같으면</b> 같은 담보다 → 통합 칸을 비운다.
+        _SIB = {'암통합치료비':'암주요치료비', '비급여암통합치료비':'비급여주요치료비',
+                '순환계주요치료비':'2대주요치료비', '순환계통합치료비':'2대주요치료비'}
+        if _st=='on' and _vl and lookup in _SIB:
+            try:
+                _ss,_sv=_wc_status(rep, _SIB[lookup])
+                import re as _re693
+                _n=lambda x: int(float(_re693.sub(r'[^0-9.]','',str(x)) or 0))
+                if _ss=='on' and _sv and _n(_sv)==_n(_vl):
+                    print(f'[v693 7p중복] {lookup} {_vl} = {_SIB[lookup]} 값과 동일 → 통합 칸 비움(제155조 2.3)')
+                    _st,_vl='off',''
+            except Exception as _e693: print('[v693 7p중복] 판정 실패', _e693)
         _bv=_html.escape(str(_vl)) if (_st=='on' and _vl) else ''
         _bv=_wbox_inner(rep, lookup, _bv)          # ★v421c 색 규칙
         return (f'<div class="wcard plain{_half}"><div class="wct">{_html.escape(title)}</div>'
@@ -4827,7 +4843,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v692-hub8-20260910</div>'
+    _VSTAMP = '<div class="vstamp">v695-chipdedupe-20260915</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

@@ -1,4 +1,4 @@
-# ===== BARUM coverage_benchmark.py v692-hub8-20260910 (구 v33-ci-rate-20260708 계승) =====
+# ===== BARUM coverage_benchmark.py v695-chipdedupe-20260915 (구 v33-ci-rate-20260708 계승) =====
 # -*- coding: utf-8 -*-
 """
 BARUM 충족률 엔진 + map_excel_to_report
@@ -594,6 +594,19 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         _live=[x for x in out if x['amt']]
         return min(_live or out, key=lambda x:x['pct'])
     coverage=[]; donut_map={}; detail_map={}; named_map={}
+    # ★★★★★v695 제155조 2.1 (지점장 지적 2026.09.15 이화미 「진단서 치료비쪽이 2·3중으로 찍힌다」):
+    #   2대 주요치료비·혈전용해치료비·산정특례는 마스터에 뇌 블록과 심장 블록 <b>두 행</b>이 있어(§8.3 정본)
+    #   2p 보장현황 칩이 뇌혈관·심장 양쪽에 같은 담보를 찍었다. <b>담보 하나는 분류 한 칸에만</b> — 먼저 나온 칸에만 남긴다.
+    _seen_chip=set()
+    def _dedupe_items(items):
+        out=[]
+        for it in items:
+            t=str(it.get('t','')).strip()
+            if it.get('none') or not t: out.append(it); continue
+            if t in _seen_chip:
+                print(f'[v695 칩중복] {t} 두 번째 분류에서 제거(제155조 2.1)'); continue
+            _seen_chip.add(t); out.append(it)
+        return out
     for cat in CATEGORY_GROUPS:
         p,total,top=pct_for(cat,grp_rows,age_band)
         _nb=_named(cat)
@@ -607,6 +620,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
             items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),
                     **({'blue':True} if (cat in ('실손·일배책',) or _gen_map.get(str(b).strip())) else {}),
                     **({'red':True} if _red_map.get(str(b).strip()) else {})} for b,v in top]
+            items=_dedupe_items(items)
             if not items or all(not it['v'] for it in items):
                 items=[{'t':f'{cat} 없음','none':True}]
             coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
@@ -634,6 +648,7 @@ def map_excel_to_report(xlsx_path, settings=None, age_band='40s', age_known=Fals
         items=[{'t':b,'v':(_disp.get(b) or _fmt(v)),
                 **({'blue':True} if (blue or _gen_map.get(str(b).strip())) else {}),
          **({'red':True} if _red_map.get(str(b).strip()) else {})} for b,v in top]
+        items=_dedupe_items(items)
         if not items or all(not it['v'] for it in items):
             items=[{'t':f'{cat} 없음','none':True}]
         coverage.append({'name':cat if cat!='심장' else '심장 (＋빈맥)','status':status,'items':items})
