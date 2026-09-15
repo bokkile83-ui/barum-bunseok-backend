@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v734-shell-20260916'
+VSTAMP = 'v736-pencalcurl-20260916'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10621,7 +10621,7 @@ _HUB_DEF = [
     {"k":"pension","ic":"🏛","nm":"연금","ds":"생명보험사 연금을 한눈에 비교한다.","ur":"life/files/pension_sim.html"},
     # ★v692 (지점장 지시 2026.09.10 「통합앱에 8번이 되게 해줘」) — MEDICARE 카드. 인증은 서버 /verify 공통.
     {"k":"medicare","ic":"🩺","nm":"MEDICARE","ds":"암·뇌·심 치료비와 보장 점검 리포트. 산정특례·실손·소득 공백까지 한 장.","ur":"https://guileless-longma-1bde76.netlify.app"},
-    {"k":"pencalc","ic":"CALC","nm":"연금계산기","ds":"보험사별 연금 비교 엑셀 — 나이·보험료·납입기간 입력하면 회사별 수령액 비교.","ur":"files/pension_calculator.xlsx"},
+    {"k":"pencalc","ic":"CALC","nm":"연금계산기","ds":"보험사별 연금을 한 화면에서 비교한다 — 나이·보험료·납입기간·개시나이 입력.","ur":"https://animated-jelly-c322ed.netlify.app"},
 ]
 _HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
 
