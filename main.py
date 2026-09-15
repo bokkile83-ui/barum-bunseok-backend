@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v697-metastatic-20260915'
+VSTAMP = 'v698-upstream-20260915'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10068,7 +10068,19 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
   let j=null;
   try{
     const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
-    j=await r.json();
+    /* ★★★★★v698 (지점장 실측 2026.09.15 「Unexpected token 'u', "upstream error" is not valid JSON」)
+       분석이 80~100초라 Railway 엣지가 먼저 연결을 끊으면 프록시가 <b>JSON이 아닌 문자열</b>을 돌려준다.
+       구 코드는 그걸 그대로 `r.json()`에 넣어 <b>파싱 오류</b>로 죽었다 → 원인이 안 보였다.
+       ⇒ 본문을 먼저 글자로 받아보고, JSON이 아니면 <b>사람이 읽는 안내</b>로 띄운다. */
+    const _raw = await r.text();
+    try{ j = JSON.parse(_raw); }
+    catch(e){
+      var _hint = (/upstream|timeout|gateway|502|503|504/i.test(_raw) || r.status>=502)
+        ? "서버 응답이 끊겼습니다(분석에 1~2분 걸립니다). 잠시 후 <b>같은 파일로 다시</b> 눌러 주세요."
+        : "서버가 알 수 없는 응답을 보냈습니다.";
+      add('<span class="err">[연결 오류] '+_hint+'<br><span style="font-size:11px;opacity:.7">status '+r.status+' · '+esc(_raw.slice(0,120))+'</span></span>',"bot");
+      document.getElementById("send").disabled=false; return;
+    }
     if(!j.ok){
       /* ★v94: '[오류] 실패'만 뜨고 원인을 알 수 없던 문제 — 서버가 보내주는 trace를 화면에 같이 찍는다. */
       var _m = esc(j.error||"실패(서버가 오류 문구를 못 보냄)");
