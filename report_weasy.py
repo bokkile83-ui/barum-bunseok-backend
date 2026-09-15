@@ -3530,7 +3530,60 @@ body {{ color:{INK}; }}
 </div>
 <!-- P-GOJI: 가입 전 고지의무 체크리스트 (표지 다음) · 보험사 표기 없음 · v49 2026.09.05 -->
 <div class="pg infopg">
- <div class="top"><div class="eb">MAKEONE 보장분석 · 참고자료</div><div class="nm">보험 가입 전 <b>고지의무 체크리스트</b></div><!-- ★★★★★P5c0: 질병 후유장해 — 세부 장해와 지급률 (v710 · 지점장 지시 「원본처럼 디테일하게」) -->
+ <div class="top"><div class="eb">MAKEONE 보장분석 · 참고자료</div><div class="nm">보험 가입 전 <b>고지의무 체크리스트</b></div><div class="pgn"><b>@@PN@@</b> · 고지의무</div><div class="bar"></div></div>
+ <div class="body" style="padding:0 4mm">
+  <div style="font-size:3.3mm;color:#345;margin:3mm 0 4mm">정확한 고지는 고객님의 권리를 지키는 가장 중요한 시작입니다. 해당되는 항목에 체크하고, 반드시 청약서에 직접 기재하세요.</div>
+  <div style="column-count:2;column-gap:9mm;font-size:3.0mm;line-height:1.62;color:#22314d">
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">① 최근 3개월 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 병원(의원·한의원 등)에 다녀온 적이 있다<br>☐ 건강검진에서 이상소견을 들었다<br>☐ 새로운 질병명을 진단받았다<br>☐ 의사에게 질병이 의심된다는 말을 들었다<br>☐ 치료를 받았다 (주사·물리치료 포함)<br>☐ 약을 처방받았다 (약국 조제약 포함)<br>☐ 입원했다<br>☐ 수술했다 (내시경·시술 포함)<br>☐ 추가검사·재검사가 필요하다는 말을 들었다</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">② 최근 1년 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 건강검진 후 추가검사를 받았다<br>☐ 초음파·CT·MRI·내시경 등을 추가로 했다<br>☐ 혈액검사 이상으로 재검사를 했다<br>☐ 혹·결절·용종·수치 이상 등으로 재검사를 받았다<br>☐ 검사 결과를 추적관찰하고 있다</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 단순 정기검진·상태확인 검진은 상품에 따라 고지대상이 아닐 수 있으니 정확한 판단을 위해 반드시 알려주세요.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">③ 최근 5년 이내</div>
+    <div style="padding:2.2mm 1mm 0">☐ 입원한 적이 있다<br>☐ 수술한 적이 있다<br>☐ 같은 질병·사고로 7일 이상 치료받았다<br>☐ 같은 질병으로 30일 이상 약을 처방받았다<br>☐ 장기간 통원치료를 받은 적이 있다</div>
+    <div style="border:0.22mm solid #d9c9a8;background:#fdf8ee;border-radius:1mm;padding:2mm 2.4mm;margin-top:2mm;font-size:2.9mm;line-height:1.6">주요 질병의 진단·치료·입원·수술·투약 여부<br>☐ 암 ☐ 뇌혈관병 ☐ 고혈압 ☐ 협심증 ☐ 심근경색<br>☐ 심장판막증 ☐ 간경화 ☐ 뇌졸중증 ☐ 당뇨병 ☐ HIV/AIDS</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">④ 최근 6~10년 이내</div>
+    <div style="padding:2.2mm 1mm 0">입원 또는 수술을 받은 적이 있나요?<br>☐ 6년 ☐ 7년 ☐ 8년 ☐ 9년 ☐ 10년 이내 입원·수술</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 건강고지항(6~10년)은 가입일 기준으로 정확한 입원일·수술일 확인이 필요합니다.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑤ 현재 복용 중인 약</div>
+    <div style="padding:2.2mm 1mm 0">☐ 혈압약 ☐ 당뇨약 ☐ 고지혈증약 ☐ 갑상선약<br>☐ 정신건강의학과 약 (우울증·불안 등)<br>☐ 수면제 ☐ 진통제 ☐ 호르몬제<br>☐ 기타 장기복용약 (　　　　　　　　　)</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑥ 건강검진 결과</div>
+    <div style="padding:2.2mm 1mm 0">☐ 재검 권유를 받은 적이 있다<br>☐ 추가검사 권유를 받은 적이 있다<br>☐ 결과 이상이 발견되었다<br>☐ 간수치·혈당·혈압 등 수치 이상이 있다<br>☐ 혈뇨·단백뇨 등 이상소견이 있다<br>☐ 검진 후 추적관찰 중이다</div>
+    <div style="color:#b3261e;font-size:2.8mm;line-height:1.45;margin-top:1.8mm">※ 건강검진 결과도 상품에 따라 고지대상이 될 수 있습니다.</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑦ 기타 확인사항 (청약서 질문 시)</div>
+    <div style="padding:2.2mm 1mm 0">☐ 현재 직업 및 직무 (변경 예정 포함)<br>☐ 오토바이·이륜차 운전 여부<br>☐ 위험한 취미·스포츠 활동<br>☐ 장애 또는 신체 상해 관련 사항<br>☐ 다른 보험 가입 및 청약 관련 사항</div>
+   </div>
+   <div style="break-inside:avoid;margin-bottom:6.5mm">
+    <div style="background:#12305e;color:#fff;font-weight:800;padding:1.7mm 2.4mm;border-radius:1mm;font-size:3.25mm">⑧ 많이 놓치는 수술·시술 예시</div>
+    <div style="padding:2.2mm 1mm 0">☐ 제왕절개 ☐ 용종절제(내시경 포함) ☐ 백내장수술<br>☐ 치질수술 ☐ 맹장수술 ☐ 골절수술<br>☐ 자궁·난소 관련 수술 ☐ 피부종양 제거<br>☐ 내시경적 시술·수술 ☐ 기타 마취가 필요한 수술·시술</div>
+    <div style="color:#b3261e;font-size:2.9mm;font-weight:700;margin-top:1.8mm">작은 수술이나 시술도 꼭 함께 알려주세요!</div>
+   </div>
+  </div>
+  <div style="border:0.3mm solid #12305e;border-radius:1.5mm;padding:3mm 3.5mm;margin-top:4mm;font-size:2.95mm;line-height:1.65;color:#22314d">
+   <b style="color:#12305e">꼭 기억하세요</b><br>
+   ① 청약서 질문사항에 사실대로 알리는 것이 고객님의 권리를 지키는 가장 중요한 방법입니다.
+   ② 고지내용은 가입 가능여부·보험료를 정하는 심사정보이며, 고지했다고 무조건 거절되지 않습니다.
+   ③ 가입이 어려운 경우 보장 내용을 정확히 확인해 협의할 수 있도록 안내해 드립니다.
+   ④ <b style="color:#b3261e">보험설계사는 고지의무 수령권이 없습니다.</b> 반드시 청약서에 직접 기재하거나 정확히 반영되었는지 확인하세요.
+   ⑤ 사실과 다르게 고지한 경우 계약 해지 또는 보험금 지급이 제한될 수 있습니다.
+  </div>
+ </div>
+ <div class="ft"><b>MAKEONE</b> 보장분석 자동화<span class="r">{cust} 고객님 · 참고자료</span></div>
+</div>
+<!-- ★★★★★P5c0: 질병 후유장해 — 세부 장해와 지급률 (v710 · 지점장 지시 「원본처럼 디테일하게」) -->
 <div class="pg">
  <div class="top"><div class="eb">MAKEONE 보장분석 · 인포메이션</div>
   <div class="nm">질병 후유장해 <b>— 세부 장해와 지급률</b></div>
@@ -3556,45 +3609,45 @@ body {{ color:{INK}; }}
 </style>
   <div class="sect">① 꼭 알아둘 4가지 <span>보험 표준 장해분류표 기준</span></div>
   <div class="hjA">
-   <div class="c"><div class="ic">❓</div><div class="h">무엇인가요?</div>
+   <div class="c"><div class="ic">?</div><div class="h">무엇인가요?</div>
     <div class="t">질병 치료 후에도 신체·정신 기능에 <b>영구적인 손상</b>이 남은 상태</div></div>
-   <div class="c"><div class="ic">📅</div><div class="h">언제 보나요?</div>
+   <div class="c"><div class="ic">1</div><div class="h">언제 보나요?</div>
     <div class="t">진단명만이 아니라 <b>장해가 고정</b>되었는지, 약관 기준 충족 여부를 함께 판단</div></div>
-   <div class="c"><div class="ic">💰</div><div class="h">얼마나 받나요?</div>
+   <div class="c"><div class="ic">₩</div><div class="h">얼마나 받나요?</div>
     <div class="t">보험금 = <b>가입금액 × 장해지급률</b><br>(보통 3~100%)</div></div>
-   <div class="c"><div class="ic">✅</div><div class="h">꼭 기억할 점</div>
+   <div class="c"><div class="ic">★</div><div class="h">꼭 기억할 점</div>
     <div class="t"><b>합산·차액·파상장해</b>는 약관마다 다르므로 가입한 약관 확인이 가장 중요합니다</div></div>
   </div>
 
   <div class="sect">② 대표 장해 세부 예시 <span>13개 신체부위 장해분류표 · 대표 예시 요약</span></div>
   <div class="hjG">
-   <div class="b"><div class="bh"><span class="n">A</span>👁 눈</div><ul>
+   <div class="b"><div class="bh"><span class="n">A</span>눈</div><ul>
      <li>두 눈 실명 <b>100%</b></li><li>한 눈 실명 <b>50%</b></li>
      <li>한 눈 교정시력 0.02 이하 35%</li><li>한 눈 교정시력 0.06 이하 25%</li>
      <li>한 눈 교정시력 0.1 이하 15%</li><li>한 눈 교정시력 0.2 이하 5%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">B</span>👂 귀</div><ul>
+   <div class="b"><div class="bh"><span class="n">B</span>귀</div><ul>
      <li>두 귀 청력 완전상실 <b>80%</b></li><li>한 귀 완전상실 + 다른 귀 심한 장해 45%</li>
      <li>한 귀 완전상실 25%</li><li>한 귀 심한 장해 15%</li>
      <li>한 귀 약간의 장해 5%</li><li>귓바퀴 대부분 결손 10%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">C</span>👃 코</div><ul>
+   <div class="b"><div class="bh"><span class="n">C</span>코</div><ul>
      <li>코 호흡기능 완전상실 <b>15%</b></li><li>코 후각기능 완전상실 5%</li>
      <li>코 기능장해는 추상장해와 <b>별도 판단</b> 가능</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">D</span>🗣 씹기·말하기</div><ul>
+   <div class="b"><div class="bh"><span class="n">D</span>씹기·말하기</div><ul>
      <li>둘 다 심한 장해 <b>100%</b></li><li>씹기 심한 장해 80%</li>
      <li>말하기 심한 장해 60%</li><li>둘 다 뚜렷한 장해 40%</li>
      <li>하나만 뚜렷한 장해 20%</li><li>하나만 약간의 장해 5%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">E</span>🦴 척추·디스크</div><ul>
+   <div class="b"><div class="bh"><span class="n">E</span>척추·디스크</div><ul>
      <li>척추 심한 운동장해 40%</li><li>척추 뚜렷한 운동장해 30%</li><li>척추 약간의 운동장해 10%</li>
      <li>척추 심한 기능장해 <b>50%</b></li><li>척추 뚜렷한 기능장해 30%</li><li>척추 약간의 기능장해 15%</li>
      <li>심한 디스크 20% · 뚜렷 15% · 약간 10%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">F</span>✋ 손가락</div><ul>
+   <div class="b"><div class="bh"><span class="n">F</span>손가락</div><ul>
      <li>한 손 5손가락 모두 상실 <b>55%</b></li><li>첫째 손가락 상실 15%</li>
      <li>다른 손가락 상실 각 10%</li><li>5손가락 모두 뚜렷한 장해 30%</li>
      <li>첫째 손가락 뚜렷한 장해 10%</li><li>다른 손가락 뚜렷한 장해 각 5%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">G</span>🦶 발가락</div><ul>
+   <div class="b"><div class="bh"><span class="n">G</span>발가락</div><ul>
      <li>한 발 리스프랑관절 이상 상실 <b>40%</b></li><li>5개 발가락 모두 상실 30%</li>
      <li>첫째 발가락 상실 10%</li><li>다른 발가락 상실 각 5%</li></ul></div>
-   <div class="b"><div class="bh"><span class="n">H</span>🧠 신경계·정신행동</div><ul>
+   <div class="b"><div class="bh"><span class="n">H</span>신경계·정신행동</div><ul>
      <li>뇌혈행장해(뇌졸중·TIA·뇌 등) <b>10~100%</b></li><li>약간의 치매 CDR 2점 40%</li>
      <li>뚜렷한 치매 CDR 3점 60%</li><li>심한 치매 CDR 4점 80%</li>
      <li>극심한 치매 CDR 5점 <b>100%</b></li><li>마비·간질·뇌병변도 해당 가능</li></ul></div>
@@ -3602,10 +3655,10 @@ body {{ color:{INK}; }}
 
   <div class="sect" style="margin-top:2.5mm">③ 청구 전 꼭 체크 <span>서류 · 항목 · 구간 · 중복</span></div>
   <div class="hjC">
-   <div class="c"><div class="h">📄 필요 서류</div><div class="t">진단서, 진료기록지, 검사결과지, <b>장해 고정 후 평가서</b> 등<br>보험사마다 추가 서류가 요청될 수 있습니다.</div></div>
-   <div class="c"><div class="h">📋 필요 항목</div><div class="t">후유장해진단서, 진단서, 의무기록, 검사결과, 영상자료, 일상생활기록 등</div></div>
-   <div class="c"><div class="h">📊 약관 차이</div><div class="t">상품마다<br><b>3~10%, 50% 이상, 80% 이상</b> 등<br>지급 구간이 다릅니다.</div></div>
-   <div class="c"><div class="h">🔍 중요한 내용</div><div class="t">기존 장해·재해장해가 있으면 <b>차액 지급</b>이 될 수 있고, 중복 부위는 높은 지급률을 적용할 수 없으므로 약관 적용 여부를 확인하세요.</div></div>
+   <div class="c"><div class="h">필요 서류</div><div class="t">진단서, 진료기록지, 검사결과지, <b>장해 고정 후 평가서</b> 등<br>보험사마다 추가 서류가 요청될 수 있습니다.</div></div>
+   <div class="c"><div class="h">필요 항목</div><div class="t">후유장해진단서, 진단서, 의무기록, 검사결과, 영상자료, 일상생활기록 등</div></div>
+   <div class="c"><div class="h">약관 차이</div><div class="t">상품마다<br><b>3~10%, 50% 이상, 80% 이상</b> 등<br>지급 구간이 다릅니다.</div></div>
+   <div class="c"><div class="h">중요한 내용</div><div class="t">기존 장해·재해장해가 있으면 <b>차액 지급</b>이 될 수 있고, 중복 부위는 높은 지급률을 적용할 수 없으므로 약관 적용 여부를 확인하세요.</div></div>
   </div>
 
   <div class="ezn" style="margin-top:2mm">★ <b>BARUM 엑셀 연동</b> — 담보명에 <b>(80세)</b>가 붙으면 <b>질병후유3%</b> 행,
@@ -3649,10 +3702,10 @@ body {{ color:{INK}; }}
   <div class="sect">① 외래진료 300회 초과 시 90% 적용 핵심 <span>2027.01.01 전면 시행</span></div>
   <div class="oh1">
    <div class="L">
-    <div class="row"><div class="ic">📅</div><div><div class="h">시행일자</div><div class="t"><b>2027년 1월 1일</b>부터 전면 시행</div></div></div>
-    <div class="row"><div class="ic">🕐</div><div><div class="h">누적 기간</div><div class="t">매년 1월 1일 ~ 12월 31일 · 1년간 <b>전국 병의원 외래 횟수 합산</b></div></div></div>
-    <div class="row"><div class="ic">🚨</div><div><div class="h">적용 시점</div><div class="t">300회까지는 정상 본인부담률 · <b>301회째 진료부터 90% 적용</b></div></div></div>
-    <div class="row"><div class="ic">💰</div><div><div class="h">체감 병원비 변화</div><div class="t">평소 3,000~5,000원 내던 진료비가 <b>1만~2만원 이상</b>으로 증가할 수 있습니다.</div></div></div>
+    <div class="row"><div class="ic">1</div><div><div class="h">시행일자</div><div class="t"><b>2027년 1월 1일</b>부터 전면 시행</div></div></div>
+    <div class="row"><div class="ic">2</div><div><div class="h">누적 기간</div><div class="t">매년 1월 1일 ~ 12월 31일 · 1년간 <b>전국 병의원 외래 횟수 합산</b></div></div></div>
+    <div class="row"><div class="ic">3</div><div><div class="h">적용 시점</div><div class="t">300회까지는 정상 본인부담률 · <b>301회째 진료부터 90% 적용</b></div></div></div>
+    <div class="row"><div class="ic">₩</div><div><div class="h">체감 병원비 변화</div><div class="t">평소 3,000~5,000원 내던 진료비가 <b>1만~2만원 이상</b>으로 증가할 수 있습니다.</div></div></div>
    </div>
    <div class="R">
     <div class="rh">300회 vs 301회 이후</div>
@@ -3665,16 +3718,16 @@ body {{ color:{INK}; }}
 
   <div class="oh2">
    <div class="bx g"><div class="bh">② 90% 적용 예외 대상은?</div>
-    <div class="it"><div class="h">👶 아동 및 임산부 <span style="color:#1a7a3c">(전면 제외)</span></div><div class="t">18세 미만 소아·청소년, 임신·출산 진료 임산부 — 횟수 제한 없이 90% 적용 제외</div></div>
-    <div class="it"><div class="h">💉 중증·희귀·난치질환자 <span style="color:#1a7a3c">(산정특례)</span></div><div class="t">암, 뇌혈관, 심장질환, 중증난치질환 등 산정특례 등록 환자 (해당 질환 외래 진료 시)</div></div>
-    <div class="it"><div class="h">♿ 중증장애인</div><div class="t">등록 장애인 중 산정특례 등 법적 요건 충족 시 예외 인정<br><span class="smn">단순 장애 등록만으로는 자동 제외 안 됨</span></div></div>
-    <div class="it"><div class="h">🩺 의학적 필요 환자</div><div class="t">불가피하게 진료 횟수가 늘어난 경우 건강보험공단 심의를 거쳐 예외 인정</div></div>
+    <div class="it"><div class="h">아동 및 임산부 <span style="color:#1a7a3c">(전면 제외)</span></div><div class="t">18세 미만 소아·청소년, 임신·출산 진료 임산부 — 횟수 제한 없이 90% 적용 제외</div></div>
+    <div class="it"><div class="h">중증·희귀·난치질환자 <span style="color:#1a7a3c">(산정특례)</span></div><div class="t">암, 뇌혈관, 심장질환, 중증난치질환 등 산정특례 등록 환자 (해당 질환 외래 진료 시)</div></div>
+    <div class="it"><div class="h">중증장애인</div><div class="t">등록 장애인 중 산정특례 등 법적 요건 충족 시 예외 인정<br><span class="smn">단순 장애 등록만으로는 자동 제외 안 됨</span></div></div>
+    <div class="it"><div class="h">의학적 필요 환자</div><div class="t">불가피하게 진료 횟수가 늘어난 경우 건강보험공단 심의를 거쳐 예외 인정</div></div>
    </div>
    <div class="bx b"><div class="bh">③ 외래진료 횟수, 이렇게 계산됩니다</div>
-    <div class="it"><div class="h">🏥 모든 병의원 합산</div><div class="t">의원, 병원, 종합병원, 치과, 한의원 등 <b>전국 모든 의료기관</b> 외래 통원 횟수 합산</div></div>
-    <div class="it"><div class="h">👨‍⚕️ 하루 여러 과 진료는 각각 1회</div><div class="t">오전 내과·오후 정형외과 = <b>2회</b> · 같은 병원이라도 과를 달리하면 각각 1회 · 진료 청구 건별로 개별 카운트</div></div>
-    <div class="it"><div class="h">🛏 입원 치료는 제외</div><div class="t">며칠씩 병실에 있는 '입원'은 외래진료 300회에 포함되지 않습니다.</div></div>
-    <div class="it"><div class="h">📱 내 진료 횟수 확인법</div><div class="t">국민건강보험공단 홈페이지 또는 스마트폰 <b>'The건강보험'</b> 앱에서 올해 외래진료 횟수를 실시간 조회</div></div>
+    <div class="it"><div class="h">모든 병의원 합산</div><div class="t">의원, 병원, 종합병원, 치과, 한의원 등 <b>전국 모든 의료기관</b> 외래 통원 횟수 합산</div></div>
+    <div class="it"><div class="h">하루 여러 과 진료는 각각 1회</div><div class="t">오전 내과·오후 정형외과 = <b>2회</b> · 같은 병원이라도 과를 달리하면 각각 1회 · 진료 청구 건별로 개별 카운트</div></div>
+    <div class="it"><div class="h">입원 치료는 제외</div><div class="t">며칠씩 병실에 있는 '입원'은 외래진료 300회에 포함되지 않습니다.</div></div>
+    <div class="it"><div class="h">내 진료 횟수 확인법</div><div class="t">국민건강보험공단 홈페이지 또는 스마트폰 <b>'The건강보험'</b> 앱에서 올해 외래진료 횟수를 실시간 조회</div></div>
    </div>
   </div>
 
@@ -4053,7 +4106,7 @@ body {{ color:{INK}; }}
 </style>
   <div class="sect">① 한 장 요약 <span>5세대 · 비중증(특약2) 기준</span></div>
   <div class="v3">
-   <div class="c mri"><div class="h">🩻 MRI<span class="sub">자기공명영상진단</span></div>
+   <div class="c mri"><div class="h">MRI<span class="sub">자기공명영상진단</span></div>
     <div class="big">연 200만</div><div class="bigsub">비중증도 <b>보장된다</b> · 별도 담보</div>
     <div class="band bmildok">비중증 → 보장 ○</div>
     <div class="row">공제 <b>Max[5만, 50%]</b></div>
@@ -4062,7 +4115,7 @@ body {{ color:{INK}; }}
     <div class="band bsev">중증(산정특례) → 3대비급여 안</div>
     <div class="row">공제 Max[3만, 30%] · <b>연 300만</b></div>
    </div>
-   <div class="c do"><div class="h">💪 도수·체외·증식<span class="sub">근골격계 이학요법</span></div>
+   <div class="c do"><div class="h">도수·체외·증식<span class="sub">근골격계 이학요법</span></div>
     <div class="big">보장 제외</div><div class="bigsub">비중증이면 실손에서 <b>안 나온다</b></div>
     <div class="band bmild">비중증 → 보장 ✕</div>
     <div class="row"><b>도수만</b> 2026.07.01 <b>관리급여</b> 전환<br>1회 <b>43,850원</b> · 건보 본인부담률 <b>95%</b></div>
@@ -4071,7 +4124,7 @@ body {{ color:{INK}; }}
     <div class="band bsev">중증(산정특례) → 3대비급여 안</div>
     <div class="row">공제 Max[3만, 30%] · <b>연 350만 · 50회</b> <span class="smn">(최초 10회 후 10회 단위)</span></div>
    </div>
-   <div class="c ju"><div class="h">💉 비급여 주사제<span class="sub">영양주사 등</span></div>
+   <div class="c ju"><div class="h">비급여 주사제<span class="sub">영양주사 등</span></div>
     <div class="big">0원</div><div class="bigsub">비중증이면 <b>한 푼도 안 나온다</b></div>
     <div class="band bmild">비중증 → 보장 ✕</div>
     <div class="row"><b>급여 전환 없음</b> — 여전히 비급여라 급여 경로도 없다</div>
@@ -4092,13 +4145,13 @@ body {{ color:{INK}; }}
   </table>
 
   <div class="v3ex">
-   <div class="e"><div class="h">💡 MRI 50만원을 받았다면</div>
+   <div class="e"><div class="h">MRI 50만원을 받았다면</div>
     <div class="t">중증 50 − Max[15만, 3만] = <b>35만</b><br>비중증 50 − Max[25만, 5만] = <b>25만</b><br>
      <b>입원·통원 값이 같다</b> — MRI엔 통원 20만 한도가 없다.</div></div>
-   <div class="e"><div class="h">🔁 2부위·2회 규칙</div>
+   <div class="e"><div class="h">2부위·2회 규칙</div>
     <div class="t">1회 통원(또는 1회 입원)에 <b>2개 이상 부위</b>이거나 같은 부위 <b>2회 이상</b>이면
      각 진단행위를 <b>각각 1회</b>로 보아 회당 공제·한도를 각각 적용한다.</div></div>
-   <div class="e"><div class="h">⚠️ 95%는 실손 공제율이 아니다</div>
+   <div class="e"><div class="h"><b class="r">주의</b> 95%는 실손 공제율이 아니다</div>
     <div class="t">도수 <b>95%</b>는 <b>건강보험 본인부담률</b>이다(관리급여). 실손 자기부담률(50%)과 혼동 금지 —
      둘은 별개 제도이고 5세대는 그 95%가 <b>공제로 잡힌다</b>.</div></div>
   </div>
@@ -5086,7 +5139,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v728-toc6-20260916</div>'
+    _VSTAMP = '<div class="vstamp">v734-shell-20260916</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
