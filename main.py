@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v698-upstream-20260915'
+VSTAMP = 'v701-mri-20260915'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -652,7 +652,11 @@ def _has_nonpay3(dambo):
         n = re.sub(r'\s', '', str(k)).upper()
         if ('도수' in n) or ('체외충격파' in n) or ('증식치료' in n): return True
         if ('비급여' in n) and (('주사' in n) or ('MRI' in n)): return True
-        if ('MRI' in n) and (('검사' in n) or ('비급여' in n)): return True
+        # ★★★★★v701 (지점장 지시 2026.09.15 「상해MRI검사지원비는 실손이 아니다」):
+        #   `상해MRI검사지원비`·`질병MRI검사지원비`는 <b>정액 지원금 담보</b>다. 3대비급여 실손 특약
+        #   `비급여 MRI 검사`와 이름만 비슷하다. 구 규칙은 'MRI'+'검사'만 보고 <b>실손 3세대 하한</b>을
+        #   깔아 세대 판정을 틀리게 했다. ⇒ <b>비급여 표기가 있는 것만</b> 실손 특약으로 본다.
+        if ('MRI' in n) and ('비급여' in n): return True
     return False
 
 def _has_drug(dambo):
@@ -1707,6 +1711,11 @@ _JOMUN_SELFTEST = [
     ('간호간병통합서비스사용질병입원일당(1-180일)', '간호통합병동', '제154조④ 간호통합'),
     ('중증질환자(심장질환)산정특례대상진단비', '산정특례심장', '제154조 마스터-2 52행'),
     ('부정맥질환(Ⅰ49)진단비(맞춤고지)',       '부정맥',        'v696 로마자Ⅰ49'),
+    ('허혈성심장질환진단',                     '허혈성 진단비', '제158조 축분리(신정원명)'),
+    ('상해MRI검사지원비',                       None,            'v701 MRI지원비=실손 아님'),
+    ('질병MRI검사지원비',                       None,            'v701 MRI지원비=실손 아님'),
+    ('비급여 MRI 검사',                         'MRI',           'v701 3대비급여는 MRI 행'),
+    ('뇌혈관질환진단',                         '뇌혈관진단비',  '제158조 축분리(신정원명)'),
     ('통합전이암진단비(3대특정고액전이암진단비)(맞춤고지)', '통합전이암', '제156조 전이암>고액암'),
     ('통합전이암진단비(3대특정고액전이암진단비)',           '통합전이암', '제156조 전이암>고액암'),
     ('고액암진단비',                                        '고액암',     '제154조⑧ 고액암 유지'),
@@ -2694,6 +2703,16 @@ def _sj_rows(block):
         v = _amt_kr(amt_s) if amt_s else None
         if v is None:
             out.append(('[확인] 금액판독불가 ' + name, sj, 0)); continue
+        # ★★★★★v699 제158조 (지점장 실측 2026.09.15 장은실 교보생명 「심장이 안 나온다」):
+        #   교보 3열 회사담보명 `허혈심장질환및특정뇌혈관질환진단특약(갱신형)3년만기[갱신,허혈심장]`은
+        #   <b>뇌 축과 심장 축이 한 이름에 같이</b> 들어 있다. 회사담보명만 보면 '뇌혈관'이 먼저 걸려
+        #   허혈성 500이 <b>뇌졸증진단비</b>로 갔다(허혈성 진단비 행 공란).
+        #   ⇒ 이럴 때만 <b>신정원명</b>이 축을 가른다(`뇌혈관질환진단` / `허혈성심장질환진단`).
+        #   담보명 정본=회사담보명(#2)은 유지 — <b>두 축이 한 이름에 있을 때만</b> 신정원명을 쓴다.
+        _nm_ax = re.sub(r'\s', '', str(name)); _sj_ax = re.sub(r'\s', '', str(sj))
+        if _sj_ax and ('뇌' in _nm_ax) and any(_k in _nm_ax for _k in ('허혈심장','허혈성심장','심장질환','심혈관')):
+            print(f'[v699 축분리] 회사담보명 「{name[:40]}」에 뇌·심장 동시 → 신정원명 「{sj}」로 판정')
+            name = sj
         name = _sj_fixname(name, sj, _SJC.get('c',''), _SJC.get('p',''))
         if '특정암진단' in re.sub(r'\s','',sj) and '유사암' not in sj:   # ★v257 `r'\\s'` 오타 수정(공백 제거가 죽어 있었다)
             # ★v197(2026.07.23): 신정원 '특정암진단' = 고액암 행으로 확정(구 v98 F5 [확인]큐 폐기)
@@ -4732,7 +4751,8 @@ def parse_txt(txt, filename='', extra=None):
                 _sbc271 = _bb
         except Exception as _e279:
             print('[v279 sebu-bbox] 실패:', _e279)
-    return {'client':client,'contracts':deduped,'sebu_bc':_sbc271,'surg13':_surg13,'hanjang':_hj279,'hanjang_kb':_hjkb,'sebu_blocked':_sebu_blocked}
+    _OZSTD = any('기준담보/권장금액' in str(_l) for _l in lines[:400])   # ★v699 신정원 표준(OZ) 리포트 표식
+    return {'client':client,'contracts':deduped,'sebu_bc':_sbc271,'surg13':_surg13,'hanjang':_hj279,'hanjang_kb':_hjkb,'sebu_blocked':_sebu_blocked,'oz_std':_OZSTD}
 
 # ★ DMAP — 마스터 엑셀 B열 기준 100% 일치
 DMAP = {
@@ -5346,6 +5366,8 @@ def resolve_kw(raw):
     # ── 실손/수술일당 먼저 (수술·일당 오분류 차단) ──
     if (has('실손') or has('입원형') or has('입원의료비')) and has('입원'): return '입원',0
     if has('도수') or has('체외충격파') or has('증식치료'): return '도수치료',0   # 비급여 도수/체외/증식
+    # ★v701: `MRI검사지원비`(정액 지원금)는 실손 MRI 행이 아니다 — 마스터 무행 → [확인](꼭대기 지침).
+    if has('MRI') and has('지원') and no('비급여'): return None, 0
     if has('MRI'): return 'MRI',0
     if has('비급여') and has('주사'): return '비급여주사',0
     # ★★★★★v550 제9조 2항 (지점장 실측 2026.08.22 「4세대 실손 오류 — 입원 0 · 통원 5천 ·
@@ -7211,7 +7233,10 @@ def build_excel(data, out):
                     elif ('KB' in _co) or ('케이비' in _co):
                         if _t==2: _heart_bundle=['급성심근경색']
                         elif '심근병' in _rn: _heart_bundle=['심근병증']
-                        elif '판막' in _rn: _heart_bundle=['심장판막','염증']
+                        # ★★★★★v700 (지점장 지시 2026.09.15 「지침 100% 메모리 100%가 정답이다」):
+                        #   정본표(메모리 #6 · KB 5종) = 특정Ⅰ / 특정Ⅱ / 심근병증 / <b>심장판막질환(별도 가입)</b> / I49.
+                        #   심장판막에 염증을 덤으로 붙인 것은 정본표에 없다 → <b>단독</b>.
+                        elif '판막' in _rn: _heart_bundle=['심장판막']
                         elif _i49: _heart_bundle=['부정맥']
                         elif _t==1 or ('확대' in _rn and '심장' in _rn) or ('특정심장' in _rn): _heart_bundle=['협심증','빈맥','심부전']
                     # 현대(정본 재수정): 허혈성심장질환진단비=<b>단독</b>(허혈성 행) / 특정허혈=급성심근 /
@@ -8334,6 +8359,19 @@ def build_excel(data, out):
         _hjsrc = '한장보장표'
         if not _hj:
             _hj = (data.get('hanjang_kb') or {}); _hjsrc = 'KB 전체 보장 현황(2~3p)'   # ★v295
+            # ★★★★★v699 제158조 2항 (지점장 실측 2026.09.15 장은실 · OZ Report):
+            #   신정원 표준 리포트(머리글 「기준담보/권장금액 : 기본형(37개)/표준형」)는 첫 금액열이
+            #   <b>권장(표준)금액</b>이고 가입금액은 그 다음 열이다. KB 요약표 파서가 <b>권장액</b>을 읽어
+            #   허혈성 3,000·뇌혈관 3,000 같은 값으로 검산해 <b>불일치 16건이 전부 거짓</b>이었다.
+            #   (실제 표 값은 허혈성 500 · 뇌혈관 500 · 각 수술비 200.)
+            #   ⇒ 이 형식이면 KB 앵커를 쓰지 않는다 — 거짓 경보보다 검산 생략이 낫다(제0조).
+            try:
+                _oz = bool(data.get('oz_std'))
+            except Exception:
+                _oz = False
+            if _oz and _hj:
+                print('[v699 검산] 신정원 표준 리포트(권장금액 열) — KB 요약표 앵커 사용 안 함, 검산 생략')
+                _hj = {}
         if _hj:
             # ★★★★★v421 (지점장 지적 2026.08.14 박미정 검산 불일치 3건 — <b>게이트 오탐</b>)
             #   구 코드는 `_lc2 = 3 + n_ct`로 <b>파싱 단계의 계약 수</b>를 썼다. 3열(KB) 리포트에서
