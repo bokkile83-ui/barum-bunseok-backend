@@ -19,10 +19,16 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v736-pencalcurl-20260916'
+VSTAMP = 'v737-cors-20260917'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
+
+# ★v737 CORS 전역 허용 (지점장 2026.09.17 「BOHUM에서 제안서 넣으니 안 된다」)
+#   BOHUM(Netlify)이 /analyze를 fetch로 부르는데 응답에 Access-Control 헤더가 없어 브라우저가 막았다.
+#   허브 엔드포인트만 _HUB_CORS로 열려 있었고 /analyze는 아니었다. 전역으로 연다. 보안은 pw 검사로 그대로.
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
 
 # ★★★★★v679 보안 강화 (지점장 지시 2026.09.05 「보안을 아주 강화해라」)
 #   ① 검색엔진 수집 차단 — 구글에 우리 주소·화면이 뜨지 않는다
