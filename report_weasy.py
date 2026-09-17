@@ -494,7 +494,7 @@ def _wc_status(rep, lookup):
     #   → 2대 값이 순환계 값과 <b>같거나 작으면</b> 그 값의 출처가 순환계이므로 2대 칸을 비운다.
     #   ★2대가 <b>더 크면</b> 뇌혈관·심장 이름의 진짜 2대 담보가 따로 있는 것 → 건드리지 않는다.
     #   ★report_pages.py(리모델링 리포트)에는 같은 규칙이 이미 있다(883~886행) — 진단서에만 빠져 있었다.
-    if str(lookup) == '2대주요치료비':
+    if str(lookup) == '2대주요치료비' and not (rep or {}).get('p7_pure_done'):   # ★v739 원문으로 이미 갈랐으면 값 비교 생략
         try:
             _c7 = ((rep or {}).get('p7_only') or {}).get('순환계주요치료비')
             if _c7:
@@ -687,7 +687,7 @@ def _wcard(rep, title, desc, lookup, mode):
         #   ⇒ 통합·순환계 칸 값이 <b>짝 칸(암주요치료비·하이클래스·2대)의 값과 같으면</b> 같은 담보다 → 통합 칸을 비운다.
         _SIB = {'암통합치료비':'암주요치료비', '비급여암통합치료비':'비급여주요치료비',
                 '순환계주요치료비':'2대주요치료비', '순환계통합치료비':'2대주요치료비'}
-        if _st=='on' and _vl and lookup in _SIB:
+        if _st=='on' and _vl and lookup in _SIB and not (rep or {}).get('p7_pure_done'):   # ★v739
             try:
                 _ss,_sv=_wc_status(rep, _SIB[lookup])
                 import re as _re693
@@ -5139,7 +5139,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v736-pencalcurl-20260916</div>'
+    _VSTAMP = '<div class="vstamp">v740-job-20260918</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

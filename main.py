@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v737-cors-20260917'
+VSTAMP = 'v740-job-20260918'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -5495,6 +5495,9 @@ def resolve_kw(raw):
             #   → 판정 전에 <b>'갱신형'·'비갱신형' 접두어를 제거</b>한다. 2열(롯데)엔 이 접두어가 없어 영향 없다.
             _core_s2 = re.sub(r'^(?:비)?갱신형', '', _core_s2)
             _core_s2 = re.sub(r'^재해상해', '상해', _core_s2)   # 재해상해=상해(중복 정리)
+            # ★v738 (지점장 실측 2026.09.18 한수빈 「상해수술비Q가 수술비 0」) — DB 아이러브의 상품표기 `Q`가
+            #   `수술비` 바로 뒤에 붙어 순수 판정(`비` 뒤엔 괄호·담보·끝만)에서 탈락했다. Q는 담보를 가르지 않는다.
+            _core_s2 = re.sub(r'^((?:상해|재해)(?:입원|통원)?수술비?)Q(?=\(|담보|$)', r'\1', _core_s2)
             _core_s2 = re.sub(r'^재해(입원)?수술', r'상해\1수술', _core_s2)  # ★v65 재해수술비·재해입원수술비=상해수술비(지점장 2026.07.15, '입원' 낀 변형도 포함)
             # ★v594 (지점장 확정 2026.08.26 「비가 없어도 수술비다」) — 질병 쪽과 <b>대칭</b>.
             #   `상해수술(간편건강고지)담보`가 「비」 한 글자 때문에 [확인]큐로 빠졌다.
@@ -5524,6 +5527,7 @@ def resolve_kw(raw):
             _core = re.sub(r'^[\(\[][^\)\]]*[\)\]]\s*', '', r)   # 접두 수식어 괄호 제거
             _core_strip = _core.strip().replace(' ','')
             _core_strip = re.sub(r'^(?:비)?갱신형', '', _core_strip)   # ★v247 3열 '갱신형' 접두어 제거(KB 실측)
+            _core_strip = re.sub(r'^(질병(?:입원|통원)?수술비?)Q(?=\(|담보|$)', r'\1', _core_strip)   # ★v738 DB 상품표기 Q 제거(한수빈 질병수술비Q 50 누락)
             # 순수 질병수술비/질병입원수술비로 시작해야 함(자XXXX 등 한글 접두 배제)
             # ★★★★★v594 (지점장 확정 2026.08.26 「<b>비가 없어도 수술비다</b>」).
             #   [실측 · 현대해상] `질병수술(간편건강고지)담보` <b>30</b>이 [확인]큐로 빠졌다 —
@@ -6104,6 +6108,9 @@ _SURG_CASES = [
     ('상해수술위로금', None), ('상해수술치료비', None),
     ('다발성질병수술(3대질병)(간편건강고지)담보', None), ('특정질병수술비', None),
     ('상해수술비(종합병원)', None), ('상해흉터복원수술비', None), ('교통상해수술비', None),
+    # ★v738 제163조 (한수빈 DB 아이러브 실측 2026.09.18) — 상품표기 Q는 담보를 가르지 않는다
+    ('상해수술비Q(동일사고당1회지급)(태아가입)', '상해수술비'), ('질병수술비Q(매회지급)(태아가입)', '질병수술비'),
+    ('질병수술비ⅡQ', None),
 ]
 
 
@@ -6180,6 +6187,11 @@ def resolve2(raw):
             return None, 0
     _n590 = re.sub(r'\s', '', str(raw))
     if ('의료비' in _n590) and ('입원' in _n590) and ('통원' in _n590) and ('실손' not in _n590):
+        return '입원', 0
+    # ★v739 (한수빈 DB 실손의료비보험2301 실측 2026.09.18 「실비도 안 나왔어」) — 별첨에서 담보명이 괄호 뒤에서 잘려
+    #   `상해(일반상해,전체상해를 의미)` · `질병(전체질병을 의미)` 5,000만 남았다(뒤의 「의료비(입원+통원)」 유실).
+    #   이 문구는 4세대 실손 통합형 담보에만 쓰인다(v590 윤선경 NH 원문과 동일) → 입원 행. 대표값(max)이라 중복 없다.
+    if ('전체상해를의미' in _n590) or ('전체질병을의미' in _n590):
         return '입원', 0
     _pfx = re.match(r'^(.{4,}?)\s*[:：]\s*(.{4,})$', raw)
     if _pfx and re.search(r'(특약|플랜|보험|계약)', _pfx.group(1)) \
@@ -8276,6 +8288,11 @@ def build_excel(data, out):
         if (('상해수술비' in _n) and not _n.startswith('상해수술비')) or \
            (('질병수술비' in _n) and not _n.startswith('질병수술비')):
             return ('규칙제외', '수술비 변형(부위·특정·병원규모) = 기재금지(§8.5)')
+        # ★v739 (한수빈 실측 2026.09.18) 안내 오분류 2건 — 값은 맞게 빠졌는데 「결함의심 · 그 행에 들어갔어야 함」이라고 틀리게 안내했다.
+        if ('유사암' in _n) and ('수술' in _n):
+            return ('규칙제외', '유사암 수술비 = 유사암 진단비 행 아님 · 암수술 행도 아님(v30)')
+        if ('응급실' in _n) and ('비응급' in _n):
+            return ('규칙제외', '응급실 비응급 = 응급실(응급) 행 아님')
         if _nt.strip(): return ('규칙제외', _nt.strip()[:40])
         if (_n.startswith('교통') or '교통상해' in _n) and \
            not any(k in _n for k in ('사망','벌금','합의금','처리지원금','변호사','부상치료비','사고부상','위로금','입원일당','일당')):
@@ -10628,6 +10645,8 @@ _HUB_DEF = [
     # ★v692 (지점장 지시 2026.09.10 「통합앱에 8번이 되게 해줘」) — MEDICARE 카드. 인증은 서버 /verify 공통.
     {"k":"medicare","ic":"🩺","nm":"MEDICARE","ds":"암·뇌·심 치료비와 보장 점검 리포트. 산정특례·실손·소득 공백까지 한 장.","ur":"https://guileless-longma-1bde76.netlify.app"},
     {"k":"pencalc","ic":"CALC","nm":"연금계산기","ds":"보험사별 연금을 한 화면에서 비교한다 — 나이·보험료·납입기간·개시나이 입력.","ur":"https://animated-jelly-c322ed.netlify.app"},
+    # ★v738 (지점장 2026.09.18 「메이크원 보험이 메인화면에 없다」) — 10번째 타일. DB에 저장된 목록에 없으면 뒤에 붙는다(_hub_norm).
+    {"k":"bohum","ic":"📋","nm":"MAKEONE BOHUM","ds":"엑셀·보장분석지·제안서를 올리면 암·뇌·심 담보를 합산해 4장 리포트로.","ur":"https://peaceful-cocada-cd702f.netlify.app"},
 ]
 _HUB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hub_config.json')
 
@@ -11664,6 +11683,17 @@ def doctrine_robot(heavy=False):
     _ck('제135조 수술비', '제135조',
         lambda: '' if not surg_selftest() else ('%d건: %s' % (len(surg_selftest()), surg_selftest()[0])))
 
+    # ★v739 제164조 — 진단서 치료비 2중 차단(담보 원문 기준). 값이 달라도 통합분이 짝 칸에서 빠져야 한다.
+    def _ck164():
+        _rp = {'dambo': {'암주요치료비': '8,000만', '하이클래스암': '', '2대주요치료비': '1,500만'},
+               'chiryo': [{'name': '암주요치료비', 'value': '8,000만'}, {'name': '순환계주요치료비', 'value': '1,500만'}]}
+        _ct = [{'dambo': {'암(유사암제외)주요치료비Plus': 3000, '뇌혈관질환주요치료비': 500}},
+               {'dambo': {'암 통합치료비Plus': 5000, '신특정순환계질환 주요치료비Plus': 1000}}]
+        p7_pure_fix(_rp, _ct, {'암통합치료비': 5000.0, '순환계주요치료비': 1000.0})
+        _g = (_rp['dambo']['암주요치료비'], _rp['dambo']['2대주요치료비'])
+        return '' if _g == ('3,000만', '500만') else '짝 칸 %s (정답 3,000만·500만)' % (_g,)
+    _ck('제164조 치료비2중', '제164조', _ck164)
+
     # ★★★★★v595 제137조 (지점장 지시 2026.08.26 「<b>보장분석지 / 보장분석지+제안서 /
     #   제안서 / 엑셀1·2 비교 — 이 4가지에 대해 로봇이 따로 지정되고 따로 각각 검사해야 한다</b>」).
     #   [왜 필요한가] 오늘 실사고가 전부 <b>모드별로</b> 났다 —
@@ -12213,6 +12243,57 @@ _REPMAX_ROWS = ('질병수술비','상해수술비',
                 '1인실 상급병원','1인실 종합병원','2대 주요치료비')
 
 
+
+# ★★★★★v739 제164조 (지점장 2026.09.18 「진단서가 치료비가 2중으로 나온다 · 언제 고칠 건데」)
+#   [재현] 계약 A 암주요치료비 3,000 + 계약 B 암 통합치료비 5,000 → 엑셀 암주요치료비 행 8,000(불변).
+#     진단서 8쪽은 「암 주요치료비 8,000」과 「암 통합치료비 5,000」을 같이 찍었다 — 통합 5,000이 두 번.
+#   [원인] v596·v613·v693의 중복 차단은 <b>두 칸 값이 같을 때만</b> 통합 칸을 비운다. 계약이 둘 이상이면
+#     값이 달라져 그대로 통과한다. 값 비교로는 「같은 담보냐」를 알 수 없다.
+#   ⇒ 값이 아니라 <b>담보 원문</b>으로 가른다. 진단서 전용 칸(통합·순환계)으로 가는 담보를 뺀
+#     <b>순수 값</b>을 계약 원문에서 직접 세어, 진단서의 짝 칸(암주요·하이클래스·2대)에만 쓴다. 엑셀은 그대로.
+_P7_SIB = {'암주요치료비': '암주요치료비', '하이클래스(암)': '하이클래스암', '2대 주요치료비': '2대주요치료비'}
+def _p7_is_only(name):
+    _t = re.sub(r'\s', '', str(name))
+    return ('통합치료' in _t) or (('순환계' in _t) and ('주요치료' in _t))
+def p7_pure_fix(rep, contracts, p7only):
+    """진단서 rep의 짝 칸 값을 순수 값으로 바꾼다. 돌려주는 값 = {행: (엑셀값, 순수값)} (바꾼 것만)."""
+    if not rep or not p7only: return {}
+    pure = {k: 0.0 for k in _P7_SIB}; had = {k: False for k in _P7_SIB}
+    for _c in (contracts or []):
+        if not isinstance(_c, dict): continue
+        _per = {k: [] for k in _P7_SIB}
+        for _n, _v in (_c.get('dambo') or {}).items():
+            try: _f = float(_v)
+            except Exception: continue
+            if not _f: continue
+            try: _std = resolve2(_n)[0]
+            except Exception: _std = None
+            if _std not in _P7_SIB: continue
+            if _p7_is_only(_n): had[_std] = True
+            else: _per[_std].append(_f)
+        for k, _l in _per.items():
+            if _l: pure[k] += (max(_l) if _is_repmax(k) else sum(_l))
+    _num = lambda x: int(float(re.sub(r'[^0-9.]', '', str(x)) or 0))
+    out = {}
+    for k, dk in _P7_SIB.items():
+        if not had[k]: continue
+        _old = _num((rep.get('dambo') or {}).get(dk) or 0)
+        _new = int(min(pure[k], _old)) if _old else 0
+        if _new == _old: continue
+        out[k] = (_old, _new)
+        _s = ('{:,}만'.format(_new)) if _new else ''
+        if rep.get('dambo') is not None: rep['dambo'][dk] = _s
+        for _ch in (rep.get('chiryo') or []):
+            if k == '암주요치료비' and _ch.get('name') == '암주요치료비': _ch['value'] = _s
+            if k == '하이클래스(암)' and _ch.get('name') == '비급여주요치료비': _ch['value'] = _s
+            if k == '2대 주요치료비' and _ch.get('name') == '순환계주요치료비':
+                _sv = p7only.get('순환계주요치료비')
+                _ch['value'] = ('{:,}만'.format(int(float(_sv)))) if _sv else ''
+    rep['p7_pure_done'] = True     # 값 비교식 중복 차단(v596·v693)은 건너뛴다 — 원문으로 이미 갈랐다
+    print('[v739 7p순수] ' + (' · '.join('%s %d→%d' % (k, a, b) for k, (a, b) in out.items()) or '변경 없음'))
+    return out
+
+
 def zip_selfcheck(d=''):
     """zip 발행 전 필수 검증(제0조 6항·제12조). 실패 목록을 돌려준다. 빈 리스트여야 발행 가능."""
     import os as _os, re as _re
@@ -12358,6 +12439,64 @@ def _doc_read(tag=''):
         print(f'[지침] ★★ 파일 각인 불일치 — 코드 {VSTAMP} ≠ ' + ' / '.join(_mis))
     return {'ok': not _fail, 'chars': len(_txt), 'jomun': _jo, 'stamp': _stamp, 'fail': _fail}
 
+
+# ★★★★★v740 (지점장 2026.09.18 「가장 중요한 건 파일 넣으면 나오게 하라」) — BOHUM 전용 작업 큐.
+#   [왜] BOHUM은 /analyze 하나를 80~100초 붙들고 기다렸다. ①서버에 외부접속 허용(CORS)이 없으면 통째로 막히고
+#     ②폰은 긴 연결을 중간에 끊는다(화면 꺼짐·망 전환) → 둘 다 「Failed to fetch」.
+#   ⇒ 파일을 받으면 <b>즉시 작업번호</b>를 돌려주고, 앱은 3초마다 결과를 물어본다. 요청 하나하나가 짧아
+#     Netlify 같은 주소 경유(/api/*)로도 되고(CORS 불필요), 연결이 끊겨도 다시 물어보면 된다.
+#   ★분석 로직은 /analyze 그대로 부른다(같은 함수) — 결과가 갈리지 않는다. 진단서 렌더만 건너뛴다(엑셀만 필요).
+import threading as _thr740, uuid as _uuid740, time as _time740
+_JOB_LITE = _thr740.local()
+_JOBS = {}
+def _jobs_gc():
+    _now = _time740.time()
+    for _k in [k for k, v in _JOBS.items() if _now - v.get('t', 0) > 1200]:
+        _JOBS.pop(_k, None)
+
+@app.post('/job/start')
+async def job_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
+    if pw != PW: return JSONResponse({'ok': False, 'error': '비밀번호 오류'})
+    _jobs_gc()
+    _b1 = None
+    if file is not None and (getattr(file, 'filename', '') or ''):
+        _b1 = (file.filename, await file.read())
+    _b2 = []
+    for _f in (file2 if isinstance(file2, (list, tuple)) else ([file2] if file2 is not None else [])):
+        if _f is not None and (getattr(_f, 'filename', '') or ''):
+            _b2.append((_f.filename, await _f.read()))
+    if not _b1 and not _b2:
+        return JSONResponse({'ok': False, 'error': '파일이 없습니다'})
+    _jid = _uuid740.uuid4().hex[:16]
+    _JOBS[_jid] = {'st': 'run', 't': _time740.time()}
+    def _run():
+        import asyncio as _aio, io as _io
+        from starlette.datastructures import UploadFile as _UF
+        _JOB_LITE.on = True
+        try:
+            _f1 = _UF(_io.BytesIO(_b1[1]), filename=_b1[0]) if _b1 else None
+            _f2 = [_UF(_io.BytesIO(b), filename=n) for n, b in _b2] or None
+            _resp = _aio.run(analyze(file=_f1, file2=_f2, pw=pw))
+            _j = json.loads(bytes(_resp.body).decode('utf-8')) if hasattr(_resp, 'body') else dict(_resp)
+            if _j.get('ok') and _j.get('xlsx_b64'):
+                _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': True,
+                               'xlsx_b64': _j['xlsx_b64'], 'xlsx_name': _j.get('xlsx_name', '')}
+            else:
+                _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': False,
+                               'error': re.sub(r'<[^>]+>', '', str(_j.get('error') or '서버가 엑셀을 못 만들었다'))[:400]}
+        except Exception as _e:
+            print('[v740 job] 실패', type(_e).__name__, _e)
+            _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': False, 'error': '%s: %s' % (type(_e).__name__, str(_e)[:200])}
+    _thr740.Thread(target=_run, daemon=True).start()
+    return JSONResponse({'ok': True, 'job': _jid, 'version': VSTAMP})
+
+@app.get('/job/{jid}')
+def job_get(jid: str):
+    _j = _JOBS.get(jid)
+    if not _j: return JSONResponse({'ok': False, 'st': 'none', 'error': '작업을 찾을 수 없다(서버 재시작 또는 20분 경과)'})
+    if _j.get('st') == 'run':
+        return JSONResponse({'ok': True, 'st': 'run', 'sec': int(_time740.time() - _j.get('t', 0))})
+    return JSONResponse(dict(_j))
 
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
@@ -12608,6 +12747,8 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
+        if getattr(_JOB_LITE, 'on', False):      # ★v740 BOHUM 작업 — 엑셀만 필요하다. 진단서 렌더(약 60초)를 건너뛴다.
+            return JSONResponse(response)
         # ── 보장설명서: 충족률 PDF + ★보장진단서 PPT(편집가능) — 둘 다 실패해도 엑셀·PPT는 유지 ──
         rep=None
         try:
@@ -12671,6 +12812,9 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
             rep=map_excel_to_report(xl, settings={'client':cust,'reset10':_r10,'reset10_amt':_r10amt,
                 'branch':'메이크원','manager':'최은혜','title':'지점장','phone':''})
             if _p7only: rep['p7_only'] = _p7only      # ★v421f 진단서 전용 칸 값(엑셀 미반영)
+            if _p7only:
+                try: p7_pure_fix(rep, data.get('contracts') or [], _p7only)   # ★v739 제164조
+                except Exception as _e739: print('[v739 7p순수] 실패', _e739)
         except Exception as _re:
             response['report_error']='분석데이터 생성 실패: '+str(_re)
         if rep is not None:
