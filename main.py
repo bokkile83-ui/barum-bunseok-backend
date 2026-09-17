@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v740-job-20260918'
+VSTAMP = 'v743-hdjean-20260918'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -3481,6 +3481,59 @@ def parse_jean_life(txt):
     return _out
 
 
+# ★★★★★v743 제168조 (지점장 실측 2026.09.18 이화미 현대해상 「찐최종」 제안서 — BOHUM에 넣어도 안 나온 원인)
+#   현대해상 제안서 중 <b>「가입담보 요약표」가 없고 「위험보장 및 보험금 지급내용」만 있는 양식</b>이 있다.
+#   담보명은 `NNN. …담보` 줄에 혼자 있고, 납기·가입금액·보험료는 <b>그 아래 보장내용 설명 줄 어딘가</b>에 붙는다.
+#   구 파서는 「이름과 금액이 같은 줄」을 전제로 해 <b>설명 문장을 담보명으로 읽었다</b>(실측 19건 중 담보 0건 정상 —
+#   뇌혈관Ⅰ·Ⅱ, 심혈관 특정Ⅰ·Ⅱ·2대·염증, 심뇌혈관질환주요치료비Ⅱ 9건이 전부 소실).
+#   ⇒ `NNN.` 머리줄로 블록을 끊고, 블록 안에서 「납기/만기 + 금액 + 보험료」 줄을 찾는다.
+#   ★구 파서를 고치지 않는다 — 결과 건수가 <b>더 많을 때만</b> 이 파서를 쓴다(다른 회사·다른 현대 양식 회귀 차단).
+_JN_HD_AMT = re.compile(r'((?:\d+년납|전기납)\s*\d+(?:세|년)만기)\s+((?:\d+억)?\s*\d*(?:천|백|십)?만?원)\s+([\d,]+)(?![\d,])')
+def _jn_hd_won(t):
+    t = re.sub(r'\s', '', str(t)); v = 0
+    m = re.match(r'^(?:(\d+)억)?(?:(\d+)(천|백|십)?만)?원$', t)
+    if not m: return None
+    if m.group(1): v += int(m.group(1)) * 10000
+    if m.group(2): v += int(m.group(2)) * {'천': 1000, '백': 100, '십': 10, None: 1}[m.group(3)]
+    return v or None
+def parse_jean_hyundai(txt):
+    if '위험보장 및 보험금 지급내용' not in (txt or ''): return []
+    lines = txt.split('\n'); heads = []
+    for i, l in enumerate(lines):
+        m = re.match(r'^\s*(\d{3})\.\s*(.*)$', l)
+        if m: heads.append((i, m.group(1), m.group(2).strip()))
+    rows = []
+    for k, (i, no, body) in enumerate(heads):
+        end = heads[k + 1][0] if k + 1 < len(heads) else len(lines)
+        nm = body
+        if not nm:                                   # 번호만 있는 줄 — 담보명이 위·아래 줄로 접혔다
+            pre = lines[i - 1].strip() if i > 0 else ''
+            nxt = lines[i + 1].strip() if i + 1 < len(lines) else ''
+            nm = pre + nxt
+            if k + 1 < len(heads) and heads[k + 1][0] - 1 > i + 1 and not heads[k + 1][2]:
+                end = heads[k + 1][0] - 1            # 다음 담보의 접힌 윗줄은 이 블록이 아니다
+        nm = _JN_HD_AMT.sub('', nm).strip()
+        nm = re.sub(r'\s+', '', nm)
+        if not nm.endswith('담보'): 
+            _j = nm.find('담보')
+            if _j < 0: continue
+        nm = re.sub(r'담보$', '', nm)
+        hit = None
+        for l in lines[i:end]:
+            if '발행번호' in l or '보험대리점명' in l: break      # 쪽 바닥글을 넘어가지 않는다
+            m = _JN_HD_AMT.search(l)
+            if m: hit = m; break
+        if not hit: continue
+        amt = _jn_hd_won(hit.group(2))
+        if amt is None: continue
+        tm = re.sub(r'\s', '', hit.group(1))
+        m2 = re.match(r'^(\d+년|전기)납(\d+(?:세|년))만기$', tm)
+        term = ('%s/%s' % (m2.group(1), m2.group(2))) if m2 else tm
+        rows.append({'no': int(no), 'name': nm, 'amt': amt, 'prem': int(hit.group(3).replace(',', '')), 'term': term})
+    if rows: print('[JEAN] v743 현대 「위험보장 및 보험금 지급내용」 양식 %d건' % len(rows))
+    return rows
+
+
 def parse_jean(txt):
     """가입제안서 텍스트 → [{'name','amt','prem','term'}] 리스트.
     ★v371: 신규 표 파서를 먼저 쓰고, 결과가 빈약하면 구 `\\d+\\.` 규칙으로 폴백한다."""
@@ -3628,6 +3681,77 @@ def jean_company(txt):
     if 'idbins.com' in (txt or ''): return 'DB손해보험'   # ★[확인] 도메인표는 지점장 확정분만 추가
     return '미확인'
 
+# ★★★★★v741 제166조 (지점장 2026.09.18 「순환계주요치료비·암주치·비급여주치 — 제안서는 꼭 뒤에 <b>각각 주는지 ·
+#   여러 개 중에서 하나 주는지</b> 다 체크 읽어야 해 · 이건 사실 제안서용이다 · 최대 5개」)
+#   가입담보 요약표에는 금액뿐이다. 「수술·방사선·약물을 각각 주는지 / 그중 하나만 주는지」는 뒤쪽 보장내용에 있다.
+#   ⇒ 주요치료비·통합치료비 담보마다 <b>뒤쪽 보장내용 원문</b>을 찾아 지급방식을 가린다.
+#   ★추측 금지 — 문구가 분명할 때만 판정하고, 아니면 「확인」. 원문 조각(src)을 같이 돌려줘 사람이 대조한다.
+#   ★엑셀·분석지·진단서는 건드리지 않는다(BOHUM 작업 결과에만 실린다).
+_PAY_EACH = re.compile(r'각\s*각|각\s*치료|치료\s*별|항목\s*별|각\s*항목|각\s*1\s*회|각\s*연')
+_PAY_ONE  = re.compile(r'중\s*(?:어느\s*)?(?:하나|한\s*가지|1\s*가지)|1\s*가지\s*이상|가지\s*이상\s*의?\s*치료|최초\s*1\s*회\s*한?에?\s*한')
+# ★★★★★v743 제168조 2항 (이화미 현대 제안서 원문 2026.09.18 「수술비도 관혈or비관혈도 있어」)
+#   현대 `심뇌혈관질환주요치료비Ⅱ(관혈/비관혈)(연간1회한)…(심장질환관혈수술)`처럼 <b>치료마다 담보가 따로</b> 있는 주요치료비가 있다
+#   (심장·뇌 각각 관혈수술 1,000 · 비관혈수술 1,000 · 중환자실 500 · 혈전용해 1,000 + 특정중증치료 500).
+#   엑셀은 이 9건을 「2대 주요치료비」 한 칸(대표값 1,000)으로 접는다. BOHUM은 칸마다 다른 담보를 써야 한다
+#   → 담보명 끝 괄호에서 <b>장기(뇌/심)·치료(관혈/비관혈/중환자실/혈전용해)</b>를 읽어 같이 돌려준다.
+def jean_split_tag(name):
+    t = re.sub(r'\s', '', str(name or ''))
+    if '주요치료' not in t: return None
+    if re.search(r'\(특정중증치료[^)]*\)?[^()]*\)?\s*$', t): return {'organ': '공통', 'treat': '특정중증'}   # 4칸 어디에도 안 들어간다(확인)
+    m = re.search(r'\((심장질환|뇌혈관질환|심뇌혈관질환)?(비관혈수술|관혈수술|중환자실입원|중환자실|혈전용해치료|혈전용해|혈전제거)[^()]*\)\s*$', t)
+    if not m: return None
+    organ = {'심장질환': '심', '뇌혈관질환': '뇌'}.get(m.group(1) or '', '공통')
+    tr = m.group(2)
+    treat = ('비관혈' if tr.startswith('비관혈') else '관혈' if tr.startswith('관혈') else
+             '중환자실' if tr.startswith('중환자실') else '혈전제거' if tr.startswith('혈전제거') else '혈전용해')
+    return {'organ': organ, 'treat': treat}
+
+
+def jean_paymode(full, rows):
+    out = []
+    try:
+        _lines = (full or '').split('\n'); _norm = [re.sub(r'\s', '', l) for l in _lines]
+        for x in (rows or []):
+            nm = str(x.get('name') or ''); key = re.sub(r'\s', '', nm)
+            if not (('주요치료' in key) or ('통합치료' in key)): continue
+            _hits = [i for i, l in enumerate(_norm) if key in l]
+            if len(_hits) < 2:                       # 괄호 표기가 앞뒤에서 다르면 괄호를 걷어내고 맞춘다
+                _core = re.sub(r'\(.*?\)|\[.*?\]', '', key)
+                if len(_core) >= 6:
+                    _hits = [i for i, l in enumerate(_norm) if _core in re.sub(r'\(.*?\)|\[.*?\]', '', l)]
+            if len(_hits) < 2 and len(key) >= 24:       # ★v743 KB 실측: 긴 담보명은 요약표·보장내용 양쪽에서 두 줄로 접힌다 → 앞 20자로 찾는다
+                _pf = key[:20]
+                _hits = [i for i, l in enumerate(_norm) if _pf in l]
+            _others = [re.sub(r'\s', '', str(y.get('name') or '')) for y in rows if y is not x]
+            _others = [o for o in _others if len(o) >= 5 and o != key]
+            mode = '확인'; src = ''
+            # 첫 번째 = 요약표. 그 뒤에 다시 나오는 자리가 보장내용이다.
+            for i in _hits[1:]:
+                _end = i + 16
+                for j in range(i + 1, min(len(_lines), i + 16)):      # 다음 담보가 시작되면 거기서 끊는다
+                    if any(o in _norm[j] for o in _others): _end = j; break
+                _w = ' '.join(t.strip() for t in _lines[i:_end] if t.strip())
+                _e = bool(_PAY_EACH.search(_w)); _o = bool(_PAY_ONE.search(_w))
+                # ★v742 KB 특별약관 세부보장항목 실물(인포메이션 35~37쪽): 보장항목마다 지급방식 칸에
+                #   「연간1회한 · 수술1회당」이 따로 적힌 표다 → 항목별로 각각 지급(가입금액은 연간 총한도).
+                if (not _e) and (not _o) and len(re.findall(r'연간\s*\d+\s*회\s*한|수술\s*1\s*회\s*당', _w)) >= 2:
+                    _e = True
+                if _e and not _o: mode = '각각'
+                elif _o and not _e: mode = '하나만'
+                else: continue                      # 둘 다 있거나 둘 다 없으면 판정하지 않는다
+                src = _w[:220]; break
+            if not src and len(_hits) > 1:
+                src = ' '.join(t.strip() for t in _lines[_hits[1]:_hits[1] + 8] if t.strip())[:220]
+            _it = {'name': nm, 'amt': x.get('amt'), 'mode': mode, 'src': src}
+            _sp = jean_split_tag(nm)
+            if _sp: _it.update(_sp); _it['mode'] = '각각'; _it['src'] = '담보명에 치료가 적혀 있다: ' + nm[-30:]      # 치료별로 담보가 따로 있다 = 각각
+            out.append(_it)
+    except Exception as _e:
+        print('[v741 지급방식] 실패', _e)
+    if out: print('[v741 지급방식] ' + ' | '.join('%s=%s' % (o['name'][:18], o['mode']) for o in out))
+    return out
+
+
 def build_proposal_contract(pdf_bytes, fname=''):
     """가입제안서 PDF → 계약 dict 1건(맨 오른쪽 열). 실패 시 None."""
     import subprocess as _sp, tempfile as _tf
@@ -3641,6 +3765,12 @@ def build_proposal_contract(pdf_bytes, fname=''):
         print('[JEAN] pdftotext 실패', e); return None
     _life_rows = None
     rows = parse_jean(full)
+    try:                                              # ★v743 제168조 — 건수가 더 많을 때만 채택
+        _hd743 = parse_jean_hyundai(full)
+        if len(_hd743) > len(rows or []):
+            print('[JEAN] v743 현대 양식 채택 %d건 (구 파서 %d건)' % (len(_hd743), len(rows or [])))
+            rows = _hd743
+    except Exception as _e743: print('[JEAN] v743 현대 양식 실패', _e743)
     if not rows:
         # ★★★★★v600 제140조 (지점장 지시 2026.08.26 「<b>kb라이프 인식해라</b>」).
         #   생보 제안서는 표 형식이 <b>통째로 다르다</b> — 담보명이 3~5줄로 쪼개지고
@@ -3662,6 +3792,11 @@ def build_proposal_contract(pdf_bytes, fname=''):
     #   <b>피보험자 줄</b>(`조승우 (42세 / 남 / … / 보험나이변경일 : 매년`)을 상품명으로 집었다
     #   → 엑셀 헤더 1행 상품명 칸이 고객 신상으로 오염된다(v29c (1) 헤더 3줄 표기 위반).
     #   ★<b>오염된 경우에만</b> 표지 첫 실질 줄로 대체한다 — 기존 통과 회사(KB·현대·롯데…)는 건드리지 않는다.
+    # ★v743 (이화미 현대 「찐최종」 실측): 상품명이 `가입제안서 무배당현대해상…` 한 줄에 붙어 있어 '가입' 제외 규칙에 걸리고
+    #   대신 `보험기간 2026.09.15 ~ …` 줄이 상품명으로 집혔다 → 엑셀 헤더 오염.
+    _m743 = re.search(r'가입제안서\s+(무배당\S+(?:보험|플랜)\S*)', full[:3000])
+    if _m743 and ((not prod) or re.search(r'보험기간|납입주기|\d{4}\.\d{2}\.\d{2}', prod)):
+        prod = _m743.group(1)
     if (not prod) or re.search(r'피보험자|계약자|보험나이변경일|\d+\s*세\s*/', prod):
         for l in full.split('\n')[:20]:
             t=l.strip()
@@ -3740,7 +3875,32 @@ def build_proposal_contract(pdf_bytes, fname=''):
         _na = re.sub(r'[^0-9]', '', _a); _nb = re.sub(r'[^0-9]', '', _b)
         if _na and _nb and _na == _nb: _jr = '갱신'
     print(f'[JEAN] 회사={co} 담보={len(rows)}건 매핑입력={len(blk)} 보험료={prem:,} 납기/만기={term} 판정={_jr}')
-    return {'dup':0,'holder':'','company':co,'ipwon':{},'ci_extra':0,
+    _pm741 = jean_paymode(full, rows)               # ★v741 제166조
+    # ★v742 제167조 — 엑셀은 통합치료비를 암주요치료비·하이클래스(암)·2대 주요치료비 행에 <b>액면 그대로</b> 넣는다(불변).
+    #   BOHUM이 그 행을 100%로 세면 통합치료비 가입금액(연간 총한도)이 통째로 더해진다 — 「액면 합산 금지」 위반.
+    #   ⇒ 이 계약에서 통합치료비 때문에 그 행에 얹힌 몫(adj)을 같이 돌려준다. BOHUM이 빼고, 칸별 실제 지급액으로 다시 넣는다.
+    _adj742 = {}
+    try:
+        for _std in ('암주요치료비', '하이클래스(암)', '2대 주요치료비'):
+            _all = []; _pure = []
+            for _n, _v in (dambo or {}).items():
+                try: _f = float(_v)
+                except Exception: continue
+                if not _f: continue
+                try: _s2 = resolve2(_n)[0]
+                except Exception: _s2 = None
+                if _s2 != _std: continue
+                _all.append(_f)
+                if ('통합치료' not in re.sub(r'\s', '', str(_n))) and not jean_split_tag(_n): _pure.append(_f)   # ★v743 치료별로 쪼개진 담보도 BOHUM이 칸별로 다시 넣는다
+            _agg = (lambda l: (max(l) if l else 0)) if _is_repmax(_std) else (lambda l: sum(l))
+            _d = _agg(_all) - _agg(_pure)
+            if _d > 0: _adj742[_std] = _d
+    except Exception as _e742: print('[v742 adj] 실패', _e742)
+    try:
+        if (_pm741 or _adj742) and isinstance(getattr(_JOB_LITE, 'pay', None), list):
+            _JOB_LITE.pay.append({'file': fname, 'company': co, 'renewal': _jr, 'items': _pm741, 'adj': _adj742})
+    except Exception: pass
+    return {'paymode':_pm741,'dup':0,'holder':'','company':co,'ipwon':{},'ci_extra':0,
             'product':(prod or '가입제안서'),'contract_date':'','expiry_date':'',
             'premium':prem,'pay_period':_pp,'pay_count':'','renewal':_jr,
             'dambo':dambo,'ci_jugye':[],'ci_sebu':{},'ci_lines':{},
@@ -11694,6 +11854,48 @@ def doctrine_robot(heavy=False):
         return '' if _g == ('3,000만', '500만') else '짝 칸 %s (정답 3,000만·500만)' % (_g,)
     _ck('제164조 치료비2중', '제164조', _ck164)
 
+    # ★v741 제166조 — 제안서 뒤쪽 보장내용에서 지급방식(각각/하나만/확인)을 읽는다. 문구가 없으면 반드시 「확인」.
+    def _ck166():
+        _full = ('요약\n 1 암(유사암제외) 주요치료비Plus 3,000만원\n 2 신특정순환계질환 주요치료비Plus 1,000만원\n 3 비급여 암 주요치료비 2,000만원\n'
+                 '보장내용\n 암(유사암제외) 주요치료비Plus\n  암수술, 항암방사선, 항암약물 각 치료별 연간 1회한\n'
+                 ' 신특정순환계질환 주요치료비Plus\n  수술, 혈전제거술, 혈전용해치료 중 1가지 이상의 치료를 받은 경우\n'
+                 ' 비급여 암 주요치료비\n  비급여 항암치료를 받은 경우 지급\n')
+        _rows = [{'name': '암(유사암제외) 주요치료비Plus', 'amt': 3000}, {'name': '신특정순환계질환 주요치료비Plus', 'amt': 1000},
+                 {'name': '비급여 암 주요치료비', 'amt': 2000}, {'name': '질병수술비', 'amt': 10}]
+        _g = [o['mode'] for o in jean_paymode(_full, _rows)]
+        return '' if _g == ['각각', '하나만', '확인'] else '판정 %s (정답 각각·하나만·확인)' % _g
+    _ck('제166조 지급방식', '제166조', _ck166)
+
+    # ★v742 제167조 — KB 세부보장항목 표(지급방식 칸 반복)는 「각각」 · 8쪽 n/8은 고정 글자가 아니다
+    def _ck167():
+        _full = ('요약\n 1 암 통합치료비Plus 5,000만원\n세부보장항목\n 암 통합치료비Plus\n  암(유사암제외) 수술  수술1회당 500만원\n'
+                 '  암(유사암제외) 항암방사선치료 연간1회한 500만원\n  표적항암약물허가치료 연간1회한 1,000만원\n')
+        _g = [o['mode'] for o in jean_paymode(_full, [{'name': '암 통합치료비Plus', 'amt': 5000}])]
+        if _g != ['각각']: return '항목별 표 판정 %s (정답 각각)' % _g
+        import report_weasy as _rw167
+        if '>2/8<' in open(_rw167.__file__, encoding='utf-8').read(): return '8쪽 n/8이 다시 고정 글자 2/8'
+        return ''
+    _ck('제167조 통합치료비', '제167조', _ck167)
+
+    # ★v743 제168조 — 현대 「위험보장 및 보험금 지급내용」 양식 · 치료별로 쪼개진 주요치료비(관혈/비관혈)
+    def _ck168():
+        _t = ('●   위험보장 및 보험금 지급내용\n      담보명 및 보장내용       납기/만기      가입금액    보험료(원)\n'
+              '204. 뇌혈관질환(Ⅰ)진단(간편건강고지)담보\n'
+              ' 뇌혈관질환(Ⅰ)으로 진단 확정된 경우 가입금액 지급(최초1회한          20년납100세만기    1천만원         12,910 )(단, 최초\n'
+              '       심뇌혈관질환주요치료비Ⅱ(관혈/비관혈)(연간1회한)(간편건강고지)(심장질환관혈수술)담\n493.\n       보\n'
+              '                                                                     20년납100세만기    1천만원          1,410\n'
+              ' 심장질환\'의 치료를 직접적인 목적으로 관혈 수술을 받은경우 이 보장의 가입금액 (연간1회한)\n'
+              '002. 보험료납입면제대상(간편건강고지)담보\n 우 가입금액 지급(최초 1회한)            전기납20년만기      10만원            118\n')
+        _r = parse_jean_hyundai(_t)
+        _g = [(x['no'], x['amt'], x['term']) for x in _r]
+        if _g != [(204, 1000, '20년/100세'), (493, 1000, '20년/100세'), (2, 10, '전기/20년')]: return '현대 양식 %s' % _g
+        if not _r[1]['name'].endswith('(심장질환관혈수술)'): return '접힌 담보명 복원 실패 %s' % _r[1]['name'][-20:]
+        _s = jean_split_tag(_r[1]['name'])
+        if _s != {'organ': '심', 'treat': '관혈'}: return '치료 꼬리표 %s' % _s
+        if jean_split_tag('신특정순환계질환 주요치료비Plus') is not None: return '쪼개지지 않은 담보에 꼬리표'
+        return ''
+    _ck('제168조 현대제안서', '제168조', _ck168)
+
     # ★★★★★v595 제137조 (지점장 지시 2026.08.26 「<b>보장분석지 / 보장분석지+제안서 /
     #   제안서 / 엑셀1·2 비교 — 이 4가지에 대해 로봇이 따로 지정되고 따로 각각 검사해야 한다</b>」).
     #   [왜 필요한가] 오늘 실사고가 전부 <b>모드별로</b> 났다 —
@@ -12473,6 +12675,7 @@ async def job_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None
         import asyncio as _aio, io as _io
         from starlette.datastructures import UploadFile as _UF
         _JOB_LITE.on = True
+        _JOB_LITE.pay = []
         try:
             _f1 = _UF(_io.BytesIO(_b1[1]), filename=_b1[0]) if _b1 else None
             _f2 = [_UF(_io.BytesIO(b), filename=n) for n, b in _b2] or None
@@ -12480,7 +12683,8 @@ async def job_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None
             _j = json.loads(bytes(_resp.body).decode('utf-8')) if hasattr(_resp, 'body') else dict(_resp)
             if _j.get('ok') and _j.get('xlsx_b64'):
                 _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': True,
-                               'xlsx_b64': _j['xlsx_b64'], 'xlsx_name': _j.get('xlsx_name', '')}
+                               'xlsx_b64': _j['xlsx_b64'], 'xlsx_name': _j.get('xlsx_name', ''),
+                               'pay': list(getattr(_JOB_LITE, 'pay', []) or [])}
             else:
                 _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': False,
                                'error': re.sub(r'<[^>]+>', '', str(_j.get('error') or '서버가 엑셀을 못 만들었다'))[:400]}
