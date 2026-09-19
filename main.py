@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v745-paycycle-20260918'
+VSTAMP = 'v750-jongdesign-20260918'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -11952,6 +11952,68 @@ def doctrine_robot(heavy=False):
         _g = [(o['mode'], o.get('surg', ''), o.get('treat', '')) for o in jean_paymode(_t, _r)]
         return '' if _g == [('연1회', '매회', ''), ('매회', '', '관혈')] else '판정 %s' % _g
     _ck('제170조 지급주기', '제170조', _ck170)
+
+    # ★v746 제171조 — 종수술 분류표 9사 145장이 인포메이션에 실려 있어야 한다
+    def _ck171():
+        try: import jongsul_b64 as _J
+        except Exception as _e: return '모듈 없음 %s' % _e
+        _n = sum(len(v) for v in _J.JONG.values())
+        if _n != 145 or len(_J.JONG_ORDER) != 9: return '회사 %d사 · 캡처 %d장 (정답 9사 145장)' % (len(_J.JONG_ORDER), _n)
+        import report_weasy as _rw
+        if 'jwrap' not in open(_rw.__file__, encoding='utf-8').read(): return '인포메이션에 종수술 쪽이 없다'
+        return ''
+    _ck('제171조 종수술표', '제171조', _ck171)
+
+    # ★v747 제172조 — 종수술 요약 1장: 9사 전부 생보약관(제왕절개 판별), 지급방식은 제안서 본 회사만
+    def _ck172():
+        try: import jongsul_sum as _S
+        except Exception as _e: return '요약 모듈 없음 %s' % _e
+        if len(_S.COS) != 9: return '회사 %d사 (정답 9사)' % len(_S.COS)
+        if any(_c[1] != '생보약관' for _c in _S.COS): return '약관 계열이 생보약관이 아닌 행이 있다'
+        if any('제왕절개' not in _c[2] and '항' not in _c[2] for _c in _S.COS): return '제왕절개 판별 칸이 비었다'
+        _pay = [_c[0] for _c in _S.COS if not _c[4].startswith('[확인]')]
+        if sorted(_pay) != sorted(['DB손보', 'KB손보']): return '지급방식 확정 회사 %s (정답 DB·KB만)' % _pay
+        import jongsul_txt as _T
+        if 'DB손보' not in _T.JONG_TXT: return 'DB손보 글자 표가 없다'
+        return ''
+    _ck('제172조 종수술요약', '제172조', _ck172)
+
+    # ★v748 제173조 — 회사별 보상(종수) 비교표: 9사 전 칸이 채워져 있어야 한다(? 금지)
+    def _ck173():
+        try: import jongsul_cmp as _C
+        except Exception as _e: return '비교 모듈 없음 %s' % _e
+        if len(_C.CO) != 9: return '회사 %d사' % len(_C.CO)
+        for _nm, _no, _v in _C.ROWS:
+            if len(_v) != 9: return '%s 칸 %d개' % (_nm, len(_v))
+            if '?' in _v: return '%s 에 미확인(?) 칸이 남아 있다' % _nm
+        _dae = [r for r in _C.ROWS if '대장' in r[0]][0][2]
+        if _dae != ['2', '2', '★1', '2', '★1', '2', '★1', '2', '2']:
+            return '대장 용종 행 %s' % _dae
+        return ''
+    _ck('제173조 종수술비교', '제173조', _ck173)
+
+    # ★v749 제174조 — 신입용 보상별 1장(종별 72개 + 회사차이 5개)
+    def _ck174():
+        try: import jongsul_new as _N
+        except Exception as _e: return '신입용 모듈 없음 %s' % _e
+        if sorted(_N.JONG) != ['1종', '2종', '3종', '4종', '5종']: return '종 구성 %s' % sorted(_N.JONG)
+        if sum(len(v[1]) for v in _N.JONG.values()) < 60: return '수술 항목이 너무 적다'
+        if len(_N.DIFF) != 5: return '회사차이 %d개 (정답 5개)' % len(_N.DIFF)
+        if 'KB' not in _N.DIFF[0][1]: return '대장 용종 유리한 쪽에 KB(Ⅲ)가 빠졌다'
+        return ''
+    _ck('제174조 신입용표', '제174조', _ck174)
+
+    # ★v750 제175조 — 신입용 장은 2쪽(카드+목록 / 회사차이) · 대장용종 KB는 1종 단일 표기
+    def _ck175():
+        import report_weasy as _rw
+        _src = open(_rw.__file__, encoding='utf-8').read()
+        if 'class="bcw"' not in _src: return '블로그형 카드(bcw)가 없다'
+        if "_new[0]" not in _src or "_new[1]" not in _src: return '신입용 2쪽 분리가 안 돼 있다'
+        import jongsul_cmp as _C
+        _dae = [r for r in _C.ROWS if '대장' in r[0]][0][2]
+        if _dae[4] != '★1': return 'KB 대장용종이 1종 단일 표기가 아니다 (%s)' % _dae[4]
+        return ''
+    _ck('제175조 신입용2쪽', '제175조', _ck175)
 
     # ★★★★★v595 제137조 (지점장 지시 2026.08.26 「<b>보장분석지 / 보장분석지+제안서 /
     #   제안서 / 엑셀1·2 비교 — 이 4가지에 대해 로봇이 따로 지정되고 따로 각각 검사해야 한다</b>」).

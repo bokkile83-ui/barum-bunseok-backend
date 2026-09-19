@@ -2645,6 +2645,63 @@ body {{ color:{INK}; }}
 .gdv {{ font-size:9.6pt; font-weight:900; color:{NAVY}; line-height:1.3; margin-top:0.8mm; }}
 .gdnt2 {{ font-size:7.4pt; font-weight:700; color:{MUT}; padding:1.8mm 4mm 2mm; }}
 .gdnt2 b {{ color:{GAP}; }}
+.jwrap{{column-count:3;column-gap:4mm;margin-top:2mm}}
+.jtwrap{{margin-top:1.5mm}}
+table.jt{{width:100%;border-collapse:collapse;font-size:7pt;line-height:1.3;table-layout:fixed}}
+table.jt th{{background:#1F3A5F;color:#fff;font-weight:800;padding:1mm;text-align:left}}
+table.jt td{{border-bottom:0.15mm solid #dde3ea;padding:0.8mm 1mm;vertical-align:top}}
+table.jt tr.gtop td{{border-top:0.3mm solid #1F3A5F}}
+table.jt .c1{{width:34mm;font-weight:700;color:#1F3A5F}}
+table.jt .c3{{width:12mm;text-align:center;font-weight:800}}
+.jtn{{font-size:6.4pt;color:#556;margin:1.2mm 0 0;line-height:1.35}}
+.jsub{{font-size:8pt;font-weight:800;color:#1F3A5F;margin:3mm 0 1.2mm}}
+table.jsc{{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2.5mm 0;margin:2mm 0 3mm}}
+table.jsc td.jsx{{width:20%;border:0.3mm solid #cfd8e3;border-radius:1.6mm;padding:0;vertical-align:top;word-break:keep-all}}
+.jck{{display:block;font-size:12pt;font-weight:900;color:#fff;text-align:center;padding:1.6mm 0}}
+.jsx.k1 .jck{{background:#5AA9E6}}.jsx.k2 .jck{{background:#3C7DD9}}.jsx.k3 .jck{{background:#2FA36B}}
+.jsx.k4 .jck{{background:#2E7D32}}.jsx.k5 .jck{{background:#E08A1E}}
+.jcs{{display:block;font-size:7.6pt;font-weight:800;text-align:center;padding:1.4mm 1mm;color:#1F3A5F;background:#F4F7FB}}
+.jce{{display:block;font-size:6.8pt;line-height:1.45;padding:1.6mm 1.8mm;color:#333}}
+table.jt.js td.co{{font-weight:800;color:#1F3A5F;width:22mm}}
+table.jt.js td.ty{{width:18mm;font-weight:700}}table.jt.js td.ty.life{{color:#8A4B12}}table.jt.js td.ty.nonlife{{color:#1F3A5F}}
+table.jt.js td.pay{{font-weight:800;color:#0B6B3A}}table.jt.js td.chk{{font-weight:800;color:#C00000}}
+table.jt.js td.src{{font-size:6.2pt;color:#667}}
+table.jt.js td.mm{{font-size:6.6pt}}
+table.jt.jcm{{font-size:7pt}}
+table.jt.jcm th.cc,table.jt.jcm td.cc{{width:14mm;text-align:center}}
+table.jt.jcm td.c2{{width:auto;font-weight:700;color:#1F3A5F}}
+table.jt.jcm .no{{width:14mm;text-align:center;color:#667;font-size:6.4pt}}
+table.jt.jcm td.cc{{font-weight:800}}
+table.jt.jcm td.cc.hi{{background:#FFF3CD;color:#8A4B12}}
+table.jt.jcm td.cc.q{{color:#C00000}}
+table.bcw{{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2.2mm 0;margin:1mm 0 3mm}}
+table.bcw td.bc{{width:20%;vertical-align:top;border-radius:2.4mm;overflow:hidden;padding:0 0 2mm;border:0.3mm solid #dde4ec}}
+.bch{{padding:2.2mm 0 1.6mm;text-align:center}}
+.bcn{{font-size:16pt;font-weight:900;color:#fff;letter-spacing:-0.3pt}}
+.bci{{text-align:center;font-size:15pt;line-height:1.1;margin:1.6mm 0 0.6mm}}
+.bcs{{text-align:center;font-size:7.4pt;font-weight:800;color:#1F3A5F;padding:0 1.5mm 1.4mm;word-break:keep-all}}
+ul.bcl{{margin:0;padding:0 2mm 0 5mm;font-size:7pt;line-height:1.55;color:#33415c}}
+td.bc.k1{{background:#EAF4FD}}td.bc.k1 .bch{{background:#5AA9E6}}
+td.bc.k2{{background:#E8F0FC}}td.bc.k2 .bch{{background:#3C7DD9}}
+td.bc.k3{{background:#E8F7EF}}td.bc.k3 .bch{{background:#2FA36B}}
+td.bc.k4{{background:#E9F3E9}}td.bc.k4 .bch{{background:#2E7D32}}
+td.bc.k5{{background:#FDF2E2}}td.bc.k5 .bch{{background:#E08A1E}}
+.jnwrap{{column-count:2;column-gap:5mm}}
+.jn{{break-inside:avoid;border:0.3mm solid #cfd8e3;border-radius:1.6mm;margin:0 0 2.5mm;overflow:hidden}}
+.jnh{{padding:1.2mm 2mm;color:#fff;display:block}}
+.jnh b{{font-size:9.5pt;font-weight:900;margin-right:1.5mm}}
+.jnh span{{font-size:7pt;font-weight:700}}.jnh em{{font-size:6.4pt;font-style:normal;float:right;opacity:.9}}
+.jn.k1 .jnh{{background:#5AA9E6}}.jn.k2 .jnh{{background:#3C7DD9}}.jn.k3 .jnh{{background:#2FA36B}}
+.jn.k4 .jnh{{background:#2E7D32}}.jn.k5 .jnh{{background:#E08A1E}}
+ul.jnl{{margin:0;padding:1.4mm 2mm 1.6mm 5mm;font-size:6.8pt;line-height:1.5}}
+ul.jnl li{{margin:0 0 0.4mm}}
+table.jt.jdf td.hi2{{font-weight:800;color:#0B6B3A;width:58mm}}
+table.jt.jdf td.c2{{width:44mm;font-weight:700;color:#1F3A5F}}
+table.jt.js td.ty{{width:16mm}}
+table.jt.js td.chk{{width:16mm}}
+
+.jcell{{break-inside:avoid;page-break-inside:avoid;margin:0 0 3mm}}
+.jcell img{{width:100%;display:block;border:0.2mm solid #ccd3dd}}
 /* ── 보험 인포메이션 간지 (화이트) ── */
 .infopg {{ background:#fff; }}
 /* ★상급종합병원 47곳 — 권역별 카드 (v51) */
@@ -2818,10 +2875,159 @@ body {{ color:{INK}; }}
     _n8='<div class="hcnote">★ <b>"특정Ⅰ·Ⅱ"는 회사마다 뜻이 다릅니다 — 라벨 말고 질병코드로 확인.</b> 롯데 특정Ⅰ=급성심근경색 / 흥국 특정심혈관=협심증·허혈·빈맥·심부전(급성심근 아님) / 한화·NH 특정Ⅰ=협심증·허혈·빈맥·부정맥·심부전 / DB 특정Ⅰ=협심증·허혈·염증 / KB 특정Ⅰ=협심증·허혈·빈맥·심부전·염증(심장판막은 별도 가입 담보) / 현대 특정Ⅰ=협심증·빈맥·심부전(허혈 I24·25는 별도 허혈성 담보). 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
     _n9='<div class="hcnote">★ 삼성·메리츠는 허혈성심장질환을 6가지로 세분(급성기·후속·합병증·협심증·기타급성·만성). 롯데 특정심장Ⅰ=급성심근경색 / 흥국은 특정심혈관질환(기타부정맥제외)=협심·허혈·빈맥·심부전(급성심근 아님). 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>.</div>'
     _n8b='<div class="hcnote">★ 색: <b style="color:#1F5FA8">허혈·협심</b> / <b style="color:#B9540B">급성심근</b> / <b style="color:#5B7A2E">심근병</b> / <b style="color:#1E7A46">염증</b> / <b style="color:#9A7A12">부정맥·전도</b> / <b style="color:#6A4A9A">판막</b>. 빈맥(I47·48)과 부정맥(I49)은 별개.</div>'
+    # ★★★★★v746 제171조 (지점장 2026.09.18 「종수술 모음집 엑셀 다 뒤져서 인포메이션에 회사별로 넣어줘」)
+    #   엑셀에는 셀 데이터가 없고 <b>1~5종 수술분류표 화면캡처 145장</b>이 9개 시트에 박혀 있었다.
+    #   글자로 옮기면 오타가 난다 → 원본 이미지를 그대로 싫는다. 회사별·삽입 순서 그대로(임의 재배열 금지 — 제162조).
+    # ★★★★★v747 제172조 (지점장 2026.09.18 「이걸 니가 직접 그려줘」) — 측정 이미지 대신 글자 표로 그린다.
+    #   전사된 회사는 글자 표, 아직 전사 안 된 회사는 종전대로 원본 측정을 싫는다(빈 칸 없이).
+    # ★v747 제172조 — 종수술 맨 앞 요약 1장(1~5종 카드 + 회사별 생·손보·지급방식)
+    # ★v748 제173조 — 회사별 보상(종수) 비교 미니도표
+    # ★v749 제174조 — 신입용 「보상별(종별)」 1장
+    def _jong_new_page():
+        try:
+            import jongsul_new as _N
+        except Exception as _e:
+            print('[v750 종수술신입] 모듈 없음', _e); return ''
+        # ★v750 블로그 인포그래픽 형식 — 위에 카드 5장(큰 숫자·아이콘·대표 수술), 아래에 전체 목록
+        _cards = []
+        for _i, _k in enumerate(['1종', '2종', '3종', '4종', '5종'], 1):
+            _ic, _sub, _rep = _N.FACE[_k]
+            _li = ''.join('<li>%s</li>' % _html.escape(_t) for _t in _rep)
+            _cards.append('<td class="bc k%d"><div class="bch"><span class="bcn">%s</span></div>'
+                          '<div class="bci">%s</div><div class="bcs">%s</div><ul class="bcl">%s</ul></td>'
+                          % (_i, _html.escape(_k), _ic, _html.escape(_sub), _li))
+        _bl = []
+        for _i, _k in enumerate(['1종', '2종', '3종', '4종', '5종'], 1):
+            _sub, _items = _N.JONG[_k]
+            _li = ''.join('<li>%s</li>' % _html.escape(_t) for _t in _items)
+            _bl.append('<div class="jn k%d"><div class="jnh"><b>%s</b><span>%s</span><em>%d개</em></div><ul class="jnl">%s</ul></div>'
+                       % (_i, _k, _html.escape(_sub), len(_items), _li))
+        _dr = ''.join('<tr><td class="c2">%s</td><td class="hi2">%s</td><td>%s</td></tr>'
+                      % (_html.escape(_a), _html.escape(_b), _html.escape(_c)) for _a, _b, _c in _N.DIFF)
+        _p1 = ('<table class="bcw"><tbody><tr>%s</tr></tbody></table>'
+               '<div class="jsub">종별 전체 목록</div><div class="jnwrap">%s</div>') % (''.join(_cards), ''.join(_bl))
+        _p2 = ('<div class="jsub">★ 회사마다 갈리는 것 — 이것만 외우면 된다</div>'
+               '<table class="jt jdf"><thead><tr><th>수술</th><th>유리한 쪽</th><th>나머지</th></tr></thead><tbody>%s</tbody></table>'
+               '<div class="jtn">%s</div>') % (_dr, _html.escape(_N.FOOT))
+        return (_p1, _p2)
+
+    def _jong_cmp_page():
+        try:
+            import jongsul_cmp as _C
+        except Exception as _e:
+            print('[v748 종수술비교] 모듈 없음', _e); return ''
+        _th = ''.join('<th class="cc">%s</th>' % _html.escape(_c) for _c in _C.CO)
+        _tr = []
+        for _nm, _no, _vals in _C.ROWS:
+            _tds = ''.join('<td class="cc %s">%s</td>'
+                           % (('hi' if _v.startswith('★') else ('q' if _v == '?' else '')), _html.escape(_v))
+                           for _v in _vals)
+            _tr.append('<tr><td class="c2">%s</td><td class="no">%s</td>%s</tr>' % (_html.escape(_nm), _html.escape(_no), _tds))
+        return ('<table class="jt jcm"><thead><tr><th>수술</th><th class="no">항</th>%s</tr></thead><tbody>%s</tbody></table>'
+                '<div class="jtn">%s</div><div class="jtn">%s</div>') % (_th, ''.join(_tr), _html.escape(_C.NOTE), _html.escape(_C.FOOT))
+
+    def _jong_sum_page():
+        try:
+            import jongsul_sum as _S
+        except Exception as _e:
+            print('[v747 종수술요약] 모듈 없음', _e); return ''
+        _c = ''.join('<td class="jsx k%d"><div class="jck">%s</div><div class="jcs">%s</div><div class="jce">%s</div></td>'
+                     % (_i + 1, _html.escape(_k), _html.escape(_t), _html.escape(_ex))
+                     for _i, (_k, _t, _ex) in enumerate(_S.CARDS))
+        _r = ''.join('<tr><td class="co">%s</td><td class="%s">%s</td><td class="mm">%s</td><td class="mm">%s</td><td class="%s">%s</td><td class="src">%s</td></tr>'
+                     % (_html.escape(_co), ('chk' if _ak.startswith('[') else 'ty life'), _html.escape(_ak),
+                        _html.escape(_h), _html.escape(_tb),
+                        ('chk' if _pay.startswith('[확인]') else 'pay'), _html.escape(_pay), _html.escape(_sr))
+                     for _co, _ak, _h, _tb, _pay, _sr in _S.COS)
+        _body = ('<table class="jsc"><tbody><tr>%s</tr></tbody></table><div class="jtn">%s</div>'
+                 '<table class="jt js"><thead><tr><th>회사</th><th>약관 계열</th><th>제왕절개만출술(판별)</th><th>분류표 구성</th><th>지급방식</th><th>근거</th></tr></thead><tbody>%s</tbody></table>'
+                 '<div class="jtn">%s</div>') % (_c, _html.escape(_S.NOTE), _r, _html.escape(_S.FOOT))
+        return _body
+
+    def _jong_txt_pages():
+        try:
+            import jongsul_txt as _T
+        except Exception as _e:
+            print('[v747 종수술글자] 모듈 없음', _e); return {}
+        _P = {}
+        for _co, _d in _T.JONG_TXT.items():
+            _tb = ['<table class="jt"><thead><tr><th class="c1">구분</th><th class="c2">수술명</th><th class="c3">종류</th></tr></thead><tbody>']
+            for _g, _items in _d['groups']:
+                for _i, (_nm, _k) in enumerate(_items):
+                    _tb.append('<tr%s><td class="c1">%s</td><td class="c2">%s</td><td class="c3">%s</td></tr>'
+                               % (' class="gtop"' if _i == 0 else '',
+                                  _html.escape(_g) if _i == 0 else '', _html.escape(_nm), _html.escape(_k)))
+            _tb.append('</tbody></table>')
+            for _t in _d.get('notes', []): _tb.append('<div class="jtn">%s</div>' % _html.escape(_t))
+            for _ttl, _key, _nkey in (('2. 악성신생물 치료목적의 수술', 'aks', 'aksn'),
+                                      ('3. 악성신생물 근치·두개내신생물 근치 방사선 조사 분류표', 'bang', 'bangn')):
+                if not _d.get(_key): continue
+                _tb.append('<div class="jsub">%s</div><table class="jt"><tbody>' % _ttl)
+                for _nm, _k in _d[_key]:
+                    _tb.append('<tr class="gtop"><td class="c2" colspan="2">%s</td><td class="c3">%s</td></tr>' % (_html.escape(_nm), _html.escape(_k)))
+                _tb.append('</tbody></table>')
+                for _t in _d.get(_nkey, []): _tb.append('<div class="jtn">%s</div>' % _html.escape(_t))
+            _P[_co] = ''.join(_tb)
+        return _P
+
+    def _jong_pages():
+        try:
+            import jongsul_b64 as _J
+        except Exception as _e:
+            print('[v746 종수술] 모듈 없음', _e); return ''
+        _TPL = ('<div class="pg">\n'
+                ' <div class="top"><div class="eb">MAKEONE · 보험 인포메이션</div>\n'
+                '  <div class="nm"><b>1~5종 수술분류표</b> · %s</div>\n'
+                '  <div class="pgn"><b>@@PN@@</b>종수술 분류표</div><div class="bar"></div></div>\n'
+                ' <div class="body">\n'
+                '  <div class="sect">1~5종 수술분류표 <span>%s · 약관 원문 캡처 %s · 상담용 참고자료</span></div>\n'
+                '  <div class="jwrap">%s</div>\n'
+                ' </div>\n'
+                ' <div class="ft"><b>MAKEONE 보장분석 자동화</b><span class="r">1~5종 수술분류표 · %s · @@PN@@ / @@TPG@@</span></div>\n'
+                '</div>')
+        _COL_MM, _PAGE_MM = 56.0, 705.0      # 3단 × 235mm — 원본이 좁고 긴 표 조각이라 3단이 가장 촌촌하다      # 단 폭 86mm · 한 쪽 = 2단 × 235mm
+        _TX = _jong_txt_pages()
+        _out = []
+        _sum = _jong_sum_page()
+        if _sum:
+            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
+                        % ('한 눈에 보는 1~5종', '9사 요약', '생·손보 · 분류표 · 지급방식', _sum, '요약'))
+        _new = _jong_new_page()
+        if _new:
+            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
+                        % ('신입용 보상별 정리 (1/2)', '1~5종 보상별', '종별로 묶은 수술 72개', _new[0], '신입용'))
+            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
+                        % ('신입용 보상별 정리 (2/2)', '회사마다 갈리는 것', '도표 5개만 외우면 된다', _new[1], '신입용'))
+        _cmp = _jong_cmp_page()
+        if _cmp:
+            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
+                        % ('회사별 보상 비교', '같은 수술 · 9사 종수', '★는 다른 값 · ?는 원본 미확인', _cmp, '비교'))
+        for _co in _J.JONG_ORDER:
+            if _co in _TX:                               # ★v747 글자 표가 있는 회사는 그것을 쓴다
+                _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"') % (_html.escape(_co), _html.escape(_co), '약관 원문 전사(글자 표)', _TX[_co], _html.escape(_co)))
+                continue
+            _imgs = _J.JONG.get(_co) or []
+            if not _imgs: continue
+            _pages, _cur, _acc = [], [], 0.0
+            for _w, _h, _b in _imgs:                       # 표 조각 높이를 재서 쌓는다 — 한 쪽에 생족 밀어넣으면 잘린다
+                _mm = (_h / float(_w or 1)) * _COL_MM + 3.0
+                if _cur and _acc + _mm > _PAGE_MM:
+                    _pages.append(_cur); _cur, _acc = [], 0.0
+                _cur.append(_b); _acc += _mm
+            if _cur: _pages.append(_cur)
+            _e2 = _html.escape(_co)
+            for _k, _pg in enumerate(_pages, 1):
+                _cells = ''.join('<div class="jcell"><img src="data:image/jpeg;base64,%s"></div>' % _b for _b in _pg)
+                _sub = ('%d장 중 %d~%d' % (len(_imgs), sum(len(x) for x in _pages[:_k-1]) + 1,
+                                            sum(len(x) for x in _pages[:_k]))) if len(_pages) > 1 else ('%d장' % len(_imgs))
+                _out.append(_TPL % (_e2 + ('' if len(_pages) == 1 else ' (%d/%d)' % (_k, len(_pages))), _e2, _sub, _cells, _e2))
+        return '\n'.join(_out)
+
     heart_chart = _fullpage(26,'① 손해보험 (1/4)', ['한화손해보험','DB손해보험'], _n8) + '\n' + \
                   _fullpage(27,'② 손해보험 (2/4)', ['KB손해보험','현대해상'], _n8b) + '\n' + \
                   _fullpage(28,'③ 손해보험 (3/4)', ['NH농협손해보험','삼성화재 (허혈성심장질환)','메리츠화재 (허혈성심장질환)'], _n9) + '\n' + \
                   _fullpage(29,'④ 손해보험 (4/4)', ['흥국화재','롯데손해보험'], _n8b)
+    _jong_html = _jong_pages()      # ★v746 제171조
     # ★badge-5 담보별: 상단 박스 제거 → 뇌졸증·뇌출혈·급성심근경색 보유금액을 질병코드 표 행 안에 직접 기재(지점장 2026.07.07)
     p5box=''
     _amt_brain={}; _amt_heart={}; _GENSLOT=set()
@@ -5111,6 +5317,7 @@ body {{ color:{INK}; }}
 
 {_ga_html}
 {heart_chart}
+{_jong_html}
 <!-- P-CW1: 암 치료 용어 (2단 · 관혈/비관혈 · 전행 1줄) --></body></html>'''
     # ★재무 페이지 본문 = 고객 데이터에서 생성(제45조). 박아두면 다른 고객에게 남의 값이 나간다.
     try:
@@ -5156,7 +5363,7 @@ body {{ color:{INK}; }}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v745-paycycle-20260918</div>'
+    _VSTAMP = '<div class="vstamp">v750-jongdesign-20260918</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
