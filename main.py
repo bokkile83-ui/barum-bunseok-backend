@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v750-jongdesign-20260918'
+VSTAMP = 'v751-appkey-20260919'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1448,6 +1448,8 @@ _STRUCT_SELFTEST = [
     ('제33조 실행마다정독','main.py',          r'_doc_read\(tag=.analyze.\)', True),
     ('제34조 각인1곳',   'main.py',            r"^VSTAMP = 'v\d", True),
     ('제35조 zip검증',   'main.py',            r'def zip_selfcheck', True),
+    # ★v751 제176조 — 앱 잠금키는 서버가 쥔다(메디케어 /appkey). 이 줄이 사라지면 앱 파일이 다시 키를 품게 된다.
+    ('제176조 앱키서버', 'main.py',            r"@app\.post\('/appkey'\)", True),
     # ★v475 제83조 — 갱신 담보 색은 계약 루프 끝에서 확정한다(제5조 B).
     ('제83조 갱신담보색', 'main.py',            r'_blue_r', True),
     ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
@@ -11123,6 +11125,54 @@ async def hub_verify(request: Request):
 
 @app.options('/verify')
 def hub_verify_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+# ★v751 제176조 — 앱 잠금키를 서버가 쥔다 (지점장 2026.09.19 「해킹강화」)
+#   예전 메디케어는 화면 파일 안에 잠금키가 들어 있었다 → 소스를 열면 서버를 거치지 않고 열 수 있었다.
+#   이제 키는 이 서버에만 있고, /verify 와 같은 판정(개인 번호·관리자 번호)을 통과한 사람에게만 내려준다.
+#   중지된 번호는 즉시 못 연다. 키는 환경변수 MEDI_KEY 로 바꿀 수 있다(바꾸면 앱도 새로 만들어야 한다).
+_APP_KEYS = {
+    'medicare': os.environ.get('MEDI_KEY') or 'MAKEONE-MEDICARE-SERVERAUTH-2026',
+}
+
+async def _appkey_judge(request: Request):
+    try:
+        j = await request.json()
+    except Exception:
+        j = {}
+    nm = str(j.get('name') or '').strip(); cd = str(j.get('code') or '').strip()
+    ap = str(j.get('app') or '').strip().lower()
+    if ap not in _APP_KEYS:
+        return None, JSONResponse({'ok': False, 'why': '알 수 없는 앱입니다'}, headers=_HUB_CORS)
+    if cd == ADMIN_PW:
+        return (_APP_KEYS[ap], True, nm), None
+    if cd == PW:
+        return (_APP_KEYS[ap], False, nm), None
+    ok, mnm, why = _member_check(cd)
+    if not ok:
+        return None, JSONResponse({'ok': False, 'why': why}, headers=_HUB_CORS)
+    if nm and mnm and re.sub(r'\s', '', nm) != re.sub(r'\s', '', mnm):
+        return None, JSONResponse({'ok': False, 'why': '이름과 번호가 맞지 않습니다'}, headers=_HUB_CORS)
+    return (_APP_KEYS[ap], False, mnm or nm), None
+
+@app.post('/appkey')
+async def hub_appkey(request: Request):
+    got, err = await _appkey_judge(request)
+    if err is not None:
+        return err
+    k, admin, nm = got
+    try:
+        c = _db()
+        if c:
+            with c, c.cursor() as q:
+                q.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'appkey')", ('', nm or ''))
+            c.close()
+    except Exception:
+        pass
+    return JSONResponse({'ok': True, 'k': k, 'admin': admin, 'name': nm or ''}, headers=_HUB_CORS)
+
+@app.options('/appkey')
+def hub_appkey_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
 @app.post('/issue')
