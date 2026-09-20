@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v751-appkey-20260919'
+VSTAMP = 'v752-fxtoday-20260919'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1450,6 +1450,8 @@ _STRUCT_SELFTEST = [
     ('제35조 zip검증',   'main.py',            r'def zip_selfcheck', True),
     # ★v751 제176조 — 앱 잠금키는 서버가 쥔다(메디케어 /appkey). 이 줄이 사라지면 앱 파일이 다시 키를 품게 된다.
     ('제176조 앱키서버', 'main.py',            r"@app\.post\('/appkey'\)", True),
+    # ★v752 제177조 — 달러계산기용 오늘 환율·기준금리. 이 줄이 사라지면 달러계산기가 환율을 못 받는다.
+    ('제177조 오늘환율', 'main.py',            r"@app\.get\('/fx/today'\)", True),
     # ★v475 제83조 — 갱신 담보 색은 계약 루프 끝에서 확정한다(제5조 B).
     ('제83조 갱신담보색', 'main.py',            r'_blue_r', True),
     ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
@@ -11173,6 +11175,54 @@ async def hub_appkey(request: Request):
 
 @app.options('/appkey')
 def hub_appkey_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+# ★v752 제177조 — 오늘 달러 환율·미국 기준금리 (달러계산기 전용)
+#   앱이 바깥 사이트를 직접 부르면 CORS·차단에 걸린다 → 서버가 대신 받아서 10분간 들고 있는다.
+#   환율 = exchangerate.host / open.er-api.com (둘 중 먼저 되는 것) · 기준금리 = FRED 공개 CSV(DFEDTARU).
+#   전부 실패하면 ok:false 를 준다. 앱은 그때 수기로 넣게 되어 있다(숫자를 지어내지 않는다).
+_FX_CACHE = {'t': 0, 'v': None}
+
+@app.get('/fx/today')
+async def fx_today(fresh: int = 0):
+    import time as _t
+    now = _t.time()
+    if not fresh and _FX_CACHE['v'] and now - _FX_CACHE['t'] < 600:
+        return JSONResponse(_FX_CACHE['v'], headers=_HUB_CORS)
+    out = {'ok': False}
+    usd = None; fed = None
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as cl:
+            for url, pick in (
+                ('https://open.er-api.com/v6/latest/USD', lambda j: (j.get('rates', {}).get('KRW'), 'open.er-api.com', (j.get('time_last_update_utc') or '')[5:16])),
+                ('https://api.exchangerate.host/latest?base=USD&symbols=KRW', lambda j: (j.get('rates', {}).get('KRW'), 'exchangerate.host', j.get('date') or '')),
+            ):
+                try:
+                    r = await cl.get(url)
+                    v, src, at = pick(r.json())
+                    if v:
+                        usd = {'v': round(float(v), 2), 'src': src, 'at': at}
+                        break
+                except Exception:
+                    continue
+            try:
+                r = await cl.get('https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFEDTARU')
+                rows = [x for x in r.text.strip().split('\n') if x][1:]
+                last = rows[-1].split(',')
+                fed = {'v': float(last[1]), 'src': 'FRED DFEDTARU', 'at': last[0]}
+            except Exception:
+                fed = None
+    except Exception:
+        pass
+    if usd:
+        out = {'ok': True, 'usdkrw': usd}
+        if fed:
+            out['fed'] = fed
+        _FX_CACHE['t'] = now; _FX_CACHE['v'] = out
+    return JSONResponse(out, headers=_HUB_CORS)
+
+@app.options('/fx/today')
+def fx_today_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
 @app.post('/issue')
