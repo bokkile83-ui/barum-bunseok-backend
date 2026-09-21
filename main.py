@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v752-fxtoday-20260919'
+VSTAMP = 'v755-silsongate-20260921'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1452,6 +1452,12 @@ _STRUCT_SELFTEST = [
     ('제176조 앱키서버', 'main.py',            r"@app\.post\('/appkey'\)", True),
     # ★v752 제177조 — 달러계산기용 오늘 환율·기준금리. 이 줄이 사라지면 달러계산기가 환율을 못 받는다.
     ('제177조 오늘환율', 'main.py',            r"@app\.get\('/fx/today'\)", True),
+    # ★v753 제178조 — 운전자 6행은 규칙이 최종 판정. 이 줄이 사라지면 LLM 이 민사소송법률비용·부상치료비(1~7급)를 다시 끌어온다.
+    ('제178조 운전자LLM차단', 'main.py',       r"if std in _DRIVER_RULE_ONLY:", True),
+    # ★v754 제179조 — 1-8종 세트+종번호는 8칸 슬래시. 이 줄이 사라지면 8줄이 한 숫자로 더해진다(700).
+    ('제179조 1-8종슬래시', 'main.py',         r"if std in jong8_acc and 1 <= jong <= 8:", True),
+    # ★v755 제180조 — 실손 계약이 아니면 엑셀 실손 5행에 넣지 않는다. 사라지면 실손 없는 고객에 5/0/0 이 찍힌다.
+    ('제180조 실손칸 계약게이트', 'main.py',   r"if std in _SILSON5:", True),
     # ★v475 제83조 — 갱신 담보 색은 계약 루프 끝에서 확정한다(제5조 B).
     ('제83조 갱신담보색', 'main.py',            r'_blue_r', True),
     ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
@@ -6596,6 +6602,12 @@ def inject_sum_cache(path):
         print(f'[INJECT_CACHE_ERR] {_e}')
         return False
 
+# ★v755 제180조 — 마스터 「실손」 구분 5행으로 가는 표준명(트리오는 기재 전 표준명 3개로 온다).
+_SILSON5 = ('입원', '통원', '약값', 'MRI', '도수치료', '비급여주사', 'MRI/도수치료/비급여주사', '상해의료비')
+
+# ★v753 제178조 — 운전자 6행은 규칙(resolve_kw)이 최종 판정. LLM 폴백이 이 행으로 보낸 담보는 받지 않는다.
+_DRIVER_RULE_ONLY = ('합의금', '6주미만', '변호사', '대인', '대물', '자부상')
+
 # ★ LLM 매핑 엔진 — 마스터 표준 담보명에 의미기반 매핑 (앱 자동화 핵심)
 def load_std_dambo(ws):
     out=[]
@@ -6624,7 +6636,7 @@ def llm_resolve(raw_names, std_list):
         "- 뇌혈관수술=뇌혈관수술비, 항암방사선/약물치료비=항암방사선약물, 암수술=암수술\n"
         "- 화상 진단비='화상진단비'(화상 구분 행), 중대한화상·부식=중증화상진단비\n"
         "- 생명보험 종신 주계약/기본계약(사망보장)=일반사망\n"
-        "- 운전자: 벌금(대인)=대인, 벌금(대물)=대물, 교통사고처리지원금(중상해)=합의금, 처리지원금(6주미만)=6주미만, 변호사비=변호사, 자동차(사고)부상보장=자부상\n"
+        "- 운전자(대인·대물·합의금·6주미만·변호사·자부상)는 매핑하지 말 것=null. 규칙 엔진이 이미 판정했다(민사소송법률비용·부상치료비 1~7급/8~11급 등은 제외 담보).\n"
         "- 표준목록에 자리 없는 담보(예 크론병·다발경화증·장기이식 등)=null (행 추가 금지)\n"
         "- 심장담보 질병코드 분류: 협심증(I20)=협심증, 급성심근경색(I21~22)=급성심근경색, "
         "부정맥(I47~49)=부정맥, 심부전(I50)=심부전, 심내막·심근·심장막염=염증. "
@@ -7131,6 +7143,14 @@ def build_excel(data, out):
         # ★v378 종번호 없는 단일금액 종수술(질병종수술·상해종수술·파워수술보장 등) 수집칸.
         #   슬래시 칸(jong_acc)과 <b>같은 행</b>을 쓰므로 둘이 동시에 차면 [확인]큐로 보낸다(조용한 덮어쓰기 차단).
         jong_lump = {'상해 종수술비(1-5종)':0, '질병 종수술비(1-5종)':0}
+        # ★★★★★v754 제179조 (지점장 지시 2026.09.21 DB 참좋은운전자 「1-8종이 하나도 표기가 안 된다 · 1-5종처럼 표기하라」):
+        #   [실측] `상해1-8종수술비(1종,…)`~`(8종,…)` 8줄 = 10/10/10/20/50/200/200/200.
+        #          규칙은 8줄 다 `상해 종수술비(1-8종)` + 종번호로 맞게 읽었는데, 종별 칸(jong_acc)이 <b>1-5종 두 행만</b> 받아
+        #          1-8종은 일반 숫자 칸으로 떨어져 <b>8줄이 한 숫자로 더해졌다(700)</b> — 대표값도 슬래시도 아닌 값.
+        #   [고침] 세트 표기(1-7·1-8·1-9종) + 종번호가 있는 담보는 <b>(1-8종) 행에 8칸 슬래시</b>로 적는다(1-5종과 같은 방식).
+        #   ★종번호 없는 1-8종(미래에셋 1-7종 대표값·삼성 `상해8종수술비` 줄 단위 = 제41조 대표 max)은 종전 그대로다.
+        jong8_acc  = {'상해 종수술비(1-8종)':[0]*8, '질병 종수술비(1-8종)':[0]*8}
+        jong8_blue = {'상해 종수술비(1-8종)':False, '질병 종수술비(1-8종)':False}
 
         # ★ CI/리빙케어/GI 본체 분해 (지점장 지시 2026.06.28): 주계약 최대=사망, 본체=사망의 80%/50%,
         #   본체를 중대한암·중대한뇌졸증·중대한급성심근에 동일 기재 / 사망 전액=일반사망 / 판별실패=주계약 [확인].
@@ -7530,6 +7550,18 @@ def build_excel(data, out):
                     m = LLMMAP.get(raw) or {}
                     std = m.get('std')
                     if not jong: jong = m.get('jong', 0) or 0
+                    # ★★★★★v753 제178조 (지점장 실측 2026.09.21 KB 운전자 「두개 합산이 된다 · 엑셀지침 어김」):
+                    #   [실측] 엑셀 변호사 <b>7,500</b> = `자동차사고 변호사선임비용` 5,000 + `민사소송법률비용` <b>2,500</b>.
+                    #          엑셀 자부상 <b>120</b> = `자동차부상치료비(8-11급)` 20 + `자동차부상치료비II (1~7급)` 100.
+                    #   [원인] 규칙(`resolve_kw`)은 셋 다 <b>정확히 제외</b>(None)했다 — 직접 호출로 확인.
+                    #          그런데 「규칙이 못 잡은 것만 LLM 폴백」이 <b>「규칙이 일부러 뺀 것」까지</b> LLM 에 넘겼고,
+                    #          Haiku 가 민사소송법률비용→변호사, 8-11급·1~7급→자부상으로 <b>되끌어왔다</b>(v30m 수술·일당과 같은 구멍).
+                    #          API 키가 죽어 있던 동안은 LLM 이 꺼져 있어 안 보였고, 2026.09.20 키 교체 후 드러났다.
+                    #   [고침] <b>운전자 6행은 규칙이 최종 판정</b>이다(§8.6). LLM 이 이 행으로 보낸 것은 받지 않고 [확인]큐에 남긴다.
+                    #          자부상 = 14급 포함 밴드만 · 변호사 = 담보명에 '변호사'가 있을 때만 — 둘 다 규칙에 이미 있다.
+                    if std in _DRIVER_RULE_ONLY:
+                        print(f"[v753 제178조] LLM 운전자 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
+                        std = None; m = {}
             else:
                 m = {}
             if std and _isci_prod(ct['product'], ct.get('company')):
@@ -7549,6 +7581,21 @@ def build_excel(data, out):
             _DAILY = ('질병일당','상해일당','간병인','간병인지원일당','간호통합병동','종합병원 질병입원일당','종합병원 상해입원일당',
                       '1인실 상급병원','1인실 종합병원','질병중환자실','상해중환자실',
                       '질병수술일당','상해수술일당','암일당')
+            # ★★★★★v755 제180조 (지점장 2026.09.21 「실비가 없는데 5/0/0 이라고 표기된다 · 오류다」 → 「<b>실손없는데 엑셀에넣지마라</b>」):
+            #   마스터 「실손」 구분 5행(입원·통원·약값·MRI/도수치료/비급여주사·상해의료비)은 <b>실손 계약의 담보만</b> 적는다.
+            #   [실측] 규칙이 담보명의 'MRI' 글자만 보고 <b>정액 담보</b>(MRI촬영검사비 5 등)를 3대 비급여 칸에 넣어
+            #          실손이 없는 고객 엑셀에 `5/0/0` 이 찍혔다. v701 은 「MRI…지원」 글자만, v381 은 세부보충만 막았다.
+            #   [고침] <b>글자가 아니라 계약으로</b> 막는다 — 5행 전부, 규칙·LLM 어느 경로로 왔든 여기 한 곳에서.
+            #          실손 계약 = 상품·회사명에 '실손' 또는 그 계약 담보에 실손·의료비(`_is_silson_like`, v125·v381 과 같은 판정).
+            #          담보명 자체에 실손·의료비·비급여가 있으면 그 담보가 곧 실손이다. 둘 다 아니면 [확인]큐(누락 금지).
+            if std in _SILSON5:
+                _rw180 = re.sub(r'\s', '', str(raw))
+                if not (_is_silson_like(ct.get('company',''), ct.get('product',''), ct.get('dambo'))
+                        or any(_k in _rw180 for _k in ('실손','의료비','비급여'))):
+                    unmapped.append((col, ct['company'], raw, amt,
+                                     f'[확인] 실손 계약이 아니다 — 엑셀 실손 칸({std})에 기재하지 않는다'))
+                    print(f"[v755 제180조] 실손 아님 → 실손 칸 거절: {ct.get('company','')} '{raw}' {amt} → {std}")
+                    continue
             if std in _DAILY and isinstance(amt,(int,float)) and amt > 100:
                 unmapped.append((col, ct['company'], raw, amt,
                                  f'[확인] 일당 행에 100만원 초과({amt}) — 진단비·수술비 오매핑 의심'))
@@ -7607,6 +7654,11 @@ def build_excel(data, out):
                     ndae_acc[_ndg-1] = max(ndae_acc[_ndg-1], amt)
                     surg_trace.append((ct['company'], raw, f'n대수술비 {_ndg}등급 슬롯', amt))
                     continue
+            if std in jong8_acc and 1 <= jong <= 8:      # ★v754 제179조 — 1-8종 종별 슬래시
+                jong8_acc[std][jong-1] += amt
+                if blue: jong8_blue[std] = True
+                surg_trace.append((ct['company'], raw, f'{std} {jong}종 슬롯', amt))
+                continue
             if std in jong_acc and 1 <= jong <= 5:
                 jong_acc[std][jong-1] += amt
                 if blue: jong_blue[std] = True
@@ -7728,6 +7780,19 @@ def build_excel(data, out):
                 if r:
                     ws.cell(r,col).value = '/'.join(str(x) for x in use)
                     ws.cell(r,col).font = BL if (gen or jong_blue[nm]) else BK
+
+        for nm8, vals8 in jong8_acc.items():     # ★v754 제179조 — (1-8종) 행 8칸 슬래시 기재
+            if not any(vals8): continue
+            r8 = nm2r.get(nm8)
+            if not r8: continue
+            _cur8 = ws.cell(r8, col).value
+            if _cur8 not in (None, '', 0):
+                # 같은 계약·같은 행에 이미 다른 값(대표값·v29v 슬래시)이 있다 → 조용히 덮지 않는다(v378 과 같은 원칙).
+                unmapped.append((col, ct['company'], f'{nm8}(종별 슬래시)', '/'.join(str(x) for x in vals8),
+                                 '[확인] 같은 계약에 1-8종 대표값과 종별 슬래시가 동시 존재 — 병합 규칙 없음'))
+                continue
+            ws.cell(r8, col).value = '/'.join(str(x) for x in vals8)
+            ws.cell(r8, col).font = BL if (gen or jong8_blue[nm8]) else BK
 
         if any(ndae_acc):   # ★v386 116대 수술비 등급 슬래시 기재
             _rnd = nm2r.get('n대수술비') or nm2r.get('120대수술비')
@@ -9120,6 +9185,9 @@ def read_excel_totals(path):
                 if _rg.endswith('C00000'): _red=True
                 else: return False
             return _red and _any
+        # ★v754 제179조 — (1-8종) 끝열이 8칸 슬래시면 PPT 에도 슬래시 그대로 넘긴다(대표값은 out 에 그대로 둔다).
+        if nm in ('상해 종수술비(1-8종)','질병 종수술비(1-8종)') and isinstance(endv,str) and '/' in endv:
+            splits['__J8__'+nm] = endv
         if nm == '상해 종수술비(1-5종)' and isinstance(endv,str) and '/' in endv:
             for k,p in enumerate(endv.split('/')[:5]):
                 try: ss[k]=int(p)
@@ -9196,6 +9264,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     _gensum={}; _nonsum={}; _propsum={}   # ★v370 제안(레드)
     if splits:
         for _st,_sv in splits.items():
+            if isinstance(_sv, str): continue          # ★v754 '__J8__…' = 1-8종 슬래시 문자열(분할값 아님)
             _g,_n = _sv[0],_sv[1]; _p = _sv[2] if len(_sv)>2 else 0
             if _g: _gensum[_st]=_g
             if _n: _nonsum[_st]=_n
@@ -9466,8 +9535,18 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     # ★v337 1-7/1-8/1-9종 = 폼 `1~7종 수술비 :` 칸에 대표값(최댓값)
     # ★v351: 엑셀 '120대수술비'를 분석지 PPT `_____대 수술 :` 칸에도 기재(질병 박스 TextBox 17).
     if g('n대수술비'): pvl('TextBox 17','대 수술','n대수술비')
-    if g('상해 종수술비(1-8종)'): pvl('TextBox 19','1~7종 수술비','상해 종수술비(1-8종)')
-    if g('질병 종수술비(1-8종)'): pvl('TextBox 17','1~7종 수술비','질병 종수술비(1-8종)')
+    # ★v754 제179조 — 엑셀이 8칸 슬래시면 분석지 PPT 도 슬래시 그대로(1-5종과 같은 표기). 대표값이면 종전 pvl.
+    for _k8, _bx8 in (('상해 종수술비(1-8종)','TextBox 19'), ('질병 종수술비(1-8종)','TextBox 17')):
+        _s8 = (splits or {}).get('__J8__'+_k8)
+        if isinstance(_s8, str) and _s8:
+            _sl8 = _slot(_bx8, '1~7종 수술비')
+            if not _sl8:
+                print(f'[PPT_MISS] 라벨없음 box={_bx8} label=1~7종 수술비 std={_k8}')
+            else:
+                _p8, _ri8, _c8 = _sl8
+                _seg(_p8.runs[_ri8], [(_p8.runs[_ri8].text[:_c8+1] + ' ' + _s8, _BLACK)])
+        elif g(_k8):
+            pvl(_bx8, '1~7종 수술비', _k8)
     for _hn in ('빈맥','염증','심근병증','심장판막'):
         if g(_hn): pvl('TextBox 심장4종', _hn, _hn)
     # ★★★★★v318 허혈성 진단비(TextBox 54) — <b>pv() 경로로 통일</b>(지점장 지시 2026.08.01).
@@ -9738,6 +9817,8 @@ def _autofit_ppt(by):
                 # ★★★v318 수술 1~5종 슬래시 줄 = <b>9pt</b>(지점장 지시 2026.08.01).
                 #   구 v50 정본 「슬래시 줄 6pt」는 <b>폐기</b> — 지점장 원문 "(40/80/600/2000/4800) → 글자포인트9".
                 _sz = 9.0 if ('/' in ptxt) else 10.0  # ★v318: 슬래시(1-5종) 9pt, 그 외 10pt
+                # ★v754 제179조 — 「1~7종 수술비 : 8칸 슬래시」 줄은 라벨과 값이 한 줄이라 9pt 로는 옆 「실손」 박스를 덮는다(렌더 실측) → 이 줄만 5.5pt.
+                if ('/' in ptxt) and ('1~7' in ptxt) and ptxt.count('/') >= 5: _sz = 5.5
                 for r in p.runs:
                     if r.text:
                         try: r.font.size = Pt(_sz)
