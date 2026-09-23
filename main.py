@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v755-silsongate-20260921'
+VSTAMP = 'v756-formsplit-20260923'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1458,6 +1458,8 @@ _STRUCT_SELFTEST = [
     ('제179조 1-8종슬래시', 'main.py',         r"if std in jong8_acc and 1 <= jong <= 8:", True),
     # ★v755 제180조 — 실손 계약이 아니면 엑셀 실손 5행에 넣지 않는다. 사라지면 실손 없는 고객에 5/0/0 이 찍힌다.
     ('제180조 실손칸 계약게이트', 'main.py',   r"if std in _SILSON5:", True),
+    # ★v756 제181조 — 통짜 주요치료비는 연간 총한도, 형별 표로 치료별 금액을 낸다. 사라지면 BOHUM 4칸에 7,000 이 통째로 든다.
+    ('제181조 형별분해', 'main.py',           r"def jean_form_split\(", True),
     # ★v475 제83조 — 갱신 담보 색은 계약 루프 끝에서 확정한다(제5조 B).
     ('제83조 갱신담보색', 'main.py',            r'_blue_r', True),
     ('제82조 상품명절단', 'main.py',            r'def _clean_product', True),
@@ -3716,6 +3718,11 @@ def jean_split_tag(name):
     t = re.sub(r'\s', '', str(name or ''))
     if '주요치료' not in t: return None
     if re.search(r'\(특정중증치료[^)]*\)?[^()]*\)?\s*$', t): return {'organ': '공통', 'treat': '특정중증'}   # 4칸 어디에도 안 들어간다(확인)
+    # ★v756 제181조 현대 양식: `암주요치료비Ⅲ(…)(항암호르몬치료)담보` · `(…)(중환자실입원)담보` — 괄호 접미로 치료가 갈린다.
+    #   (주요치료) 는 수술·약물·방사선 각각 가입금액이라 통짜(4칸 전부)로 둔다. 호르몬·중환자실은 4칸 밖 → 표시해서 adj 로 뺀다.
+    if '암주요치료' in t and '유사암주요' not in t:
+        if re.search(r'\(항암호르몬치료\)담보?$', t): return {'organ': '암', 'treat': '호르몬'}
+        if re.search(r'\(중환자실입원[^)]*\)담보?$', t): return {'organ': '암', 'treat': '암중환자실'}
     if '암주요치료' in t and '_' in t:           # ★v744 암 치료별 담보를 먼저 가른다(아래 순환계 규칙이 '중환자실'을 먼저 집지 않게)
         _ca = re.search(r'(암중환자실|암수술|항암방사선|항암호르몬약물|항암약물)', t.split('_', 1)[1])
         if _ca:
@@ -3741,6 +3748,45 @@ def jean_split_tag(name):
              '중환자실' if tr.startswith('중환자실') else '혈전제거' if tr.startswith('혈전제거') else '혈전용해')
     return {'organ': organ, 'treat': treat}
 
+
+# ★★★★★v756 제181조 (지점장 실측 2026.09.23 현대 제안서 「암수술시 7천 나온다 · 7천은 3형이고 3형이 암수술이면 1,000만원 — 넌 몽땅해서 7천을 잡았다 · 지침 오류」)
+#   통짜 주요치료비(비급여 주요치료비 7,000 등)는 <b>연간 총한도</b>이고, 약관 보장내용에 형별 표가 있다:
+#     암수술 (1형:500/2형:750/3형:1,000) · 항암약물 (…) 연1회 · 항암방사선 (…) 연1회 · ※연간 총 (1형:3천/2형:5천/3형:7천)
+#   가입금액이 총한도 어느 형인지로 형을 정하고, 치료별 금액을 items 로 낸다(organ=암 · treat 암수술/약물/방사선). BOHUM 은 이미 이 형식을 칸에 넣는다.
+#   원 담보는 형별 분해됨으로 표시(_FORM_SPLIT) → _adj742 가 액면(7,000)을 빼도록 한다. 표가 없으면 종전 그대로(액면 + 확인).
+_FORM_SPLIT = set()
+_FORM_NUM = re.compile(r'(\d[\d,]*)\s*(억|천만원|천|만원)?')
+def _form_won(t):
+    m = _FORM_NUM.search(t or '')
+    if not m: return 0
+    n = float(m.group(1).replace(',', '')); u = m.group(2) or '만원'
+    return int(n * 10000) if u == '억' else int(n * 1000) if u in ('천만원', '천') else int(n)
+_FORM_ROW = re.compile(r'\(\s*1\s*형\s*[:：]\s*([^/)]+)/\s*2\s*형\s*[:：]\s*([^/)]+)/\s*3\s*형\s*[:：]\s*([^)]+)\)')
+def jean_form_split(nm, amt, text):
+    """형별 표 → [(treat, 금액, 지급방식)] · 형 판정 실패면 []"""
+    t = re.sub(r'\s', '', text or '')
+    rows = []
+    _prev = 0
+    for m in _FORM_ROW.finditer(t):
+        lead = t[_prev:m.start()][-90:]; _prev = m.end()            # 앞 표와 이 표 사이 글이 이 표의 설명이다(괄호 포함)
+        a, b, c = m.group(1), m.group(2), m.group(3); tail = t[m.end():m.end() + 25]
+        vals = [_form_won(a), _form_won(b), _form_won(c)]
+        if '연간총' in lead or '총지급' in lead: rows.append(('총', vals, '')); continue
+        if re.search(r'유사암(?!제외)', lead) or '갑상선' in lead or '피부암' in lead: continue          # 유사암 수술·치료 행은 4칸 아님('유사암제외'는 일반암 행)
+        if '암수술' in lead: rows.append(('암수술', vals, '매회' if not re.search(r'연간\d*회', tail) else '연1회'))
+        elif '항암방사선' in lead: rows.append(('방사선', vals, '연1회'))
+        elif '항암약물' in lead or '항암호르몬' in lead: rows.append(('약물', vals, '연1회'))
+    tot = [r for r in rows if r[0] == '총']
+    if not tot or not any(r[0] != '총' for r in rows): return []
+    try: a = int(float(str(amt).replace(',', '')))
+    except Exception: return []
+    tv = tot[0][1]
+    if a in tv: idx = tv.index(a)
+    else:
+        near = min(range(3), key=lambda i: abs(tv[i] - a))
+        if abs(tv[near] - a) > max(100, a * 0.05): return []
+        idx = near
+    return [(r[0], r[1][idx], r[2]) for r in rows if r[0] != '총' and r[1][idx] > 0]
 
 def jean_paymode(full, rows):
     out = []
@@ -3788,6 +3834,20 @@ def jean_paymode(full, rows):
                 elif _it['mode'] == '확인': _it['mode'] = '연1회'   # 제170조 기본값 — 주요치료비는 연간 1회 각각      # 치료별로 담보가 따로 있다 = 각각
             if not _it.get('treat') and _surg: _it['surg'] = _surg
             out.append(_it)
+            # ★v756 제181조 — 통짜 주요치료비에 형별 표가 있으면 치료별 금액으로 쪼갠다
+            if not _sp and _hits:
+                try:
+                    _i0 = _hits[-1]; _e0 = min(len(_lines), _i0 + 45)
+                    for j in range(_i0 + 1, _e0):
+                        if any(o in _norm[j] for o in _others): _e0 = j; break
+                    _win = '\n'.join(_lines[_i0:_e0])
+                    _fs = jean_form_split(nm, x.get('amt'), _win)
+                    if _fs:
+                        _FORM_SPLIT.add(re.sub(r'\s', '', nm))
+                        for _tr, _am, _md in _fs:
+                            out.append({'name': f'{nm}_{_tr}(형별)', 'amt': _am, 'mode': _md, 'organ': '암', 'treat': _tr, 'src': f'형별 표: 가입 {x.get("amt")} → {_tr} {_am}'})
+                        print(f'[v756 제181조] 형별 분해 {nm[:24]} 가입 {x.get("amt")} → ' + ', '.join(f'{a}={b}' for a, b, _ in _fs))
+                except Exception as _e756: print('[v756 제181조] 실패', _e756)
     except Exception as _e:
         print('[v741 지급방식] 실패', _e)
     if out: print('[v741 지급방식] ' + ' | '.join('%s=%s' % (o['name'][:18], o['mode']) for o in out))
@@ -3933,7 +3993,7 @@ def build_proposal_contract(pdf_bytes, fname=''):
                 except Exception: _s2 = None
                 if _s2 != _std: continue
                 _all.append(_f)
-                if ('통합치료' not in re.sub(r'\s', '', str(_n))) and not jean_split_tag(_n): _pure.append(_f)   # ★v743 치료별로 쪼개진 담보도 BOHUM이 칸별로 다시 넣는다
+                if ('통합치료' not in re.sub(r'\s', '', str(_n))) and not jean_split_tag(_n) and (re.sub(r'\s', '', str(_n)) not in _FORM_SPLIT): _pure.append(_f)   # ★v743 치료별로 쪼개진 담보도 BOHUM이 칸별로 다시 넣는다 · ★v756 형별 분해 담보도
             _agg = (lambda l: (max(l) if l else 0)) if _is_repmax(_std) else (lambda l: sum(l))
             _d = _agg(_all) - _agg(_pure)
             if _d > 0: _adj742[_std] = _d
