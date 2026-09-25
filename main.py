@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v756-formsplit-20260923'
+VSTAMP = 'v757-cform-20260925'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1689,6 +1689,7 @@ _STRUCT_SELFTEST = [
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
     ('제154조⑪ dl만료HTML',        'main.py',    r"headers=\{'Content-Disposition': 'inline'\}", True),
     ('제154조⑤ 달력서버저장',       'main.py',    r"@app\.post\('/hub/events'\)", True),
+    ('제184조 상담기록지저장',       'main.py',    r"@app\.post\('/hub/forms'\)", True),
     ('제0조0항 지점장4법',           'BARUM_DOCTRINE.md', r'비교엑셀은 절대 정답지니 더 추가 말자', True),
     ('제155조 산정특례정본',          'BARUM_DOCTRINE.md', r'심장은 뇌와 다르다', True),
     ('제156조 전이암정본',            'BARUM_DOCTRINE.md', r'전이암은 통합전이암이다', True),
@@ -11235,6 +11236,83 @@ async def hub_events_post(code: str = Form(''), events: str = Form('')):
 
 @app.options('/hub/events')
 def hub_events_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+# ★★★★★v757 제184조 (지점장 2026.09.25 「입력지 만들자 — 상담기록지 + 인포메이션 2쪽 · 입력·체크 · PDF · 인당 50개 저장」)
+#   통합앱 「상담기록지」 저장소 — 메모·달력과 같은 hub_notes 표, 키 `번호#CF`, 배열 50건 상한(오래된 것부터 잘림은 앱이 한다 — 서버는 50 초과면 거절)
+#   ★주민번호 뒷자리는 앱이 첫 자리만 남기고 보내며, 서버도 7자리 넘는 숫자열(뒷자리 통째)은 거절한다(평문 주민번호 저장 금지).
+def _hub_cf_key(own): return own + '#CF'
+_CF_RRN = re.compile(r'(?<!\d)\d{6}\s*-?\s*[1-8]\d{6}(?!\d)')
+
+@app.get('/hub/forms')
+def hub_forms_get(code: str = ''):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    key = _hub_cf_key(own)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v, to_char(updated,'YYYY-MM-DD HH24:MI') FROM hub_notes WHERE code=%s", (key,))
+                r = k.fetchone()
+                return JSONResponse({'ok': True, 'forms': json.loads(r[0]) if r and r[0] else [],
+                                     'updated': r[1] if r else None, 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v757 forms] DB 읽기 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    return JSONResponse({'ok': True, 'forms': allv.get(key) or [], 'updated': None, 'src': 'file'}, headers=_HUB_CORS)
+
+@app.post('/hub/forms')
+async def hub_forms_post(code: str = Form(''), forms: str = Form('')):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    try:
+        arr = json.loads(forms); assert isinstance(arr, list)
+        if len(arr) > 50:
+            return JSONResponse({'ok': False, 'error': '인당 50건까지 저장된다'}, headers=_HUB_CORS)
+        if len(forms) > 2_000_000:
+            return JSONResponse({'ok': False, 'error': '저장 용량 초과(2MB)'}, headers=_HUB_CORS)
+        def _strs(o):
+            if isinstance(o, str): yield o
+            elif isinstance(o, dict):
+                for v in o.values(): yield from _strs(v)
+            elif isinstance(o, list):
+                for v in o: yield from _strs(v)
+        if any(_CF_RRN.search(x) for x in _strs(arr)):   # 글자 값만 본다(저장 시각·id 숫자 13자리 오인 금지)
+            return JSONResponse({'ok': False, 'error': '주민번호 뒷자리 전체는 저장하지 않는다'}, headers=_HUB_CORS)
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
+    key = _hub_cf_key(own)
+    c = _db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) "
+                          "ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()", (key, forms))
+            return JSONResponse({'ok': True, 'n': len(arr), 'src': 'db'}, headers=_HUB_CORS)
+        except Exception as _e:
+            print('[v757 forms] DB 저장 실패:', str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception:
+        allv = {}
+    allv[key] = arr
+    json.dump(allv, open(_HUB_NOTES_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
+    return JSONResponse({'ok': True, 'n': len(arr), 'src': 'file'}, headers=_HUB_CORS)
+
+@app.options('/hub/forms')
+def hub_forms_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
 @app.post('/verify')
