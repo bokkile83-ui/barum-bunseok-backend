@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v757-cform-20260925'
+VSTAMP = 'v763-carecard-20260926'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1682,8 +1682,25 @@ _STRUCT_SELFTEST = [
     ('제154조① 간병인세부보충금지', 'main.py', r"_SEBU_WIN = \{\n\s*'상해사망','입원'", True),
     ('제154조① 사본동기화',        'main.py', r"_SEBU_WIN_682 = \{[^}]*'간병인'", False),
     ('제154조② 교통가드resolve2',  'main.py', r'v684 제154조 ① \(지점장 원문 2026\.09\.07', True),
-    ('제154조④ 간호통합한칸',      'report_weasy.py', r'v684 간호통합병동은 지원 칸 한 곳만', True),
+    ('제154조④ 간호통합한칸(제189조로 대체)', 'report_weasy.py', r'v684 「간호통합병동은 지원 칸 한 곳만」 대체', True),   # ★v763 제189조가 대체 — 이력 문구 확인
     ('제154조⑥ 결번감시',          'BARUM_DOCTRINE.md', r'제153조', True),
+    # ★v758 (지점장 2026.09.26 「★ 결번 2개 -> 이거 왜 떠있어?」·「지침. 메모리 통일 시키고 다시 점검」): 제182·183조는 메모리에만 있고 서버 지침서엔 없어 181→184 결번 2개·99% 였다
+    ('제182조 실손공제',            'BARUM_DOCTRINE.md', r'제182조 — 실손 통원은 공제를 항상 뺀다', True),
+    ('제183조 메디케어잠금',        'BARUM_DOCTRINE.md', r'제183조 — 메디케어 잠금 배치', True),
+    ('제185조 다빈치합산차단',      'main.py', r"if _tgt == '암수술':\n\s*_rdv759 = nm2r\.get\('다빈치로봇수술비'\)", True),
+    ('제185조 조문',                'BARUM_DOCTRINE.md', r'제185조 — 세부가입현황 암수술비 칸은 다빈치를 합쳐 싣는다', True),
+    ('제186조 질병우선',            'main.py', r"_pv760 == 'Q' and _nq760 == 'S'", True),
+    ('제186조 조문',                'BARUM_DOCTRINE.md', r'제186조 — 간병인·간호통합병동은 같은 계약에 질병·상해가 둘 다 있으면 질병', True),
+    ('제187조 인포분리',            'report_weasy.py', r"def _cut_info\(doc\)", True),
+    ('제187조 info.pdf',            'main.py', r"@app.get\('/info.pdf'\)", True),
+    ('제187조 조문',                'BARUM_DOCTRINE.md', r'제187조 — 인포메이션은 보장분석에서 떼어 서버가 1번만 그린다', True),
+    ('제188조 간병인20캡',          'main.py', r"if std == '간병인' and isinstance\(amt,\(int,float\)\) and amt > 20:", True),
+    ('제188조 조문',                'BARUM_DOCTRINE.md', r'제188조 — 간병인은 최대 20만원', True),
+    ('제189조 간호통합배정',        'report_weasy.py', r"'간호통합병동@지원':\['간호통합병동'\], '간호통합병동@사용':\['간호통합병동'\]", True),
+    ('제189조 사용카드',            'report_weasy.py', r"_wcard_fix_list\('간병인 사용','직접 고용 · 일당 10~20만',\['간병인 사용일당','간호통합병동@사용'\]\)", True),
+    ('제189조 조문',                'BARUM_DOCTRINE.md', r'제189조 — 간호통합병동은 금액으로 지원/사용 카드에 배정', True),
+    ('제190조 분할단위대조',        'report_pptx.py', r'_core763 in _SPT', True),
+    ('제190조 조문',                'BARUM_DOCTRINE.md', r'제190조 — 진단서 편집칸의 갱신\+비갱신 분할은 단위를 떼고 대조', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -7107,6 +7124,7 @@ def build_excel(data, out):
                                  _why + ' → <b>세부가입현황(계약별 가입정보)에서 대조</b>'))
     cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
     surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
+    _nurse_src760 = {}   # ★v760 제186조 (행,열)→ 'Q'질병/'S'상해 출처
     raw_by_std = {}   # ★v39 워크시트 담보명 카피: 표준명→원본담보명(최댓값 담보 기준)
     # ★★★★★v289 (지점장 지시 2026.07.31 "계속 반복이야 — 우선 원인 잡자")
     #   <b>반복의 구조적 원인</b>: 근거 수집이 `_WS_STD` 10개 담보에만 걸려 있어
@@ -7661,6 +7679,14 @@ def build_excel(data, out):
                 unmapped.append((col, ct['company'], raw, amt,
                                  f'[확인] 일당 행에 100만원 초과({amt}) — 진단비·수술비 오매핑 의심'))
                 continue
+            # ★★★★★v762 제188조 (지점장 2026.09.26 「간병인이 100만원이라고 나온다. 지침 추가하자 간병인은 최대 20만원이다」 · 조영선 흥국 실측):
+            #   흥국 `질병장기입원간병비 100` 두 건이 간병인 행에 100 으로 앉았다. 간병인 행은 <b>하루당 일당</b>이고 최대 20만원이다.
+            #   20만원을 넘는 값은 일당이 아니라 정액 간병비·진단비류 → 간병인 행에 넣지 않고 [확인]큐(누락 금지).
+            if std == '간병인' and isinstance(amt,(int,float)) and amt > 20:
+                unmapped.append((col, ct['company'], raw, amt,
+                                 f'[확인] 간병인은 최대 20만원(일당)인데 {amt} — 정액 간병비·오매핑 의심 (제188조)'))
+                print(f"[v762 제188조] {ct.get('company','')} '{raw}' {amt} → 간병인 행 거절(20만 초과)")
+                continue
             # ★★★★★v353 (지점장 지시 2026.08.02, 영구): <b>골절·화상 「등급별 100만↑ 제외」 규칙 폐기</b>.
             #   지점장 원문: 라이나 골절진단비II(치아파절포함) 1,000 · AXA 골절진단의료비용(치아파절제외) 1,000
             #   · AIG 골절진단의료비용 500 · Ⅲ 250 · 화상진단의료비용 500 → "<b>넣어줘</b>".
@@ -7789,6 +7815,24 @@ def build_excel(data, out):
                 # ★v693 (이화미 현대 정답지 2026.09.15): 일상생활배상책임이 (대인)·(대물) 두 담보로 갈라져 오면
                 #   같은 배상책임 한도다 → 합산(20,000) 금지 · <b>대표(max) 10,000</b>. 지점장 정답지 그대로.
                 _rep1 = _rep1 or (std == '일상배상책임')
+                # ★★★★★v760 제186조 (지점장 2026.09.26 「간호통합병동이 20만원으로 나온다.. ㅠㅠ」 · 조영선 DB 2504 실측):
+                #   별첨 = 간호간병통합서비스사용<b>질병</b>입원일당Ⅱ(1-180일) 7 · …사용<b>상해</b>입원일당(1-180일) 20 → 같은 행,
+                #   대표(max)가 <b>상해 20</b>을 잡았다. 정본 7(지점장 견본 「간병인일당 [20만] · 간호통합병동 [7만]」).
+                #   ⇒ 간병인·간호통합병동 행은 <b>같은 계약에 질병·상해 변형이 둘 다 있으면 질병이 정본</b>(상해는 버린다).
+                #     상해 변형만 있는 계약은 종전대로 그 값(2026.08.30 지점장 확정 「간병인사용상해입원일당Ⅷ(간호간병통합서비스) → 간호통합병동」 유지).
+                #     간병인 20(질병)·5(상해)도 같은 규칙 — 그동안은 max 가 가려 안 보였다.
+                _nq760 = None
+                if std in ('간병인','간호통합병동'):
+                    _rw760 = _norm(raw)
+                    _nq760 = 'S' if ('상해' in _rw760 and '질병' not in _rw760) else 'Q'
+                    _pv760 = _nurse_src760.get((tr, col))
+                    if _pv760 == 'Q' and _nq760 == 'S' and isinstance(existing,(int,float)):
+                        print(f"[v760 제186조] {ct.get('company','')} 「{raw}」 {amt} 버림 — 같은 계약 질병 변형 {existing} 이 정본")
+                        continue
+                    if _pv760 == 'S' and _nq760 == 'Q' and isinstance(existing,(int,float)):
+                        print(f"[v760 제186조] {ct.get('company','')} 「{raw}」 {amt} 로 교체 — 상해 변형 {existing} 버림")
+                        existing = None
+                    _nurse_src760[(tr, col)] = _nq760 if _pv760 != 'Q' else 'Q'
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
@@ -8213,6 +8257,16 @@ def build_excel(data, out):
                 _tgt = '일반사망' if (_jong and _nm2=='질병사망(80세)') else _nm2
                 _r2 = nm2r.get(_tgt)
                 if not _r2: continue
+                # ★★★★★v759 제185조 (지점장 2026.09.26 「다빈치로봇수술비 + 암수술이 합산으로 나온다」 · 조영선 DB 2504 실측):
+                #   세부가입현황 「암수술비」 칸은 채널 리포트가 <b>암수술비 200 + 다빈치로봇암수술비 1,000·500 을 합쳐 1,700</b> 으로 싣는다.
+                #   별첨은 다빈치를 다빈치로봇수술비 행(대표 1,000)에 따로 넣었는데, 세부보충(화이트리스트 v299-1)이
+                #   암수술 행을 1,700 으로 덮어 <b>다빈치가 두 번</b> 들어갔다(엑셀 암수술 1,700 + 다빈치 1,000 · 근거표는 200).
+                #   ⇒ 그 계약에 다빈치로봇수술비 별첨값이 있으면 세부 암수술 칸은 합산값이다 → 암수술 세부보충을 건너뛴다(별첨 정본).
+                if _tgt == '암수술':
+                    _rdv759 = nm2r.get('다빈치로봇수술비')
+                    if _rdv759 and ws.cell(_rdv759,_cl2).value not in (None, ''):
+                        print(f"[v759 제185조] {_cn2} 암수술 세부 {_v2} 건너뜀 — 다빈치로봇수술비 {ws.cell(_rdv759,_cl2).value} 별첨 있음(세부 칸은 합산)")
+                        continue
                 # ★★★★★v381 (지점장 지적 2026.08.11 "한화생명에 어디서 실손이 있냐", 영구):
                 #   <b>실손 계약이 아닌 계약에는 실손 행을 세부보충하지 않는다.</b>
                 #   [구 결함] 세부가입현황(계약별 가입정보)은 계약이 가로로 늘어선 표라
@@ -11616,6 +11670,49 @@ $('#reset').onclick=function(){if(confirm('기본 7장으로 되돌릴까? (저�
 $('#save').onclick=function(){fetch('/hub/config',{method:'POST',body:fd({pw:PW,cards:JSON.stringify(C)})}).then(r=>r.json()).then(function(j){if(!j.ok){alert(j.error||'실패');return}$('#msg').textContent='저장됨 '+new Date().toLocaleTimeString()+' ('+j.n+'장)';alert('저장됐다. 앱을 새로 열면 반영된다.')})};
 </script></body></html>""".replace("__HUBDEF__", json.dumps(_HUB_DEF, ensure_ascii=False)))
 
+# ★★★★★v761 제187조 — 보험 인포메이션 PDF 를 서버가 버전당 1번만 그려 허브 「인포메이션」 아이콘이 연다.
+import threading as _thr761
+_INFO_LOCK761 = _thr761.Lock()
+def _info_pdf_path761():
+    return os.path.join(tempfile.gettempdir(), 'makeone_info_%s.pdf' % VSTAMP)
+def _build_info_pdf761():
+    _p = _info_pdf_path761()
+    if os.path.exists(_p) and os.path.getsize(_p) > 100000:
+        return _p
+    with _INFO_LOCK761:
+        if os.path.exists(_p) and os.path.getsize(_p) > 100000:
+            return _p
+        import report_weasy as _rw
+        from coverage_benchmark import map_excel_to_report as _m2r
+        _rep = _m2r(TPL_XL, settings={'client':'고객','branch':'메이크원','manager':'최은혜','title':'지점장','phone':''})
+        _old = _rw._INFO_MODE
+        _rw._INFO_MODE = 'info'
+        try:
+            _tmp = _p + '.part'
+            _rw.build_report_pdf(_rep, _tmp)
+            os.replace(_tmp, _p)
+        finally:
+            _rw._INFO_MODE = _old
+        print('[v761 인포메이션] PDF 생성', _p, os.path.getsize(_p))
+    return _p
+
+@app.on_event('startup')
+def _info_warm761():
+    def _w():
+        try: _build_info_pdf761()
+        except Exception as _e: print('[v761 인포메이션] 선행 생성 실패:', str(_e)[:120])
+    _thr761.Thread(target=_w, daemon=True).start()
+
+@app.get('/info.pdf')
+def info_pdf():
+    try:
+        _p = _build_info_pdf761()
+    except Exception as _e:
+        return JSONResponse({'ok': False, 'error': '인포메이션 PDF 생성 실패: ' + str(_e)[:160]}, status_code=500)
+    return Response(open(_p, 'rb').read(), media_type='application/pdf',
+                    headers={'Content-Disposition': 'inline; filename="MAKEONE_information.pdf"',
+                             'Cache-Control': 'public, max-age=3600', 'X-BARUM-VER': VSTAMP})
+
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
@@ -13506,7 +13603,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                     except Exception as _e9:
                         print('[v424 설명서] 재무 제거 실패:', _e9)
                     response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
-                    response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
+                    response['report_name']=f'보장설명서_{cust}.pdf'   # ★v761 제187조: 참고자료(인포메이션)는 /info.pdf 로 분리 — 이 PDF 는 고객 구간 벡터본
                 if os.path.exists(rpx):
                     response['report_pptx_b64']=base64.b64encode(open(rpx,'rb').read()).decode()
                     response['report_pptx_name']=f'보장진단서_{cust}.pptx'

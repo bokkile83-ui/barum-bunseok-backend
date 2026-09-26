@@ -835,6 +835,7 @@ def _ac(label):
         '대인 벌금':['대인'], '대물 벌금':['대물'], '합의금':['합의금'], '6주미만 합의금':['6주미만'],
         '변호사비':['변호사'], '자동차부상위로금':['자부상'],
         '간병인지원일당':['간병인지원일당'], '간호통합병동':['간호통합병동'],
+        '간호통합병동@지원':['간호통합병동'], '간호통합병동@사용':['간호통합병동'],   # ★v763 제189조 금액으로 지원/사용 배정
         # ★★★★★v512 제110조 (지점장 2026.08.19) — 간병 3분할
         '간병인 사용일당':['간병인'], '요양병원 간병인':['간병인일당(요양병원)'],
         '간호통합병동일당':['간호통합병동'],
@@ -893,6 +894,21 @@ def _wcard_fix_list(title, desc, rows):
     import html as _html
     def _cell(r):
         v=_ac(r)
+        # ★★★★★v763 제189조 (지점장 2026.09.26 「간호통합병동이 간병인사용+간호통합병동 이어야 하는데 간병인 지원에 찍힌다.
+        #   지침을 좀 잡자 간병인지원은 일당이 "1" OR "2"다 + 간호통합병동이다 / 간병인사용은 10~20사이 + 간호통합병동이다」):
+        #   간호통합병동 칸은 지원·사용 두 카드에 다 있고, <b>값의 크기</b>로 어느 카드에 찍을지 가른다 —
+        #   1~2만(보험사 파견 급) → 「간병인 지원」 칸 / 그 밖(3만 이상, 사용 급 10~20) → 「간병인 사용」 칸. 다른 쪽은 빈칸.
+        #   실측 조영선: 간호통합병동 7 → 사용 칸(DB 간병인 사용 20 옆). 구 v684 「지원 칸 한 곳만」은 이 조문으로 대체.
+        if '@' in r:
+            try:
+                _nv763 = int(''.join(ch for ch in str(v or '') if ch.isdigit()) or 0)
+            except Exception:
+                _nv763 = 0
+            _side763 = r.split('@')[1]
+            if _nv763 <= 0: v = ''
+            elif _side763 == '지원' and _nv763 > 2: v = ''
+            elif _side763 == '사용' and _nv763 <= 2: v = ''
+            r = r.split('@')[0]
         # ★★★★★v417c (지점장 지시 2026.08.13 「운전자도 해야지」)
         #   9p 운전자·간병 카드도 <b>보유 / +제안(레드)</b>로 나눈다. 원천은 엑셀 보유·제안 합계 열.
         #   ★그릇(흰칸)은 하나로 둔다 — 박스를 쪼개면 그 행만 형태가 달라진다(v417b 교훈).
@@ -1252,6 +1268,30 @@ def _asset_body(rep):
            + '{:,}'.format(prem) + '원</div></div></div></div></div>')
     return top + band + two + tbl
 
+
+_INFO_MODE = 'all' if _os_env.environ.get('BARUM_INFO_IN_REPORT') == '1' else 'cust'   # ★v761 제187조: 'cust' 고객구간만 / 'info' 인포메이션만 / 'all' 통짜
+
+def _cut_info(doc):
+    """★v761 제187조 — 인포메이션 간지(첫 `pg infopg`)를 경계로 문서를 자른다. 'all'이면 그대로."""
+    import re as _rc
+    if _INFO_MODE == 'all':
+        return doc
+    _i = doc.find('<div class="pg infopg"')
+    if _i == -1:
+        print('[v761 인포분리] infopg 경계를 못 찾음 — 통짜 유지')
+        return doc
+    _h = doc.find('<div class="pg')
+    head = doc[:_h]
+    # 간지 태그의 시작(속성 포함)까지 되돌아간다 — `<div class="pg infopg" id=…>` 는 class 로 시작하므로 _i 가 곧 태그 시작
+    if _INFO_MODE == 'info':
+        body = doc[_i:]
+        n = len(_rc.findall(r'<div class="pg(?=["\s])', body))
+        print(f'[v761 인포분리] 인포메이션만 {n}쪽')
+        return head + body
+    body = doc[_h:_i]
+    n = len(_rc.findall(r'<div class="pg(?=["\s])', body))
+    print(f'[v761 인포분리] 고객 구간만 {n}쪽 (인포메이션 제외)')
+    return head + body + '</body></html>'
 
 def build_report_pdf(rep, out):
     """rep: 리포트 데이터 dict (아래 sample_rep 구조). out: 저장 경로(.pdf)"""
@@ -3574,8 +3614,8 @@ table.jt.js td.chk{{width:16mm}}
    <tr><td class="g">주요 보장</td><td>대인 · 대물</td><td class="bad">벌금 · 형사합의금 · 변호사선임비</td></tr></table>
   <div class="wscap n2 wsectcap gap2">■ 간병비 담보</div>
   <div class="ws2">
-   {_wcard_fix_list('간병인 지원','보험사 파견',['간병인지원일당','간호통합병동'])}
-   {_wcard_fix_list('간병인 사용','직접 고용',['간병인 사용일당','요양병원 간병인'])}   <!-- ★v684 간호통합병동은 지원 칸 한 곳만(지점장 2026.09.07) -->   <!-- ★v512 제110조 -->
+   {_wcard_fix_list('간병인 지원','보험사 파견 · 일당 1~2만',['간병인지원일당','간호통합병동@지원'])}
+   {_wcard_fix_list('간병인 사용','직접 고용 · 일당 10~20만',['간병인 사용일당','간호통합병동@사용'])}   <!-- ★v763 제189조 간호통합병동 = 금액으로 지원/사용 배정(구 v684 「간호통합병동은 지원 칸 한 곳만」 대체) -->
   </div>
   <table class="st cmp"><tr><th style="width:20%">구분</th><th>간병인지원일당</th><th>간병인사용일당</th></tr>
    <tr><td class="g">방식</td><td>보험사가 간병인 <b>직접 배정</b></td><td>내가 <b>직접 고용</b> 후 정액 지급</td></tr>
@@ -5348,6 +5388,11 @@ table.jt.js td.chk{{width:16mm}}
     #   ㉠시작이 밀리고 ㉡분모가 어긋나고 ㉢결번(25)이 생기고 ㉣중복(29)이 생겼다.
     #   ★<b>구조 가정 금지</b> — 고정 페이지 번호는 라벨 하드코딩과 같은 결함이다.
     #   → 번호도 분모도 <b>실제 페이지에서 센다</b>. 표지는 번호를 갖되 표기하지 않는다.
+    # ★★★★★v761 제187조 (지점장 2026.09.26 「인포메이션을 바로가기 맨 앞에 단독칸으로 … 아이콘 누르면 PDF · 보장분석에는 빼자 시간이 너무 길다」):
+    #   [실측 v760] 설명서 PDF 1건 = 54초, 그중 인포메이션 64쪽(19MB 그림)이 27초 = 절반. 매 요청마다 고정 자료를 다시 그렸다.
+    #   ⇒ 보장분석 렌더는 <b>고객 구간만</b>(_INFO_MODE='cust'), 인포메이션은 서버 /info.pdf 가 버전당 1번만 그려 허브 아이콘이 연다(_INFO_MODE='info').
+    #   옛 통짜(76쪽)는 환경변수 BARUM_INFO_IN_REPORT=1 로만 돌아온다. 소스(인포 HTML 블록)는 그대로 둔다 — 제26조·제162조 검사·순서 정답지 유지.
+    doc = _cut_info(doc)
     _pgs = _re2.split(r'(?=<div class="pg(?=["\s]))', doc)
     _tot = sum(1 for _c in _pgs if _re2.match(r'<div class="pg(?=["\s])', _c))
     _n = 0; _out = []
@@ -5363,7 +5408,7 @@ table.jt.js td.chk{{width:16mm}}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v757-cform-20260925</div>'
+    _VSTAMP = '<div class="vstamp">v763-carecard-20260926</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

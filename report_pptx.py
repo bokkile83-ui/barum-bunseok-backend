@@ -527,7 +527,14 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
             #   판정은 '+' 글자가 아니라 <b>`report_weasy.SPLIT_TEXTS` 등록 여부</b>로 한다.
             try:
                 import report_weasy as _rw3
-                _isplit = txt in (getattr(_rw3, 'SPLIT_TEXTS', set()) or set())
+                _SPT = (getattr(_rw3, 'SPLIT_TEXTS', set()) or set())
+                # ★★★★★v763 제190조 (지점장 2026.09.26 「진단서 지금고객의 3대주요치료비에 갱신+비갱신이 구분이 없다 다 블랙이다」 · 조영선):
+                #   8쪽 진단비 5칸은 값 `7,400+2,010` 뒤에 단위 `만`이 <b>별도 span(.dgu)</b>이라 pdftotext 가 한 칸으로 `7,400+2,010 만`을 준다.
+                #   SPLIT_TEXTS 엔 단위 없는 `7,400+2,010` 만 등록돼 있어 <b>정확일치가 안 됐고 run 1개(검정)</b>로 떨어졌다.
+                #   ⇒ 뒤에 붙은 공백·단위(만/만원)를 떼고도 대조한다. 색 규칙은 그대로(앞 = 갱신 파랑 · 뒤 = 비갱신 검정).
+                import re as _re763
+                _core763 = _re763.sub(r'\s*(만원|만)?\s*$', '', str(txt)).replace(' ', '')
+                _isplit = (txt in _SPT) or (_core763 in _SPT) or (str(txt).replace(' ', '') in _SPT)
             except Exception:
                 _isplit = False
             if _isplit and '+' in txt:
