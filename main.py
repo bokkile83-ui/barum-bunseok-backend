@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v770-fast-20260928'
+VSTAMP = 'v771-kbpolyp-20260928'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1708,6 +1708,8 @@ _STRUCT_SELFTEST = [
     ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
     ('제194조 동작검사캐시',        'main.py', r'_BEHAVE_CACHE770 = behave_selftest\(\)', True),
     ('제194조 조문',                'BARUM_DOCTRINE.md', r'제194조 — 분석 시간 줄이기', True),
+    ('제195조 KB용종1종',           'jongsul_cmp.py', r'KB·메리츠·흥국은 1종, 나머지 6곳은 2종', True),
+    ('제195조 조문',                'BARUM_DOCTRINE.md', r'제195조 — 대장 용종\(내시경 절제\)은 KB = 1종', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
