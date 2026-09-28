@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v776-noicon-20260928'
+VSTAMP = 'v777-surg3-20260929'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1708,12 +1708,14 @@ _STRUCT_SELFTEST = [
     ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
     ('제194조 동작검사캐시',        'main.py', r'_BEHAVE_CACHE770 = behave_selftest\(\)', True),
     ('제194조 조문',                'BARUM_DOCTRINE.md', r'제194조 — 분석 시간 줄이기', True),
-    ('제195조 KB용종1종',           'jongsul_cmp.py', r'KB·메리츠·흥국은 1종, 나머지 6곳은 2종', True),
+    ('제195조 KB용종1종',           'jongsul_cmp.py', r'KB·흥국은 1종, 나머지 4곳은 2종', True),
     ('제195조 조문',                'BARUM_DOCTRINE.md', r'제195조 — 대장 용종\(내시경 절제\)은 KB = 1종', True),
     ('제196조 원문3사제외',         'report_weasy.py', r"if _co in \('메리츠', '미래에셋', 'ABL생명'\): continue", True),
     ('제196조 조문',                'BARUM_DOCTRINE.md', r'제196조 — 인포메이션 1~5종 수술분류표 정리', True),
     ('제197조 글자치환',            'report_weasy.py', r'doc = _glyph_safe\(doc\)', True),
     ('제197조 조문',                'BARUM_DOCTRINE.md', r'제197조 — 서버 글꼴에 없는 글자는 렌더 전에 바꾼다', True),
+    ('제198조 수술비3사삭제',       'jongsul_sum.py', r"^(?![\s\S]*\('(메리츠|미래에셋|ABL생명)',)", True),
+    ('제198조 조문',                'BARUM_DOCTRINE.md', r'제198조 — 인포메이션 1~5종 수술비 쪽에서 메리츠·미래에셋·ABL을 전부 뺀다', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -12391,7 +12393,7 @@ def doctrine_robot(heavy=False):
     def _ck172():
         try: import jongsul_sum as _S
         except Exception as _e: return '요약 모듈 없음 %s' % _e
-        if len(_S.COS) != 9: return '회사 %d사 (정답 9사)' % len(_S.COS)
+        if len(_S.COS) != 6: return '회사 %d사 (정답 6사 — 제198조 메리츠·미래에셋·ABL 삭제)' % len(_S.COS)
         if any(_c[1] != '생보약관' for _c in _S.COS): return '약관 계열이 생보약관이 아닌 행이 있다'
         if any('제왕절개' not in _c[2] and '항' not in _c[2] for _c in _S.COS): return '제왕절개 판별 칸이 비었다'
         _pay = [_c[0] for _c in _S.COS if not _c[4].startswith('[확인]')]
@@ -12405,12 +12407,12 @@ def doctrine_robot(heavy=False):
     def _ck173():
         try: import jongsul_cmp as _C
         except Exception as _e: return '비교 모듈 없음 %s' % _e
-        if len(_C.CO) != 9: return '회사 %d사' % len(_C.CO)
+        if len(_C.CO) != 6 or any(_x in _C.CO for _x in ('메리츠','미래에셋','ABL생명')): return '회사 %d사 (정답 6사 — 제198조)' % len(_C.CO)
         for _nm, _no, _v in _C.ROWS:
-            if len(_v) != 9: return '%s 칸 %d개' % (_nm, len(_v))
+            if len(_v) != 6: return '%s 칸 %d개' % (_nm, len(_v))
             if '?' in _v: return '%s 에 미확인(?) 칸이 남아 있다' % _nm
         _dae = [r for r in _C.ROWS if '대장' in r[0]][0][2]
-        if _dae != ['2', '2', '★1', '2', '★1', '2', '★1', '2', '2']:
+        if _dae != ['2', '2', '2', '★1', '2', '★1']:
             return '대장 용종 행 %s' % _dae
         return ''
     _ck('제173조 종수술비교', '제173조', _ck173)
@@ -12421,7 +12423,7 @@ def doctrine_robot(heavy=False):
         except Exception as _e: return '신입용 모듈 없음 %s' % _e
         if sorted(_N.JONG) != ['1종', '2종', '3종', '4종', '5종']: return '종 구성 %s' % sorted(_N.JONG)
         if sum(len(v[1]) for v in _N.JONG.values()) < 60: return '수술 항목이 너무 적다'
-        if len(_N.DIFF) != 5: return '회사차이 %d개 (정답 5개)' % len(_N.DIFF)
+        if len(_N.DIFF) != 4: return '회사차이 %d개 (정답 4개 — 제198조로 메리츠 담석 항목 삭제)' % len(_N.DIFF)
         if 'KB' not in _N.DIFF[0][1]: return '대장 용종 유리한 쪽에 KB(Ⅲ)가 빠졌다'
         return ''
     _ck('제174조 신입용표', '제174조', _ck174)
@@ -12434,7 +12436,7 @@ def doctrine_robot(heavy=False):
         if "_new[0]" not in _src or "_new[1]" not in _src: return '신입용 2쪽 분리가 안 돼 있다'
         import jongsul_cmp as _C
         _dae = [r for r in _C.ROWS if '대장' in r[0]][0][2]
-        if _dae[4] != '★1': return 'KB 대장용종이 1종 단일 표기가 아니다 (%s)' % _dae[4]
+        if _dae[3] != '★1': return 'KB 대장용종이 1종 단일 표기가 아니다 (%s)' % _dae[3]
         return ''
     _ck('제175조 신입용2쪽', '제175조', _ck175)
 

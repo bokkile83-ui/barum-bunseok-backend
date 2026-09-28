@@ -3042,7 +3042,7 @@ table.jt.js td.chk{{width:16mm}}
         _sum = _jong_sum_page()
         if _sum:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('한 눈에 보는 1~5종', '9사 요약', '생·손보 · 분류표 · 지급방식', _sum, '요약'))
+                        % ('한 눈에 보는 1~5종', '6사 요약', '생·손보 · 분류표 · 지급방식', _sum, '요약'))
         _new = _jong_new_page()
         if _new:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
@@ -3051,12 +3051,12 @@ table.jt.js td.chk{{width:16mm}}
         # ★v773 제196조 (지점장 2026.09.28 「수술비 쪽 맨 뒤 40·41페이지 합쳐 줘」): 신입용 (2/2) 「회사마다 갈리는 것」과 「회사별 보상 비교」를 한 장으로
         if _new:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('회사별 차이 · 보상 비교', '회사마다 갈리는 것', '도표 5개 + 같은 수술 9사 종수', _new[1] + ('<div class="jsub">회사별 보상 비교 — 같은 수술 · 9사 종수 (★는 다른 값)</div>' + _cmp if _cmp else ''), '신입용·비교'))
+                        % ('회사별 차이 · 보상 비교', '회사마다 갈리는 것', '도표 4개 + 같은 수술 6사 종수', _new[1] + ('<div class="jsub">회사별 보상 비교 — 같은 수술 · 6사 종수 (★는 다른 값)</div>' + _cmp if _cmp else ''), '신입용·비교'))
         elif _cmp:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('회사별 보상 비교', '같은 수술 · 9사 종수', '★는 다른 값 · ?는 원본 미확인', _cmp, '비교'))
+                        % ('회사별 보상 비교', '같은 수술 · 6사 종수', '★는 다른 값 · ?는 원본 미확인', _cmp, '비교'))
         for _co in _J.JONG_ORDER:
-            if _co in ('메리츠', '미래에셋', 'ABL생명'): continue   # ★v773 제196조 (지점장 2026.09.28 「1-5종 분류표 메리츠 삭제 · 미래·ABL 삭제」) 원문 쪽만 뺀다
+            if _co in ('메리츠', '미래에셋', 'ABL생명'): continue   # ★v773 제196조 (지점장 2026.09.28 「1-5종 분류표 메리츠 삭제 · 미래·ABL 삭제」) 원문 쪽만 뺀다 · ★v777 제198조 요약·신입용·비교표에서도 3사 삭제(jongsul_sum/new/cmp)
             if _co in _TX:                               # ★v747 글자 표가 있는 회사는 그것을 쓴다
                 _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"') % (_html.escape(_co), _html.escape(_co), '약관 원문 전사(글자 표)', _TX[_co], _html.escape(_co)))
                 continue
@@ -5428,7 +5428,7 @@ table.jt.js td.chk{{width:16mm}}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v776-noicon-20260928</div>'
+    _VSTAMP = '<div class="vstamp">v777-surg3-20260929</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
