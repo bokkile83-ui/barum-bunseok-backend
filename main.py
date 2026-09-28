@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v757-cform-20260925'
+VSTAMP = 'v769-speed-20260928'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1105,10 +1105,30 @@ def rule_extract(block_lines, prefolded=False):
     dambo['__DUP__'] = {k:v for k,v in _duplog.items() if len(v) >= 2}
     return dambo
 
+# ★★★★★v769 제194조 ② 계약별 별첨 AI 추출 = 수집 1회 → 동시 호출(최대 6) → 글자 캐시.
+#   (v765 와 같은 방식. 2026.09.28 확인 — 강현경 250초 끊김의 원인은 이것이 아니라 「인쇄로 만든 그림 PDF」였다)
+#   되돌리기 = Railway 변수 BARUM_LLM_SERIAL=1
+class _LazyPages769:
+    """★v769 — 비전 OCR 쪽을 요청할 때 한 장씩 300dpi 로 그린다(한꺼번에 그리면 17쪽 1.3GB)."""
+    def __init__(self, b, n): self.b=b; self.n=n
+    def __len__(self): return self.n
+    def __getitem__(self, i):
+        from pdf2image import convert_from_bytes as _cfb
+        return _cfb(self.b, dpi=300, first_page=i+1, last_page=i+1)[0]
+_LLM_CACHE765 = {}
+_LLM_COLLECT765 = None
 def llm_extract(block_text):
     """깨진 별첨(담보명/금액 줄 분리)을 Claude가 의미로 추출. 키 없으면 {} -> 규칙 폴백."""
     key = os.environ.get('ANTHROPIC_API_KEY','')
     if not key or not block_text.strip(): return {}
+    if _LLM_COLLECT765 is not None:
+        _LLM_COLLECT765.append(block_text); return {}
+    if block_text in _LLM_CACHE765:
+        return dict(_LLM_CACHE765[block_text])
+    return _llm_extract_call765(block_text)
+
+def _llm_extract_call765(block_text):
+    key = os.environ.get('ANTHROPIC_API_KEY','')
     prompt = ("보험 별첨 텍스트에서 담보명과 가입금액(만원 단위 숫자)을 추출.\n"
         "주의: 표가 깨져 담보명이 2줄로 나뉘거나 금액이 별도 블록에 모여있을 수 있음. 순서·문맥으로 정확히 매칭.\n"
         "담보명은 원문 그대로. 납입면제·납입지원·특약안내 등 비담보성 항목은 제외.\n"
@@ -1174,7 +1194,15 @@ def pdf_to_txt(pdf_bytes):
         import io
         # ★★v232: dpi 170 → <b>300</b>. 170dpi에서는 별첨 표의 금액 자릿수(1,000 vs 100)가
         #   뭉개져 오독 위험이 크다. '인쇄→PDF' 이미지본은 원본이 200dpi 조각이라 300으로 올려 읽는다.
-        pages = convert_from_bytes(pdf_bytes, dpi=300)
+        # ★★★★★v769 제194조 ③ (2026.09.28 강현경 「인쇄→PDF」 그림 17쪽 · 250초 끊김 · 한꺼번에 그리기 최대 1.3GB):
+        #   쪽을 <b>한 장씩</b> 그리고(메모리), AI 전사를 <b>동시에 4장</b> 보낸다(시간). 전사 규칙·재시도·실패 기록은 그대로.
+        import subprocess as _sp769
+        try:
+            _pi769 = _sp769.run(['pdfinfo', '-'], input=pdf_bytes, capture_output=True, timeout=60).stdout.decode('utf-8','ignore')
+            _np769 = int(re.search(r'Pages:\s+(\d+)', _pi769).group(1))
+        except Exception:
+            _np769 = 0
+        pages = _LazyPages769(pdf_bytes, _np769) if _np769 else convert_from_bytes(pdf_bytes, dpi=300)
     except Exception as e:
         print(f'[PDF_RENDER_ERR] {e}')
         globals()['_VISION_FAIL'] = f'PDF 이미지 렌더 실패({e}) — pdf2image/poppler 확인'
@@ -1185,8 +1213,12 @@ def pdf_to_txt(pdf_bytes):
               "해석·설명·요약 금지, 페이지의 원문 텍스트만 출력.")
     out=[]; _fail_pages=[]
     globals()['_VISION_PARTIAL']=''
-    for idx, img in enumerate(pages):
+    _res769 = {}
+    def _one769(idx):
+      _o=[]; _f=[]
+      for _unused in (0,):
         try:
+            img = pages[idx]
             # ★v60 회전 보정: let: 리포트는 가로형인데 '인쇄→PDF' 이미지본은 세로 A4에
             #   가로 내용이 90° 눕는다. 세로(높이>너비) 페이지면 시계방향(-90°)으로 세워
             #   비전 OCR 정확도를 높인다(정방향 검증 완료). 이미 정방향(가로)이면 무동작.
@@ -1235,11 +1267,20 @@ def pdf_to_txt(pdf_bytes):
                     _last=f'예외 {_ee}'
                     print(f'[PDF_VISION_ERR] p{idx+1} try{_try+1} {_ee}')
                     import time as _tm; _tm.sleep((2,5,12)[_try])
-            if t.strip(): out.append(t)
-            else: _fail_pages.append((idx+1,_last))
+            if t.strip(): _o.append(t)
+            else: _f.append((idx+1,_last))
         except Exception as e:
             print(f'[PDF_VISION_ERR] p{idx+1} {e}')
-            _fail_pages.append((idx+1,f'예외 {e}'))
+            _f.append((idx+1,f'예외 {e}'))
+      _res769[idx]=(_o,_f)
+    from concurrent.futures import ThreadPoolExecutor as _TPE769
+    import time as _tv769
+    _tv0=_tv769.time()
+    with _TPE769(max_workers=6) as _ex769:
+        list(_ex769.map(_one769, range(len(pages))))
+    for _k in sorted(_res769):
+        out.extend(_res769[_k][0]); _fail_pages.extend(_res769[_k][1])
+    print(f'[v769 시간] 비전 OCR {len(pages)}쪽 동시6 — {round(_tv769.time()-_tv0,1)}초')
     txt='\n'.join(out)
     print(f'[PDF_VISION] pages={len(pages)} ok={len(out)} fail={len(_fail_pages)} '
           f'chars={len(txt)} dpi=300 model=claude-haiku-4-5-20251001')
@@ -1682,8 +1723,35 @@ _STRUCT_SELFTEST = [
     ('제154조① 간병인세부보충금지', 'main.py', r"_SEBU_WIN = \{\n\s*'상해사망','입원'", True),
     ('제154조① 사본동기화',        'main.py', r"_SEBU_WIN_682 = \{[^}]*'간병인'", False),
     ('제154조② 교통가드resolve2',  'main.py', r'v684 제154조 ① \(지점장 원문 2026\.09\.07', True),
-    ('제154조④ 간호통합한칸',      'report_weasy.py', r'v684 간호통합병동은 지원 칸 한 곳만', True),
+    ('제154조④ 간호통합한칸(제189조로 대체)', 'report_weasy.py', r'v684 「간호통합병동은 지원 칸 한 곳만」 대체', True),   # ★v763 제189조가 대체 — 이력 문구 확인
     ('제154조⑥ 결번감시',          'BARUM_DOCTRINE.md', r'제153조', True),
+    # ★v758 (지점장 2026.09.26 「★ 결번 2개 -> 이거 왜 떠있어?」·「지침. 메모리 통일 시키고 다시 점검」): 제182·183조는 메모리에만 있고 서버 지침서엔 없어 181→184 결번 2개·99% 였다
+    ('제182조 실손공제',            'BARUM_DOCTRINE.md', r'제182조 — 실손 통원은 공제를 항상 뺀다', True),
+    ('제183조 메디케어잠금',        'BARUM_DOCTRINE.md', r'제183조 — 메디케어 잠금 배치', True),
+    ('제185조 다빈치합산차단',      'main.py', r"if _tgt == '암수술':\n\s*_rdv759 = nm2r\.get\('다빈치로봇수술비'\)", True),
+    ('제185조 조문',                'BARUM_DOCTRINE.md', r'제185조 — 세부가입현황 암수술비 칸은 다빈치를 합쳐 싣는다', True),
+    ('제186조 질병우선',            'main.py', r"_pv760 == 'Q' and _nq760 == 'S'", True),
+    ('제186조 조문',                'BARUM_DOCTRINE.md', r'제186조 — 간병인·간호통합병동은 같은 계약에 질병·상해가 둘 다 있으면 질병', True),
+    ('제187조 인포분리',            'report_weasy.py', r"def _cut_info\(doc\)", True),
+    ('제187조 info.pdf',            'main.py', r"@app.get\('/info.pdf'\)", True),
+    ('제187조 조문',                'BARUM_DOCTRINE.md', r'제187조 — 인포메이션은 보장분석에서 떼어 서버가 1번만 그린다', True),
+    ('제188조 간병인20캡',          'main.py', r"if std == '간병인' and isinstance\(amt,\(int,float\)\) and amt > 20:", True),
+    ('제188조 조문',                'BARUM_DOCTRINE.md', r'제188조 — 간병인은 최대 20만원', True),
+    ('제189조 간호통합배정',        'report_weasy.py', r"'간호통합병동@지원':\['간호통합병동'\], '간호통합병동@사용':\['간호통합병동'\]", True),
+    ('제189조 사용카드',            'report_weasy.py', r"_wcard_fix_list\('간병인 사용','직접 고용 · 일당 10~20만',\['간병인 사용일당','간호통합병동@사용'\]\)", True),
+    ('제189조 조문',                'BARUM_DOCTRINE.md', r'제189조 — 간호통합병동은 금액으로 지원/사용 카드에 배정', True),
+    ('제190조 분할단위대조',        'report_pptx.py', r'_core763 in _SPT', True),
+    ('제190조 조문',                'BARUM_DOCTRINE.md', r'제190조 — 진단서 편집칸의 갱신\+비갱신 분할은 단위를 떼고 대조', True),
+    ('제187조 시작굽기금지',        'main.py', r"v764 긴급 \(지점장 2026\.09\.26 「모든 앱이 안 된다", True),
+    ('제192조 서버렌더금지',        'main.py', r"_RR766\('https://singular-smakager-0caac1\.netlify\.app/info\.pdf'", True),
+    ('제192조 조문',                'BARUM_DOCTRINE.md', r'제192조 — 서버는 인포메이션을 그리지 않는다', True),
+    ('제193조 참고자료복원',        'main.py', r"response\['report_name'\]=f'보장설명서_참고자료_\{cust\}\.pdf'", True),
+    ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
+    ('제194조 동작검사캐시',        'main.py', r'_BEHAVE_CACHE769 = behave_selftest\(\)', True),
+    ('제194조 AI동시',              'main.py', r'_TPE765\(max_workers=min\(6, len\(_todo\)\)\)', True),
+    ('제194조 비전한장씩',          'main.py', r'class _LazyPages769', True),
+    ('제194조 비전동시6',           'main.py', r'_TPE769\(max_workers=6\)', True),
+    ('제194조 조문',                'BARUM_DOCTRINE.md', r'제194조 — 분석 시간 줄이기', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -4047,6 +4115,34 @@ def name_selftest():
 
 
 def parse_txt(txt, filename='', extra=None):
+    """★v769 제194조 ② — 수집(1회) → 동시 호출 → 본 실행. 키 없음·BARUM_LLM_SERIAL=1·실패면 종전 그대로."""
+    global _LLM_COLLECT765
+    import time as _t765
+    _t0 = _t765.time()
+    if os.environ.get('ANTHROPIC_API_KEY','') and os.environ.get('BARUM_LLM_SERIAL') != '1':
+        try:
+            _LLM_COLLECT765 = []
+            try:
+                _parse_txt_core(txt, filename, extra)
+            finally:
+                _todo = [b for b in dict.fromkeys(_LLM_COLLECT765 or []) if b not in _LLM_CACHE765]
+                _LLM_COLLECT765 = None
+            if _todo:
+                from concurrent.futures import ThreadPoolExecutor as _TPE765
+                with _TPE765(max_workers=min(6, len(_todo))) as _ex:
+                    for _b, _r in zip(_todo, _ex.map(_llm_extract_call765, _todo)):
+                        _LLM_CACHE765[_b] = _r or {}
+            if _todo: print(f'[v769 시간] 별첨 AI {len(_todo)}건 동시 — {round(_t765.time()-_t0,1)}초')
+        except Exception as _e765:
+            _LLM_COLLECT765 = None
+            print('[v769] 동시 호출 실패 — 종전 방식:', str(_e765)[:120])
+    try:
+        return _parse_txt_core(txt, filename, extra)
+    finally:
+        if len(_LLM_CACHE765) > 400: _LLM_CACHE765.clear()
+        if _t765.time()-_t0 > 1: print(f'[v769 시간] parse_txt 전체 {round(_t765.time()-_t0,1)}초')
+
+def _parse_txt_core(txt, filename='', extra=None):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     lines = _repair_anchor(lines)   # ★v282 유실된 계약 경계 앵커 복구
     # ★★★v237: 세부가입현황(상세내역) 계약별 CI 정보 1회 계산 — 선지급률 판정 2순위 근거
@@ -7107,6 +7203,7 @@ def build_excel(data, out):
                                  _why + ' → <b>세부가입현황(계약별 가입정보)에서 대조</b>'))
     cancer_trace = []  # ★v30h 암 블록 기재 근거 — (회사, 원담보명, 기재행, 금액). 일반암 과다합산 즉시 추적
     surg_trace = []    # ★v30g 수술 블록 기재 근거 — (회사, 원담보명, 기재행/슬롯, 금액)
+    _nurse_src760 = {}   # ★v760 제186조 (행,열)→ 'Q'질병/'S'상해 출처
     raw_by_std = {}   # ★v39 워크시트 담보명 카피: 표준명→원본담보명(최댓값 담보 기준)
     # ★★★★★v289 (지점장 지시 2026.07.31 "계속 반복이야 — 우선 원인 잡자")
     #   <b>반복의 구조적 원인</b>: 근거 수집이 `_WS_STD` 10개 담보에만 걸려 있어
@@ -7661,6 +7758,14 @@ def build_excel(data, out):
                 unmapped.append((col, ct['company'], raw, amt,
                                  f'[확인] 일당 행에 100만원 초과({amt}) — 진단비·수술비 오매핑 의심'))
                 continue
+            # ★★★★★v762 제188조 (지점장 2026.09.26 「간병인이 100만원이라고 나온다. 지침 추가하자 간병인은 최대 20만원이다」 · 조영선 흥국 실측):
+            #   흥국 `질병장기입원간병비 100` 두 건이 간병인 행에 100 으로 앉았다. 간병인 행은 <b>하루당 일당</b>이고 최대 20만원이다.
+            #   20만원을 넘는 값은 일당이 아니라 정액 간병비·진단비류 → 간병인 행에 넣지 않고 [확인]큐(누락 금지).
+            if std == '간병인' and isinstance(amt,(int,float)) and amt > 20:
+                unmapped.append((col, ct['company'], raw, amt,
+                                 f'[확인] 간병인은 최대 20만원(일당)인데 {amt} — 정액 간병비·오매핑 의심 (제188조)'))
+                print(f"[v762 제188조] {ct.get('company','')} '{raw}' {amt} → 간병인 행 거절(20만 초과)")
+                continue
             # ★★★★★v353 (지점장 지시 2026.08.02, 영구): <b>골절·화상 「등급별 100만↑ 제외」 규칙 폐기</b>.
             #   지점장 원문: 라이나 골절진단비II(치아파절포함) 1,000 · AXA 골절진단의료비용(치아파절제외) 1,000
             #   · AIG 골절진단의료비용 500 · Ⅲ 250 · 화상진단의료비용 500 → "<b>넣어줘</b>".
@@ -7789,6 +7894,24 @@ def build_excel(data, out):
                 # ★v693 (이화미 현대 정답지 2026.09.15): 일상생활배상책임이 (대인)·(대물) 두 담보로 갈라져 오면
                 #   같은 배상책임 한도다 → 합산(20,000) 금지 · <b>대표(max) 10,000</b>. 지점장 정답지 그대로.
                 _rep1 = _rep1 or (std == '일상배상책임')
+                # ★★★★★v760 제186조 (지점장 2026.09.26 「간호통합병동이 20만원으로 나온다.. ㅠㅠ」 · 조영선 DB 2504 실측):
+                #   별첨 = 간호간병통합서비스사용<b>질병</b>입원일당Ⅱ(1-180일) 7 · …사용<b>상해</b>입원일당(1-180일) 20 → 같은 행,
+                #   대표(max)가 <b>상해 20</b>을 잡았다. 정본 7(지점장 견본 「간병인일당 [20만] · 간호통합병동 [7만]」).
+                #   ⇒ 간병인·간호통합병동 행은 <b>같은 계약에 질병·상해 변형이 둘 다 있으면 질병이 정본</b>(상해는 버린다).
+                #     상해 변형만 있는 계약은 종전대로 그 값(2026.08.30 지점장 확정 「간병인사용상해입원일당Ⅷ(간호간병통합서비스) → 간호통합병동」 유지).
+                #     간병인 20(질병)·5(상해)도 같은 규칙 — 그동안은 max 가 가려 안 보였다.
+                _nq760 = None
+                if std in ('간병인','간호통합병동'):
+                    _rw760 = _norm(raw)
+                    _nq760 = 'S' if ('상해' in _rw760 and '질병' not in _rw760) else 'Q'
+                    _pv760 = _nurse_src760.get((tr, col))
+                    if _pv760 == 'Q' and _nq760 == 'S' and isinstance(existing,(int,float)):
+                        print(f"[v760 제186조] {ct.get('company','')} 「{raw}」 {amt} 버림 — 같은 계약 질병 변형 {existing} 이 정본")
+                        continue
+                    if _pv760 == 'S' and _nq760 == 'Q' and isinstance(existing,(int,float)):
+                        print(f"[v760 제186조] {ct.get('company','')} 「{raw}」 {amt} 로 교체 — 상해 변형 {existing} 버림")
+                        existing = None
+                    _nurse_src760[(tr, col)] = _nq760 if _pv760 != 'Q' else 'Q'
                 if _rep1 and isinstance(existing,(int,float)):
                     ws.cell(tr,col).value = max(existing, amt)   # 표적·n대·창상봉합=대표 최댓값1건(★v29q-6) / 실손=중복합산 안함(한도)
                 else:
@@ -8213,6 +8336,16 @@ def build_excel(data, out):
                 _tgt = '일반사망' if (_jong and _nm2=='질병사망(80세)') else _nm2
                 _r2 = nm2r.get(_tgt)
                 if not _r2: continue
+                # ★★★★★v759 제185조 (지점장 2026.09.26 「다빈치로봇수술비 + 암수술이 합산으로 나온다」 · 조영선 DB 2504 실측):
+                #   세부가입현황 「암수술비」 칸은 채널 리포트가 <b>암수술비 200 + 다빈치로봇암수술비 1,000·500 을 합쳐 1,700</b> 으로 싣는다.
+                #   별첨은 다빈치를 다빈치로봇수술비 행(대표 1,000)에 따로 넣었는데, 세부보충(화이트리스트 v299-1)이
+                #   암수술 행을 1,700 으로 덮어 <b>다빈치가 두 번</b> 들어갔다(엑셀 암수술 1,700 + 다빈치 1,000 · 근거표는 200).
+                #   ⇒ 그 계약에 다빈치로봇수술비 별첨값이 있으면 세부 암수술 칸은 합산값이다 → 암수술 세부보충을 건너뛴다(별첨 정본).
+                if _tgt == '암수술':
+                    _rdv759 = nm2r.get('다빈치로봇수술비')
+                    if _rdv759 and ws.cell(_rdv759,_cl2).value not in (None, ''):
+                        print(f"[v759 제185조] {_cn2} 암수술 세부 {_v2} 건너뜀 — 다빈치로봇수술비 {ws.cell(_rdv759,_cl2).value} 별첨 있음(세부 칸은 합산)")
+                        continue
                 # ★★★★★v381 (지점장 지적 2026.08.11 "한화생명에 어디서 실손이 있냐", 영구):
                 #   <b>실손 계약이 아닌 계약에는 실손 행을 세부보충하지 않는다.</b>
                 #   [구 결함] 세부가입현황(계약별 가입정보)은 계약이 가로로 늘어선 표라
@@ -11616,6 +11749,43 @@ $('#reset').onclick=function(){if(confirm('기본 7장으로 되돌릴까? (저�
 $('#save').onclick=function(){fetch('/hub/config',{method:'POST',body:fd({pw:PW,cards:JSON.stringify(C)})}).then(r=>r.json()).then(function(j){if(!j.ok){alert(j.error||'실패');return}$('#msg').textContent='저장됨 '+new Date().toLocaleTimeString()+' ('+j.n+'장)';alert('저장됐다. 앱을 새로 열면 반영된다.')})};
 </script></body></html>""".replace("__HUBDEF__", json.dumps(_HUB_DEF, ensure_ascii=False)))
 
+# ★★★★★v761 제187조 — 보험 인포메이션 PDF 를 서버가 버전당 1번만 그려 허브 「인포메이션」 아이콘이 연다.
+import threading as _thr761
+_INFO_LOCK761 = _thr761.Lock()
+def _info_pdf_path761():
+    return os.path.join(tempfile.gettempdir(), 'makeone_info_%s.pdf' % VSTAMP)
+def _build_info_pdf761():
+    _p = _info_pdf_path761()
+    if os.path.exists(_p) and os.path.getsize(_p) > 100000:
+        return _p
+    with _INFO_LOCK761:
+        if os.path.exists(_p) and os.path.getsize(_p) > 100000:
+            return _p
+        import report_weasy as _rw
+        from coverage_benchmark import map_excel_to_report as _m2r
+        _rep = _m2r(TPL_XL, settings={'client':'고객','branch':'메이크원','manager':'최은혜','title':'지점장','phone':''})
+        _old = _rw._INFO_MODE
+        _rw._INFO_MODE = 'info'
+        try:
+            _tmp = _p + '.part'
+            _rw.build_report_pdf(_rep, _tmp)
+            os.replace(_tmp, _p)
+        finally:
+            _rw._INFO_MODE = _old
+        print('[v761 인포메이션] PDF 생성', _p, os.path.getsize(_p))
+    return _p
+
+# ★★★★★v764 긴급 (지점장 2026.09.26 「모든 앱이 안 된다 · 서버가 작동이 안 된다」):
+#   v761 이 서버가 켜질 때 인포메이션 64쪽을 미리 굽게 했다(startup 스레드). 로컬 실측 최대 메모리 <b>1.4GB · 46초</b>.
+#   켜지는 순간 다른 시작 작업과 겹쳐 메모리 초과로 죽고 → 재시작 → 또 굽고 → 또 죽는 고리가 된다(v96 인포 렌더 OOM 전례).
+#   ⇒ 시작 때 굽지 않는다. <b>처음 /info.pdf 를 누를 때만</b> 굽는다(그 뒤 캐시). 시작 경로에 무거운 작업을 넣지 않는다.
+
+# ★★★★★v766 제192조 — 서버는 인포메이션을 그리지 않는다. 통합앱(Netlify) 정적 info.pdf 로 보낸다.
+from fastapi.responses import RedirectResponse as _RR766
+@app.get('/info.pdf')
+def info_pdf():
+    return _RR766('https://singular-smakager-0caac1.netlify.app/info.pdf', status_code=302)
+
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
@@ -13140,6 +13310,7 @@ def job_get(jid: str):
         return JSONResponse({'ok': True, 'st': 'run', 'sec': int(_time740.time() - _j.get('t', 0))})
     return JSONResponse(dict(_j))
 
+_BEHAVE_CACHE769 = None
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
@@ -13154,7 +13325,11 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
     #   ★산출은 막지 않는다(제49조) — 대신 <b>화면에 크게</b> 띄운다. 조용히 넘어가지 않는다.
     _BEHAVE_WARN = []
     try:
-        _bw, _bd = behave_selftest()
+        # ★v769 제194조 ① 동작검사는 코드가 같으면 결과도 같다 → 서버 프로세스당 1번만 돌리고 재사용(분석마다 5~10초 절약)
+        global _BEHAVE_CACHE769
+        if _BEHAVE_CACHE769 is None:
+            _BEHAVE_CACHE769 = behave_selftest()
+        _bw, _bd = _BEHAVE_CACHE769
         print('[동작검사] 조문 %d개 실행 · 실패 %d건' % (len(_bd), len(_bw)))
         if _bw:
             _BEHAVE_WARN = _bw
@@ -13331,7 +13506,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
-        unmapped=build_excel(data,xl)
+        _tA769=__import__('time').time(); unmapped=build_excel(data,xl); print(f'[v769 시간] 엑셀 {round(__import__("time").time()-_tA769,1)}초')
         # ★★★★★v323 <b>10억통장 = 이름으로 찾는다</b>(지점장 지시 2026.08.01).
         #   지점장 원문: "10억통장은 이름으로 찾아야 한다. 유일하게 보장진단서에 10억통장이
         #   기재되면 거꾸로 엑셀과 보장분석지 PPT에 기재해라."
@@ -13368,7 +13543,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         except Exception as _erx: print('[R10] 엑셀 역기재 실패 (%s)'%str(_erx)[:60])
         if not recalc_xlsx(xl): inject_sum_cache(xl)   # ★v29u: Railway(LibreOffice 없음)에서도 합계 캐시 보장
         ppt_totals, sq, ss, ppt_splits = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
-        ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits)
+        _tB769=__import__('time').time(); ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits); print(f'[v769 시간] 보장분석지 PPT {round(__import__("time").time()-_tB769,1)}초')
         # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         _sm = make_summary(data)
@@ -13469,7 +13644,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 # ★v107: 같은 렌더에서 벡터 PDF(보장설명서)도 함께 받는다(추가 렌더 0회).
                 #   PPT는 이미지라 확대·인쇄 시 글자가 뭉갠다 → 선명본은 이 PDF.
                 rpdf=os.path.join(d,f'보장설명서_{cust}.pdf')
-                build_report_pptx(rep, rpx, pdf_out=rpdf)
+                _tC769=__import__('time').time(); build_report_pptx(rep, rpx, pdf_out=rpdf); print(f'[v769 시간] 진단서+설명서 {round(__import__("time").time()-_tC769,1)}초')
                 if os.path.exists(rpdf):
                     # ★★★★★v424 (지점장 지시 2026.08.16): <b>재무 페이지는 진단서에만</b>.
                     #   진단서 PPT는 이 PDF 앞부분을 잘라 쓰므로 원본에는 남기고,
@@ -13505,8 +13680,16 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                             print(f'[v424 설명서] 재무 페이지 {len(_drop)}장 제거 → {len(_rd.pages)-len(_drop)}쪽')
                     except Exception as _e9:
                         print('[v424 설명서] 재무 제거 실패:', _e9)
-                    response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
-                    response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
+                    # ★★★★★v767 제193조 — 설명서 = 미리 만든 인포메이션 참고자료(info_static.pdf). 렌더 0.
+                    _st767 = os.path.join(HERE, 'info_static.pdf')
+                    if os.path.exists(_st767):
+                        response['report_b64']=base64.b64encode(open(_st767,'rb').read()).decode()
+                        response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
+                        print('[v767 제193조] 설명서 = 인포메이션 참고자료(미리 만든 PDF) 첨부')
+                    else:
+                        response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
+                        response['report_name']=f'보장설명서_{cust}.pdf'
+                        response.setdefault('warnings', []).append('[확인] info_static.pdf 없음 — 설명서에 참고자료 대신 고객 쪽 사본을 실었다')
                 if os.path.exists(rpx):
                     response['report_pptx_b64']=base64.b64encode(open(rpx,'rb').read()).decode()
                     response['report_pptx_name']=f'보장진단서_{cust}.pptx'
