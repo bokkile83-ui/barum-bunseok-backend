@@ -10526,54 +10526,18 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
   fd.append("pw",ACCESS);
   let j=null;
   try{
-    /* ★v763 HOTFIX: Railway의 장시간 HTTP 연결(약 5분) 때문에 /analyze가 499로 끊기는 문제를 우회한다.
-       기존 /job/start가 이미 서버에 존재하므로, 업로드 요청은 즉시 job id만 받고
-       실제 분석은 백그라운드에서 수행한 뒤 /job/{id}를 폴링한다.
-       분석 엔진 자체는 /analyze와 동일하므로 산출물/판정 로직은 바꾸지 않는다. */
-    const _start=await fetch("/job/start",{method:"POST",body:fd});
-    const _startRaw=await _start.text();
-    let _startJ=null;
-    try{ _startJ=JSON.parse(_startRaw); }catch(e){
-      clearInterval(timer);loading.remove();
-      add('<span class="err">[연결 오류] 작업 시작 응답을 읽지 못했습니다.<br><span style="font-size:11px;opacity:.7">status '+_start.status+' · '+esc(_startRaw.slice(0,160))+'</span></span>',"bot");
-      document.getElementById("send").disabled=false; return;
-    }
-    if(!_startJ.ok || !_startJ.job){
-      clearInterval(timer);loading.remove();
-      add('<span class="err">[오류] '+esc(_startJ.error||"분석 작업을 시작하지 못했습니다.")+'</span>',"bot");
-      document.getElementById("send").disabled=false; return;
-    }
-    const _jid=_startJ.job;
-    let _done=false;
-    for(let _poll=0;_poll<300;_poll++){
-      await new Promise(_res=>setTimeout(_res,3000));
-      let _jr=null;
-      try{
-        const _rr=await fetch("/job/"+encodeURIComponent(_jid),{cache:"no-store"});
-        const _rt=await _rr.text();
-        _jr=JSON.parse(_rt);
-      }catch(_e){
-        /* 일시적인 폴링 실패는 분석 작업을 취소하지 않고 다음 회차에 재시도 */
-        continue;
-      }
-      if(_jr && _jr.st==="run"){
-        const _sec=Number(_jr.sec||0);
-        const _tm=document.getElementById("ldtime");
-        if(_tm)_tm.textContent=_sec+"초 경과 · 서버에서 분석 중";
-        const _mm=document.getElementById("ldmsg");
-        if(_mm){
-          const _steps=["PDF 파싱 중…","담보 추출 중…","엑셀 생성 중…","PPT 채우는 중…","완성 중…"];
-          _mm.textContent=_steps[Math.min(Math.floor(_sec/25),_steps.length-1)];
-        }
-        continue;
-      }
-      if(_jr && (_jr.st==="done" || _jr.st==="none")){
-        j=_jr; _done=true; break;
-      }
-    }
-    clearInterval(timer);loading.remove();
-    if(!_done){
-      add('<span class="err">[연결 오류] 분석 작업이 너무 오래 걸리고 있습니다. 서버 작업은 별도로 진행 중일 수 있으니 잠시 후 다시 확인해 주세요.</span>',"bot");
+    const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
+    /* ★★★★★v698 (지점장 실측 2026.09.15 「Unexpected token 'u', "upstream error" is not valid JSON」)
+       분석이 80~100초라 Railway 엣지가 먼저 연결을 끊으면 프록시가 <b>JSON이 아닌 문자열</b>을 돌려준다.
+       구 코드는 그걸 그대로 `r.json()`에 넣어 <b>파싱 오류</b>로 죽었다 → 원인이 안 보였다.
+       ⇒ 본문을 먼저 글자로 받아보고, JSON이 아니면 <b>사람이 읽는 안내</b>로 띄운다. */
+    const _raw = await r.text();
+    try{ j = JSON.parse(_raw); }
+    catch(e){
+      var _hint = (/upstream|timeout|gateway|502|503|504/i.test(_raw) || r.status>=502)
+        ? "서버 응답이 끊겼습니다(분석에 1~2분 걸립니다). 잠시 후 <b>같은 파일로 다시</b> 눌러 주세요."
+        : "서버가 알 수 없는 응답을 보냈습니다.";
+      add('<span class="err">[연결 오류] '+_hint+'<br><span style="font-size:11px;opacity:.7">status '+r.status+' · '+esc(_raw.slice(0,120))+'</span></span>',"bot");
       document.getElementById("send").disabled=false; return;
     }
     if(!j.ok){
@@ -13245,8 +13209,7 @@ async def job_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None
     def _run():
         import asyncio as _aio, io as _io
         from starlette.datastructures import UploadFile as _UF
-        # 일반 웹 분석은 전체 산출물(PPT/PDF 포함)이 필요하므로 lite 모드를 켜지 않는다.
-        _JOB_LITE.on = False
+        _JOB_LITE.on = True
         _JOB_LITE.pay = []
         try:
             _f1 = _UF(_io.BytesIO(_b1[1]), filename=_b1[0]) if _b1 else None
@@ -13254,12 +13217,9 @@ async def job_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None
             _resp = _aio.run(analyze(file=_f1, file2=_f2, pw=pw))
             _j = json.loads(bytes(_resp.body).decode('utf-8')) if hasattr(_resp, 'body') else dict(_resp)
             if _j.get('ok') and _j.get('xlsx_b64'):
-                # /analyze의 전체 JSON을 보존한다. 프론트는 /job/{id}에서
-                # 엑셀뿐 아니라 PPT/PDF/요약 등 기존 산출물을 그대로 받는다.
-                _j['st'] = 'done'
-                _j['t'] = _time740.time()
-                _j['pay'] = list(getattr(_JOB_LITE, 'pay', []) or [])
-                _JOBS[_jid] = _j
+                _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': True,
+                               'xlsx_b64': _j['xlsx_b64'], 'xlsx_name': _j.get('xlsx_name', ''),
+                               'pay': list(getattr(_JOB_LITE, 'pay', []) or [])}
             else:
                 _JOBS[_jid] = {'st': 'done', 't': _time740.time(), 'ok': False,
                                'error': re.sub(r'<[^>]+>', '', str(_j.get('error') or '서버가 엑셀을 못 만들었다'))[:400]}
