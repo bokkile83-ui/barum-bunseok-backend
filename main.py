@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v763-carecard-20260926'
+VSTAMP = 'v764-nowarm-20260926'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1701,6 +1701,7 @@ _STRUCT_SELFTEST = [
     ('제189조 조문',                'BARUM_DOCTRINE.md', r'제189조 — 간호통합병동은 금액으로 지원/사용 카드에 배정', True),
     ('제190조 분할단위대조',        'report_pptx.py', r'_core763 in _SPT', True),
     ('제190조 조문',                'BARUM_DOCTRINE.md', r'제190조 — 진단서 편집칸의 갱신\+비갱신 분할은 단위를 떼고 대조', True),
+    ('제187조 시작굽기금지',        'main.py', r"v764 긴급 \(지점장 2026\.09\.26 「모든 앱이 안 된다", True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -11696,12 +11697,10 @@ def _build_info_pdf761():
         print('[v761 인포메이션] PDF 생성', _p, os.path.getsize(_p))
     return _p
 
-@app.on_event('startup')
-def _info_warm761():
-    def _w():
-        try: _build_info_pdf761()
-        except Exception as _e: print('[v761 인포메이션] 선행 생성 실패:', str(_e)[:120])
-    _thr761.Thread(target=_w, daemon=True).start()
+# ★★★★★v764 긴급 (지점장 2026.09.26 「모든 앱이 안 된다 · 서버가 작동이 안 된다」):
+#   v761 이 서버가 켜질 때 인포메이션 64쪽을 미리 굽게 했다(startup 스레드). 로컬 실측 최대 메모리 <b>1.4GB · 46초</b>.
+#   켜지는 순간 다른 시작 작업과 겹쳐 메모리 초과로 죽고 → 재시작 → 또 굽고 → 또 죽는 고리가 된다(v96 인포 렌더 OOM 전례).
+#   ⇒ 시작 때 굽지 않는다. <b>처음 /info.pdf 를 누를 때만</b> 굽는다(그 뒤 캐시). 시작 경로에 무거운 작업을 넣지 않는다.
 
 @app.get('/info.pdf')
 def info_pdf():
