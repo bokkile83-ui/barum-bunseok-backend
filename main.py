@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v764-nowarm-20260926'
+VSTAMP = 'v765-fastllm-20260926'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1105,10 +1105,24 @@ def rule_extract(block_lines, prefolded=False):
     dambo['__DUP__'] = {k:v for k,v in _duplog.items() if len(v) >= 2}
     return dambo
 
+# ★★★★★v765 제191조 (지점장 2026.09.26 「인포메이션이 빠졌는데 여전히 2분이다」):
+#   계약마다 llm_extract(Claude API) 를 <b>한 건씩 차례로</b> 불렀다 — 계약 10건이면 API 왕복 10번이 줄을 선다.
+#   ⇒ parse_txt 를 한 번 「수집만」 돌려 계약별 별첨 글자를 모은 뒤 <b>동시에(최대 6건)</b> 부르고,
+#     결과를 글자 그대로 캐시해 본 실행이 꺼내 쓴다. 값·규칙·순서는 바뀌지 않는다(같은 글자 → 같은 호출).
+_LLM_CACHE765 = {}
+_LLM_COLLECT765 = None
 def llm_extract(block_text):
     """깨진 별첨(담보명/금액 줄 분리)을 Claude가 의미로 추출. 키 없으면 {} -> 규칙 폴백."""
     key = os.environ.get('ANTHROPIC_API_KEY','')
     if not key or not block_text.strip(): return {}
+    if _LLM_COLLECT765 is not None:          # ★v765 수집 단계 — 부르지 않고 글자만 모은다
+        _LLM_COLLECT765.append(block_text); return {}
+    if block_text in _LLM_CACHE765:          # ★v765 동시 호출 결과
+        return dict(_LLM_CACHE765[block_text])
+    return _llm_extract_call765(block_text)
+
+def _llm_extract_call765(block_text):
+    key = os.environ.get('ANTHROPIC_API_KEY','')
     prompt = ("보험 별첨 텍스트에서 담보명과 가입금액(만원 단위 숫자)을 추출.\n"
         "주의: 표가 깨져 담보명이 2줄로 나뉘거나 금액이 별도 블록에 모여있을 수 있음. 순서·문맥으로 정확히 매칭.\n"
         "담보명은 원문 그대로. 납입면제·납입지원·특약안내 등 비담보성 항목은 제외.\n"
@@ -1702,6 +1716,8 @@ _STRUCT_SELFTEST = [
     ('제190조 분할단위대조',        'report_pptx.py', r'_core763 in _SPT', True),
     ('제190조 조문',                'BARUM_DOCTRINE.md', r'제190조 — 진단서 편집칸의 갱신\+비갱신 분할은 단위를 떼고 대조', True),
     ('제187조 시작굽기금지',        'main.py', r"v764 긴급 \(지점장 2026\.09\.26 「모든 앱이 안 된다", True),
+    ('제191조 LLM동시호출',         'main.py', r'_TPE765\(max_workers=min\(6, len\(_todo\)\)\)', True),
+    ('제191조 조문',                'BARUM_DOCTRINE.md', r'제191조 — 계약별 LLM 추출은 동시에 부른다', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -4065,6 +4081,34 @@ def name_selftest():
 
 
 def parse_txt(txt, filename='', extra=None):
+    """★v765 제191조 — 수집(1회) → 동시 호출 → 본 실행. 키가 없거나 수집이 실패하면 종전 그대로."""
+    global _LLM_COLLECT765
+    import time as _t765
+    _t0 = _t765.time()
+    if os.environ.get('ANTHROPIC_API_KEY','') and os.environ.get('BARUM_LLM_SERIAL') != '1':
+        try:
+            _LLM_COLLECT765 = []
+            try:
+                _parse_txt_core(txt, filename, extra)
+            finally:
+                _todo = [b for b in dict.fromkeys(_LLM_COLLECT765 or []) if b not in _LLM_CACHE765]
+                _LLM_COLLECT765 = None
+            if _todo:
+                from concurrent.futures import ThreadPoolExecutor as _TPE765
+                with _TPE765(max_workers=min(6, len(_todo))) as _ex:
+                    for _b, _r in zip(_todo, _ex.map(_llm_extract_call765, _todo)):
+                        _LLM_CACHE765[_b] = _r or {}
+            print(f'[v765 제191조] 별첨 LLM {len(_todo)}건 동시 호출 — {round(_t765.time()-_t0,1)}초')
+        except Exception as _e765:
+            _LLM_COLLECT765 = None
+            print('[v765 제191조] 동시 호출 실패 — 종전 방식:', str(_e765)[:120])
+    try:
+        return _parse_txt_core(txt, filename, extra)
+    finally:
+        if len(_LLM_CACHE765) > 400: _LLM_CACHE765.clear()
+        print(f'[v765 제191조] parse_txt 전체 {round(_t765.time()-_t0,1)}초')
+
+def _parse_txt_core(txt, filename='', extra=None):
     lines = [l.rstrip() for l in txt.replace('\r\n','\n').replace('\r','\n').split('\n')]
     lines = _repair_anchor(lines)   # ★v282 유실된 계약 경계 앵커 복구
     # ★★★v237: 세부가입현황(상세내역) 계약별 CI 정보 1회 계산 — 선지급률 판정 2순위 근거
@@ -13427,7 +13471,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
-        unmapped=build_excel(data,xl)
+        _tA765=__import__('time').time(); unmapped=build_excel(data,xl); print(f'[v765 시간] 엑셀 {round(__import__("time").time()-_tA765,1)}초')
         # ★★★★★v323 <b>10억통장 = 이름으로 찾는다</b>(지점장 지시 2026.08.01).
         #   지점장 원문: "10억통장은 이름으로 찾아야 한다. 유일하게 보장진단서에 10억통장이
         #   기재되면 거꾸로 엑셀과 보장분석지 PPT에 기재해라."
@@ -13464,7 +13508,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         except Exception as _erx: print('[R10] 엑셀 역기재 실패 (%s)'%str(_erx)[:60])
         if not recalc_xlsx(xl): inject_sum_cache(xl)   # ★v29u: Railway(LibreOffice 없음)에서도 합계 캐시 보장
         ppt_totals, sq, ss, ppt_splits = read_excel_totals(xl)   # 등식2: PPT는 완성 엑셀만 읽음
-        ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits)
+        _tB765=__import__('time').time(); ppt_ok=build_ppt(data,pt,ppt_totals,sq,ss,ppt_splits); print(f'[v765 시간] 보장분석지 PPT {round(__import__("time").time()-_tB765,1)}초')
         # 치료비정리 PPT 폐기(v29) — 내용 부실, 보장설명지 PDF로 대체
         xlsx_b64=base64.b64encode(open(xl,'rb').read()).decode()
         _sm = make_summary(data)
@@ -13565,7 +13609,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 # ★v107: 같은 렌더에서 벡터 PDF(보장설명서)도 함께 받는다(추가 렌더 0회).
                 #   PPT는 이미지라 확대·인쇄 시 글자가 뭉갠다 → 선명본은 이 PDF.
                 rpdf=os.path.join(d,f'보장설명서_{cust}.pdf')
-                build_report_pptx(rep, rpx, pdf_out=rpdf)
+                _tC765=__import__('time').time(); build_report_pptx(rep, rpx, pdf_out=rpdf); print(f'[v765 시간] 진단서+설명서 {round(__import__("time").time()-_tC765,1)}초')
                 if os.path.exists(rpdf):
                     # ★★★★★v424 (지점장 지시 2026.08.16): <b>재무 페이지는 진단서에만</b>.
                     #   진단서 PPT는 이 PDF 앞부분을 잘라 쓰므로 원본에는 남기고,
