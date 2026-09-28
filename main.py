@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v765-fastllm-20260926'
+VSTAMP = 'v767-inforeturn-20260928'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1718,6 +1718,10 @@ _STRUCT_SELFTEST = [
     ('제187조 시작굽기금지',        'main.py', r"v764 긴급 \(지점장 2026\.09\.26 「모든 앱이 안 된다", True),
     ('제191조 LLM동시호출',         'main.py', r'_TPE765\(max_workers=min\(6, len\(_todo\)\)\)', True),
     ('제191조 조문',                'BARUM_DOCTRINE.md', r'제191조 — 계약별 LLM 추출은 동시에 부른다', True),
+    ('제192조 서버렌더금지',        'main.py', r"_RR766\('https://singular-smakager-0caac1\.netlify\.app/info\.pdf'", True),
+    ('제192조 조문',                'BARUM_DOCTRINE.md', r'제192조 — 서버는 인포메이션을 그리지 않는다', True),
+    ('제193조 참고자료복원',        'main.py', r"response\['report_name'\]=f'보장설명서_참고자료_\{cust\}\.pdf'", True),
+    ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -11746,15 +11750,15 @@ def _build_info_pdf761():
 #   켜지는 순간 다른 시작 작업과 겹쳐 메모리 초과로 죽고 → 재시작 → 또 굽고 → 또 죽는 고리가 된다(v96 인포 렌더 OOM 전례).
 #   ⇒ 시작 때 굽지 않는다. <b>처음 /info.pdf 를 누를 때만</b> 굽는다(그 뒤 캐시). 시작 경로에 무거운 작업을 넣지 않는다.
 
+# ★★★★★v766 제192조 (지점장 2026.09.28 「갑자기 안 되는 이유 찾아라」 · 분석 250초 뒤 Failed to fetch 2회):
+#   v761~v765 의 /info.pdf 는 누를 때 서버가 인포메이션 64쪽을 그렸다 — 로컬 실측 <b>최대 1.4GB · 46초</b>.
+#   분석(수백 MB)과 겹치면 서버 메모리가 넘쳐 프로세스가 죽고, 돌던 분석은 「Failed to fetch」로 끊긴다.
+#   서버가 재시작되면 캐시(/tmp)도 사라져 다음에 누르면 또 그린다 — 「갑자기」 반복되는 구조.
+#   ⇒ <b>서버는 인포메이션을 절대 그리지 않는다.</b> 미리 만든 PDF 를 통합앱(Netlify)에 정적 파일로 두고 거기로 보낸다.
+from fastapi.responses import RedirectResponse as _RR766
 @app.get('/info.pdf')
 def info_pdf():
-    try:
-        _p = _build_info_pdf761()
-    except Exception as _e:
-        return JSONResponse({'ok': False, 'error': '인포메이션 PDF 생성 실패: ' + str(_e)[:160]}, status_code=500)
-    return Response(open(_p, 'rb').read(), media_type='application/pdf',
-                    headers={'Content-Disposition': 'inline; filename="MAKEONE_information.pdf"',
-                             'Cache-Control': 'public, max-age=3600', 'X-BARUM-VER': VSTAMP})
+    return _RR766('https://singular-smakager-0caac1.netlify.app/info.pdf', status_code=302)
 
 @app.get('/health')
 def health():
@@ -13645,8 +13649,19 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                             print(f'[v424 설명서] 재무 페이지 {len(_drop)}장 제거 → {len(_rd.pages)-len(_drop)}쪽')
                     except Exception as _e9:
                         print('[v424 설명서] 재무 제거 실패:', _e9)
-                    response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
-                    response['report_name']=f'보장설명서_{cust}.pdf'   # ★v761 제187조: 참고자료(인포메이션)는 /info.pdf 로 분리 — 이 PDF 는 고객 구간 벡터본
+                    # ★★★★★v767 제193조 (지점장 2026.09.28 「그럼 인포메이션 다시 넣자」):
+                    #   v761 이전의 설명서 PDF = <b>인포메이션 구간만</b>(간지부터, 고객 쪽은 진단서 PPT 가 담당)이었다.
+                    #   v761 이 인포를 렌더에서 빼자 간지를 못 찾아 설명서가 <b>고객 12쪽 사본</b>으로 바뀌고 참고자료가 사라졌다.
+                    #   ⇒ 참고자료를 되돌린다. 단 <b>매번 그리지 않고</b> 미리 만든 `info_static.pdf` 를 그대로 싣는다(렌더 0초·메모리 0).
+                    _st767 = os.path.join(HERE, 'info_static.pdf')
+                    if os.path.exists(_st767):
+                        response['report_b64']=base64.b64encode(open(_st767,'rb').read()).decode()
+                        response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
+                        print('[v767 제193조] 설명서 = 인포메이션 참고자료(미리 만든 PDF) 첨부')
+                    else:
+                        response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
+                        response['report_name']=f'보장설명서_{cust}.pdf'
+                        response.setdefault('warnings', []).append('[확인] info_static.pdf 없음 — 설명서에 참고자료 대신 고객 쪽 사본을 실었다')
                 if os.path.exists(rpx):
                     response['report_pptx_b64']=base64.b64encode(open(rpx,'rb').read()).decode()
                     response['report_pptx_name']=f'보장진단서_{cust}.pptx'
