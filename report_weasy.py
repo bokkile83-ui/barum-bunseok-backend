@@ -1271,6 +1271,17 @@ def _asset_body(rep):
 
 _INFO_MODE = 'all' if _os_env.environ.get('BARUM_INFO_IN_REPORT') == '1' else 'cust'   # ★v761 제187조: 'cust' 고객구간만 / 'info' 인포메이션만 / 'all' 통짜
 
+def _glyph_safe(doc):
+    """★★★★★v774 제197조 (지점장 2026.09.28 「인포메이션에 아이콘들이 깨진 곳들이 있다」):
+    서버(Railway)에는 fonts-nanum 만 있다. 나눔에 없는 글자(✓ ✕ ✗ − 와 그림 이모지 👁🫀🩻🫁🧠)는 PDF 에서 네모(☒)로 깨졌다.
+    ⇒ 렌더 직전에 나눔에 있는 글자로 바꾼다: ✓→√ · ✕✗→× · −→– · 이모지 → ◎♥▣◈◆ (그 밖의 이모지는 지운다). 글자만 바꾸고 계산·배치는 그대로."""
+    import re as _rg
+    _M = {'\u2713': '\u221a', '\u2715': '\u00d7', '\u2717': '\u00d7', '\u2212': '\u2013', '\ufe0f': '',
+          '\U0001F441': '\u25ce', '\U0001FAC0': '\u2665', '\U0001FA7B': '\u25a3', '\U0001FAC1': '\u25c8', '\U0001F9E0': '\u25c6'}
+    for _k, _v in _M.items():
+        if _k in doc: doc = doc.replace(_k, _v)
+    return _rg.sub('[\U0001F000-\U0001FAFF]', '', doc)
+
 def _cut_info(doc):
     """★v761 제187조 — 인포메이션 간지(첫 `pg infopg`)를 경계로 문서를 자른다. 'all'이면 그대로."""
     import re as _rc
@@ -2718,8 +2729,8 @@ table.bcw{{width:100%;table-layout:fixed;border-collapse:separate;border-spacing
 table.bcw td.bc{{width:20%;vertical-align:top;border-radius:2.4mm;overflow:hidden;padding:0 0 2mm;border:0.3mm solid #dde4ec}}
 .bch{{padding:2.2mm 0 1.6mm;text-align:center}}
 .bcn{{font-size:16pt;font-weight:900;color:#fff;letter-spacing:-0.3pt}}
-.bci{{text-align:center;font-size:15pt;line-height:1.1;margin:1.6mm 0 0.6mm}}
-.bcs{{text-align:center;font-size:7.4pt;font-weight:800;color:#1F3A5F;padding:0 1.5mm 1.4mm;word-break:keep-all}}
+.bci{{text-align:center;line-height:0;margin:1.8mm 0 1mm}}
+.bcs{{margin-top:2.4mm !important;text-align:center;font-size:7.4pt;font-weight:800;color:#1F3A5F;padding:0 1.5mm 1.4mm;word-break:keep-all}}
 ul.bcl{{margin:0;padding:0 2mm 0 5mm;font-size:7pt;line-height:1.55;color:#33415c}}
 td.bc.k1{{background:#EAF4FD}}td.bc.k1 .bch{{background:#5AA9E6}}
 td.bc.k2{{background:#E8F0FC}}td.bc.k2 .bch{{background:#3C7DD9}}
@@ -2733,8 +2744,8 @@ td.bc.k5{{background:#FDF2E2}}td.bc.k5 .bch{{background:#E08A1E}}
 .jnh span{{font-size:7pt;font-weight:700}}.jnh em{{font-size:6.4pt;font-style:normal;float:right;opacity:.9}}
 .jn.k1 .jnh{{background:#5AA9E6}}.jn.k2 .jnh{{background:#3C7DD9}}.jn.k3 .jnh{{background:#2FA36B}}
 .jn.k4 .jnh{{background:#2E7D32}}.jn.k5 .jnh{{background:#E08A1E}}
-ul.jnl{{margin:0;padding:1.4mm 2mm 1.6mm 5mm;font-size:6.8pt;line-height:1.5}}
-ul.jnl li{{margin:0 0 0.4mm}}
+ul.jnl{{margin:0;padding:1.1mm 2mm 1.2mm 5mm;font-size:6.4pt;line-height:1.36}}
+ul.jnl li{{margin:0 0 0.15mm}}
 table.jt.jdf td.hi2{{font-weight:800;color:#0B6B3A;width:58mm}}
 table.jt.jdf td.c2{{width:44mm;font-weight:700;color:#1F3A5F}}
 table.jt.js td.ty{{width:16mm}}
@@ -2934,8 +2945,8 @@ table.jt.js td.chk{{width:16mm}}
             _ic, _sub, _rep = _N.FACE[_k]
             _li = ''.join('<li>%s</li>' % _html.escape(_t) for _t in _rep)
             _cards.append('<td class="bc k%d"><div class="bch"><span class="bcn">%s</span></div>'
-                          '<div class="bci">%s</div><div class="bcs">%s</div><ul class="bcl">%s</ul></td>'
-                          % (_i, _html.escape(_k), _ic, _html.escape(_sub), _li))
+                          '<div class="bcs">%s</div><ul class="bcl">%s</ul></td>'
+                          % (_i, _html.escape(_k), _html.escape(_sub), _li))   # ★v776 (지점장 「그냥 아이콘 빼라 — 더 이상하다」) 아이콘 칸 삭제
         _bl = []
         for _i, _k in enumerate(['1종', '2종', '3종', '4종', '5종'], 1):
             _sub, _items = _N.JONG[_k]
@@ -3035,14 +3046,17 @@ table.jt.js td.chk{{width:16mm}}
         _new = _jong_new_page()
         if _new:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('신입용 보상별 정리 (1/2)', '1~5종 보상별', '종별로 묶은 수술 72개', _new[0], '신입용'))
-            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('신입용 보상별 정리 (2/2)', '회사마다 갈리는 것', '도표 5개만 외우면 된다', _new[1], '신입용'))
+                        % ('신입용 보상별 정리', '1~5종 보상별', '종별로 묶은 수술 72개', _new[0], '신입용'))
         _cmp = _jong_cmp_page()
-        if _cmp:
+        # ★v773 제196조 (지점장 2026.09.28 「수술비 쪽 맨 뒤 40·41페이지 합쳐 줘」): 신입용 (2/2) 「회사마다 갈리는 것」과 「회사별 보상 비교」를 한 장으로
+        if _new:
+            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
+                        % ('회사별 차이 · 보상 비교', '회사마다 갈리는 것', '도표 5개 + 같은 수술 9사 종수', _new[1] + ('<div class="jsub">회사별 보상 비교 — 같은 수술 · 9사 종수 (★는 다른 값)</div>' + _cmp if _cmp else ''), '신입용·비교'))
+        elif _cmp:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
                         % ('회사별 보상 비교', '같은 수술 · 9사 종수', '★는 다른 값 · ?는 원본 미확인', _cmp, '비교'))
         for _co in _J.JONG_ORDER:
+            if _co in ('메리츠', '미래에셋', 'ABL생명'): continue   # ★v773 제196조 (지점장 2026.09.28 「1-5종 분류표 메리츠 삭제 · 미래·ABL 삭제」) 원문 쪽만 뺀다
             if _co in _TX:                               # ★v747 글자 표가 있는 회사는 그것을 쓴다
                 _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"') % (_html.escape(_co), _html.escape(_co), '약관 원문 전사(글자 표)', _TX[_co], _html.escape(_co)))
                 continue
@@ -3704,87 +3718,92 @@ table.jt.js td.chk{{width:16mm}}
   <div class="irow">
     <div class="inum">01</div>
     <div class="itx"><div class="ih">질병 후유장해</div><div class="ip">세부 장해와 지급률 · 청구 전 체크</div></div>
-    <div class="ipg">15</div>
+    <div class="ipg">3</div>
    </div>
    <div class="irow">
     <div class="inum">02</div>
     <div class="itx"><div class="ih">외래 300회 초과 90%</div><div class="ip">2027.01.01 시행 · 5세대 연동</div></div>
-    <div class="ipg">16</div>
+    <div class="ipg">4</div>
    </div>
    <div class="irow">
     <div class="inum">03</div>
     <div class="itx"><div class="ih">국민건강보험공단 지원제도</div><div class="ip">산정특례 · 재난적의료비 · 상한제 · 검진 · 상병수당</div></div>
-    <div class="ipg">17 – 18</div>
+    <div class="ipg">5 – 6</div>
    </div>
    <div class="irow">
     <div class="inum">04</div>
     <div class="itx"><div class="ih">5세대 실손보험</div><div class="ip">급여 통원 공제 · MRI/도수/주사 · 중증 vs 비중증</div></div>
-    <div class="ipg">19 – 24</div>
+    <div class="ipg">7 – 12</div>
    </div>
    <div class="irow">
     <div class="inum">05</div>
     <div class="itx"><div class="ih">교통사고 경상환자</div><div class="ip">자배법 시행령 개정 · 8주 기준</div></div>
-    <div class="ipg">25</div>
+    <div class="ipg">13</div>
    </div>
    <div class="irow">
     <div class="inum">06</div>
     <div class="itx"><div class="ih">3대 주요치료비 변천사</div><div class="ip">비례형 → 정액형 → 비급여 → 생활비</div></div>
-    <div class="ipg">26</div>
+    <div class="ipg">14</div>
    </div>
    <div class="irow">
     <div class="inum">07</div>
     <div class="itx"><div class="ih">흥국화재 10억통장</div><div class="ip">[갱신형]플래티넘 건강 리셋월렛II</div></div>
-    <div class="ipg">27</div>
+    <div class="ipg">15</div>
    </div>
    <div class="irow">
     <div class="inum">08</div>
     <div class="itx"><div class="ih">암 · 뇌 · 심 치료 용어</div><div class="ip">관혈 · 비관혈 구분 · 수술 · 시술 · 약물</div></div>
-    <div class="ipg">28 – 29</div>
+    <div class="ipg">16 – 17</div>
    </div>
    <div class="irow">
     <div class="inum">09</div>
     <div class="itx"><div class="ih">암 보장률 리포트</div><div class="ip">공단 「2024년도 진료비 실태조사」</div></div>
-    <div class="ipg">30 – 32</div>
+    <div class="ipg">18 – 20</div>
    </div>
    <div class="irow">
     <div class="inum">10</div>
     <div class="itx"><div class="ih">암 치료비 4단계</div><div class="ip">급여 · 선별급여 · 전액본인부담 · 비급여</div></div>
-    <div class="ipg">33</div>
+    <div class="ipg">21</div>
    </div>
    <div class="irow">
     <div class="inum">11</div>
     <div class="itx"><div class="ih">대한민국 상급종합병원 47곳</div><div class="ip">권역별 명단</div></div>
-    <div class="ipg">34</div>
+    <div class="ipg">22</div>
    </div>
    <div class="irow">
     <div class="inum">12</div>
     <div class="itx"><div class="ih">통합치료비 세부보장항목</div><div class="ip">KB 암 · 순환계 · 삼성화재</div></div>
-    <div class="ipg">35 – 38</div>
+    <div class="ipg">23 – 26</div>
    </div>
    <div class="irow">
     <div class="inum">13</div>
     <div class="itx"><div class="ih">순환계 한눈에 정리</div><div class="ip">심장 · 혈관 · 혈액 구조와 순환 경로</div></div>
-    <div class="ipg">39</div>
+    <div class="ipg">27</div>
    </div>
    <div class="irow">
     <div class="inum">14</div>
     <div class="itx"><div class="ih">알츠하이머 신약 레켐비</div><div class="ip">치료 원리 · 보험 담보 핵심</div></div>
-    <div class="ipg">40</div>
+    <div class="ipg">28</div>
    </div>
    <div class="irow">
     <div class="inum">15</div>
     <div class="itx"><div class="ih">연금계좌 세액공제</div><div class="ip">연금저축 · IRP 납입 한도 · 공제율</div></div>
-    <div class="ipg">41</div>
+    <div class="ipg">29</div>
    </div>
    <div class="irow">
     <div class="inum">16</div>
     <div class="itx"><div class="ih">MAKEONE LIFE PLAN</div><div class="ip">재무상태 · 미래가치 · 달러자산</div></div>
-    <div class="ipg">42 – 45</div>
+    <div class="ipg">30 – 33</div>
    </div>
    <div class="irow">
     <div class="inum">17</div>
     <div class="itx"><div class="ih">심혈관 담보 분류</div><div class="ip">보험사별 · 질병코드 기준</div></div>
-    <div class="ipg">46 – 49</div>
+    <div class="ipg">34 – 37</div>
+   </div>
+   <div class="irow">
+    <div class="inum">18</div>
+    <div class="itx"><div class="ih">1~5종 수술분류표</div><div class="ip">요약 · 신입용 · 회사별 비교 · 약관 원문</div></div>
+    <div class="ipg">38 – 49</div>
    </div>
   </div>
   </div>
@@ -3855,7 +3874,7 @@ table.jt.js td.chk{{width:16mm}}
 <style>
 .hjA{{display:flex;gap:2mm;margin:1.5mm 0 2.5mm}}
 .hjA .c{{flex:1;border:0.3mm solid #cfd8ea;border-radius:2mm;background:#f7f9ff;padding:2mm}}
-.hjA .c .ic{{font-size:11pt;line-height:1}}
+.hjA .c .ic{{line-height:0;height:7mm}}
 .hjA .c .h{{font:800 8pt/1.2 inherit;color:#1544a8;margin:0.8mm 0}}
 .hjA .c .t{{font-size:6.8pt;line-height:1.45;color:#25324a}}
 .hjG{{display:flex;flex-wrap:wrap;gap:1.6mm}}
@@ -3872,13 +3891,13 @@ table.jt.js td.chk{{width:16mm}}
 </style>
   <div class="sect">① 꼭 알아둘 4가지 <span>보험 표준 장해분류표 기준</span></div>
   <div class="hjA">
-   <div class="c"><div class="ic">?</div><div class="h">무엇인가요?</div>
+   <div class="c"><div class="h">무엇인가요?</div>
     <div class="t">질병 치료 후에도 신체·정신 기능에 <b>영구적인 손상</b>이 남은 상태</div></div>
-   <div class="c"><div class="ic">1</div><div class="h">언제 보나요?</div>
+   <div class="c"><div class="h">언제 보나요?</div>
     <div class="t">진단명만이 아니라 <b>장해가 고정</b>되었는지, 약관 기준 충족 여부를 함께 판단</div></div>
-   <div class="c"><div class="ic">₩</div><div class="h">얼마나 받나요?</div>
+   <div class="c"><div class="h">얼마나 받나요?</div>
     <div class="t">보험금 = <b>가입금액 × 장해지급률</b><br>(보통 3~100%)</div></div>
-   <div class="c"><div class="ic">★</div><div class="h">꼭 기억할 점</div>
+   <div class="c"><div class="h">꼭 기억할 점</div>
     <div class="t"><b>합산·차액·파상장해</b>는 약관마다 다르므로 가입한 약관 확인이 가장 중요합니다</div></div>
   </div>
 
@@ -5393,6 +5412,7 @@ table.jt.js td.chk{{width:16mm}}
     #   ⇒ 보장분석 렌더는 <b>고객 구간만</b>(_INFO_MODE='cust'), 인포메이션은 서버 /info.pdf 가 버전당 1번만 그려 허브 아이콘이 연다(_INFO_MODE='info').
     #   옛 통짜(76쪽)는 환경변수 BARUM_INFO_IN_REPORT=1 로만 돌아온다. 소스(인포 HTML 블록)는 그대로 둔다 — 제26조·제162조 검사·순서 정답지 유지.
     doc = _cut_info(doc)
+    doc = _glyph_safe(doc)   # ★v774 제197조 서버 글꼴(fonts-nanum)에 없는 글자 → 있는 글자로
     _pgs = _re2.split(r'(?=<div class="pg(?=["\s]))', doc)
     _tot = sum(1 for _c in _pgs if _re2.match(r'<div class="pg(?=["\s])', _c))
     _n = 0; _out = []
@@ -5408,7 +5428,7 @@ table.jt.js td.chk{{width:16mm}}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v771-kbpolyp-20260928</div>'
+    _VSTAMP = '<div class="vstamp">v776-noicon-20260928</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3
