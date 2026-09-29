@@ -2725,7 +2725,7 @@ table.jt.jcm .no{{width:14mm;text-align:center;color:#667;font-size:6.4pt}}
 table.jt.jcm td.cc{{font-weight:800}}
 table.jt.jcm td.cc.hi{{background:#FFF3CD;color:#8A4B12}}
 table.jt.jcm td.cc.q{{color:#C00000}}
-table.bcw{{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:2.2mm 0;margin:1mm 0 3mm}}
+table.bcw{{width:calc(100% - 13.2mm);table-layout:fixed;border-collapse:separate;border-spacing:2.2mm 0;margin:1mm 0 3mm}}
 table.bcw td.bc{{width:20%;vertical-align:top;border-radius:2.4mm;overflow:hidden;padding:0 0 2mm;border:0.3mm solid #dde4ec}}
 .bch{{padding:2.2mm 0 1.6mm;text-align:center}}
 .bcn{{font-size:16pt;font-weight:900;color:#fff;letter-spacing:-0.3pt}}
@@ -2957,9 +2957,8 @@ table.jt.js td.chk{{width:16mm}}
                       % (_html.escape(_a), _html.escape(_b), _html.escape(_c)) for _a, _b, _c in _N.DIFF)
         _p1 = ('<table class="bcw"><tbody><tr>%s</tr></tbody></table>'
                '<div class="jsub">종별 전체 목록</div><div class="jnwrap">%s</div>') % (''.join(_cards), ''.join(_bl))
-        _p2 = ('<div class="jsub">★ 회사마다 갈리는 것 — 이것만 외우면 된다</div>'
-               '<table class="jt jdf"><thead><tr><th>수술</th><th>유리한 쪽</th><th>나머지</th></tr></thead><tbody>%s</tbody></table>'
-               '<div class="jtn">%s</div>') % (_dr, _html.escape(_N.FOOT))
+        _p2 = ('<div class="jsub">② 회사마다 갈리는 것 — 이것만 외우면 된다</div>'
+               '<table class="jt jdf"><thead><tr><th>수술</th><th>유리한 쪽</th><th>나머지</th></tr></thead><tbody>%s</tbody></table>') % (_dr,)
         return (_p1, _p2)
 
     def _jong_cmp_page():
@@ -2975,24 +2974,20 @@ table.jt.js td.chk{{width:16mm}}
                            for _v in _vals)
             _tr.append('<tr><td class="c2">%s</td><td class="no">%s</td>%s</tr>' % (_html.escape(_nm), _html.escape(_no), _tds))
         return ('<table class="jt jcm"><thead><tr><th>수술</th><th class="no">항</th>%s</tr></thead><tbody>%s</tbody></table>'
-                '<div class="jtn">%s</div><div class="jtn">%s</div>') % (_th, ''.join(_tr), _html.escape(_C.NOTE), _html.escape(_C.FOOT))
+                '<div class="jtn jrd">%s</div>') % (_th, ''.join(_tr), '<br>'.join(_html.escape(_x) for _x in _C.READ))
 
     def _jong_sum_page():
         try:
             import jongsul_sum as _S
         except Exception as _e:
             print('[v747 종수술요약] 모듈 없음', _e); return ''
-        _c = ''.join('<td class="jsx k%d"><div class="jck">%s</div><div class="jcs">%s</div><div class="jce">%s</div></td>'
-                     % (_i + 1, _html.escape(_k), _html.escape(_t), _html.escape(_ex))
-                     for _i, (_k, _t, _ex) in enumerate(_S.CARDS))
-        _r = ''.join('<tr><td class="co">%s</td><td class="%s">%s</td><td class="mm">%s</td><td class="mm">%s</td><td class="%s">%s</td><td class="src">%s</td></tr>'
-                     % (_html.escape(_co), ('chk' if _ak.startswith('[') else 'ty life'), _html.escape(_ak),
-                        _html.escape(_h), _html.escape(_tb),
+        # ★v778 제199조 — 카드는 신입용 한 벌만(여기 카드 삭제) · 약관 계열 칸은 6사 모두 생보약관이라 읽는 법 한 줄로 · 메모도 읽는 법 한 곳으로
+        _r = ''.join('<tr><td class="co">%s</td><td class="mm">%s</td><td class="mm">%s</td><td class="%s">%s</td><td class="src">%s</td></tr>'
+                     % (_html.escape(_co), _html.escape(_h), _html.escape(_tb),
                         ('chk' if _pay.startswith('[확인]') else 'pay'), _html.escape(_pay), _html.escape(_sr))
                      for _co, _ak, _h, _tb, _pay, _sr in _S.COS)
-        _body = ('<table class="jsc"><tbody><tr>%s</tr></tbody></table><div class="jtn">%s</div>'
-                 '<table class="jt js"><thead><tr><th>회사</th><th>약관 계열</th><th>제왕절개만출술(판별)</th><th>분류표 구성</th><th>지급방식</th><th>근거</th></tr></thead><tbody>%s</tbody></table>'
-                 '<div class="jtn">%s</div>') % (_c, _html.escape(_S.NOTE), _r, _html.escape(_S.FOOT))
+        _body = ('<div class="jsub">① 회사별 분류표 · 지급방식</div>'
+                 '<table class="jt js"><thead><tr><th>회사</th><th>제왕절개만출술(항·종)</th><th>분류표 구성</th><th>지급방식</th><th>근거</th></tr></thead><tbody>%s</tbody></table>') % (_r,)
         return _body
 
     def _jong_txt_pages():
@@ -3039,22 +3034,19 @@ table.jt.js td.chk{{width:16mm}}
         _COL_MM, _PAGE_MM = 56.0, 705.0      # 3단 × 235mm — 원본이 좁고 긴 표 조각이라 3단이 가장 촌촌하다      # 단 폭 86mm · 한 쪽 = 2단 × 235mm
         _TX = _jong_txt_pages()
         _out = []
+        # ★★★★★v778 제199조 (지점장 2026.09.29 「38·39·40이 내용이 비슷하다 · 비슷한 내용을 2·3번 적어놨다」 → 「3장을 2장으로 새로 배치 — 알아서」)
+        #   종전 3장 = ①요약(카드+회사표) ②신입용(카드+목록) ③차이+비교 — 카드 두 벌 · 같은 메모 다섯 군데.
+        #   → ⓐ 「한 눈에 보는 1~5종」 = 카드 한 벌 + 종별 전체 목록  ⓑ 「회사별 차이 · 보상 비교」 = ①회사별 분류표·지급방식 ②회사마다 갈리는 것 ③같은 수술 6사 종수 + 읽는 법 1곳
         _sum = _jong_sum_page()
-        if _sum:
-            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('한 눈에 보는 1~5종', '6사 요약', '생·손보 · 분류표 · 지급방식', _sum, '요약'))
         _new = _jong_new_page()
-        if _new:
-            _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('신입용 보상별 정리', '1~5종 보상별', '종별로 묶은 수술 72개', _new[0], '신입용'))
         _cmp = _jong_cmp_page()
-        # ★v773 제196조 (지점장 2026.09.28 「수술비 쪽 맨 뒤 40·41페이지 합쳐 줘」): 신입용 (2/2) 「회사마다 갈리는 것」과 「회사별 보상 비교」를 한 장으로
         if _new:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('회사별 차이 · 보상 비교', '회사마다 갈리는 것', '도표 4개 + 같은 수술 6사 종수', _new[1] + ('<div class="jsub">회사별 보상 비교 — 같은 수술 · 6사 종수 (★는 다른 값)</div>' + _cmp if _cmp else ''), '신입용·비교'))
-        elif _cmp:
+                        % ('한 눈에 보는 1~5종', '1~5종 한 눈에', '카드 5장 + 종별 수술 72개', _new[0], '한눈에'))
+        _b2 = (_sum or '') + (_new[1] if _new else '') + (('<div class="jsub">③ 같은 수술 · 6사 종수 (★는 다른 값)</div>' + _cmp) if _cmp else '')
+        if _b2:
             _out.append(_TPL.replace('class="jwrap"', 'class="jtwrap"')
-                        % ('회사별 보상 비교', '같은 수술 · 6사 종수', '★는 다른 값 · ?는 원본 미확인', _cmp, '비교'))
+                        % ('회사별 차이 · 보상 비교', '회사별 차이', '분류표·지급방식 + 갈리는 것 4개 + 6사 종수', _b2, '회사비교'))
         for _co in _J.JONG_ORDER:
             if _co in ('메리츠', '미래에셋', 'ABL생명'): continue   # ★v773 제196조 (지점장 2026.09.28 「1-5종 분류표 메리츠 삭제 · 미래·ABL 삭제」) 원문 쪽만 뺀다 · ★v777 제198조 요약·신입용·비교표에서도 3사 삭제(jongsul_sum/new/cmp)
             if _co in _TX:                               # ★v747 글자 표가 있는 회사는 그것을 쓴다
@@ -3803,7 +3795,7 @@ table.jt.js td.chk{{width:16mm}}
    <div class="irow">
     <div class="inum">18</div>
     <div class="itx"><div class="ih">1~5종 수술분류표</div><div class="ip">요약 · 신입용 · 회사별 비교 · 약관 원문</div></div>
-    <div class="ipg">38 – 49</div>
+    <div class="ipg">38 – 48</div>
    </div>
   </div>
   </div>
@@ -5428,7 +5420,7 @@ table.jt.js td.chk{{width:16mm}}
     # ★★★v120: 이 문자열은 배포마다 <반드시> main.py /health 버전과 똑같이 바꾼다.
     #   v101~v119 동안 v96 그대로 방치돼, 산출물만 보고 배포 여부를 판별할 수 없었다.
     #   (실사고 2026.07.21 — 분할은 적용됐는데 각인은 v96이라 '아무것도 반영 안 됐다'로 오인)
-    _VSTAMP = '<div class="vstamp">v777-surg3-20260929</div>'
+    _VSTAMP = '<div class="vstamp">v778-surg2p-20260929</div>'
 
     def _force_forms(_d, _cust):
         import re as _r3

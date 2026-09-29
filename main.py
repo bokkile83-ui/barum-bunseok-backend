@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v777-surg3-20260929'
+VSTAMP = 'v778-surg2p-20260929'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1708,7 +1708,7 @@ _STRUCT_SELFTEST = [
     ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
     ('제194조 동작검사캐시',        'main.py', r'_BEHAVE_CACHE770 = behave_selftest\(\)', True),
     ('제194조 조문',                'BARUM_DOCTRINE.md', r'제194조 — 분석 시간 줄이기', True),
-    ('제195조 KB용종1종',           'jongsul_cmp.py', r'KB·흥국은 1종, 나머지 4곳은 2종', True),
+    ('제195조 KB용종1종',           'jongsul_new.py', r"\('대장 용종 — 내시경으로 뗄 때', 'KB·흥국 = 1종'", True),
     ('제195조 조문',                'BARUM_DOCTRINE.md', r'제195조 — 대장 용종\(내시경 절제\)은 KB = 1종', True),
     ('제196조 원문3사제외',         'report_weasy.py', r"if _co in \('메리츠', '미래에셋', 'ABL생명'\): continue", True),
     ('제196조 조문',                'BARUM_DOCTRINE.md', r'제196조 — 인포메이션 1~5종 수술분류표 정리', True),
@@ -1716,6 +1716,9 @@ _STRUCT_SELFTEST = [
     ('제197조 조문',                'BARUM_DOCTRINE.md', r'제197조 — 서버 글꼴에 없는 글자는 렌더 전에 바꾼다', True),
     ('제198조 수술비3사삭제',       'jongsul_sum.py', r"^(?![\s\S]*\('(메리츠|미래에셋|ABL생명)',)", True),
     ('제198조 조문',                'BARUM_DOCTRINE.md', r'제198조 — 인포메이션 1~5종 수술비 쪽에서 메리츠·미래에셋·ABL을 전부 뺀다', True),
+    ('제199조 수술비2장',           'report_weasy.py', r"% \('회사별 차이 · 보상 비교', '회사별 차이', '분류표·지급방식 \+ 갈리는 것 4개 \+ 6사 종수'", True),
+    ('제199조 읽는법1곳',           'jongsul_cmp.py', r'^READ = \[', True),
+    ('제199조 조문',                'BARUM_DOCTRINE.md', r'제199조 — 1~5종 수술비 쪽은 2장 · 같은 말은 한 번만', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
