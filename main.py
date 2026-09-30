@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v778-surg2p-20260929'
+VSTAMP = 'v782-attach-20261001'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -120,6 +120,9 @@ def _db_init():
             # ★v665 허브 메모 — 회원 번호별 저장(폰·PC 공용)
             k.execute("""CREATE TABLE IF NOT EXISTS hub_notes(
                 code TEXT PRIMARY KEY, v TEXT, updated TIMESTAMP DEFAULT NOW())""")
+            # ★v780 HELPER 자료실(소식지·세일즈북) — 쪽 단위 글
+            k.execute("""CREATE TABLE IF NOT EXISTS helper_kb(
+                id SERIAL PRIMARY KEY, title TEXT, tag TEXT, page INT, txt TEXT, created TIMESTAMP DEFAULT NOW())""")
         print('[v429 DB] members · uselog · hub_config 준비 완료')
         return True
     except Exception as _e:
@@ -13954,6 +13957,285 @@ async def remodel_route(xlsx: UploadFile = File(None),
     except Exception as e:
         traceback.print_exc()
         return JSONResponse({'ok': False, 'error': f'{type(e).__name__}: {e}'})
+
+
+# ★★★★★v779 (2026.10.01 지점장 「나는 AI를 원해 — 네이버 AI같이, 너같이. 단 보험심사+고지위반+고지의무+회사찾아주기에 한정」)
+#   MAKEONE HELPER 대화 AI. 범위 밖 질문은 정중히 거절. 앱이 보내는 kb(규칙표·사례·KCD·회사 메모)를 시스템에 넣어 앱과 같은 근거로 답한다.
+#   고객 병력이 나오면 <facts>{...}</facts> JSON 을 답 끝에 붙여 앱의 규칙 엔진이 판정한다(판정은 AI가 아니라 규칙이 한다).
+#   캡처(건강e음·나의건강기록·The건강보험)가 오면 비전으로 진료내역을 읽어 같은 facts 로 낸다. 저장 안 함.
+_HELPER_SYS = """당신은 MAKEONE HELPER — 보험 설계사(특히 신입)를 돕는 심사 도우미 AI다. 한국어로, 짧고 단정하게, 결론→근거→할 일 순서로 답한다.
+★답 길이 규칙(신입용, 어기면 안 된다): 첫 줄에 결론 한 문장. 전체 5줄 이내, 한 줄 40자 안팎. 어려운 말·긴 설명·인사·서론 금지. 「회사별」이면 회사마다 한 줄(회사명: 핵심 숫자·조건, 자료명 쪽) 로 최대 8줄. 더 자세한 건 마지막 줄에 「더 보고 싶으면 ○○ 자료 ○쪽」 한 줄로. 표·마크다운 제목 쓰지 말고 줄바꿈과 「·」만 쓴다.
+다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기 — 아래 kb의 규칙표 안에서 어느 회사·상품 질문을 통과하는지.
+범위 밖(보험료 계산, 상품 담보 설명 일반, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기만 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다.
+원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
+고객 병력(나이·성별·약·진단·입원·수술·재검사·날짜)이 대화나 캡처에 나오면 답 마지막 줄에 반드시 <facts>{"age":만나이 숫자 또는 null,"sex":"M"|"F"|null,"meds":["혈압약"...],"cards":[{"kind":"adm|op|sev|re|dz","name":"병명","ym":"YYYY-MM" 또는 "","cured":true|false,"drug30":true|false,"ongoing":true|false,"need3":true|false}]}</facts> 를 붙인다. meds 는 kb.medNames 중에서, cards.name 은 kb.dzNames 중에서 고른다(없으면 "기타(직접 입력)"). kind: adm=입원, op=수술, sev=암·뇌졸중·심근경색·협심증·판막·간경화 진단, re=재검사·추가검사, dz=그 밖 진단·치료. 캡처의 진료내역은 한 줄씩 다 뽑되 같은 병은 하나로 합쳐 마지막 날짜를 ym 으로. 판정 결과(어느 상품)는 앱이 계산해 붙이므로 당신은 순위를 단정하지 말고 근거와 주의점만 말한다."""
+
+# ★★★★★v780 (2026.10.01 지점장 「10월 소식지 넣어 주면 간병인 치면 회사별 정보도 나와야 해」)
+#   HELPER 자료실: 관리자가 소식지·세일즈북 PDF/캡처를 올리면 쪽 단위 글로 저장(DB, 없으면 파일) →
+#   /helper/chat 이 질문과 겹치는 쪽을 골라 AI 에 근거로 넣는다. 저장은 글만(파일은 버림).
+_HKB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'helper_kb.json')
+_HELPER_ADMIN = '130624'
+def _hkb_all():
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT id,title,tag,page,txt,to_char(created,'YYYY-MM-DD') FROM helper_kb ORDER BY id")
+                return [dict(id=r[0],title=r[1],tag=r[2],page=r[3],txt=r[4],created=r[5]) for r in k.fetchall()]
+        except Exception as e: print('[v780 kb] DB 읽기 실패', str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try: return json.load(open(_HKB_FILE,encoding='utf-8')) if os.path.exists(_HKB_FILE) else []
+    except Exception: return []
+def _hkb_add(rows):
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                for r in rows: k.execute("INSERT INTO helper_kb(title,tag,page,txt) VALUES(%s,%s,%s,%s)",(r['title'],r['tag'],r['page'],r['txt']))
+            return 'db'
+        except Exception as e: print('[v780 kb] DB 쓰기 실패', str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    allv=_hkb_all(); nid=(max([x.get('id',0) for x in allv])+1) if allv else 1
+    for r in rows: r['id']=nid; r['created']=datetime.date.today().isoformat(); nid+=1; allv.append(r)
+    json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return 'file'
+def _hkb_del(title):
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k: k.execute("DELETE FROM helper_kb WHERE title=%s",(title,)); return True
+        except Exception as e: print('[v780 kb] DB 삭제 실패', str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    allv=[x for x in _hkb_all() if x.get('title')!=title]
+    json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return True
+def _hkb_tokens(q):
+    return [w for w in re.findall(r'[가-힣A-Za-z0-9]{2,}',q or '')][:30]
+def _hkb_pick(q, n=6, maxc=9000):
+    rows=_hkb_all()
+    if not rows: return []
+    toks=_hkb_tokens(q)
+    if not toks: return []
+    sc=[]
+    for r in rows:
+        t=r.get('txt','')
+        score=sum(t.count(w) for w in toks)+sum(3 for w in toks if w in (r.get('title','')+' '+(r.get('tag') or '')))
+        if score>0: sc.append((score,r))
+    sc.sort(key=lambda x:-x[0]); out=[]; used=0
+    per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or ''))
+    if per_title:   # 「회사별」이면 자료(회사)마다 제일 맞는 쪽 1개씩 — 한 회사가 다 차지하지 않게
+        seen=set(); n=max(n,10); maxc=max(maxc,14000)
+        for _,r in sc:
+            if r['title'] in seen: continue
+            t=r['txt'][:1600]
+            if used+len(t)>maxc or len(out)>=n: break
+            out.append(r|{'txt':t}); used+=len(t); seen.add(r['title'])
+        return out
+    for _,r in sc[:n]:
+        t=r['txt'][:2500]
+        if used+len(t)>maxc: break
+        out.append(r|{'txt':t}); used+=len(t)
+    return out
+def _pdf_pages_text(path):
+    """pdftotext(poppler) 쪽 단위 — pypdf 는 한글 폰트를 \x00 으로 뱉는 일이 있어 쓰지 않는다."""
+    import subprocess
+    try:
+        out=subprocess.run(['pdftotext','-layout',path,'-'],capture_output=True,timeout=120).stdout.decode('utf-8','ignore')
+        pages=[p.strip() for p in out.split('\f')]
+        while pages and not pages[-1]: pages.pop()
+        return pages
+    except Exception as e:
+        print('[v780 kb] pdftotext 실패', str(e)[:80])
+        try:
+            from pypdf import PdfReader
+            return [(p.extract_text() or '').strip() for p in PdfReader(path).pages]
+        except Exception: return []
+def _pptx_pages_text(path):
+    try:
+        from pptx import Presentation as _P
+        prs=_P(path); pages=[]
+        for sl in prs.slides:
+            t=[]
+            for sh in sl.shapes:
+                if sh.has_text_frame: t.append(sh.text_frame.text)
+                if getattr(sh,'has_table',False) and sh.has_table:
+                    for r in sh.table.rows: t.append(' | '.join(c.text for c in r.cells))
+            pages.append('\n'.join(x for x in t if x and x.strip()))
+        return pages
+    except Exception as e: print('[v780 kb] pptx 실패', str(e)[:80]); return []
+async def _kb_ingest_one(name, data, title, tag, key, td):
+    """파일 1개 → 쪽 글 목록. name 으로 종류 판단."""
+    low=name.lower(); pages=[]
+    if low.endswith('.pdf'):
+        p=os.path.join(td,'in_'+str(abs(hash(name)))+'.pdf'); open(p,'wb').write(data)
+        pages=_pdf_pages_text(p)
+        thin=[i for i,t in enumerate(pages) if len(t)<200]
+        if (not pages or thin) and key:
+            try:
+                import subprocess
+                subprocess.run(['pdftoppm','-r','130','-png',p,p+'_pg'],check=True,timeout=180)
+                pngs=sorted([os.path.join(td,f) for f in os.listdir(td) if f.startswith(os.path.basename(p)+'_pg') and f.endswith('.png')])
+                if not pages: pages=['']*len(pngs); thin=list(range(len(pngs)))
+                idx=[i for i in thin if i<len(pngs)][:30]
+                vt=await _vision_pages([pngs[i] for i in idx],key)
+                for i,t in zip(idx,vt):
+                    if len(t)>len(pages[i]): pages[i]=t
+            except Exception as e: print('[v780 kb] 스캔 OCR 실패', str(e)[:80])
+    elif low.endswith('.pptx'):
+        p=os.path.join(td,'in_'+str(abs(hash(name)))+'.pptx'); open(p,'wb').write(data); pages=_pptx_pages_text(p)
+    elif low.split('.')[-1] in ('png','jpg','jpeg','webp'):
+        if not key: return []
+        p=os.path.join(td,'in_'+str(abs(hash(name)))+'.png'); open(p,'wb').write(data); pages=await _vision_pages([p],key)
+    elif low.endswith('.txt') or low.endswith('.md'):
+        try: pages=[data.decode('utf-8')]
+        except Exception: pages=[]
+    return [{'title':title,'tag':tag,'page':i+1,'txt':t} for i,t in enumerate(pages) if t and t.strip()]
+async def _vision_pages(png_paths, key):
+    out=[]
+    async with httpx.AsyncClient(timeout=120) as client:
+        for pth in png_paths:
+            b64=base64.b64encode(open(pth,'rb').read()).decode()
+            try:
+                resp=await client.post('https://api.anthropic.com/v1/messages',
+                    headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+                    json={'model':'claude-haiku-4-5-20251001','max_tokens':4000,'messages':[{'role':'user','content':[
+                        {'type':'image','source':{'type':'base64','media_type':'image/png','data':b64}},
+                        {'type':'text','text':'이 쪽의 글자를 표 구조가 보이게 그대로 옮겨 적어라. 회사명·상품명·담보명·금액·조건을 빠뜨리지 마라. 설명은 붙이지 마라.'}]}]})
+                j=resp.json(); out.append(''.join(b.get('text','') for b in j.get('content',[]) if b.get('type')=='text'))
+            except Exception as e: out.append(''); print('[v780 kb] 비전 실패', str(e)[:80])
+    return out
+
+@app.post('/helper/kb/upload')
+async def helper_kb_upload(pw: str = Form(''), title: str = Form(''), tag: str = Form(''), file: UploadFile = File(...)):
+    if pw not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    name=file.filename or 'file'; tag=(tag or '')[:20]
+    data=await file.read(); key=os.environ.get('ANTHROPIC_API_KEY','')
+    done=[]; skipped=[]
+    with tempfile.TemporaryDirectory() as td:
+        if name.lower().endswith('.zip'):
+            import zipfile, io
+            z=zipfile.ZipFile(io.BytesIO(data))
+            for info in z.infolist():
+                if info.is_dir(): continue
+                nm=info.filename
+                try: nm=nm.encode('cp437').decode('cp949')
+                except Exception: pass
+                base=os.path.basename(nm)
+                if not base or base.startswith('.') or base.startswith('__'): continue
+                t=(tag+' ' if tag else '')+os.path.splitext(base)[0]; t=t.strip()[:80]
+                rows=await _kb_ingest_one(base, z.read(info), t, tag, key, td)
+                if rows: _hkb_del(t); _hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows)})
+                else: skipped.append(base)
+        else:
+            t=(title or os.path.splitext(name)[0])[:80]
+            rows=await _kb_ingest_one(name, data, t, tag, key, td)
+            if rows: _hkb_del(t); _hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows)})
+            else: skipped.append(name)
+    if not done: return JSONResponse({'ok':False,'error':'읽은 글이 없다(스캔본·캡처는 서버 키 필요)','skipped':skipped},headers=_HUB_CORS)
+    return JSONResponse({'ok':True,'done':done,'skipped':skipped,'store':'db' if _db() else 'file'},headers=_HUB_CORS)
+
+@app.get('/helper/kb/list')
+def helper_kb_list():
+    rows=_hkb_all(); seen={}
+    for r in rows:
+        k=r['title']; seen.setdefault(k,{'title':k,'tag':r.get('tag'),'pages':0,'created':r.get('created')}); seen[k]['pages']+=1
+    return JSONResponse({'ok':True,'items':list(seen.values())},headers=_HUB_CORS)
+
+@app.post('/helper/kb/delete')
+async def helper_kb_delete(body:dict):
+    if body.get('pw') not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    _hkb_del(body.get('title','')); return JSONResponse({'ok':True},headers=_HUB_CORS)
+
+@app.post('/helper/kb/search')
+async def helper_kb_search(body:dict):
+    q=body.get('q',''); picks=_hkb_pick(q,n=8,maxc=12000)
+    return JSONResponse({'ok':True,'items':[{'title':p['title'],'tag':p.get('tag'),'page':p['page'],'txt':p['txt'][:1200]} for p in picks]},headers=_HUB_CORS)
+
+
+@app.post('/helper/chat')
+async def helper_chat(body:dict):
+    if body.get('pw')!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
+    msgs=body.get('messages') or []
+    kb=body.get('kb') or {}
+    images=body.get('images') or []
+    if not msgs and not images: return JSONResponse({'ok':False,'error':'메시지 없음'})
+    key=os.environ.get('ANTHROPIC_API_KEY','')
+    if not key and not body.get('dry'): return JSONResponse({'ok':False,'error':'ANTHROPIC_API_KEY 미설정'})
+    lastq=''
+    for m in reversed(msgs):
+        if m.get('role')=='user' and str(m.get('content','')).strip(): lastq=str(m.get('content',''))[:500]; break
+    picks=_hkb_pick(lastq)
+    kbtxt=''.join(f"\n[자료 「{p['title']}」 {p.get('tag') or ''} {p['page']}쪽]\n{p['txt']}\n" for p in picks)
+    system=_HELPER_SYS+("\n\n★지점장이 올린 자료(소식지·세일즈북)가 아래 있으면 그 자료를 최우선 근거로 쓰고, 「회사별로」 물으면 자료에 나온 회사를 하나씩 나눠 답하며 자료명·쪽을 적는다. 자료에 없는 회사는 「자료에 없음」이라 한다.\n"+kbtxt if picks else '')+"\n\n[kb — 앱과 같은 근거]\n"+json.dumps(kb,ensure_ascii=False)[:60000]
+    conv=[]
+    for m in msgs[-12:]:
+        r='user' if m.get('role')=='user' else 'assistant'
+        c=str(m.get('content',''))[:4000]
+        if not c: continue
+        if conv and conv[-1]['role']==r: conv[-1]['content']+= '\n'+c
+        else: conv.append({'role':r,'content':c})
+    if not conv or conv[0]['role']!='user': conv.insert(0,{'role':'user','content':'(캡처 첨부)'})
+    # ★v782 📎 PDF·pptx·txt 첨부 — 글로 뽑아 마지막 사용자 말에 붙인다(스캔 PDF 는 앞 10쪽 비전)
+    files=body.get('files') or []
+    if files:
+        ftxt=[]
+        with tempfile.TemporaryDirectory() as td:
+            for f in files[:4]:
+                try:
+                    nm=str(f.get('name','file'))[:80]; raw=f.get('b64','')
+                    if ',' in raw: raw=raw.split(',',1)[1]
+                    data=base64.b64decode(raw)
+                    rows=await _kb_ingest_one(nm,data,nm,'',key,td)
+                    t='\n'.join(f"[{nm} {r['page']}쪽]\n{r['txt']}" for r in rows)[:20000]
+                    if t: ftxt.append(t)
+                except Exception as e: print('[v782 attach] 실패',str(e)[:80])
+        if ftxt:
+            add='\n\n(첨부 파일 내용)\n'+'\n\n'.join(ftxt)+'\n(첨부의 진료내역·투약·검진을 읽어 병력으로 정리해 줘)'
+            if conv and conv[-1]['role']=='user' and isinstance(conv[-1]['content'],str): conv[-1]['content']+=add
+            else: conv.append({'role':'user','content':add.strip()})
+    if images:
+        blocks=[]
+        for im in images[:6]:
+            try:
+                head,b64=im.split(',',1) if ',' in im else ('data:image/png;base64',im)
+                mt=head.split(':')[1].split(';')[0] if ':' in head else 'image/png'
+                blocks.append({'type':'image','source':{'type':'base64','media_type':mt,'data':b64}})
+            except Exception: pass
+        last=conv[-1]
+        if last['role']=='user':
+            last['content']=blocks+[{'type':'text','text':(last['content'] if isinstance(last['content'],str) else '')+'\n(첨부한 캡처의 진료내역·투약·검진 내용을 읽어 병력으로 정리해 줘)'}]
+        else:
+            conv.append({'role':'user','content':blocks+[{'type':'text','text':'첨부한 캡처의 진료내역을 읽어 병력으로 정리해 줘'}]})
+    if body.get('dry'):
+        cc=sum(len(m['content']) if isinstance(m['content'],str) else sum(len(x.get('text','')) for x in m['content'] if x.get('type')=='text') for m in conv)
+        return JSONResponse({'ok':True,'dry':True,'picks':[{'title':p['title'],'page':p['page'],'len':len(p['txt'])} for p in picks],'system_len':len(system),'conv_chars':cc},headers=_HUB_CORS)
+    async def _call(model):
+        async with httpx.AsyncClient(timeout=90) as client:
+            resp=await client.post('https://api.anthropic.com/v1/messages',
+                headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+                json={'model':model,'max_tokens':700,'system':system,'messages':conv})
+        return resp.status_code, resp.json()
+    used=None; data=None
+    for model in ('claude-sonnet-4-6','claude-haiku-4-5-20251001'):
+        try:
+            st,data=await _call(model)
+            if st==200 and data.get('content'): used=model; break
+            print(f'[v779 helper] {model} status={st} err={str(data)[:200]}')
+        except Exception as e:
+            print(f'[v779 helper] {model} exc={e}')
+    if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패','detail':str(data)[:300]})
+    text=''.join(b.get('text','') for b in data.get('content',[]) if b.get('type')=='text')
+    facts=None
+    m=re.search(r'<facts>\s*(\{.*?\})\s*</facts>',text,re.S)
+    if m:
+        try: facts=json.loads(m.group(1))
+        except Exception: facts=None
+        text=text[:m.start()].rstrip()
+    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used})
 
 
 @app.post('/ask')
