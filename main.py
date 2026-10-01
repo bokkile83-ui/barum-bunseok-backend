@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v786-kbkeep-20261001'
+VSTAMP = 'v788-kbidf-20261001'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1731,6 +1731,10 @@ _STRUCT_SELFTEST = [
     ('제202조 실제저장소',          'main.py', r"'store':st,'saved'", True),
     ('제202조 파일분 합침',         'main.py', r'return dbrows\+\[r for r in frows', True),
     ('제202조 조문',                'BARUM_DOCTRINE.md', r'제202조 — HELPER 자료가 저장됐는데 사라진다', True),
+    ('제203조 조사·줄임말',         'main.py', r'_HKB_ALIAS=\{', True),
+    ('제203조 조문',                'BARUM_DOCTRINE.md', r'제203조 — HELPER 검색: 조사·회사 줄임말', True),
+    ('제204조 IDF',                 'main.py', r'idf=\{w:math\.log', True),
+    ('제204조 조문',                'BARUM_DOCTRINE.md', r'제204조 — HELPER 검색: 드문 말 우선', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -14034,17 +14038,43 @@ def _hkb_del(title):
             except Exception: pass
     allv=[x for x in _hkb_all() if x.get('title')!=title]
     json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return True
+_HKB_ALIAS={'흥생':'흥국생명','삼생':'삼성생명','한생':'한화생명','교보':'교보생명','동양':'동양생명','미래에셋':'미래에셋생명','abl':'ABL생명','에이비엘':'ABL생명',
+            '현대':'현대해상','메리츠':'메리츠화재','삼성':'삼성화재','롯데':'롯데손보','한화':'한화손보','하나':'하나손보','흥국':'흥국','농협':'NH농협','신한':'신한라이프','라이나':'라이나생명'}
+_HKB_JOSA=('에서는','에서','으로','부터','까지','이랑','하고','해봐','해줘','알려줘','은','는','이','가','을','를','도','의','에','로','와','과','랑','만','요')
 def _hkb_tokens(q):
-    return [w for w in re.findall(r'[가-힣A-Za-z0-9]{2,}',q or '')][:30]
+    # ★v787 제203조 (지점장 캡처 「동양도 검색해봐」 → 자료 0쪽): 「동양도」처럼 조사가 붙으면 「동양생명」과 안 맞았다
+    #   → 끝 조사를 떼고, 회사 줄임말(동양·흥생·ABL…)을 정식 이름으로 넓힌다
+    out=[]
+    for w in re.findall(r'[가-힣A-Za-z0-9.]{2,}',q or ''):
+        w=w.strip('.')
+        if len(w)<2: continue
+        out.append(w)
+        if re.match(r'^[가-힣]+$',w):
+            for j in _HKB_JOSA:
+                if w.endswith(j) and len(w)-len(j)>=2: out.append(w[:-len(j)]); break
+    more=[]
+    for w in out:
+        k=w.lower()
+        for a,b in _HKB_ALIAS.items():
+            if k==a.lower() or (k.startswith(a.lower()) and len(k)<=len(a)+2): more.append(b)
+    # ★v788 제204조: 「임신중인데」「치과다닌」처럼 붙여 쓴 말 → 앞 2글자(임신·치과)도 찾는다
+    pre=[w[:2] for w in out if re.match(r'^[가-힣]{3,}$',w) and w[:2] not in _HKB_STOP]
+    seen=[];[seen.append(x) for x in out+more+pre if x not in seen and x not in _HKB_STOP]
+    return seen[:40]
+_HKB_STOP={'고지','고지해','고지해야','보험','고객','알려','알려야','해야','하나','하나요','있어','없어','그럼','이거','저거','근데','그냥','혹시','어떻게','뭐야','뭐예요','되나','돼요','되요','해요','합니다'}
 def _hkb_pick(q, n=6, maxc=9000):
     rows=_hkb_all()
     if not rows: return []
     toks=_hkb_tokens(q)
     if not toks: return []
+    # ★v788 제204조: 흔한 말(여러 쪽에 다 있는 말)은 가볍게, 드문 말(제왕절개·한의원)은 무겁게 — IDF
+    import math
+    N=len(rows); df={w:sum(1 for r in rows if w in r.get('txt','')) for w in toks}
+    idf={w:math.log(1+N/(1+df[w])) for w in toks}
     sc=[]
     for r in rows:
-        t=r.get('txt','')
-        score=sum(t.count(w) for w in toks)+sum(3 for w in toks if w in (r.get('title','')+' '+(r.get('tag') or '')))
+        t=r.get('txt',''); ttl=r.get('title','')+' '+(r.get('tag') or '')
+        score=sum(min(t.count(w),3)*idf[w] for w in toks)+sum(2*idf[w] for w in toks if w in ttl)
         if score>0: sc.append((score,r))
     sc.sort(key=lambda x:-x[0]); out=[]; used=0
     per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or ''))
