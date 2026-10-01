@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v788-kbidf-20261001'
+VSTAMP = 'v789-kbamb-20261002'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1735,6 +1735,8 @@ _STRUCT_SELFTEST = [
     ('제203조 조문',                'BARUM_DOCTRINE.md', r'제203조 — HELPER 검색: 조사·회사 줄임말', True),
     ('제204조 IDF',                 'main.py', r'idf=\{w:math\.log', True),
     ('제204조 조문',                'BARUM_DOCTRINE.md', r'제204조 — HELPER 검색: 드문 말 우선', True),
+    ('제205조 줄임말 정확일치',     'main.py', r"if k==a\.lower\(\): more\.extend\(b\)", True),
+    ('제205조 조문',                'BARUM_DOCTRINE.md', r'제205조 — HELPER 회사 이름 2글자는 되묻는다', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -14038,8 +14040,11 @@ def _hkb_del(title):
             except Exception: pass
     allv=[x for x in _hkb_all() if x.get('title')!=title]
     json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return True
-_HKB_ALIAS={'흥생':'흥국생명','삼생':'삼성생명','한생':'한화생명','교보':'교보생명','동양':'동양생명','미래에셋':'미래에셋생명','abl':'ABL생명','에이비엘':'ABL생명',
-            '현대':'현대해상','메리츠':'메리츠화재','삼성':'삼성화재','롯데':'롯데손보','한화':'한화손보','하나':'하나손보','흥국':'흥국','농협':'NH농협','신한':'신한라이프','라이나':'라이나생명'}
+_HKB_ALIAS={'흥생':['흥국생명'],'삼생':['삼성생명'],'한생':['한화생명'],'교보':['교보생명'],'동양':['동양생명'],'미래에셋':['미래에셋생명'],'abl':['ABL생명'],'에이비엘':['ABL생명'],
+            '현대':['현대해상'],'메리츠':['메리츠화재'],'롯데':['롯데손보'],'신한':['신한라이프'],
+            # ★v789 제205조: 손보·생보가 둘 다 있는 이름은 한쪽으로 몰지 않고 둘 다 찾는다(앱 v0.36 이 먼저 「어느 회사?」 되묻는다)
+            '삼성':['삼성화재','삼성생명'],'한화':['한화손보','한화생명'],'흥국':['흥국화재','흥국생명'],'db':['DB손보','DB생명'],'kb':['KB손보','KB라이프'],
+            '농협':['NH농협손보','NH농협생명'],'nh':['NH농협손보','NH농협생명'],'라이나':['라이나생명','라이나손보'],'하나':['하나손보','하나생명']}
 _HKB_JOSA=('에서는','에서','으로','부터','까지','이랑','하고','해봐','해줘','알려줘','은','는','이','가','을','를','도','의','에','로','와','과','랑','만','요')
 def _hkb_tokens(q):
     # ★v787 제203조 (지점장 캡처 「동양도 검색해봐」 → 자료 0쪽): 「동양도」처럼 조사가 붙으면 「동양생명」과 안 맞았다
@@ -14056,7 +14061,7 @@ def _hkb_tokens(q):
     for w in out:
         k=w.lower()
         for a,b in _HKB_ALIAS.items():
-            if k==a.lower() or (k.startswith(a.lower()) and len(k)<=len(a)+2): more.append(b)
+            if k==a.lower(): more.extend(b)   # ★v789 제205조: 정확히 그 줄임말일 때만(「한화생명」이 「한화」로 잡혀 한화손보가 섞이던 것 막음 — 조사는 위에서 이미 뗐다)
     # ★v788 제204조: 「임신중인데」「치과다닌」처럼 붙여 쓴 말 → 앞 2글자(임신·치과)도 찾는다
     pre=[w[:2] for w in out if re.match(r'^[가-힣]{3,}$',w) and w[:2] not in _HKB_STOP]
     seen=[];[seen.append(x) for x in out+more+pre if x not in seen and x not in _HKB_STOP]
