@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v783-bareumi-20261001'
+VSTAMP = 'v784-kbstrict-20261001'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1722,6 +1722,9 @@ _STRUCT_SELFTEST = [
     ('제199조 수술비2장',           'report_weasy.py', r"% \('회사별 차이 · 보상 비교', '회사별 차이', '분류표·지급방식 \+ 갈리는 것 4개 \+ 6사 종수'", True),
     ('제199조 읽는법1곳',           'jongsul_cmp.py', r'^READ = \[', True),
     ('제199조 조문',                'BARUM_DOCTRINE.md', r'제199조 — 1~5종 수술비 쪽은 2장 · 같은 말은 한 번만', True),
+    ('제200조 지식책 절나누기',     'main.py', r'pages=_kb_split_text\(data\.decode', True),
+    ('제200조 근거규칙',            'main.py', r'근거 규칙\(v784 제200조', True),
+    ('제200조 조문',                'BARUM_DOCTRINE.md', r'제200조 — HELPER 지식책·근거 없으면 「확인 필요」', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -13967,7 +13970,8 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 ★답 길이 규칙(신입용, 어기면 안 된다): 첫 줄에 결론 한 문장. 전체 5줄 이내, 한 줄 40자 안팎. 어려운 말·긴 설명·인사·서론 금지. 「회사별」이면 회사마다 한 줄(회사명: 핵심 숫자·조건, 자료명 쪽) 로 최대 8줄. 더 자세한 건 마지막 줄에 「더 보고 싶으면 ○○ 자료 ○쪽」 한 줄로. 표·마크다운 제목 쓰지 말고 줄바꿈과 「·」만 쓴다.
 다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기 — 아래 kb의 규칙표 안에서 어느 회사·상품 질문을 통과하는지.
 범위 밖(보험료 계산, 상품 담보 설명 일반, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기만 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다.
-원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
+원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다.
+★★근거 규칙(v784 제200조, 어기면 틀린 답이다): 숫자·기간·회사명·상품명·병명 코드·판례·조문은 아래 [자료]·[kb]에 「글자로 적힌 것」만 쓴다. 일반 상식·기억·추측으로 채우지 않는다. 질문에 맞는 근거가 [자료]·[kb]에 없으면 첫 줄을 「확인 필요 — 자료에 없음 · 회사 사전심사(언더라이팅) 문의」로 쓰고, 아는 근거가 있는 부분만 짧게 덧붙인다. 근거를 쓸 때는 자료명(또는 출처·날짜)을 줄 끝 괄호에 적는다. 자료끼리 다르면 날짜가 최신인 쪽을 쓰고 「자료마다 다름」이라 적는다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
 고객 병력(나이·성별·약·진단·입원·수술·재검사·날짜)이 대화나 캡처에 나오면 답 마지막 줄에 반드시 <facts>{"age":만나이 숫자 또는 null,"sex":"M"|"F"|null,"meds":["혈압약"...],"cards":[{"kind":"adm|op|sev|re|dz","name":"병명","ym":"YYYY-MM" 또는 "","cured":true|false,"drug30":true|false,"ongoing":true|false,"need3":true|false}]}</facts> 를 붙인다. meds 는 kb.medNames 중에서, cards.name 은 kb.dzNames 중에서 고른다(없으면 "기타(직접 입력)"). kind: adm=입원, op=수술, sev=암·뇌졸중·심근경색·협심증·판막·간경화 진단, re=재검사·추가검사, dz=그 밖 진단·치료. 캡처의 진료내역은 한 줄씩 다 뽑되 같은 병은 하나로 합쳐 마지막 날짜를 ym 으로. 판정 결과(어느 상품)는 앱이 계산해 붙이므로 당신은 순위를 단정하지 말고 근거와 주의점만 말한다."""
 
 # ★★★★★v780 (2026.10.01 지점장 「10월 소식지 넣어 주면 간병인 치면 회사별 정보도 나와야 해」)
@@ -14028,12 +14032,13 @@ def _hkb_pick(q, n=6, maxc=9000):
     sc.sort(key=lambda x:-x[0]); out=[]; used=0
     per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or ''))
     if per_title:   # 「회사별」이면 자료(회사)마다 제일 맞는 쪽 1개씩 — 한 회사가 다 차지하지 않게
-        seen=set(); n=max(n,10); maxc=max(maxc,14000)
+        seen={}; n=max(n,12); maxc=max(maxc,14000)
+        cap=4   # ★v784 제200조: 회사별로 절이 나뉜 자료(지식책·인수정리)는 한 자료에서 여러 회사 절이 와야 한다 — 자료당 최대 4쪽
         for _,r in sc:
-            if r['title'] in seen: continue
+            if seen.get(r['title'],0)>=cap: continue
             t=r['txt'][:1600]
             if used+len(t)>maxc or len(out)>=n: break
-            out.append(r|{'txt':t}); used+=len(t); seen.add(r['title'])
+            out.append(r|{'txt':t}); used+=len(t); seen[r['title']]=seen.get(r['title'],0)+1
         return out
     for _,r in sc[:n]:
         t=r['txt'][:2500]
@@ -14067,6 +14072,29 @@ def _pptx_pages_text(path):
             pages.append('\n'.join(x for x in t if x and x.strip()))
         return pages
     except Exception as e: print('[v780 kb] pptx 실패', str(e)[:80]); return []
+def _kb_split_text(t, maxc=2200):
+    """★v784 제200조 — 글 자료(지식책 txt·md)를 절 단위 쪽으로 나눈다.
+    「■ 」 또는 「## 」로 시작하는 줄이 새 절. 절이 maxc 를 넘으면 빈 줄 기준으로 더 자른다. 절 표시가 없으면 빈 줄 기준 maxc 덩어리."""
+    t=(t or '').replace('\r\n','\n')
+    secs=[];cur=[]
+    for ln in t.split('\n'):
+        if (ln.startswith('■') or ln.startswith('## ') or re.match(r'^\[[^\]]{1,20}\]\s*$',ln)) and cur:   # 「[회사명]」 줄도 새 절
+            secs.append('\n'.join(cur).strip()); cur=[]
+        cur.append(ln)
+    if cur: secs.append('\n'.join(cur).strip())
+    out=[]
+    for sec in secs:
+        if not sec: continue
+        if len(sec)<=maxc: out.append(sec); continue
+        head=sec.split('\n',1)[0][:80]; buf=''
+        for para in sec.split('\n\n'):
+            if buf and len(buf)+len(para)+2>maxc:
+                out.append(buf.strip()); buf=head+' (이어서)\n'
+            buf+=para+'\n\n'
+            while len(buf)>maxc:
+                out.append(buf[:maxc].strip()); buf=head+' (이어서)\n'+buf[maxc:]
+        if buf.strip(): out.append(buf.strip())
+    return out or ([t] if t.strip() else [])
 async def _kb_ingest_one(name, data, title, tag, key, td):
     """파일 1개 → 쪽 글 목록. name 으로 종류 판단."""
     low=name.lower(); pages=[]
@@ -14091,7 +14119,7 @@ async def _kb_ingest_one(name, data, title, tag, key, td):
         if not key: return []
         p=os.path.join(td,'in_'+str(abs(hash(name)))+'.png'); open(p,'wb').write(data); pages=await _vision_pages([p],key)
     elif low.endswith('.txt') or low.endswith('.md'):
-        try: pages=[data.decode('utf-8')]
+        try: pages=_kb_split_text(data.decode('utf-8'))   # ★v784 제200조: 통째 1쪽이면 앞 2,500자만 AI 에 갔다 → 「■」·「## 」 절 단위로 쪽을 나눈다
         except Exception: pages=[]
     return [{'title':title,'tag':tag,'page':i+1,'txt':t} for i,t in enumerate(pages) if t and t.strip()]
 async def _vision_pages(png_paths, key):
