@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v785-kbfollow-20261001'
+VSTAMP = 'v786-kbkeep-20261001'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1728,6 +1728,9 @@ _STRUCT_SELFTEST = [
     ('제201조 이어묻기 검색',       'main.py', r"pickq=' '\.join\(_uq\[-3:\]\)", True),
     ('제201조 질문표 대입',         'main.py', r'질문표 대입\(v785 제201조', True),
     ('제201조 조문',                'BARUM_DOCTRINE.md', r'제201조 — HELPER 이어 묻기·질문표 대입', True),
+    ('제202조 실제저장소',          'main.py', r"'store':st,'saved'", True),
+    ('제202조 파일분 합침',         'main.py', r'return dbrows\+\[r for r in frows', True),
+    ('제202조 조문',                'BARUM_DOCTRINE.md', r'제202조 — HELPER 자료가 저장됐는데 사라진다', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -13984,32 +13987,42 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 _HKB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'helper_kb.json')
 _HELPER_ADMIN = '130624'
 def _hkb_all():
-    c=_db()
+    c=_db(); dbrows=None
     if c:
         try:
             with c, c.cursor() as k:
                 k.execute("SELECT id,title,tag,page,txt,to_char(created,'YYYY-MM-DD') FROM helper_kb ORDER BY id")
-                return [dict(id=r[0],title=r[1],tag=r[2],page=r[3],txt=r[4],created=r[5]) for r in k.fetchall()]
+                dbrows=[dict(id=r[0],title=r[1],tag=r[2],page=r[3],txt=r[4],created=r[5]) for r in k.fetchall()]
         except Exception as e: print('[v780 kb] DB 읽기 실패', str(e)[:80])
         finally:
             try: c.close()
             except Exception: pass
-    try: return json.load(open(_HKB_FILE,encoding='utf-8')) if os.path.exists(_HKB_FILE) else []
-    except Exception: return []
+    frows=_hkb_file_all()
+    if dbrows is None: return frows
+    # ★v786 제202조: DB 가 있어도 파일로 떨어진 자료(DB 쓰기 실패분)를 같이 보여 준다 — 같은 제목은 DB 우선
+    have={r['title'] for r in dbrows}
+    return dbrows+[r for r in frows if r.get('title') not in have]
 def _hkb_add(rows):
-    c=_db()
+    """★v786 제202조: 실제로 어디에 저장됐는지 돌려준다('db'·'file'·'file(DB실패…)'). 전에는 DB 쓰기가 실패해 파일로 가도
+    업로드 응답은 _db() 유무만 보고 「db」라 했고, 목록은 DB만 읽어 파일에 간 자료가 안 보였다 → 「저장됐는데 사라진다」."""
+    for r in rows: r['txt']=(r.get('txt') or '').replace('\x00','')   # Postgres text 는 NUL 글자를 거부한다
+    c=_db(); err=''
     if c:
         try:
             with c, c.cursor() as k:
                 for r in rows: k.execute("INSERT INTO helper_kb(title,tag,page,txt) VALUES(%s,%s,%s,%s)",(r['title'],r['tag'],r['page'],r['txt']))
             return 'db'
-        except Exception as e: print('[v780 kb] DB 쓰기 실패', str(e)[:80])
+        except Exception as e:
+            err=str(e)[:80]; print('[v786 kb] DB 쓰기 실패 → 파일로', err)
         finally:
             try: c.close()
             except Exception: pass
-    allv=_hkb_all(); nid=(max([x.get('id',0) for x in allv])+1) if allv else 1
+    allv=_hkb_file_all(); nid=(max([x.get('id',0) for x in allv])+1) if allv else 1
     for r in rows: r['id']=nid; r['created']=datetime.date.today().isoformat(); nid+=1; allv.append(r)
-    json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return 'file'
+    json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return 'file' + (f'(DB실패: {err})' if err else '')
+def _hkb_file_all():
+    try: return json.load(open(_HKB_FILE,encoding='utf-8')) if os.path.exists(_HKB_FILE) else []
+    except Exception: return []
 def _hkb_del(title):
     c=_db()
     if c:
@@ -14160,22 +14173,22 @@ async def helper_kb_upload(pw: str = Form(''), title: str = Form(''), tag: str =
                 if not base or base.startswith('.') or base.startswith('__'): continue
                 t=(tag+' ' if tag else '')+os.path.splitext(base)[0]; t=t.strip()[:80]
                 rows=await _kb_ingest_one(base, z.read(info), t, tag, key, td)
-                if rows: _hkb_del(t); _hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows)})
+                if rows: _hkb_del(t); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
                 else: skipped.append(base)
         else:
             t=(title or os.path.splitext(name)[0])[:80]
             rows=await _kb_ingest_one(name, data, t, tag, key, td)
-            if rows: _hkb_del(t); _hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows)})
+            if rows: _hkb_del(t); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
             else: skipped.append(name)
     if not done: return JSONResponse({'ok':False,'error':'읽은 글이 없다(스캔본·캡처는 서버 키 필요)','skipped':skipped},headers=_HUB_CORS)
-    return JSONResponse({'ok':True,'done':done,'skipped':skipped,'store':'db' if _db() else 'file'},headers=_HUB_CORS)
+    return JSONResponse({'ok':True,'done':done,'skipped':skipped,'store':(done[0]['store'] if done else '')},headers=_HUB_CORS)   # ★v786 제202조: 실제 저장소
 
 @app.get('/helper/kb/list')
 def helper_kb_list():
     rows=_hkb_all(); seen={}
     for r in rows:
         k=r['title']; seen.setdefault(k,{'title':k,'tag':r.get('tag'),'pages':0,'created':r.get('created')}); seen[k]['pages']+=1
-    return JSONResponse({'ok':True,'items':list(seen.values())},headers=_HUB_CORS)
+    return JSONResponse({'ok':True,'items':list(seen.values()),'total':len(seen),'pages':len(rows)},headers=_HUB_CORS)
 
 @app.post('/helper/kb/delete')
 async def helper_kb_delete(body:dict):
