@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v789-kbamb-20261002'
+VSTAMP = 'v791-kbdedup-20261002'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1737,6 +1737,12 @@ _STRUCT_SELFTEST = [
     ('제204조 조문',                'BARUM_DOCTRINE.md', r'제204조 — HELPER 검색: 드문 말 우선', True),
     ('제205조 줄임말 정확일치',     'main.py', r"if k==a\.lower\(\): more\.extend\(b\)", True),
     ('제205조 조문',                'BARUM_DOCTRINE.md', r'제205조 — HELPER 회사 이름 2글자는 되묻는다', True),
+    ('제206조 모를때 웹검색',       'main.py', r"if _helper_unknown\(text\) and not body\.get\('noweb'\)", True),
+    ('제206조 손보생보 같이',       'main.py', r'손보·생보 같이\(v790 제206조\)', True),
+    ('제206조 조문',                'BARUM_DOCTRINE.md', r'제206조 — HELPER 손보·생보 같이 · 모를 때만 웹 검색', True),
+    ('제207조 DB+파일 삭제',        'main.py', r'DB 와 임시 파일 「둘 다」에서 지운다', True),
+    ('제207조 올릴때 옛판 교체',    'main.py', r'_hkb_del\(t,norm=True\)', True),
+    ('제207조 조문',                'BARUM_DOCTRINE.md', r'제207조 — HELPER 중복 자료는 서버가 무시', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -13984,7 +13990,8 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 범위 밖(보험료 계산, 상품 담보 설명 일반, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기만 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다.
 원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다.
 ★★근거 규칙(v784 제200조, 어기면 틀린 답이다): 숫자·기간·회사명·상품명·병명 코드·판례·조문은 아래 [자료]·[kb]에 「글자로 적힌 것」만 쓴다. 일반 상식·기억·추측으로 채우지 않는다. 질문에 맞는 근거가 [자료]·[kb]에 없으면 첫 줄을 「확인 필요 — 자료에 없음 · 회사 사전심사(언더라이팅) 문의」로 쓰고, 아는 근거가 있는 부분만 짧게 덧붙인다. 근거를 쓸 때는 자료명(또는 출처·날짜)을 줄 끝 괄호에 적는다. 자료끼리 다르면 날짜가 최신인 쪽을 쓰고 「자료마다 다름」이라 적는다.
-★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
+★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다.
+★손보·생보 같이(v790 제206조): 상품·담보를 물으면(예: 간병인·고당지·통합치료비) 「손보」「생보」 두 덩어리로 나눠 자료에 있는 회사를 양쪽 다 적는다. 회사를 하나 지정했어도 같은 담보가 반대쪽(생보/손보)에 있으면 끝에 한 줄 「생보 쪽은 …」「손보 쪽은 …」을 붙인다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
 고객 병력(나이·성별·약·진단·입원·수술·재검사·날짜)이 대화나 캡처에 나오면 답 마지막 줄에 반드시 <facts>{"age":만나이 숫자 또는 null,"sex":"M"|"F"|null,"meds":["혈압약"...],"cards":[{"kind":"adm|op|sev|re|dz","name":"병명","ym":"YYYY-MM" 또는 "","cured":true|false,"drug30":true|false,"ongoing":true|false,"need3":true|false}]}</facts> 를 붙인다. meds 는 kb.medNames 중에서, cards.name 은 kb.dzNames 중에서 고른다(없으면 "기타(직접 입력)"). kind: adm=입원, op=수술, sev=암·뇌졸중·심근경색·협심증·판막·간경화 진단, re=재검사·추가검사, dz=그 밖 진단·치료. 캡처의 진료내역은 한 줄씩 다 뽑되 같은 병은 하나로 합쳐 마지막 날짜를 ym 으로. 판정 결과(어느 상품)는 앱이 계산해 붙이므로 당신은 순위를 단정하지 말고 근거와 주의점만 말한다."""
 
 # ★★★★★v780 (2026.10.01 지점장 「10월 소식지 넣어 주면 간병인 치면 회사별 정보도 나와야 해」)
@@ -14029,17 +14036,33 @@ def _hkb_add(rows):
 def _hkb_file_all():
     try: return json.load(open(_HKB_FILE,encoding='utf-8')) if os.path.exists(_HKB_FILE) else []
     except Exception: return []
-def _hkb_del(title):
+def _hkb_norm(title):
+    """★v791 제207조 — 같은 자료인지 가르는 이름: 앞의 번호·표시(「130624 」「2026-10 」)를 떼고 본다"""
+    t=(title or '').strip()
+    t=re.sub(r'^(\d{4,}|\d{4}-\d{2})\s+','',t)
+    return t.strip()
+def _hkb_del(title, norm=False):
+    """★v791 제207조: DB 와 임시 파일 「둘 다」에서 지운다. 전에는 DB 가 있으면 DB 만 지워서,
+    v786 부터 목록에 함께 보이는 임시 파일 쪽 자료가 지워도 다시 나타났다(「삭제가 잘 안 된다」).
+    norm=True 면 번호·표시만 다른 같은 자료(예 「130624 14_…」 와 「14_…」)도 같이 지운다."""
+    key=_hkb_norm(title) if norm else title
+    hit=lambda x:(_hkb_norm(x) if norm else x)==key
+    names=sorted({r.get('title') for r in _hkb_all() if r.get('title') and hit(r.get('title'))}) or [title]
     c=_db()
     if c:
         try:
-            with c, c.cursor() as k: k.execute("DELETE FROM helper_kb WHERE title=%s",(title,)); return True
-        except Exception as e: print('[v780 kb] DB 삭제 실패', str(e)[:80])
+            with c, c.cursor() as k:
+                for nm in names: k.execute("DELETE FROM helper_kb WHERE title=%s",(nm,))
+        except Exception as e: print('[v791 kb] DB 삭제 실패', str(e)[:80])
         finally:
             try: c.close()
             except Exception: pass
-    allv=[x for x in _hkb_all() if x.get('title')!=title]
-    json.dump(allv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return True
+    try:
+        fv=_hkb_file_all()
+        nv=[x for x in fv if not hit(x.get('title',''))]
+        if len(nv)!=len(fv): json.dump(nv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False)
+    except Exception as e: print('[v791 kb] 파일 삭제 실패', str(e)[:80])
+    return True
 _HKB_ALIAS={'흥생':['흥국생명'],'삼생':['삼성생명'],'한생':['한화생명'],'교보':['교보생명'],'동양':['동양생명'],'미래에셋':['미래에셋생명'],'abl':['ABL생명'],'에이비엘':['ABL생명'],
             '현대':['현대해상'],'메리츠':['메리츠화재'],'롯데':['롯데손보'],'신한':['신한라이프'],
             # ★v789 제205조: 손보·생보가 둘 다 있는 이름은 한쪽으로 몰지 않고 둘 다 찾는다(앱 v0.36 이 먼저 「어느 회사?」 되묻는다)
@@ -14068,7 +14091,7 @@ def _hkb_tokens(q):
     return seen[:40]
 _HKB_STOP={'고지','고지해','고지해야','보험','고객','알려','알려야','해야','하나','하나요','있어','없어','그럼','이거','저거','근데','그냥','혹시','어떻게','뭐야','뭐예요','되나','돼요','되요','해요','합니다'}
 def _hkb_pick(q, n=6, maxc=9000):
-    rows=_hkb_all()
+    rows=[r for r in _hkb_all() if r.get('title')!='__unknown__']   # ★v790 모르는 질문 기록은 자료가 아니다
     if not rows: return []
     toks=_hkb_tokens(q)
     if not toks: return []
@@ -14082,7 +14105,17 @@ def _hkb_pick(q, n=6, maxc=9000):
         score=sum(min(t.count(w),3)*idf[w] for w in toks)+sum(2*idf[w] for w in toks if w in ttl)
         if score>0: sc.append((score,r))
     sc.sort(key=lambda x:-x[0]); out=[]; used=0
-    per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or ''))
+    # ★v791 제207조: 번호만 다른 같은 자료가 남아 있어도 같은 글 쪽은 한 번만(중복 자료는 서버가 무시)
+    _seen_txt=set(); _sc2=[]
+    for _s,_r in sc:
+        _h=hash((_r.get('txt') or '')[:600])
+        if _h in _seen_txt: continue
+        _seen_txt.add(_h); _sc2.append((_s,_r))
+    sc=_sc2
+    _co_names=set(k.lower() for k in _HKB_ALIAS)|set(x.lower() for v in _HKB_ALIAS.values() for x in v)|{'화재','손보','생명','라이프'}
+    _named=any(n in (q or '').lower() for n in _co_names)
+    # ★v790 제206조: 회사 이름 없이 상품·담보만 물으면(「간병인은?」) 자료(회사 책)마다 고르게 → 손보·생보 회사가 같이 들어온다
+    per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or '')) or not _named
     if per_title:   # 「회사별」이면 자료(회사)마다 제일 맞는 쪽 1개씩 — 한 회사가 다 차지하지 않게
         seen={}; n=max(n,12); maxc=max(maxc,14000)
         cap=4   # ★v784 제200조: 회사별로 절이 나뉜 자료(지식책·인수정리)는 한 자료에서 여러 회사 절이 와야 한다 — 자료당 최대 4쪽
@@ -14208,22 +14241,37 @@ async def helper_kb_upload(pw: str = Form(''), title: str = Form(''), tag: str =
                 if not base or base.startswith('.') or base.startswith('__'): continue
                 t=(tag+' ' if tag else '')+os.path.splitext(base)[0]; t=t.strip()[:80]
                 rows=await _kb_ingest_one(base, z.read(info), t, tag, key, td)
-                if rows: _hkb_del(t); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
+                if rows: _hkb_del(t,norm=True); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
                 else: skipped.append(base)
         else:
             t=(title or os.path.splitext(name)[0])[:80]
             rows=await _kb_ingest_one(name, data, t, tag, key, td)
-            if rows: _hkb_del(t); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
+            if rows: _hkb_del(t,norm=True); st=_hkb_add(rows); done.append({'title':t,'pages':len(rows),'chars':sum(len(r['txt']) for r in rows),'store':st,'saved':sum(1 for x in _hkb_all() if x.get('title')==t)})
             else: skipped.append(name)
     if not done: return JSONResponse({'ok':False,'error':'읽은 글이 없다(스캔본·캡처는 서버 키 필요)','skipped':skipped},headers=_HUB_CORS)
     return JSONResponse({'ok':True,'done':done,'skipped':skipped,'store':(done[0]['store'] if done else '')},headers=_HUB_CORS)   # ★v786 제202조: 실제 저장소
 
 @app.get('/helper/kb/list')
 def helper_kb_list():
-    rows=_hkb_all(); seen={}
+    rows=[r for r in _hkb_all() if r.get('title')!='__unknown__']; seen={}
     for r in rows:
         k=r['title']; seen.setdefault(k,{'title':k,'tag':r.get('tag'),'pages':0,'created':r.get('created')}); seen[k]['pages']+=1
     return JSONResponse({'ok':True,'items':list(seen.values()),'total':len(seen),'pages':len(rows)},headers=_HUB_CORS)
+
+@app.post('/helper/kb/dedupe')
+async def helper_kb_dedupe(body:dict):
+    """★v791 제207조 — 번호·표시만 다른 같은 자료가 여러 벌이면 가장 최근 것 하나만 남긴다"""
+    if body.get('pw') not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    rows=[r for r in _hkb_all() if r.get('title')!='__unknown__']
+    grp={}
+    for r in rows: grp.setdefault(_hkb_norm(r['title']),{}).setdefault(r['title'],max(grp.get(_hkb_norm(r['title']),{}).get(r['title'],0),r.get('id') or 0))
+    removed=[]
+    for nm,titles in grp.items():
+        if len(titles)<=1: continue
+        keep=max(titles.items(),key=lambda kv:kv[1])[0]
+        for t in titles:
+            if t!=keep: _hkb_del(t); removed.append(t)
+    return JSONResponse({'ok':True,'removed':removed},headers=_HUB_CORS)
 
 @app.post('/helper/kb/delete')
 async def helper_kb_delete(body:dict):
@@ -14318,7 +14366,67 @@ async def helper_chat(body:dict):
         try: facts=json.loads(m.group(1))
         except Exception: facts=None
         text=text[:m.start()].rstrip()
-    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used})
+    # ★v790 제206조 (지점장 「모르는 건 니가 서치해서 못 해주나 바름이가」): 자료에 없다고 답할 때만 웹 검색을 한 번 더 한다
+    #   → 아는 질문은 비용·속도 그대로, 모르는 질문만 검색(최대 3회). 결과는 「🔎 웹 검색」 표시 + 출처·날짜
+    web=False
+    if _helper_unknown(text) and not body.get('noweb'):
+        wt=await _helper_web(key,conv)
+        if wt:
+            text='🔎 자료에 없어 웹에서 찾았다 (공개 자료 · 회사 확인 필요)\n'+wt; web=True
+            try: _helper_log_unknown(lastq)
+            except Exception: pass
+    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web})
+
+def _helper_unknown(text):
+    """★v790 제206조 — 바름이 답이 「자료에 없음/확인 필요」로 시작하거나 앞부분에 그 말이 있으면 모르는 질문으로 본다"""
+    h=(text or '').strip()[:160]
+    return h.startswith('확인 필요') or bool(re.search(r'자료에\s*없|자료\s*없음|확인\s*필요\s*—\s*자료', h))
+
+_HELPER_WEB_SYS = """당신은 「바름이」 — 보험 설계사를 돕는 AI다. 지점 자료에 없는 질문이라 공개 웹을 검색해 답한다.
+규칙: 검색 결과에 「글자로 적힌 것」만 쓴다(숫자·상품명·날짜). 보험사 공식 페이지·금감원·생명/손해보험협회·언론 기사를 우선, 블로그·카페는 「참고」로만.
+형식: 결론 1~2줄 → 근거(줄마다 출처 이름·날짜) → 할 일(회사 사전심사·상품설명서 확인). 짧게, 한국어 단정형.
+상품·담보 질문이면 손보·생보 회사를 나눠 적는다. 찾지 못하면 「웹에서도 확인 안 됨 — 회사 사전심사(언더라이팅) 문의」라고만 쓴다. 마지막 줄에 「출처: …」로 사이트 이름을 모은다."""
+
+async def _helper_web(key,conv):
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            resp=await client.post('https://api.anthropic.com/v1/messages',
+                headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+                json={'model':'claude-sonnet-4-6','max_tokens':900,'system':_HELPER_WEB_SYS,'messages':conv,
+                      'tools':[{'type':'web_search_20250305','name':'web_search','max_uses':3,'user_location':{'type':'approximate','country':'KR'}}]})
+        d=resp.json()
+        if resp.status_code!=200: print('[v790 web] status',resp.status_code,str(d)[:200]); return ''
+        return ''.join(b.get('text','') for b in d.get('content',[]) if b.get('type')=='text').strip()
+    except Exception as e:
+        print('[v790 web] exc',str(e)[:120]); return ''
+
+_HKB_UNK_FILE='helper_unknown.json'
+def _helper_log_unknown(q):
+    """웹으로 넘어간 질문을 모아 둔다 → 다음 지식책 거리(/helper/unknown 으로 본다)"""
+    q=(q or '').strip()[:200]
+    if not q: return
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO helper_kb(title,tag,page,txt) VALUES(%s,%s,%s,%s)",('__unknown__','',0,q)); return
+        except Exception as e: print('[v790 unk] db',str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try: L=json.load(open(_HKB_UNK_FILE,encoding='utf-8'))
+    except Exception: L=[]
+    L.append({'q':q,'t':datetime.datetime.now().isoformat(timespec='minutes')}); L=L[-500:]
+    json.dump(L,open(_HKB_UNK_FILE,'w',encoding='utf-8'),ensure_ascii=False)
+
+@app.get('/helper/unknown')
+def helper_unknown_list(pw: str = ''):
+    if pw not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    out=[]
+    try: out=[{'q':x['q'],'t':x.get('t','')} for x in json.load(open(_HKB_UNK_FILE,encoding='utf-8'))]
+    except Exception: pass
+    out+= [{'q':r['txt'],'t':r.get('created','')} for r in _hkb_all() if r.get('title')=='__unknown__']
+    return JSONResponse({'ok':True,'items':out[-200:]},headers=_HUB_CORS)
 
 
 @app.post('/ask')
