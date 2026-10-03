@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v791-kbdedup-20261002'
+VSTAMP = 'v796-feedback-20261003'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1743,6 +1743,13 @@ _STRUCT_SELFTEST = [
     ('제207조 DB+파일 삭제',        'main.py', r'DB 와 임시 파일 「둘 다」에서 지운다', True),
     ('제207조 올릴때 옛판 교체',    'main.py', r'_hkb_del\(t,norm=True\)', True),
     ('제207조 조문',                'BARUM_DOCTRINE.md', r'제207조 — HELPER 중복 자료는 서버가 무시', True),
+    ('제208조 추천 규칙',           'main.py', r'추천 규칙\(v792 제208조', True),
+    ('제208조 조문',                'BARUM_DOCTRINE.md', r'제208조 — 바름이 상품 추천 틀', True),
+    ('제209조 앱별 서랍',           'main.py', r'def _hkb_app_of', True),
+    ('제209조 조문',                'BARUM_DOCTRINE.md', r'제209조 — 서랍을 둘로', True),
+    ('제210조 피드백',              'main.py', r"@app\.post\('/helper/feedback'\)", True),
+    ('제210조 자가시험',            'main.py', r"@app\.get\('/helper/selftest'", True),
+    ('제210조 조문',                'BARUM_DOCTRINE.md', r'제210조 — 도움되게', True),
     ('제154조⑭ 뇌출혈TextBox48',   'main.py', r'v684 \(지점장 2026\.09\.07 「<b>중대한뇌출혈은 PPT가', True),
     ('제154조⑪ 보장분석지실패표시', 'remodel.py', r"_out\['fail'\] = list\(_fail\)", True),
     ('제154조⑪ 화면표시',          'main.py',    r"j\.fail\.length\+'건: '", True),
@@ -13986,8 +13993,9 @@ async def remodel_route(xlsx: UploadFile = File(None),
 #   캡처(건강e음·나의건강기록·The건강보험)가 오면 비전으로 진료내역을 읽어 같은 facts 로 낸다. 저장 안 함.
 _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 보험 설계사(특히 신입)를 돕는 심사 도우미 AI다. 자기를 가리킬 때 「바름이」라고 한다. 한국어로, 짧고 단정하게, 결론→근거→할 일 순서로 답한다.
 ★답 길이 규칙(신입용, 어기면 안 된다): 첫 줄에 결론 한 문장. 전체 5줄 이내, 한 줄 40자 안팎. 어려운 말·긴 설명·인사·서론 금지. 「회사별」이면 회사마다 한 줄(회사명: 핵심 숫자·조건, 자료명 쪽) 로 최대 8줄. 더 자세한 건 마지막 줄에 「더 보고 싶으면 ○○ 자료 ○쪽」 한 줄로. 표·마크다운 제목 쓰지 말고 줄바꿈과 「·」만 쓴다.
-다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기 — 아래 kb의 규칙표 안에서 어느 회사·상품 질문을 통과하는지.
-범위 밖(보험료 계산, 상품 담보 설명 일반, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기만 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다.
+다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기·추천 — 아래 kb의 규칙표와 자료(카탈로그1·2, 추천규칙)에서 어느 회사·상품이 되는지 + 상품명으로 추천.
+범위 밖(보험료 계산, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기·상품 추천을 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다. 담보·상품 설명은 자료에 있으면 답한다.
+★★추천 규칙(v792 제208조, 지점장 2026.10.03 「두루뭉술 추천·고지만 체크 금지, 수준 올려라」): 고객 병력·나이가 나오면 고지 판정에서 끝내지 말고 반드시 「다음 단계」까지 간다 — ① 결론 한 줄「○○님은 [유형] — [회사 상품명] 먼저」 ② 유형 근거 한 줄(건강고지/초경증·고당지/간편 3.N.5의 N/암·뇌심 유병자형) ③ 후보 상품 2~3개 = 자료의 카탈로그1·2(2026.10 현재 판매)에 적힌 「회사 상품명」만, 가장 유리한 것부터, 출시월·핵심 조건·이유 한 줄씩 ④ 주의 한 줄(면책·감액·예외·납입면제·갱신) ⑤ 할 일(사전심사·전산 보험료 비교). 「어느 회사가 좋아요」「추천해 줘」「뭐 들어야 해」도 같은 틀. 상품명을 지어내지 않는다 — 카탈로그에 없으면 「카탈로그 미수록 · 전산 확인」. 보험료 숫자·가입 한도는 전산으로 돌리고 단정하지 않는다. 추천 틀 답은 5줄 규칙 대신 최대 8줄까지 허용.
 원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다.
 ★★근거 규칙(v784 제200조, 어기면 틀린 답이다): 숫자·기간·회사명·상품명·병명 코드·판례·조문은 아래 [자료]·[kb]에 「글자로 적힌 것」만 쓴다. 일반 상식·기억·추측으로 채우지 않는다. 질문에 맞는 근거가 [자료]·[kb]에 없으면 첫 줄을 「확인 필요 — 자료에 없음 · 회사 사전심사(언더라이팅) 문의」로 쓰고, 아는 근거가 있는 부분만 짧게 덧붙인다. 근거를 쓸 때는 자료명(또는 출처·날짜)을 줄 끝 괄호에 적는다. 자료끼리 다르면 날짜가 최신인 쪽을 쓰고 「자료마다 다름」이라 적는다.
 ★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다.
@@ -14090,8 +14098,23 @@ def _hkb_tokens(q):
     seen=[];[seen.append(x) for x in out+more+pre if x not in seen and x not in _HKB_STOP]
     return seen[:40]
 _HKB_STOP={'고지','고지해','고지해야','보험','고객','알려','알려야','해야','하나','하나요','있어','없어','그럼','이거','저거','근데','그냥','혹시','어떻게','뭐야','뭐예요','되나','돼요','되요','해요','합니다'}
-def _hkb_pick(q, n=6, maxc=9000):
-    rows=[r for r in _hkb_all() if r.get('title')!='__unknown__']   # ★v790 모르는 질문 기록은 자료가 아니다
+# ★v793 제209조 (지점장 2026.10.03 「AI는 보험상품·담보, 헬퍼는 고지 문의·고지 기준·고지위반·상품추천 · 겹치는 건 조절」)
+#   책 번호로 서랍을 가른다: helper = 고지·질병별 고지·분쟁·추천 / ai = 상품·담보·보상·법·영업·설계·동향 / both = 회사 책·조건표·소식지·카탈로그
+_HKB_HELPER_NUMS=set([12,14,15,16,17,19,114,169,170,171,213,142,144]+list(range(20,40))+list(range(123,133))+list(range(214,500)))   # ★v794 214~ = 고지 카드·약·검진·시나리오·유형·사례(HELPER 300권)
+_HKB_BOTH_NUMS=set([18,77,211,212]+list(range(78,123))+list(range(500,700)))   # ★v795 500~699 = 보험사 상품 카드(두 앱 공통)
+def _hkb_app_of(title):
+    m=re.match(r'^\s*(\d{1,3})_',_hkb_norm(title or ''))
+    if not m: return 'both'      # 번호 없는 자료(GA Brief PDF 등)는 둘 다
+    n=int(m.group(1))
+    if n in _HKB_HELPER_NUMS: return 'helper'
+    if n in _HKB_BOTH_NUMS: return 'both'
+    return 'ai'
+def _hkb_rows_for(app):
+    rows=[r for r in _hkb_all() if not str(r.get('title','')).startswith('__')]   # ★v796 __unknown__·__fb__ 기록 제외
+    if app not in ('helper','ai'): return rows
+    return [r for r in rows if _hkb_app_of(r.get('title')) in (app,'both')]
+def _hkb_pick(q, n=6, maxc=9000, app=None):
+    rows=_hkb_rows_for(app)   # ★v793 앱별 서랍 · v790 모르는 질문 기록 제외
     if not rows: return []
     toks=_hkb_tokens(q)
     if not toks: return []
@@ -14253,9 +14276,9 @@ async def helper_kb_upload(pw: str = Form(''), title: str = Form(''), tag: str =
 
 @app.get('/helper/kb/list')
 def helper_kb_list():
-    rows=[r for r in _hkb_all() if r.get('title')!='__unknown__']; seen={}
+    rows=[r for r in _hkb_all() if not str(r.get('title','')).startswith('__')]; seen={}
     for r in rows:
-        k=r['title']; seen.setdefault(k,{'title':k,'tag':r.get('tag'),'pages':0,'created':r.get('created')}); seen[k]['pages']+=1
+        k=r['title']; seen.setdefault(k,{'title':k,'tag':r.get('tag'),'pages':0,'created':r.get('created'),'app':_hkb_app_of(k)}); seen[k]['pages']+=1
     return JSONResponse({'ok':True,'items':list(seen.values()),'total':len(seen),'pages':len(rows)},headers=_HUB_CORS)
 
 @app.post('/helper/kb/dedupe')
@@ -14280,7 +14303,7 @@ async def helper_kb_delete(body:dict):
 
 @app.post('/helper/kb/search')
 async def helper_kb_search(body:dict):
-    q=body.get('q',''); picks=_hkb_pick(q,n=8,maxc=12000)
+    q=body.get('q',''); picks=_hkb_pick(q,n=8,maxc=12000,app=body.get('app') or 'ai')   # ★v793 검색 API 기본 = AI 앱(상품·담보) 서랍
     return JSONResponse({'ok':True,'items':[{'title':p['title'],'tag':p.get('tag'),'page':p['page'],'txt':p['txt'][:1200]} for p in picks]},headers=_HUB_CORS)
 
 
@@ -14299,7 +14322,7 @@ async def helper_chat(body:dict):
     # ★v785 제201조: 「다른회사는?」처럼 짧은 이어 묻기는 앞 질문의 병명이 없어 자료를 못 찾았다 → 최근 사용자 말 3개를 합쳐 찾는다(최신 말 우선)
     _uq=[str(m.get('content','')).strip() for m in msgs if m.get('role')=='user' and str(m.get('content','')).strip()]
     pickq=' '.join(_uq[-3:])[-900:] if _uq else lastq
-    picks=_hkb_pick(pickq)
+    picks=_hkb_pick(pickq,app=body.get('app') or 'helper')   # ★v793 HELPER 채팅 = 고지·추천 서랍
     kbtxt=''.join(f"\n[자료 「{p['title']}」 {p.get('tag') or ''} {p['page']}쪽]\n{p['txt']}\n" for p in picks)
     system=_HELPER_SYS+("\n\n★지점장이 올린 자료(소식지·세일즈북)가 아래 있으면 그 자료를 최우선 근거로 쓰고, 「회사별로」 물으면 자료에 나온 회사를 하나씩 나눠 답하며 자료명·쪽을 적는다. 자료에 없는 회사는 「자료에 없음」이라 한다.\n"+kbtxt if picks else '')+"\n\n[kb — 앱과 같은 근거]\n"+json.dumps(kb,ensure_ascii=False)[:60000]
     conv=[]
@@ -14418,6 +14441,63 @@ def _helper_log_unknown(q):
     except Exception: L=[]
     L.append({'q':q,'t':datetime.datetime.now().isoformat(timespec='minutes')}); L=L[-500:]
     json.dump(L,open(_HKB_UNK_FILE,'w',encoding='utf-8'),ensure_ascii=False)
+
+_HKB_FB_FILE='helper_feedback.json'
+def _helper_log_fb(rec):
+    """★v796 제210조 (지점장 「자료는 방대하나 도움되게」): 답마다 👍👎 를 모아 둔다 → 👎 가 책 고칠 자리"""
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO helper_kb(title,tag,page,txt) VALUES(%s,%s,%s,%s)",('__fb__','',0,json.dumps(rec,ensure_ascii=False))); return True
+        except Exception as e: print('[v796 fb] db',str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try: L=json.load(open(_HKB_FB_FILE,encoding='utf-8'))
+    except Exception: L=[]
+    L.append(rec); L=L[-1000:]
+    json.dump(L,open(_HKB_FB_FILE,'w',encoding='utf-8'),ensure_ascii=False); return True
+
+@app.post('/helper/feedback')
+async def helper_feedback(body:dict):
+    if body.get('pw') not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    rec={'t':datetime.datetime.now().isoformat(timespec='minutes'),'app':str(body.get('app') or 'helper')[:10],'ok':bool(body.get('ok')),
+         'q':str(body.get('q') or '')[:400],'a':str(body.get('a') or '')[:1500],'why':str(body.get('why') or '')[:200],'who':str(body.get('who') or '')[:20]}
+    _helper_log_fb(rec)
+    return JSONResponse({'ok':True},headers=_HUB_CORS)
+
+@app.get('/helper/feedback/list')
+def helper_feedback_list(pw: str = ''):
+    if pw not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    out=[]
+    try: out=json.load(open(_HKB_FB_FILE,encoding='utf-8'))
+    except Exception: pass
+    for r in _hkb_all():
+        if r.get('title')=='__fb__':
+            try: out.append(json.loads(r['txt']))
+            except Exception: pass
+    out.sort(key=lambda x:x.get('t',''))
+    return JSONResponse({'ok':True,'items':out[-300:],'bad':sum(1 for x in out if not x.get('ok'))},headers=_HUB_CORS)
+
+# ★v796 자가시험: 대표 질문 → 기대 책이 1~3순위에 있나 (AI 호출 없음)
+_HKB_SELFTEST=[('helper','갑상선 결절 1년마다 추적 고지해?','갑상선'),('helper','혈압약 처방받고 안 먹었어','투약|혈압|고혈압'),('helper','58세 남 혈압약 뭐 추천','시나리오|추천|고혈압'),('helper','암 수술 3년 어디 회사','암_수술_3년|암유병자|추천'),
+ ('helper','플라빅스 먹는데 간편 돼','플라빅스'),('helper','종양표지자 상승','종양표지자'),('helper','임상시험 입원 고지','임상시험'),('helper','당일 응급실 입원만','당일|한화손보'),('helper','동양 용종','동양'),('helper','교보 K맞춤 누구에게','교보'),
+ ('helper','80대 부모님 가입','80|골든|고령|시니어'),('helper','치매 부모 상품 추천','치매'),('helper','위고비 처방 고지','위고비'),('helper','해지 통지 받았어','해지|고지9|분쟁'),('ai','수익자 바꾸고 싶대요','수익자|계약자'),
+ ('ai','통합치료비 누적형','통합치료|암담보|소식지'),('ai','골절 치아포함 제외','골절|상해담보'),('ai','실손 2세대 통원','실손'),('ai','삼성화재 온통보장','삼성화재'),('ai','현대 케어더블암치매','케어더블|현대해상'),
+ ('ai','8주룰','자동차'),('ai','갱신 비갱신 판정 순서','갱신'),('ai','보장분석 표 읽는법','보장분석'),('ai','납입면제 조건 차이','납입면제'),('ai','리모델링 때 지킬 담보','리모델링')]
+@app.get('/helper/selftest', response_class=HTMLResponse)
+def helper_selftest(pw: str = ''):
+    if pw not in (PW,_HELPER_ADMIN): return HTMLResponse('<p>비밀번호 오류</p>')
+    rows=[];okn=0
+    for app_,q,exp in _HKB_SELFTEST:
+        picks=_hkb_pick(q,n=6,maxc=9000,app=app_)
+        top=[p['title'] for p in picks][:3]
+        hit=any(re.search(exp,t) for t in top)
+        okn+=hit
+        rows.append(f"<tr style='background:{'#eefbe9' if hit else '#fff0f0'}'><td>{app_}</td><td>{q}</td><td>{'✓' if hit else '✗'}</td><td style='font-size:12px'>{'<br>'.join(t[:60] for t in top)}</td></tr>")
+    html=f"<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>바름이 자가시험</title></head><body style='font-family:sans-serif;padding:12px'><h3>바름이 자가시험 — {okn}/{len(_HKB_SELFTEST)} 통과 · {VSTAMP} · 자료 {len(_hkb_rows_for(None))}쪽</h3><p style='font-size:13px;color:#666'>질문마다 기대한 책이 1~3순위에 있는지만 본다(AI 호출 없음). ✗ 가 나오면 그 책을 두껍게 하거나 제목에 찾는 말을 넣는다.</p><table border='1' cellpadding='6' style='border-collapse:collapse;font-size:13px'><tr><th>서랍</th><th>질문</th><th>결과</th><th>1~3순위</th></tr>{''.join(rows)}</table></body></html>"
+    return HTMLResponse(html)
 
 @app.get('/helper/unknown')
 def helper_unknown_list(pw: str = ''):
