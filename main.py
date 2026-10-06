@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v796-feedback-20261003'
+VSTAMP = 'v798-hubsync-20261006'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -11215,30 +11215,92 @@ def _hub_owner(code):
     ok, nm, why = _member_check(cd)
     return cd.upper() if ok else None
 
-@app.get('/hub/notes')
-def hub_notes_get(code: str = ''):
-    """★v665 메모 내려받기 — 폰·PC 어디서 열어도 같은 메모. 번호가 틀리면 빈손."""
-    own = _hub_owner(code)
-    if not own:
-        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
-    c = _db()
-    if c:
+# ★★★★★v798 제212조 (지점장 2026.10.06 「계속 공유가 되었다 안 되었다 한다. 그러지 마」)
+#   원인 ① DB 연결이 잠깐 끊기면(6초 초과) 조용히 「서버 임시 파일」로 저장·읽기 → 그 사이 쓴 메모는 DB에 없고, 다음엔 DB를 읽어 사라진 것처럼 보였다(되었다 안 되었다)
+#   원인 ② 저장할 때 서버 값을 기기 목록으로 「통째로 덮어썼다」 → 오래 안 맞춘 기기가 저장하면 다른 기기 메모가 잠깐 사라졌다
+#   ⇒ DB가 설정돼 있으면 임시 파일로 절대 빠지지 않는다(한 번 더 시도, 그래도 안 되면 ok:false — 앱은 기기에 두고 다시 보낸다)
+#   ⇒ 저장은 서버에서 「합친다」(메모 = id별 최근 t · 지움 표시 유지 / 일정 = 날짜별 합집합 + __del) · 행 잠금(FOR UPDATE)으로 동시 저장도 안전 · 합친 결과를 돌려준다
+import os as _os798
+def _hub_db_on(): return bool(_os798.environ.get('DATABASE_URL',''))
+def _hub_db():
+    c=_db()
+    if c is None and _hub_db_on():
+        import time as _t; _t.sleep(0.4); c=_db()
+    return c
+def _hub_file_all():
+    try: return json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
+    except Exception: return {}
+def _hub_read(key):
+    """(값, 오류) — DB 설정 시 DB만. 실패면 (None,'DB 연결 실패')"""
+    if _hub_db_on():
+        c=_hub_db()
+        if not c: return None,'DB 연결 실패'
         try:
             with c, c.cursor() as k:
-                k.execute("SELECT v, to_char(updated,'YYYY-MM-DD HH24:MI') FROM hub_notes WHERE code=%s", (own,))
-                r = k.fetchone()
-                return JSONResponse({'ok': True, 'notes': json.loads(r[0]) if r and r[0] else None,
-                                     'updated': r[1] if r else None, 'src': 'db'}, headers=_HUB_CORS)
-        except Exception as _e:
-            print('[v665 notes] DB 읽기 실패:', str(_e)[:80])
+                k.execute("SELECT v FROM hub_notes WHERE code=%s",(key,)); r=k.fetchone()
+                return (json.loads(r[0]) if r and r[0] else None),None
+        except Exception as e: return None,'DB 읽기 실패'
         finally:
             try: c.close()
             except Exception: pass
-    try:
-        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
-    except Exception:
-        allv = {}
-    return JSONResponse({'ok': True, 'notes': allv.get(own), 'updated': None, 'src': 'file'}, headers=_HUB_CORS)
+    return _hub_file_all().get(key),None
+def _hub_merge_write(key, incoming, merger):
+    """서버 값과 합쳐 저장하고 합친 값을 돌려준다. (합친값, 오류)"""
+    if _hub_db_on():
+        c=_hub_db()
+        if not c: return None,'DB 연결 실패'
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v FROM hub_notes WHERE code=%s FOR UPDATE",(key,)); r=k.fetchone()
+                cur=json.loads(r[0]) if r and r[0] else None
+                out=merger(cur,incoming)
+                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()",(key,json.dumps(out,ensure_ascii=False)))
+            return out,None
+        except Exception as e:
+            print('[v798 hub] DB 저장 실패',str(e)[:80]); return None,'DB 저장 실패'
+        finally:
+            try: c.close()
+            except Exception: pass
+    allv=_hub_file_all(); out=merger(allv.get(key),incoming); allv[key]=out
+    json.dump(allv, open(_HUB_NOTES_FILE,'w',encoding='utf-8'), ensure_ascii=False)
+    return out,None
+def _merge_notes(cur, inc):
+    m={}
+    for n in (cur or [])+(inc or []):
+        if not isinstance(n,dict) or 'id' not in n: continue
+        k=str(n['id']); o=m.get(k)
+        if o is None or (n.get('t') or 0)>=(o.get('t') or 0): m[k]=n
+    return list(m.values())
+def _merge_events(cur, inc):
+    cur=cur if isinstance(cur,dict) else {}; inc=inc if isinstance(inc,dict) else {}
+    cdel=[x for x in (cur.get('__del') or []) if isinstance(x,str)]; idel=[x for x in (inc.get('__del') or []) if isinstance(x,str)]
+    # 지운 일정을 일부러 다시 넣은 것만 __undel 로 받아 지움 표시에서 뺀다(오래된 기기가 옛 목록을 보내도 되살아나지 않게)
+    readd={x for x in (inc.get('__undel') or []) if isinstance(x,str)}
+    D=[x for x in cdel if x not in readd]
+    for x in idel:
+        if x not in D and x not in readd: D.append(x)
+    out={}
+    for src in (cur,inc):
+        for k,v in src.items():
+            if k in ('__del','__undel') or not isinstance(v,list): continue
+            a=out.setdefault(k,[])
+            for t in v:
+                if isinstance(t,str) and t not in a: a.append(t)
+    Ds=set(D)
+    for k in list(out.keys()):
+        out[k]=[t for t in out[k] if (k+'|'+t) not in Ds]
+        if not out[k]: del out[k]
+    if D: out['__del']=D[-500:]
+    return out
+
+@app.get('/hub/notes')
+def hub_notes_get(code: str = ''):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    v,err=_hub_read(own)
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'notes': v, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
 
 @app.post('/hub/notes')
 async def hub_notes_post(code: str = Form(''), notes: str = Form('')):
@@ -11251,25 +11313,9 @@ async def hub_notes_post(code: str = Form(''), notes: str = Form('')):
             return JSONResponse({'ok': False, 'error': '메모가 너무 크다(4MB)'}, headers=_HUB_CORS)
     except Exception:
         return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
-    c = _db()
-    if c:
-        try:
-            with c, c.cursor() as k:
-                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) "
-                          "ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()", (own, notes))
-            return JSONResponse({'ok': True, 'n': len(arr), 'src': 'db'}, headers=_HUB_CORS)
-        except Exception as _e:
-            print('[v665 notes] DB 저장 실패:', str(_e)[:80])
-        finally:
-            try: c.close()
-            except Exception: pass
-    try:
-        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
-    except Exception:
-        allv = {}
-    allv[own] = arr
-    json.dump(allv, open(_HUB_NOTES_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
-    return JSONResponse({'ok': True, 'n': len(arr), 'src': 'file'}, headers=_HUB_CORS)
+    out,err=_hub_merge_write(own,arr,_merge_notes)
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'n': len(out), 'notes': out, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
 
 @app.options('/hub/notes')
 def hub_notes_opt():
@@ -11285,25 +11331,9 @@ def hub_events_get(code: str = ''):
     own = _hub_owner(code)
     if not own:
         return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
-    key = _hub_ev_key(own)
-    c = _db()
-    if c:
-        try:
-            with c, c.cursor() as k:
-                k.execute("SELECT v, to_char(updated,'YYYY-MM-DD HH24:MI') FROM hub_notes WHERE code=%s", (key,))
-                r = k.fetchone()
-                return JSONResponse({'ok': True, 'events': json.loads(r[0]) if r and r[0] else None,
-                                     'updated': r[1] if r else None, 'src': 'db'}, headers=_HUB_CORS)
-        except Exception as _e:
-            print('[v688 events] DB 읽기 실패:', str(_e)[:80])
-        finally:
-            try: c.close()
-            except Exception: pass
-    try:
-        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
-    except Exception:
-        allv = {}
-    return JSONResponse({'ok': True, 'events': allv.get(key), 'updated': None, 'src': 'file'}, headers=_HUB_CORS)
+    v,err=_hub_read(_hub_ev_key(own))
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'events': v, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
 
 @app.post('/hub/events')
 async def hub_events_post(code: str = Form(''), events: str = Form('')):
@@ -11316,26 +11346,9 @@ async def hub_events_post(code: str = Form(''), events: str = Form('')):
             return JSONResponse({'ok': False, 'error': '일정이 너무 크다(2MB)'}, headers=_HUB_CORS)
     except Exception:
         return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
-    key = _hub_ev_key(own)
-    c = _db()
-    if c:
-        try:
-            with c, c.cursor() as k:
-                k.execute("INSERT INTO hub_notes(code,v,updated) VALUES(%s,%s,NOW()) "
-                          "ON CONFLICT (code) DO UPDATE SET v=EXCLUDED.v, updated=NOW()", (key, events))
-            return JSONResponse({'ok': True, 'n': len(obj), 'src': 'db'}, headers=_HUB_CORS)
-        except Exception as _e:
-            print('[v688 events] DB 저장 실패:', str(_e)[:80])
-        finally:
-            try: c.close()
-            except Exception: pass
-    try:
-        allv = json.load(open(_HUB_NOTES_FILE, encoding='utf-8')) if os.path.exists(_HUB_NOTES_FILE) else {}
-    except Exception:
-        allv = {}
-    allv[key] = obj
-    json.dump(allv, open(_HUB_NOTES_FILE, 'w', encoding='utf-8'), ensure_ascii=False)
-    return JSONResponse({'ok': True, 'n': len(obj), 'src': 'file'}, headers=_HUB_CORS)
+    out,err=_hub_merge_write(_hub_ev_key(own),obj,_merge_events)
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'n': len(out), 'events': out, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
 
 @app.options('/hub/events')
 def hub_events_opt():
@@ -14300,6 +14313,41 @@ async def helper_kb_dedupe(body:dict):
 async def helper_kb_delete(body:dict):
     if body.get('pw') not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
     _hkb_del(body.get('title','')); return JSONResponse({'ok':True},headers=_HUB_CORS)
+
+def _hkb_del_many(titles):
+    """★v797 제211조 (지점장 2026.10.05 「지우는데 잘 안 지워진다」): 선택 삭제를 한 번에.
+    전에는 앱이 책마다 /helper/kb/delete 를 따로 불렀고, 그때마다 _hkb_all() 로 전체 DB 를 다시 읽어 952권이면 952번 읽었다
+    → 화면이 꺼지면 중간에 멈췄다. 여기서는 DB 한 번(DELETE ... = ANY) · 임시 파일 한 번만 고쳐 쓴다."""
+    ts=sorted({str(t) for t in (titles or []) if str(t).strip()})
+    if not ts: return 0
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("DELETE FROM helper_kb WHERE title = ANY(%s)",(ts,))
+        except Exception as e: print('[v797 kb] DB 일괄 삭제 실패', str(e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    try:
+        fv=_hkb_file_all(); st=set(ts)
+        nv=[x for x in fv if x.get('title','') not in st]
+        if len(nv)!=len(fv): json.dump(nv,open(_HKB_FILE,'w',encoding='utf-8'),ensure_ascii=False)
+    except Exception as e: print('[v797 kb] 파일 일괄 삭제 실패', str(e)[:80])
+    return len(ts)
+
+@app.post('/helper/kb/delete_many')
+async def helper_kb_delete_many(body:dict):
+    """★v797 제211조: {pw, titles:[...]} → 한 번에 지운다(최대 2,000개). all=true 면 저장된 자료 전부(__ 기록 제외)"""
+    if body.get('pw') not in (PW,_HELPER_ADMIN): return JSONResponse({'ok':False,'error':'비밀번호 오류'},headers=_HUB_CORS)
+    if body.get('all'):
+        titles=sorted({r.get('title') for r in _hkb_all() if r.get('title') and not str(r.get('title')).startswith('__')})
+    else:
+        titles=list(body.get('titles') or [])[:2000]
+    n=_hkb_del_many(titles)
+    left={r.get('title') for r in _hkb_all()}
+    failed=[t for t in titles if t in left]
+    return JSONResponse({'ok':not failed,'deleted':n-len(failed),'failed':failed[:50]},headers=_HUB_CORS)
 
 @app.post('/helper/kb/search')
 async def helper_kb_search(body:dict):
