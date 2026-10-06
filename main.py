@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v798-hubsync-20261006'
+VSTAMP = 'v799-insside-20261006'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14013,6 +14013,7 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 ★★근거 규칙(v784 제200조, 어기면 틀린 답이다): 숫자·기간·회사명·상품명·병명 코드·판례·조문은 아래 [자료]·[kb]에 「글자로 적힌 것」만 쓴다. 일반 상식·기억·추측으로 채우지 않는다. 질문에 맞는 근거가 [자료]·[kb]에 없으면 첫 줄을 「확인 필요 — 자료에 없음 · 회사 사전심사(언더라이팅) 문의」로 쓰고, 아는 근거가 있는 부분만 짧게 덧붙인다. 근거를 쓸 때는 자료명(또는 출처·날짜)을 줄 끝 괄호에 적는다. 자료끼리 다르면 날짜가 최신인 쪽을 쓰고 「자료마다 다름」이라 적는다.
 ★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다.
 ★손보·생보 같이(v790 제206조): 상품·담보를 물으면(예: 간병인·고당지·통합치료비) 「손보」「생보」 두 덩어리로 나눠 자료에 있는 회사를 양쪽 다 적는다. 회사를 하나 지정했어도 같은 담보가 반대쪽(생보/손보)에 있으면 끝에 한 줄 「생보 쪽은 …」「손보 쪽은 …」을 붙인다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
+★손보·생보 회사 구분(v799 제213조): 손보 = 삼성화재·현대해상·DB손보·KB손보·메리츠화재·한화손보·롯데손보·흥국화재·NH농협손보·하나손보·MG손보·AIG손보·라이나손보·캐롯손보·AXA손보. 생보 = 삼성생명·한화생명·교보생명·교보라이프플래닛·신한라이프·NH농협생명·미래에셋생명·동양생명·ABL생명·흥국생명·DB생명·KB라이프·메트라이프·AIA생명·라이나생명·처브라이프·하나생명·iM라이프·푸본현대생명·KDB생명·BNP파리바카디프생명·IBK연금. 우체국보험은 손보·생보가 아닌 국가 보험(공제)이다. 「손보:」 줄에는 손보 회사만, 「생보:」 줄에는 생보 회사만 적는다. 자료에 그쪽 회사가 없으면 「손보: 자료에 해당 손보 상품 없음 — 전산 비교설계로 확인」처럼 쓰고, 다른 쪽 회사를 옮겨 적거나 「구분 없이」라고 쓰지 않는다. 이름이 비슷한 회사(흥국화재/흥국생명, DB손보/DB생명, 한화손보/한화생명, KB손보/KB라이프, 하나손보/하나생명, NH농협손보/NH농협생명, 라이나손보/라이나생명)는 끝말까지 적는다.
 고객 병력(나이·성별·약·진단·입원·수술·재검사·날짜)이 대화나 캡처에 나오면 답 마지막 줄에 반드시 <facts>{"age":만나이 숫자 또는 null,"sex":"M"|"F"|null,"meds":["혈압약"...],"cards":[{"kind":"adm|op|sev|re|dz","name":"병명","ym":"YYYY-MM" 또는 "","cured":true|false,"drug30":true|false,"ongoing":true|false,"need3":true|false}]}</facts> 를 붙인다. meds 는 kb.medNames 중에서, cards.name 은 kb.dzNames 중에서 고른다(없으면 "기타(직접 입력)"). kind: adm=입원, op=수술, sev=암·뇌졸중·심근경색·협심증·판막·간경화 진단, re=재검사·추가검사, dz=그 밖 진단·치료. 캡처의 진료내역은 한 줄씩 다 뽑되 같은 병은 하나로 합쳐 마지막 날짜를 ym 으로. 판정 결과(어느 상품)는 앱이 계산해 붙이므로 당신은 순위를 단정하지 말고 근거와 주의점만 말한다."""
 
 # ★★★★★v780 (2026.10.01 지점장 「10월 소식지 넣어 주면 간병인 치면 회사별 정보도 나와야 해」)
@@ -14148,7 +14149,8 @@ def _hkb_pick(q, n=6, maxc=9000, app=None):
         if _h in _seen_txt: continue
         _seen_txt.add(_h); _sc2.append((_s,_r))
     sc=_sc2
-    _co_names=set(k.lower() for k in _HKB_ALIAS)|set(x.lower() for v in _HKB_ALIAS.values() for x in v)|{'화재','손보','생명','라이프'}
+    # ★v799 제213조: 「손보」「생보」「생명」 같은 말만 있으면 회사를 지정한 게 아니다(전엔 이 말 때문에 자료를 6쪽만 골라 손보 후보가 빠졌다)
+    _co_names=set(k.lower() for k in _HKB_ALIAS)|set(x.lower() for v in _HKB_ALIAS.values() for x in v)
     _named=any(n in (q or '').lower() for n in _co_names)
     # ★v790 제206조: 회사 이름 없이 상품·담보만 물으면(「간병인은?」) 자료(회사 책)마다 고르게 → 손보·생보 회사가 같이 들어온다
     per_title=bool(re.search(r'회사별|각사|비교|어디|어느\s*회사|회사들',q or '')) or not _named
@@ -14160,11 +14162,30 @@ def _hkb_pick(q, n=6, maxc=9000, app=None):
             t=r['txt'][:1600]
             if used+len(t)>maxc or len(out)>=n: break
             out.append(r|{'txt':t}); used+=len(t); seen[r['title']]=seen.get(r['title'],0)+1
-        return out
+        return _hkb_balance(out,sc)
     for _,r in sc[:n]:
         t=r['txt'][:2500]
         if used+len(t)>maxc: break
         out.append(r|{'txt':t}); used+=len(t)
+    return _hkb_balance(out,sc)
+def _hkb_balance(out, sc, k=3):
+    """★v799 제213조 — 고른 자료에 손보 회사 책(또는 생보 회사 책)이 하나도 없으면 반대쪽에서 점수 높은 쪽을 3개까지 더 넣는다.
+    (치매·간병 질문에 생보 카드만 와서 바름이가 미래에셋생명을 「손보:」에 적던 것 — 자료에는 현대해상·DB·KB·메리츠·하나손보 카드가 있었다)"""
+    try:
+        def sd(r):
+            nl,lf=_ins_side_of(r.get('title',''))
+            return 'nl' if nl and not lf else ('lf' if lf and not nl else '')
+        have={sd(r) for r in out}
+        titles={(r.get('title'),r.get('page')) for r in out}
+        for want in ('nl','lf'):
+            if want in have: continue
+            add=0
+            for _,r in sc:
+                if add>=k: break
+                if (r.get('title'),r.get('page')) in titles: continue
+                if sd(r)!=want: continue
+                out.append(r|{'txt':(r.get('txt') or '')[:1600]}); titles.add((r.get('title'),r.get('page'))); add+=1
+    except Exception as e: print('[v799 balance]',str(e)[:80])
     return out
 def _pdf_pages_text(path):
     """pdftotext(poppler) 쪽 단위 — pypdf 는 한글 폰트를 \x00 으로 뱉는 일이 있어 쓰지 않는다."""
@@ -14446,7 +14467,51 @@ async def helper_chat(body:dict):
             text='🔎 자료에 없어 웹에서 찾았다 (공개 자료 · 회사 확인 필요)\n'+wt; web=True
             try: _helper_log_unknown(lastq)
             except Exception: pass
+    try: text=_fix_ins_side(text)
+    except Exception: pass
     return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web})
+
+# ★v799 제213조 — 답의 「손보:」「생보:」 줄 회사가 반대쪽이면 서버가 바로잡는다
+_INS_NONLIFE=['삼성화재','현대해상','DB손보','DB손해보험','KB손보','KB손해보험','메리츠화재','한화손보','한화손해보험','롯데손보','롯데손해보험','흥국화재','NH농협손보','농협손보','NH농협손해보험','하나손보','하나손해보험','MG손보','AIG손보','라이나손보','라이나손해보험','캐롯','AXA손보','악사손보']
+_INS_LIFE=['교보라이프플래닛','BNP파리바카디프생명','IBK연금','삼성생명','한화생명','교보생명','신한라이프','NH농협생명','농협생명','미래에셋생명','미래에셋','동양생명','ABL생명','흥국생명','DB생명','KB라이프','메트라이프','AIA생명','AIA','라이나생명','처브라이프','하나생명','iM라이프','푸본현대생명','KDB생명']
+def _ins_side_of(t):
+    nl=[c for c in _INS_NONLIFE if c in t]
+    lf=[c for c in _INS_LIFE if c in t and not (c=='AIA' and 'AIA생명' in t) and not (c=='미래에셋' and '미래에셋생명' in t) and not (c=='농협생명' and 'NH농협생명' in t)]
+    nl=[c for c in nl if not (c=='농협손보' and 'NH농협손보' in t)]
+    return nl,lf
+def _fix_ins_side(text):
+    import re as _re
+    if not text: return text
+    out=[]; changed=False
+    for ln in text.split('\n'):
+        m=_re.match(r'^(\s*[-·*•]*\s*\**)(손보|생보)(\**\s*[:：])(.*)$',ln)
+        if m:
+            side=m.group(2); nl,lf=_ins_side_of(m.group(4))
+            other='생보' if side=='손보' else '손보'
+            if (side=='손보' and lf and not nl) or (side=='생보' and nl and not lf):
+                changed=True
+                out.append(m.group(1)+side+m.group(3)+' 자료에 해당 '+side+' 상품 없음 — 전산 비교설계로 확인')
+                out.append(m.group(1)+other+m.group(3)+m.group(4))
+                continue
+            bad=lf if side=='손보' else nl
+            if bad:
+                changed=True; ln=ln+'  (※ '+'·'.join(bad)+' = '+other+')'
+        out.append(ln)
+    if not changed: return text
+    seen=set(); sidefirst=set(); res=[]
+    for ln in out:
+        k=ln.strip()
+        if k and k in seen: continue
+        m2=_re.match(r'^\s*[-·*•]*\s*\**(손보|생보)\**\s*[:：](.*)$',ln)
+        if m2:
+            nl,lf=_ins_side_of(m2.group(2)); co=(nl+lf)[:1]
+            if co:
+                key=(m2.group(1),co[0])
+                if key in sidefirst: continue   # 같은 쪽·같은 회사 줄이 또 나오면(옮긴 줄과 겹침) 뒤의 것은 뺀다
+                sidefirst.add(key)
+        if k: seen.add(k)
+        res.append(ln)
+    return '\n'.join(res)
 
 def _helper_unknown(text):
     """★v790 제206조 — 바름이 답이 「자료에 없음/확인 필요」로 시작하거나 앞부분에 그 말이 있으면 모르는 질문으로 본다"""
@@ -14580,6 +14645,8 @@ async def ask(body:dict):
                       'system':system,'messages':[{'role':'user','content':question}]})
         r=resp.json()
         answer=r.get('content',[])[0].get('text','답변을 가져오지 못했습니다.')
+        try: answer=_fix_ins_side(answer)   # ★v799 제213조 AI 앱 답도 손보·생보 줄 검사
+        except Exception: pass
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e)})
