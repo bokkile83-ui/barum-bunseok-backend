@@ -1581,18 +1581,20 @@ def build_report_pdf(rep, out):
         '<div class="cil"><b>납입면제</b><span class="cis">중대질환 진단 이후 <b>보험료 납입이 면제</b>된다.</span></div>')
     _ci_con = (
         '<div class="cil"><b class="r">암·뇌·심 중 딱 1가지만</b><span class="cis">먼저 발생한 <b>1회만</b> 선지급된다. 이후 다른 중증질환이 와도 <b class="r">중복 보장 불가</b>.</span></div>'
-        '<div class="cil"><b class="r">[뇌] 25% 후유장해가 영구적이어야 한다</b><span class="cis">재활 후에도 신경계 장해(ADLs) 25% 이상 <b>영구 지속</b> + 수시간호 상태여야 지급. 일과성 허혈발작(TIA)·외상성 출혈은 제외.</span></div>'
-        '<div class="cil"><b class="r">★후유장해는 즉시 진단이 안 된다</b><span class="cis">후유장해는 <b>최소 6개월에서 1년간 지낸 후</b> 후유장해를 진단받아야 지급이 가능하다. 진단 직후 바로 받는 담보가 아니다.</span></div>'
-        '<div class="cil"><b class="r">[심장] 3가지를 전부 충족해야 한다</b><span class="cis">① 전형적 흉통 ② 새 심전도 변화(ST상승·Q파·T파역전) ③ 심근효소 상승(CK-MB·트로포닌 I·T). <b>모든 협심증은 제외</b> — 심근 괴사가 없기 때문이다.</span></div>'
-        '<div class="cil"><b class="r">[암] 침윤·파괴적 증식만 인정</b><span class="cis">상피내암·경계성종양·초기 전립선암·피부암은 전부 제외.</span></div>'
-        '<div class="cil"><b class="r">선지급 = 사망보험금 감소</b><span class="cis">받은 만큼 유족에게 갈 돈이 줄어든다. 보험료도 비싸고 지급 분쟁이 잦다.</span></div>')
+        # ★v801: 「후유장해는 즉시 진단이 안 된다」 줄은 표 아래 ※ 후유장해 지급 요건과 같아 뺐다(약관 정의 카드 자리)
+        # ★★★v801 제215조 (지점장 2026.10.06 「진단서 CI 부분 맨 아래 2칸 중 오른쪽에 그 그림」): 약관 정의 카드 2장으로 교체
+        #   구 문구 오류: 심근효소 「CK-MB·트로포닌 I·T」 → 약관은 「CK-MB 포함 · 트로포닌 제외」 / 뇌 「25% + 수시간호」 → 약관은 「신경계 장해 일상생활 기본동작 제한 지급률 25% 이상」
+        '<div class="cidef"><div class="h">약관 정의 ① 중대한 암</div><div class="b">악성종양세포가 존재하고 주위 조직으로 <mark>침윤파괴적 증식</mark>을 하는 악성종양 · <u>병리 진단</u>으로 확정<br><span class="x">상피내암 · 경계성종양 · 기타피부암 · 초기 갑상선암·전립선암 등 약관 제외 항목은 안 됨</span></div></div>'
+        '<div class="cidef"><div class="h">약관 정의 ② 중대한 급성심근경색증</div><div class="b">관상동맥 폐색 → <mark>전형적인 흉통</mark> + <mark>심근조직의 비가역적 괴사</mark> · 발병 당시 <u>2가지 모두</u><br>가. <mark>전형적 심전도 변화(ST분절·T파·Q파) 새로 출현</mark><br>나. <mark>CK-MB 포함 심근효소 새로 상승</mark> <span class="x">(트로포닌 제외 · 협심증 제외)</span></div></div>'
+        '<div class="cidef"><div class="h">약관 정의 ③ 중대한 뇌졸중</div><div class="b">거미막밑출혈·뇌내출혈·뇌경색 → 뇌혈액순환 급격한 차단 → <mark>영구적인 신경학적 결손</mark><br>자각증상이 아닌 <u>신경학적 검사의 객관적 증후</u> · 「신경계 장해 — <mark>일상생활 기본동작 제한</mark>」 <mark>지급률 25% 이상</mark><br><span class="x">일과성 허혈발작(TIA)·외상성 출혈 제외</span></div></div>'
+                '<div class="cil"><b class="r">선지급 = 사망보험금 감소</b><span class="cis">받은 만큼 유족에게 갈 돈이 줄어든다. 보험료도 비싸고 지급 분쟁이 잦다.</span></div>')
     _citab=('<div class="sect" style="margin-top:4mm">CI보험 — 장점 vs 단점 <span>CRITICAL ILLNESS</span></div>'
             '<table class="citab"><colgroup><col style="width:50%"><col style="width:50%"></colgroup>'
             '<tr><th class="cig">■ 장점</th><th class="cir">■ 단점 — 이것 때문에 못 받는다</th></tr>'
             '<tr><td class="cig">' + _ci_pro + '</td>'
             '<td class="cir">' + _ci_con + '</td></tr></table>'
             '<div class="cint">※ <b>후유장해 지급 요건</b> — 후유장해는 <b>최소 6개월~1년간 경과한 뒤</b> 후유장해 진단을 받아야 지급이 가능하다.<br>'
-            '※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드. 가입 시기·보험사별 약관이 다르므로 <b>원문 확인 필수</b>.</div>')
+            '※ 출처: 26년 바름 교육자료 — CI보험 완벽가이드 · 약관 정의 = CI 약관 원문 요약. 가입 시기·보험사별 약관이 다르므로 <b>원문 확인 필수</b>.</div>')
     comment_html=_citab
 
     css=f'''
@@ -2258,6 +2260,12 @@ body {{ color:{INK}; }}
 .citab td.cig .cil .cis b {{ color:#1F7A4D; font-weight:800; }}
 .citab td.cig .cil .cis b.k {{ color:#8A6D0B; }}
 .citab td.cir .cil .cis b {{ color:{GAP}; font-weight:800; }}
+.cidef {{ margin:1.4mm 0 1.2mm; border:0.8pt solid #2E6B4F; border-radius:1.6mm; overflow:hidden; }}
+.cidef .h {{ background:#0F2A1F; color:#fff; font-size:8.6pt; font-weight:800; padding:1mm 2.4mm; }}
+.cidef .b {{ background:#fff; font-size:7.8pt; line-height:1.45; padding:1.6mm 2.4mm; font-weight:600; color:{INK}; }}
+.cidef mark {{ background:#FFE45C; color:#111; font-weight:800; padding:0 0.6mm; border-radius:0.6mm; }}
+.cidef u {{ text-decoration:none; font-weight:800; color:{NAVY}; }}
+.cidef .x {{ color:{GAP}; font-weight:800; }}
 .cint {{ font-size:8pt; color:{MUT}; font-weight:600; margin-top:3mm; padding-top:2.4mm; border-top:0.6pt solid {LINE}; }}
 .sumrow {{ display:table; width:100%; margin-top:3mm; }}
 .sumlb {{ display:table-cell; width:24mm; font-size:12pt; font-weight:800; color:#fff; background:{NAVY}; border-radius:2mm; padding:2.5mm 2mm; text-align:center; vertical-align:middle; }}
