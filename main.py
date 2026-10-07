@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v805-infowhite-20261006'
+VSTAMP = 'v806-helperfix-20261007'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -29,6 +29,12 @@ app = FastAPI(title="BARUM 보장분석 v7")
 #   허브 엔드포인트만 _HUB_CORS로 열려 있었고 /analyze는 아니었다. 전역으로 연다. 보안은 pw 검사로 그대로.
 from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(CORSMiddleware, allow_origins=['*'], allow_methods=['*'], allow_headers=['*'])
+# ★v806 제214조 (지점장 캡처 「AI 연결 실패(Failed to fetch)」): 처리 중 예외는 서버 오류 화면(CORS 머리 없음)으로 나가 브라우저가 이유를 못 읽었다 → JSON + CORS 로
+from fastapi import Request as _Rq806
+@app.exception_handler(Exception)
+async def _any_exc_806(request:_Rq806, exc:Exception):
+    print('[v806 exc]', request.url.path, repr(exc)[:200])
+    return JSONResponse({'ok':False,'error':'서버 처리 오류','detail':repr(exc)[:200]}, status_code=200, headers={'Access-Control-Allow-Origin':'*'})
 
 # ★★★★★v679 보안 강화 (지점장 지시 2026.09.05 「보안을 아주 강화해라」)
 #   ① 검색엔진 수집 차단 — 구글에 우리 주소·화면이 뜨지 않는다
@@ -14014,6 +14020,9 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 ★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다.
 ★손보·생보 같이(v790 제206조): 상품·담보를 물으면(예: 간병인·고당지·통합치료비) 「손보」「생보」 두 덩어리로 나눠 자료에 있는 회사를 양쪽 다 적는다. 회사를 하나 지정했어도 같은 담보가 반대쪽(생보/손보)에 있으면 끝에 한 줄 「생보 쪽은 …」「손보 쪽은 …」을 붙인다. 모든 판정 문장 끝에 「예상 · 실제 인수는 회사 사전심사」를 한 번 붙인다.
 ★손보·생보 회사 구분(v799 제213조): 손보 = 삼성화재·현대해상·DB손보·KB손보·메리츠화재·한화손보·롯데손보·흥국화재·NH농협손보·하나손보·MG손보·AIG손보·라이나손보·캐롯손보·AXA손보. 생보 = 삼성생명·한화생명·교보생명·교보라이프플래닛·신한라이프·NH농협생명·미래에셋생명·동양생명·ABL생명·흥국생명·DB생명·KB라이프·메트라이프·AIA생명·라이나생명·처브라이프·하나생명·iM라이프·푸본현대생명·KDB생명·BNP파리바카디프생명·IBK연금. 우체국보험은 손보·생보가 아닌 국가 보험(공제)이다. 「손보:」 줄에는 손보 회사만, 「생보:」 줄에는 생보 회사만 적는다. 자료에 그쪽 회사가 없으면 「손보: 자료에 해당 손보 상품 없음 — 전산 비교설계로 확인」처럼 쓰고, 다른 쪽 회사를 옮겨 적거나 「구분 없이」라고 쓰지 않는다. 이름이 비슷한 회사(흥국화재/흥국생명, DB손보/DB생명, 한화손보/한화생명, KB손보/KB라이프, 하나손보/하나생명, NH농협손보/NH농협생명, 라이나손보/라이나생명)는 끝말까지 적는다.
+★★간편 유형 날짜 대입(v806 제214조, 지점장 2026.10.07 「왜 3##은?」 — 3.1.1·311-5·2Q를 빠뜨렸다): 진단·수술·치료 날짜가 있으면 자료(회사별 간편 조건표·유병자 이력별 회사길)의 유형마다 「묻는 기간 안이면 불가 · 지나면 가능」을 날짜로 계산한다. 긴 유형(3.N.5·3.N.10)이 안 된다고 끝내지 말고, 짧은 유형(롯데 3.1.1 · 삼성 311-5 = 1년)과 중대질병을 안 묻는 유형(DB 2Q건강 등)이 되는지 반드시 따로 적는다. 형식 한 줄: 「3.N.5(5년): ○○○○.○ 이후 · 3.1.1/311-5(1년): 지금 대상 · 2Q: 중대질병 안 물음」. 「추적관찰 중」은 회사마다 치료 종결 판단이 달라 「사전심사로 확인」이라 쓴다.
+★★원하는 담보 먼저(v806): 고객이 「암 보장」처럼 원하는 담보를 말하면 그 담보가 되는 상품을 먼저 적는다. 그 담보가 안 되는 상품(예: 암 이력 고객에게 뇌심만 되는 암유병자형)은 줄 끝에 「(암 담보 아님)」을 붙여 구분한다. 원하는 담보가 되는 상품이 자료에 없으면 첫 줄에 그렇게 말한다.
+★★추천 후보는 「손보:」「생보:」 두 묶음(v806, 지점장 「생보·손보 안 나와」): 추천 틀 ③ 후보 상품은 반드시 「손보:」로 시작하는 줄과 「생보:」로 시작하는 줄로 나눠 쓴다(각 1~3개). 그쪽 자료가 없으면 「생보: 자료에 해당 생보 상품 없음 — 전산 비교설계로 확인」 한 줄을 그래도 쓴다. 이 경우 답 길이는 최대 10줄.
 고객 병력(나이·성별·약·진단·입원·수술·재검사·날짜)이 대화나 캡처에 나오면 답 마지막 줄에 반드시 <facts>{"age":만나이 숫자 또는 null,"sex":"M"|"F"|null,"meds":["혈압약"...],"cards":[{"kind":"adm|op|sev|re|dz","name":"병명","ym":"YYYY-MM" 또는 "","cured":true|false,"drug30":true|false,"ongoing":true|false,"need3":true|false}]}</facts> 를 붙인다. meds 는 kb.medNames 중에서, cards.name 은 kb.dzNames 중에서 고른다(없으면 "기타(직접 입력)"). kind: adm=입원, op=수술, sev=암·뇌졸중·심근경색·협심증·판막·간경화 진단, re=재검사·추가검사, dz=그 밖 진단·치료. 캡처의 진료내역은 한 줄씩 다 뽑되 같은 병은 하나로 합쳐 마지막 날짜를 ym 으로. 판정 결과(어느 상품)는 앱이 계산해 붙이므로 당신은 순위를 단정하지 말고 근거와 주의점만 말한다."""
 
 # ★★★★★v780 (2026.10.01 지점장 「10월 소식지 넣어 주면 간병인 치면 회사별 정보도 나와야 해」)
@@ -14391,9 +14400,25 @@ async def helper_chat(body:dict):
     # ★v785 제201조: 「다른회사는?」처럼 짧은 이어 묻기는 앞 질문의 병명이 없어 자료를 못 찾았다 → 최근 사용자 말 3개를 합쳐 찾는다(최신 말 우선)
     _uq=[str(m.get('content','')).strip() for m in msgs if m.get('role')=='user' and str(m.get('content','')).strip()]
     pickq=' '.join(_uq[-3:])[-900:] if _uq else lastq
-    picks=_hkb_pick(pickq,app=body.get('app') or 'helper')   # ★v793 HELPER 채팅 = 고지·추천 서랍
+    try: picks=_hkb_pick(pickq,app=body.get('app') or 'helper')   # ★v793 HELPER 채팅 = 고지·추천 서랍
+    except Exception as e: print('[v806 pick]',str(e)[:120]); picks=[]
+    _is_reco=bool(re.search(r'회사별|각사|비교|추천|가입|들어갈|들어가|저렴|싸게|가격|어디|어느\s*회사|간편|유병|병력|진단|수술|입원|추적|관찰|완치|이력|발병|\d{2}년\s*\d{1,2}월',pickq or ''))
+    # ★v806 제214조: 병력·추천 질문이면 간편 조건표(18)·유병자 이력별 회사길(144)·추천 틀(213)·간편유형 회사비교(142)를 꼭 넣는다
+    try:
+        if _is_reco:
+            have={str(x.get('title','')) for x in picks}
+            rows=_hkb_rows_for(body.get('app') or 'helper')
+            for pre in ('144_','213_','18_','142_'):
+                if any(_hkb_norm(h).startswith(pre) for h in have): continue
+                cand=[r for r in rows if _hkb_norm(str(r.get('title',''))).startswith(pre)]
+                if not cand: continue
+                toks=_hkb_tokens(pickq)
+                cand.sort(key=lambda r:-sum((r.get('txt') or '').count(w) for w in toks))
+                picks.append(cand[0]|{'txt':(cand[0].get('txt') or '')[:2400]})
+    except Exception as e: print('[v806 pin]',str(e)[:80])
     kbtxt=''.join(f"\n[자료 「{p['title']}」 {p.get('tag') or ''} {p['page']}쪽]\n{p['txt']}\n" for p in picks)
-    system=_HELPER_SYS+("\n\n★지점장이 올린 자료(소식지·세일즈북)가 아래 있으면 그 자료를 최우선 근거로 쓰고, 「회사별로」 물으면 자료에 나온 회사를 하나씩 나눠 답하며 자료명·쪽을 적는다. 자료에 없는 회사는 「자료에 없음」이라 한다.\n"+kbtxt if picks else '')+"\n\n[kb — 앱과 같은 근거]\n"+json.dumps(kb,ensure_ascii=False)[:60000]
+    _today=(datetime.datetime.utcnow()+datetime.timedelta(hours=9)).strftime('%Y-%m-%d')   # ★v806: 날짜 계산(「3개월 전」「24년 4월」→ 몇 년 지났나)용 오늘 날짜(한국)
+    system=_HELPER_SYS+f"\n\n★오늘 날짜는 {_today}(한국)다. 「○개월 전」「작년」「24년 4월」 같은 날짜는 이 날짜로 계산한다."+("\n\n★지점장이 올린 자료(소식지·세일즈북)가 아래 있으면 그 자료를 최우선 근거로 쓰고, 「회사별로」 물으면 자료에 나온 회사를 하나씩 나눠 답하며 자료명·쪽을 적는다. 자료에 없는 회사는 「자료에 없음」이라 한다.\n"+kbtxt if picks else '')+"\n\n[kb — 앱과 같은 근거]\n"+json.dumps(kb,ensure_ascii=False)[:60000]
     conv=[]
     for m in msgs[-12:]:
         r='user' if m.get('role')=='user' else 'assistant'
@@ -14440,7 +14465,7 @@ async def helper_chat(body:dict):
         async with httpx.AsyncClient(timeout=90) as client:
             resp=await client.post('https://api.anthropic.com/v1/messages',
                 headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                json={'model':model,'max_tokens':700,'system':system,'messages':conv})
+                json={'model':model,'max_tokens':1500,'system':system,'messages':conv})
         return resp.status_code, resp.json()
     used=None; data=None
     for model in ('claude-sonnet-4-6','claude-haiku-4-5-20251001'):
@@ -14452,6 +14477,23 @@ async def helper_chat(body:dict):
             print(f'[v779 helper] {model} exc={e}')
     if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패','detail':str(data)[:300]})
     text=''.join(b.get('text','') for b in data.get('content',[]) if b.get('type')=='text')
+    # ★v806 제214조 (지점장 「저런 식의 대답이 대부분 — 잘 되도록」): 추천 질문인데 손보/생보 줄이 없거나, 날짜가 있는데 유형 날짜 줄이 없으면 한 번 고쳐 받는다
+    try:
+        if _is_reco and not body.get('nofix'):
+            miss=[]
+            body_txt=re.sub(r'<facts>.*?</facts>','',text,flags=re.S)
+            if not re.search(r'(^|\n)\s*[-·*•]*\s*\**손보\**\s*[:：]',body_txt): miss.append('「손보:」로 시작하는 후보 줄')
+            if not re.search(r'(^|\n)\s*[-·*•]*\s*\**생보\**\s*[:：]',body_txt): miss.append('「생보:」로 시작하는 후보 줄(없으면 「생보: 자료에 해당 생보 상품 없음 — 전산 비교설계로 확인」)')
+            if re.search(r'(19|20)?\d{2}\s*년|\d{4}[.\-/]\d{1,2}|\d+\s*(개월|년)\s*전|작년|재작년',pickq or '') and not re.search(r'3\.N\.5|3\.1\.1|311-5',body_txt): miss.append('간편 유형 날짜 줄(3.N.5 · 3.1.1/311-5 · 2Q 가능 시점)')
+            if miss and data.get('stop_reason')!='max_tokens':
+                fix=conv+[{'role':'assistant','content':text},{'role':'user','content':'(형식 점검) 위 답에 빠진 것: '+' / '.join(miss)+'. 내용은 그대로 두고 빠진 줄을 넣어 답 전체를 다시 써라. 자료에 없는 회사·상품은 지어내지 않는다.'}]
+                async with httpx.AsyncClient(timeout=90) as client:
+                    r2=await client.post('https://api.anthropic.com/v1/messages',headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
+                        json={'model':used,'max_tokens':1500,'system':system,'messages':fix})
+                d2=r2.json()
+                t2=''.join(b.get('text','') for b in d2.get('content',[]) if b.get('type')=='text') if r2.status_code==200 else ''
+                if t2.strip(): text=t2; print('[v806 fix] 고침:',miss)
+    except Exception as e: print('[v806 fix] exc',str(e)[:120])
     facts=None
     m=re.search(r'<facts>\s*(\{.*?\})\s*</facts>',text,re.S)
     if m:
