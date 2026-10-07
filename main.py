@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v806-helperfix-20261007'
+VSTAMP = 'v808-blink-20261007'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10177,6 +10177,37 @@ footer{text-align:center;font-size:10px;color:var(--mute);padding:8px}footer b{c
 
 .tabc .lb{font-size:10px;margin-top:3px;color:var(--sky);font-weight:700}
 .mkhome{position:sticky;top:0;z-index:9999;display:block;text-align:center;background:#0f3fa0;color:#fff;padding:7px 10px;font-size:12.5px;font-weight:800;text-decoration:none;letter-spacing:.02em}
+</style>
+<style id="mk3d-srv">
+/* ★v807 입체 디자인 (지점장 2026.10.07 「메디케어처럼 입체감 · 넣는 곳 포인트 · 아이콘·콤보박스도 이쁘게」) — 화면 겉모양만, 산출물(엑셀·PPT·PDF) 무관 */
+@media screen{
+body{background:linear-gradient(180deg,#FFFBEE 0%,#F1F4FA 100%) fixed!important}
+#gate{background:linear-gradient(180deg,#FFFBEE 0%,#EEF2F8 100%)!important}
+#gate .pw{border:2px solid #E3C26E!important;background:linear-gradient(180deg,#FFFDF5,#fff)!important;box-shadow:inset 0 2px 5px rgba(120,90,0,.08)!important}
+#gate .pw:focus{border-color:#2A6BF2!important;box-shadow:0 0 0 5px rgba(42,107,242,.16)!important}
+#gate .go{background:linear-gradient(180deg,#1B3A66,#06203F)!important;box-shadow:0 5px 0 #020F20,0 14px 26px rgba(6,32,63,.28)!important}
+#gate .go:active,.gobtn:active{transform:translateY(4px);box-shadow:0 1px 0 #020F20!important}
+.app{background:transparent}
+header{background:linear-gradient(180deg,#FFFFFF,#FBF8EF)!important;border-bottom:3px solid var(--gold)!important;box-shadow:0 6px 16px rgba(6,32,63,.08);border-radius:0 0 18px 18px}
+.msg.bot{border:0!important;border-radius:20px 20px 20px 6px!important;box-shadow:0 5px 0 #E3E7EF,0 16px 32px rgba(6,32,63,.10)!important;padding:16px 16px!important}
+.file-card{box-shadow:0 4px 0 rgba(6,32,63,.10),0 10px 18px rgba(6,32,63,.08);border:0!important}
+.file-card.xl{background:linear-gradient(160deg,#F2FBF5,#DFF2E6)!important}
+.file-card.pt{background:linear-gradient(160deg,#FFFDF4,#FFF2CC)!important}
+.file-card .dl{box-shadow:0 3px 0 rgba(6,32,63,.18)}
+.gowrap{background:transparent!important;border-top:0!important}
+.gobtn{background:linear-gradient(180deg,#3A7BF5,#1A54D0)!important;border-radius:16px!important;box-shadow:0 5px 0 #0F3A99,0 14px 26px rgba(26,84,208,.30)!important;transition:transform .1s}
+.gobtn:disabled{background:linear-gradient(180deg,#EEF1F6,#E1E6EE)!important;box-shadow:0 4px 0 #CBD3DF!important;color:#7d8898!important}
+/* 넣는 곳 = 아래 줄 — 떠 있는 판 + 칸마다 노랑 받침 */
+.tabbar{margin:6px 10px 10px;border:0!important;border-radius:22px;background:linear-gradient(180deg,#FFFFFF,#F6F8FC)!important;box-shadow:0 6px 0 #DDE3EE,0 18px 36px rgba(6,32,63,.14);padding:12px 6px 12px!important;gap:6px;align-items:stretch!important}
+.tabbar:before{content:"📥 여기에 파일 넣기";position:absolute;top:-11px;left:16px;font-size:11.5px;font-weight:900;color:#6B5200;background:linear-gradient(180deg,#FFE58A,#F5C842);padding:3px 10px;border-radius:20px;box-shadow:0 3px 0 #C99A12}
+.tab,.tabc{border-radius:14px;padding:8px 2px 7px!important;transition:transform .1s}
+.tab{background:linear-gradient(180deg,#FFFDF4,#FFF3CF);box-shadow:0 4px 0 #EBCF7A,0 8px 14px rgba(160,120,0,.14);border:1.5px dashed #E8B923}
+.tabc{background:linear-gradient(180deg,#FFF4E6,#FFE2BF);box-shadow:0 4px 0 #EDB36B,0 8px 14px rgba(240,140,20,.16)}
+.tab .ti svg,.tabc .ti svg{width:26px!important;height:26px!important;filter:drop-shadow(0 2px 2px rgba(0,0,0,.2))}
+.tab .nm,.tabc .nm{font-weight:800!important;color:#3A2E00}
+.tab:active,.tabc:active{transform:translateY(3px);box-shadow:0 1px 0 #EBCF7A!important}
+.mkhome{box-shadow:0 3px 10px rgba(15,63,160,.25)}
+}
 </style></head><body>
 <script>
 /* ★MAKEONE 야간모드 수신기(20260905c) — 화면에 뜨는 버튼 없음. 허브에서 켜면 같이 어두워진다 */
@@ -10678,7 +10709,27 @@ _onReady(function(){
      매 로드마다 통째로 unregister 했다. 그래서 크롬이 「앱 설치」를 영영 띄우지 않았다.
      서비스워커는 캐시를 하지 않으므로(no-store) 해제할 이유가 없다. 삭제한다. -->
 
-<script>/*mkhomeHide*/try{if(window.top!==window){var _m=document.getElementById('mkhome');if(_m)_m.style.display='none';}}catch(e){}</script></body></html>'''
+<script>/*mkhomeHide*/try{if(window.top!==window){var _m=document.getElementById('mkhome');if(_m)_m.style.display='none';}}catch(e){}</script><style>/* ★v808 (지점장 2026.10.07 「보장분석앱도 바로 버튼이 클릭되도록 깜박이게」) — 지금 눌러야 할 칸만 깜박인다 */
+@keyframes mkBlink{0%,100%{transform:translateY(0);box-shadow:0 4px 0 #EBCF7A,0 0 0 0 rgba(42,107,242,.0)}50%{transform:translateY(-3px);box-shadow:0 6px 0 #EBCF7A,0 0 0 7px rgba(42,107,242,.35)}}
+@keyframes mkBlinkGo{0%,100%{box-shadow:0 5px 0 #0F3A99,0 0 0 0 rgba(42,107,242,0)}50%{box-shadow:0 5px 0 #0F3A99,0 0 0 9px rgba(42,107,242,.35)}}
+.mkblink{animation:mkBlink 1.1s ease-in-out infinite!important;border:2px solid #2A6BF2!important}
+.gobtn.mkblink{animation:mkBlinkGo 1.1s ease-in-out infinite!important;border:0!important}
+.mkhint{position:absolute;left:50%;bottom:-27px;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:900;color:#fff;background:#2A6BF2;padding:3px 9px;border-radius:12px;box-shadow:0 3px 0 #1A47B0;pointer-events:none;z-index:3}
+.tabbar{margin-bottom:30px!important}
+.tab,.tabc{position:relative}
+</style>
+<script>/*mkBlinkGuide v808*/(function(){
+ var m=/[#&]go=([a-z,]+)/.exec(location.hash||''),want=(m?m[1]:'pdf,prop').split(',');
+ var MAP={pdf:['upp'],prop:['up'],xl:['upr1','upr2']},ids=[];want.forEach(function(k){(MAP[k]||[]).forEach(function(x){ids.push(x)})});
+ var LB={upp:'👆 여기',up:'👆 여기',upr1:'👆 여기',upr2:'👆 여기'};
+ function tick(){var gb=document.getElementById('gobtn');if(!gb)return;var app=document.getElementById('app');if(!app||getComputedStyle(app).display==='none')return;
+  var busy=!!gb.querySelector('.gsp'),ready=!gb.disabled&&!busy;
+  ['upp','up','upr1','upr2'].forEach(function(id){var e=document.getElementById(id);if(!e)return;var on=!ready&&!busy&&ids.indexOf(id)>=0;e.classList.toggle('mkblink',on);
+   var h=e.querySelector('.mkhint');if(on&&!h){h=document.createElement('span');h.className='mkhint';h.textContent=LB[id];e.appendChild(h)}else if(!on&&h)h.remove()});
+  gb.classList.toggle('mkblink',ready)}
+ setInterval(tick,700);
+})();</script>
+</body></html>'''
 
 # ═══════════ v428 PWA (제53조) — manifest · 아이콘 · 서비스워커 ═══════════
 _PWA_ICON = None
