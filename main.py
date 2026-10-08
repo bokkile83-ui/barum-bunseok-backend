@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v812c-vault-20261008'
+VSTAMP = 'v812d-secret-20261008'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14806,7 +14806,7 @@ def _vok812(request, pw):
     if len(f) >= 5:
         _VFAIL812[ip] = f; return False, '5번 틀려서 10분 잠겼습니다'
     if str(pw or '') != _vpw812():
-        f.append(now); _VFAIL812[ip] = f; return False, '금고 비밀번호가 틀립니다 (%d/5)' % len(f)
+        f.append(now); _VFAIL812[ip] = f; return False, 'SECRET 비밀번호가 틀립니다 (%d/5)' % len(f)
     _VFAIL812[ip] = []; return True, ''
 _VT812 = {'ok': False}
 def _vdb812():
@@ -14829,7 +14829,7 @@ def vault_list(request: Request, pw: str = Form('')):
     ok, why = _vok812(request, pw)
     if not ok: return JSONResponse({'ok': False, 'why': why}, status_code=403)
     c = _vdb812()
-    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결 — 금고를 쓸 수 없습니다'})
+    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결 — SECRET을 쓸 수 없습니다'})
     try:
         with c, c.cursor() as k:
             k.execute("SELECT id,name,size,note,to_char(created AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD HH24:MI') FROM vault ORDER BY id DESC LIMIT 200")
@@ -14893,7 +14893,7 @@ def vault_del(request: Request, pw: str = Form(''), id: int = Form(0)):
 def vault_page():
     return HTMLResponse(VAULT_HTML812, headers={'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex'})
 
-VAULT_HTML812 = r'''<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>지점장 금고</title>
+VAULT_HTML812 = r'''<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>SECRET</title>
 <style>
 *{box-sizing:border-box;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
 body{margin:0;background:linear-gradient(180deg,#F7F9FD,#EEF2F9);color:#0E1E52;min-height:100vh}
@@ -14919,9 +14919,9 @@ button.rd{background:#fff;color:#B3261E;box-shadow:0 3px 0 #F0B4AE;border:1.5px 
 .warn{font-size:12px;color:#5B667A;line-height:1.6;background:#fff;border-radius:12px;padding:10px 12px;border:1px solid #E3E8F0}
 #box{display:none}
 </style></head><body>
-<div class="hd"><b>🔒 지점장 금고</b><small>MAKEONE · 지점장만 · DB관리LIST(주민번호) 같은 민감 파일 보관</small></div>
+<div class="hd"><b>🔒 SECRET</b><small>MAKEONE · 지점장 전용 보관함</small></div>
 <div class="wr">
- <div class="card" id="gate"><div style="font-weight:900;margin-bottom:10px">금고 비밀번호</div>
+ <div class="card" id="gate"><div style="font-weight:900;margin-bottom:10px">SECRET 비밀번호</div>
   <div class="lk"><input type="password" id="pw" placeholder="비밀번호" autocomplete="off"><button id="go">열기</button></div>
   <div class="msg er" id="gm"></div></div>
  <div id="box">
@@ -14950,7 +14950,7 @@ $('fi').onchange=function(){var f=this.files[0];if(!f)return;var fd=new FormData
  post('/vault/upload',fd).then(function(r){return r.json()}).then(function(j){if(j.ok){$('um').className='msg okm';$('um').textContent='✓ 넣음 — '+f.name;$('note').value='';load()}else{$('um').className='msg er';$('um').textContent=j.why||'못 넣었습니다'}}).catch(function(){$('um').className='msg er';$('um').textContent='서버 연결 실패'});this.value=''};
 $('list').addEventListener('click',function(e){var g=e.target.getAttribute('data-g'),d=e.target.getAttribute('data-d');
  if(g){var fd=new FormData();fd.append('id',g);post('/vault/get',fd).then(function(r){if(!r.ok)throw 0;return r.blob()}).then(function(b){var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=e.target.getAttribute('data-n');document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500)}).catch(function(){alert('받기 실패')})}
- if(d&&confirm('이 파일을 금고에서 지울까요? 되돌릴 수 없습니다.')){var fd2=new FormData();fd2.append('id',d);post('/vault/del',fd2).then(function(){load()})}});
+ if(d&&confirm('이 파일을 SECRET에서 지울까요? 되돌릴 수 없습니다.')){var fd2=new FormData();fd2.append('id',d);post('/vault/del',fd2).then(function(){load()})}});
 /* 10분 손 안 대면 자동 잠금 */
 var idle=0;setInterval(function(){if(PW&&++idle>=600){$('lock').click()}},1000);['click','keydown','touchstart'].forEach(function(ev){document.addEventListener(ev,function(){idle=0})});
 </script></body></html>'''
