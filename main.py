@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v808-blink-20261007'
+VSTAMP = 'v812c-vault-20261008'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -76,6 +76,10 @@ DOCTRINE_MIN_ART = 77        # 조문 개수 하한
 DOCTRINE_MIN_CHARS = 0         # (폐기 · 0 = 검사 안 함)
 DOCTRINE_SKIP_ART  = {43}      # 처음부터 없는 번호(42 다음이 44)
 
+
+async def _rtp810_lazy(fn, *a):
+    from starlette.concurrency import run_in_threadpool as _r
+    return await _r(fn, *a)
 
 def _db():
     """psycopg 연결. 실패하면 None — 호출부는 반드시 None을 처리한다."""
@@ -10266,13 +10270,15 @@ window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night'
            산출물은 <b>칩(chip)</b>으로 감싸 줄이 넘쳐도 자연스럽게 흐르게 한다. -->
       <!-- ★★★★★v626 (지점장 지시 2026.09.02 「뭐가 나오는지 심플하게」).
            칩 12개를 버리고 <b>넣는 것 → 나오는 것</b>을 한 줄씩 3줄로. -->
-      <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.5">
-        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span>보장분석지</b><br>
-          <span style="color:var(--ink);opacity:.86">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
-        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><rect x="9.6" y="1.6" width="4.8" height="3" rx="1.4" fill="#9fb2c6"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="2.4" height="2.4" rx=".5"/><rect x="11" y="8.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="12" width="2.4" height="2.4" rx=".5"/><rect x="11" y="12.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="16" width="2.4" height="2.4" rx=".5"/><rect x="11" y="16.6" width="5.6" height="1.2" rx=".6"/></g></svg></span>제안서</b><br>
-          <span style="color:var(--ink);opacity:.86">엑셀 · 분석지PPT · 진단서 · 인포메이션</span></div>
-        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.4" fill="#1d7044"/><rect x="9.6" y="3.5" width="11.9" height="5.6" fill="#21935a"/><rect x="9.6" y="9.1" width="11.9" height="5.6" fill="#1d7044"/><rect x="9.6" y="14.7" width="11.9" height="5.8" fill="#155c37"/><rect x="2.5" y="7" width="10.5" height="10" rx="1.6" fill="#0f5132"/><text x="7.7" y="15.2" font-size="8.6" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">X</text></svg></span>엑셀 전 vs 후</b><br>
-          <span style="color:var(--ink);opacity:.86">비교엑셀 · 리포트 · 분석지PPT</span></div>
+      <div class="m4rows" style="display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.5">
+        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span>① 보장분석지만</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1D4ED8;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#222;margin-left:3px;vertical-align:0"></i><br>
+          <span style="color:var(--ink);opacity:.86">보장분석지 1개(KB·롯데·메리츠) → 엑셀 · 보장분석지PPT · 진단서</span></div>
+        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><rect x="9.6" y="1.6" width="4.8" height="3" rx="1.4" fill="#9fb2c6"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="2.4" height="2.4" rx=".5"/><rect x="11" y="8.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="12" width="2.4" height="2.4" rx=".5"/><rect x="11" y="12.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="16" width="2.4" height="2.4" rx=".5"/><rect x="11" y="16.6" width="5.6" height="1.2" rx=".6"/></g></svg></span>② 제안서만</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#C0392B;margin-left:3px;vertical-align:0"></i><br>
+          <span style="color:var(--ink);opacity:.86">제안서 최대 3개(전 보험사) → 엑셀 · 보장분석지PPT · 진단서 — 오직 레드</span></div>
+        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:2px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span><span style="font-weight:900">+</span><span style="display:inline-block;vertical-align:-3px;margin:0 5px 0 2px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="9" height="1.4" rx=".6"/><rect x="7.6" y="12" width="9" height="1.4" rx=".6"/><rect x="7.6" y="16" width="9" height="1.4" rx=".6"/></g></svg></span>③ 보장분석지 + 제안서</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1D4ED8;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#222;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#C0392B;margin-left:3px;vertical-align:0"></i><br>
+          <span style="color:var(--ink);opacity:.86">분석지 1개 + 제안서 최대 3개 → 엑셀(보유+제안) · 보장분석지PPT · 진단서</span></div>
+        <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.4" fill="#1d7044"/><rect x="9.6" y="3.5" width="11.9" height="5.6" fill="#21935a"/><rect x="9.6" y="9.1" width="11.9" height="5.6" fill="#1d7044"/><rect x="9.6" y="14.7" width="11.9" height="5.8" fill="#155c37"/><rect x="2.5" y="7" width="10.5" height="10" rx="1.6" fill="#0f5132"/><text x="7.7" y="15.2" font-size="8.6" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">X</text></svg></span>④ 엑셀 + 엑셀 (삭제하기)</b><br>
+          <span style="color:var(--ink);opacity:.86">A = ① 엑셀 + B = ③ 엑셀에서 필요 없는 것 삭제 → 비교엑셀 · 보장분석지PPT(최종) · 리모델링 리포트</span></div>
       </div>
       <div style="margin-top:10px;font-size:10px;color:var(--ink);line-height:1.55">
         ⚠️ 받은 PDF를 <b>그대로</b> 올리세요 — 재스캔·OCR은 금액이 깨집니다
@@ -10717,6 +10723,34 @@ _onReady(function(){
 .mkhint{position:absolute;left:50%;bottom:-27px;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:900;color:#fff;background:#2A6BF2;padding:3px 9px;border-radius:12px;box-shadow:0 3px 0 #1A47B0;pointer-events:none;z-index:3}
 .tabbar{margin-bottom:30px!important}
 .tab,.tabc{position:relative}
+
+/* ★v811 (지점장 2026.10.08 「보장분석앱 너무 붙였다 · 가로 끝에 맞게 폭 넓혀라」 + 색 정본: 노랑·주황 금지 → 네이비) */
+@media screen and (min-width:900px){
+ .app{max-width:none!important;padding:0 24px!important}
+ .app>*{max-width:none!important}
+ .m4rows{display:grid!important;grid-template-columns:1fr 1fr;gap:12px 22px!important;font-size:13.5px!important}
+ .m4rows>div{background:linear-gradient(160deg,#FFFFFF,#F2F5FB);border-radius:14px;padding:12px 14px;box-shadow:0 3px 0 #D3DBEA,0 8px 16px rgba(14,30,82,.08)}
+ .m4rows>div:last-child:nth-child(odd){grid-column:1/-1}
+ .tab,.tabc{font-size:12.5px!important}
+}
+@media screen{
+ header{border-bottom-color:#2A4A92!important}
+ .tabc{color:#2A4A92!important}
+ .mkhint{background:#2A4A92!important}
+ body{background:linear-gradient(180deg,#F7F9FD 0%,#EEF2F9 100%) fixed!important}
+ #gate{background:linear-gradient(180deg,#F7F9FD 0%,#EEF2F9 100%)!important}
+ #gate .pw{border:2px solid #2A4A92!important;background:#fff!important;box-shadow:0 0 0 4px rgba(42,74,146,.10)!important}
+ header{background:#fff!important;border-bottom:3px solid #2A4A92!important}
+ header h1 b{color:#2A4A92!important}
+ .file-card.pt{background:linear-gradient(160deg,#FFFFFF,#EEF2F9)!important}
+ .tabbar:before{color:#fff!important;background:linear-gradient(180deg,#2A4A92,#0E1E52)!important;box-shadow:0 3px 0 #08143A!important}
+ .tab{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important;border:1.5px solid #D3DBEA!important}
+ .tabc{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important}
+ /* 세로 = 대화 칸이 남는 높이를 다 쓴다(넣는 줄은 화면 아래) */
+ .app{min-height:100vh}
+ .chat{flex:1 1 auto!important;min-height:0}
+}
+@media screen and (min-width:900px){ .msg{max-width:100%!important} .msg.bot:first-child{width:100%} }
 </style>
 <script>/*mkBlinkGuide v808*/(function(){
  var m=/[#&]go=([a-z,]+)/.exec(location.hash||''),want=(m?m[1]:'pdf,prop').split(',');
@@ -11496,6 +11530,10 @@ async def hub_verify(request: Request):
         j = await request.json()
     except Exception:
         j = {}
+    return await _rtp810_lazy(_hub_verify_sync810, j)
+
+def _hub_verify_sync810(j):
+    # ★v810: DB 조회는 옆 줄에서(로그인이 분석 때문에 멈추지 않게)
     nm = str(j.get('name') or '').strip(); cd = str(j.get('code') or '').strip()
     hdr = _HUB_CORS
     if cd == ADMIN_PW:
@@ -11542,7 +11580,7 @@ async def _appkey_judge(request: Request):
         return (_APP_KEYS[ap], True, nm), None
     if cd == PW:
         return (_APP_KEYS[ap], False, nm), None
-    ok, mnm, why = _member_check(cd)
+    ok, mnm, why = await _rtp810_lazy(_member_check, cd)
     if not ok:
         return None, JSONResponse({'ok': False, 'why': why}, headers=_HUB_CORS)
     if nm and mnm and re.sub(r'\s', '', nm) != re.sub(r'\s', '', mnm):
@@ -11555,12 +11593,17 @@ async def hub_appkey(request: Request):
     if err is not None:
         return err
     k, admin, nm = got
+    def _log():
+        try:
+            c = _db()
+            if c:
+                with c, c.cursor() as q:
+                    q.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'appkey')", ('', nm or ''))
+                c.close()
+        except Exception:
+            pass
     try:
-        c = _db()
-        if c:
-            with c, c.cursor() as q:
-                q.execute("INSERT INTO uselog(code,name,act) VALUES(%s,%s,'appkey')", ('', nm or ''))
-            c.close()
+        await _rtp810_lazy(_log)
     except Exception:
         pass
     return JSONResponse({'ok': True, 'k': k, 'admin': admin, 'name': nm or ''}, headers=_HUB_CORS)
@@ -14743,3 +14786,201 @@ async def ask(body:dict):
         return JSONResponse({'ok':True,'answer':answer})
     except Exception as e:
         return JSONResponse({'ok':False,'error':str(e)})
+
+
+# ★v812 제216조 지점장 전용 금고 (지점장 2026.10.08 「DB시트 저장용 · 나(관리자)만 · 주민번호 넣고 · 저장칸 하나만 · 비번 걸어줘 · 지점장 전용 클라우드」)
+#   /vault = 지점장만 여는 파일 보관함. 비밀번호 = 환경변수 VAULT_PW(없으면 지점장 지정 번호).
+#   파일은 DB(vault 표)에 AES-256-GCM 으로 잠가 넣는다 — DB만 털려도 열쇠 없이는 못 연다.
+#   5번 틀리면 10분 잠김. 회원 번호·0101로는 절대 못 연다. 목록·받기·지우기 전부 같은 열쇠를 다시 묻는다.
+import time as _t812, hashlib as _h812, os as _o812, base64 as _b812
+_VFAIL812 = {}
+def _vpw812():
+    return _o812.environ.get('VAULT_PW', '') or '821024'   # 지점장 지정 2026.10.08
+def _vkey812():
+    # 잠금 열쇠는 금고 비밀번호와 따로 — VAULT_PW 를 바꿔도 이미 넣은 파일은 그대로 열린다
+    seed = (_o812.environ.get('VAULT_KEY', '') or ('MAKEONE-VAULT-' + ADMIN_PW)).encode('utf-8')
+    return _h812.pbkdf2_hmac('sha256', seed, b'makeone-vault-salt-v812', 200000)
+def _vok812(request, pw):
+    ip = (request.headers.get('x-forwarded-for', '') or (request.client.host if request.client else '')).split(',')[0].strip()
+    now = _t812.time(); f = [x for x in _VFAIL812.get(ip, []) if now - x < 600]
+    if len(f) >= 5:
+        _VFAIL812[ip] = f; return False, '5번 틀려서 10분 잠겼습니다'
+    if str(pw or '') != _vpw812():
+        f.append(now); _VFAIL812[ip] = f; return False, '금고 비밀번호가 틀립니다 (%d/5)' % len(f)
+    _VFAIL812[ip] = []; return True, ''
+_VT812 = {'ok': False}
+def _vdb812():
+    if not _VT812['ok']:
+        c0 = _db()
+        if not c0: return None
+        with c0, c0.cursor() as k:   # psycopg3: with conn = 끝나면 연결을 닫는다 → 표 만들기는 따로
+            k.execute("CREATE TABLE IF NOT EXISTS vault(id SERIAL PRIMARY KEY, name TEXT, size INT, note TEXT, nonce BYTEA, data BYTEA, created TIMESTAMPTZ DEFAULT NOW())")
+        _VT812['ok'] = True
+    return _db()
+def _venc812(b):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    n = _o812.urandom(12); return n, AESGCM(_vkey812()).encrypt(n, b, None)
+def _vdec812(n, d):
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    return AESGCM(_vkey812()).decrypt(bytes(n), bytes(d), None)
+
+@app.post('/vault/list')
+def vault_list(request: Request, pw: str = Form('')):
+    ok, why = _vok812(request, pw)
+    if not ok: return JSONResponse({'ok': False, 'why': why}, status_code=403)
+    c = _vdb812()
+    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결 — 금고를 쓸 수 없습니다'})
+    try:
+        with c, c.cursor() as k:
+            k.execute("SELECT id,name,size,note,to_char(created AT TIME ZONE 'Asia/Seoul','YYYY-MM-DD HH24:MI') FROM vault ORDER BY id DESC LIMIT 200")
+            rows = [{'id': r[0], 'name': r[1], 'size': r[2], 'note': r[3] or '', 'at': r[4]} for r in k.fetchall()]
+        return JSONResponse({'ok': True, 'files': rows})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+@app.post('/vault/upload')
+def vault_upload(request: Request, pw: str = Form(''), note: str = Form(''), file: UploadFile = File(...)):
+    ok, why = _vok812(request, pw)
+    if not ok: return JSONResponse({'ok': False, 'why': why}, status_code=403)
+    b = file.file.read()
+    if len(b) > 25 * 1024 * 1024: return JSONResponse({'ok': False, 'why': '25MB 넘는 파일은 못 넣습니다'})
+    c = _vdb812()
+    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결'})
+    try:
+        n, d = _venc812(b)
+        with c, c.cursor() as k:
+            k.execute("INSERT INTO vault(name,size,note,nonce,data) VALUES(%s,%s,%s,%s,%s) RETURNING id", (file.filename or '파일', len(b), (note or '')[:200], n, d))
+            vid = k.fetchone()[0]
+        return JSONResponse({'ok': True, 'id': vid})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+@app.post('/vault/get')
+def vault_get(request: Request, pw: str = Form(''), id: int = Form(0)):
+    ok, why = _vok812(request, pw)
+    if not ok: return JSONResponse({'ok': False, 'why': why}, status_code=403)
+    c = _vdb812()
+    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결'})
+    try:
+        with c, c.cursor() as k:
+            k.execute("SELECT name,nonce,data FROM vault WHERE id=%s", (id,))
+            r = k.fetchone()
+        if not r: return JSONResponse({'ok': False, 'why': '없는 파일'})
+        b = _vdec812(r[1], r[2])
+        fn = urllib.parse.quote(r[0] or 'file')
+        return Response(b, media_type='application/octet-stream', headers={'Content-Disposition': "attachment; filename*=UTF-8''" + fn, 'Cache-Control': 'no-store'})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+@app.post('/vault/del')
+def vault_del(request: Request, pw: str = Form(''), id: int = Form(0)):
+    ok, why = _vok812(request, pw)
+    if not ok: return JSONResponse({'ok': False, 'why': why}, status_code=403)
+    c = _vdb812()
+    if not c: return JSONResponse({'ok': False, 'why': 'DB 미연결'})
+    try:
+        with c, c.cursor() as k:
+            k.execute("DELETE FROM vault WHERE id=%s", (id,))
+        return JSONResponse({'ok': True})
+    finally:
+        try: c.close()
+        except Exception: pass
+
+@app.get('/vault', response_class=HTMLResponse)
+def vault_page():
+    return HTMLResponse(VAULT_HTML812, headers={'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex'})
+
+VAULT_HTML812 = r'''<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>지점장 금고</title>
+<style>
+*{box-sizing:border-box;font-family:-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif}
+body{margin:0;background:linear-gradient(180deg,#F7F9FD,#EEF2F9);color:#0E1E52;min-height:100vh}
+.hd{background:linear-gradient(135deg,#0E1E52,#1F3A7A);color:#fff;padding:18px 20px}
+.hd b{font-size:19px}.hd small{display:block;color:#B9C6E6;font-size:12px;margin-top:3px}
+.wr{max-width:900px;margin:0 auto;padding:18px 16px 40px}
+.card{background:linear-gradient(160deg,#fff,#F2F5FB);border-radius:18px;padding:16px;box-shadow:0 4px 0 #D3DBEA,0 10px 22px rgba(14,30,82,.10);margin-bottom:14px}
+.lk{display:flex;gap:8px;flex-wrap:wrap}
+input[type=password],input[type=text]{flex:1;min-width:0;border:2px solid #C9D3E6;border-radius:12px;padding:12px 14px;font-size:16px;background:#fff;color:#0E1E52}
+input:focus{outline:0;border-color:#2A4A92;box-shadow:0 0 0 4px rgba(42,74,146,.15)}
+button{border:0;border-radius:12px;padding:12px 18px;font-size:15px;font-weight:900;color:#fff;background:linear-gradient(180deg,#2A4A92,#0E1E52);box-shadow:0 4px 0 #08143A;cursor:pointer}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #08143A}
+button.gh{background:#fff;color:#0E1E52;box-shadow:0 3px 0 #D3DBEA;border:1.5px solid #D3DBEA;padding:8px 12px;font-size:13px}
+button.rd{background:#fff;color:#B3261E;box-shadow:0 3px 0 #F0B4AE;border:1.5px solid #F0B4AE;padding:8px 12px;font-size:13px}
+.up{display:grid;grid-template-columns:44px 1fr auto;gap:0 12px;align-items:center;cursor:pointer;position:relative}
+.up .ic{width:44px;height:44px;border-radius:12px;background:linear-gradient(180deg,#2A4A92,#0E1E52);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 4px 10px rgba(0,0,0,.2)}
+.up .t small{display:block;font-size:11px;font-weight:900;color:#C5A052;letter-spacing:.5px}.up .t b{font-size:15px}
+.up .pl{padding:5px 12px;border-radius:20px;background:linear-gradient(180deg,#2A4A92,#0E1E52);color:#fff;font-size:12px;font-weight:900}
+.up input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.row{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid #E3E8F0}
+.row .n{flex:1;min-width:0}.row .n b{display:block;font-size:14.5px;word-break:break-all}.row .n small{color:#5B667A;font-size:12px}
+.msg{font-size:13px;font-weight:800;margin-top:8px;min-height:18px}.er{color:#B3261E}.okm{color:#1B6B3A}
+.warn{font-size:12px;color:#5B667A;line-height:1.6;background:#fff;border-radius:12px;padding:10px 12px;border:1px solid #E3E8F0}
+#box{display:none}
+</style></head><body>
+<div class="hd"><b>🔒 지점장 금고</b><small>MAKEONE · 지점장만 · DB관리LIST(주민번호) 같은 민감 파일 보관</small></div>
+<div class="wr">
+ <div class="card" id="gate"><div style="font-weight:900;margin-bottom:10px">금고 비밀번호</div>
+  <div class="lk"><input type="password" id="pw" placeholder="비밀번호" autocomplete="off"><button id="go">열기</button></div>
+  <div class="msg er" id="gm"></div></div>
+ <div id="box">
+  <div class="card"><label class="up"><span class="ic">📥</span><span class="t"><small>STEP 1</small><b>파일 넣기</b></span><span class="pl" id="upl">눌러서 넣기</span><input type="file" id="fi"></label>
+   <div class="lk" style="margin-top:12px"><input type="text" id="note" placeholder="메모 (선택) — 예) 10월 DB 주민번호판"></div>
+   <div class="msg" id="um"></div></div>
+  <div class="card"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b style="flex:1">보관 파일</b><button class="gh" id="rf">↻ 새로고침</button><button class="gh" id="lock">🔒 잠그기</button></div><div id="list"></div></div>
+  <div class="warn">· 파일은 서버 DB에 잠금(AES-256)으로 들어간다 — DB가 통째로 빠져나가도 열쇠 없이는 못 연다.<br>· 주민등록번호는 법으로 보관이 엄격히 제한된다. 꼭 필요한 것만 넣고, 계약이 끝난 DB는 지운다.<br>· 열기 암호를 건 엑셀을 넣으면 두 겹으로 잠긴다.</div>
+ </div>
+</div>
+<script>
+var PW='';
+function $(i){return document.getElementById(i)}
+function post(u,fd){fd.append('pw',PW);return fetch(u,{method:'POST',body:fd})}
+function kb(n){return n>1048576?(n/1048576).toFixed(1)+'MB':Math.max(1,Math.round(n/1024))+'KB'}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function load(){post('/vault/list',new FormData()).then(function(r){return r.json()}).then(function(j){
+  if(!j.ok){$('gm').textContent=j.why||'열 수 없습니다';$('box').style.display='none';$('gate').style.display='block';PW='';return}
+  $('gate').style.display='none';$('box').style.display='block';
+  $('list').innerHTML=j.files.length?j.files.map(function(f){return '<div class="row"><div class="n"><b>'+esc(f.name)+'</b><small>'+f.at+' · '+kb(f.size)+(f.note?' · '+esc(f.note):'')+'</small></div><button class="gh" data-g="'+f.id+'" data-n="'+esc(f.name)+'">받기</button><button class="rd" data-d="'+f.id+'">지우기</button></div>'}).join(''):'<div style="color:#5B667A;font-size:13px;padding:10px 4px">아직 넣은 파일이 없습니다</div>'})
+ .catch(function(){$('gm').textContent='서버에 연결하지 못했습니다'})}
+$('go').onclick=function(){PW=$('pw').value.trim();$('pw').value='';if(!PW){$('gm').textContent='비밀번호를 넣어 주세요';return}$('gm').textContent='확인 중…';load()};
+$('pw').addEventListener('keydown',function(e){if(e.key==='Enter')$('go').click()});
+$('rf').onclick=load;$('lock').onclick=function(){PW='';$('box').style.display='none';$('gate').style.display='block';$('gm').textContent='잠갔습니다'};
+$('fi').onchange=function(){var f=this.files[0];if(!f)return;var fd=new FormData();fd.append('file',f);fd.append('note',$('note').value);$('um').className='msg';$('um').textContent='넣는 중… '+f.name;
+ post('/vault/upload',fd).then(function(r){return r.json()}).then(function(j){if(j.ok){$('um').className='msg okm';$('um').textContent='✓ 넣음 — '+f.name;$('note').value='';load()}else{$('um').className='msg er';$('um').textContent=j.why||'못 넣었습니다'}}).catch(function(){$('um').className='msg er';$('um').textContent='서버 연결 실패'});this.value=''};
+$('list').addEventListener('click',function(e){var g=e.target.getAttribute('data-g'),d=e.target.getAttribute('data-d');
+ if(g){var fd=new FormData();fd.append('id',g);post('/vault/get',fd).then(function(r){if(!r.ok)throw 0;return r.blob()}).then(function(b){var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=e.target.getAttribute('data-n');document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500)}).catch(function(){alert('받기 실패')})}
+ if(d&&confirm('이 파일을 금고에서 지울까요? 되돌릴 수 없습니다.')){var fd2=new FormData();fd2.append('id',d);post('/vault/del',fd2).then(function(){load()})}});
+/* 10분 손 안 대면 자동 잠금 */
+var idle=0;setInterval(function(){if(PW&&++idle>=600){$('lock').click()}},1000);['click','keydown','touchstart'].forEach(function(ev){document.addEventListener(ev,function(){idle=0})});
+</script></body></html>'''
+
+
+# ★v810 제215조 (지점장 실측 2026.10.08 「실손·연금·달러·MEDICARE 다 '확인 중…'에서 접속이 안 된다」):
+#   서버는 일꾼 1명(--workers 1)인데 /analyze·/remodel 같은 무거운 길이 async 안에서 80~100초 동안
+#   그냥 계산을 돌렸다 → 그동안 서버 전체가 멈춰 모든 앱 로그인(/appkey·/verify)이 '확인 중'에서 섰다.
+#   → 무거운 길은 옆 일꾼 줄(threadpool)에서 돌린다. 로그인의 DB 조회도 옆 줄로 뺀다. 결과·계산은 그대로.
+import asyncio as _aio810, functools as _ft810, inspect as _ins810
+from starlette.concurrency import run_in_threadpool as _rtp810
+from fastapi.routing import APIRoute as _AR810
+_HEAVY810 = {'/analyze', '/remodel', '/helper/chat', '/helper/kb/upload', '/helper/kb/search',
+             '/helper/kb/dedupe', '/helper/kb/delete', '/helper/kb/delete_many', '/helper/feedback', '/ask',
+             '/hub/login', '/member/login', '/member/apply', '/member/check', '/admin/api',
+             '/hub/config', '/hub/notes', '/hub/events', '/hub/forms'}
+def _shim810(fn):
+    # functools.wraps 금지: __wrapped__ 가 있으면 FastAPI가 원래 async 함수로 보고 이벤트 루프에서 돌린다
+    def _run(*a, **kw):
+        return _aio810.run(fn(*a, **kw))
+    _run.__signature__ = _ins810.signature(fn)
+    _run.__name__ = fn.__name__; _run.__qualname__ = fn.__qualname__; _run.__doc__ = fn.__doc__; _run.__module__ = fn.__module__
+    return _run
+_n810 = []
+for _i810, _r810 in enumerate(list(app.router.routes)):
+    if isinstance(_r810, _AR810) and _r810.path in _HEAVY810 and _ins810.iscoroutinefunction(_r810.endpoint):
+        if any(p.annotation is Request for p in _ins810.signature(_r810.endpoint).parameters.values()):
+            continue
+        _nr810 = _AR810(_r810.path, _shim810(_r810.endpoint), methods=list(_r810.methods or []),
+                        response_class=_r810.response_class, name=_r810.name, include_in_schema=_r810.include_in_schema)
+        app.router.routes[_i810] = _nr810
+        _n810.append(_r810.path)
+print('[v810 옆줄] 무거운 길 %d개를 threadpool 로: %s' % (len(_n810), ', '.join(_n810)))

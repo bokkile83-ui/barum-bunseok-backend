@@ -13,3 +13,4 @@ pypdf
 Pillow
 fonttools
 psycopg[binary]
+cryptography
