@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v812d-secret-20261008'
+VSTAMP = 'v812e-secret-20261008'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10746,9 +10746,9 @@ _onReady(function(){
  .tabbar:before{color:#fff!important;background:linear-gradient(180deg,#2A4A92,#0E1E52)!important;box-shadow:0 3px 0 #08143A!important}
  .tab{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important;border:1.5px solid #D3DBEA!important}
  .tabc{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important}
- /* 세로 = 대화 칸이 남는 높이를 다 쓴다(넣는 줄은 화면 아래) */
- .app{min-height:100vh}
- .chat{flex:1 1 auto!important;min-height:0}
+ /* ★v812e (지점장 「채팅창 줄여라」): 대화 칸을 화면 높이로 늘리지 않는다 — 넣는 줄은 내용 바로 아래 */
+ .app{min-height:0!important}
+ .chat{flex:0 0 auto!important;min-height:0!important}
 }
 @media screen and (min-width:900px){ .msg{max-width:100%!important} .msg.bot:first-child{width:100%} }
 </style>
