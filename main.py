@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v813-rep-20261008'
+VSTAMP = 'v814-cart-20261008'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1467,6 +1467,7 @@ _STRUCT_SELFTEST = [
     ('제177조 오늘환율', 'main.py',            r"@app\.get\('/fx/today'\)", True),
     # ★v753 제178조 — 운전자 6행은 규칙이 최종 판정. 이 줄이 사라지면 LLM 이 민사소송법률비용·부상치료비(1~7급)를 다시 끌어온다.
     ('제178조 운전자LLM차단', 'main.py',       r"if std in _DRIVER_RULE_ONLY:", True),
+    ('제215조 암치료LLM차단', 'main.py',       r"std in _CANCER_RULE_ONLY or re\.search\(r'카티", True),
     # ★v754 제179조 — 1-8종 세트+종번호는 8칸 슬래시. 이 줄이 사라지면 8줄이 한 숫자로 더해진다(700).
     ('제179조 1-8종슬래시', 'main.py',         r"if std in jong8_acc and 1 <= jong <= 8:", True),
     # ★v755 제180조 — 실손 계약이 아니면 엑셀 실손 5행에 넣지 않는다. 사라지면 실손 없는 고객에 5/0/0 이 찍힌다.
@@ -6744,6 +6745,9 @@ _SILSON5 = ('입원', '통원', '약값', 'MRI', '도수치료', '비급여주�
 
 # ★v753 제178조 — 운전자 6행은 규칙(resolve_kw)이 최종 판정. LLM 폴백이 이 행으로 보낸 담보는 받지 않는다.
 _DRIVER_RULE_ONLY = ('합의금', '6주미만', '변호사', '대인', '대물', '자부상')
+# ★v814 제215조 (지점장 2026.10.08 한O빈 「항암방사선이 왜 이리 높아 · 무슨 기준이야」): 암 치료비 2행도 규칙이 최종 판정.
+#   규칙은 카티(CAR-T) 허가치료를 제외(v267)했는데 LLM 폴백이 항암방사선약물로 되끌어와 5,000 이 찍혔다(현대·KB).
+_CANCER_RULE_ONLY = ('항암방사선약물', '중입자치료비')
 
 # ★ LLM 매핑 엔진 — 마스터 표준 담보명에 의미기반 매핑 (앱 자동화 핵심)
 def load_std_dambo(ws):
@@ -7702,6 +7706,10 @@ def build_excel(data, out):
                     #          자부상 = 14급 포함 밴드만 · 변호사 = 담보명에 '변호사'가 있을 때만 — 둘 다 규칙에 이미 있다.
                     if std in _DRIVER_RULE_ONLY:
                         print(f"[v753 제178조] LLM 운전자 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
+                        std = None; m = {}
+                    # ★v814 제215조: 카티(CAR-T)는 어느 행으로도 LLM 매핑 금지 · 항암방사선약물·중입자 행은 규칙만(§8.2 카티 제외 · 허가 제외)
+                    if std and (std in _CANCER_RULE_ONLY or re.search(r'카티|CAR-?T', raw, re.I)):
+                        print(f"[v814 제215조] LLM 암치료 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
                         std = None; m = {}
             else:
                 m = {}
