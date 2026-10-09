@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v831-asyncjob-20261009'
+VSTAMP = 'v832-ocrpar-20261009'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1198,17 +1198,17 @@ def pdf_to_txt(pdf_bytes):
               "해석·설명·요약 금지, 페이지의 원문 텍스트만 출력.")
     out=[]; _fail_pages=[]
     globals()['_VISION_PARTIAL']=''
-    for idx, img in enumerate(pages):
+    # ★★★★★v832 제231조 (지점장 실측 2026.10.09 21:44 강현경 「완성 중 268초… 안 된다」 → 「원인 찾아라」):
+    #   [원인] 비전 OCR이 <b>한 장씩 순서대로</b> 호출됐다(장당 10~15초 + 실패 시 재시도 2+5+12초·타임아웃 120초).
+    #     20장 인쇄본이면 200~300초, 한 장이라도 429/지연이 끼면 400초↑ → 종전엔 프록시 300초에서 끊겼고(v831 전),
+    #     v831 접수 방식에서도 「완성 중」이 5분 넘게 간다.
+    #   [해결] 장을 <b>동시에 5장씩</b> 호출한다(순서는 쪽번호로 되돌린다). 20장 ≈ 40~60초. 재시도 규칙·실패 기록은 그대로.
+    #     장당 타임아웃 120→90초. 결과 등식 무변경(같은 모델·같은 프롬프트·같은 장).
+    def _ocr_one(idx, img):
+        t=''; _last=''
         try:
-            # ★v60 회전 보정: let: 리포트는 가로형인데 '인쇄→PDF' 이미지본은 세로 A4에
-            #   가로 내용이 90° 눕는다. 세로(높이>너비) 페이지면 시계방향(-90°)으로 세워
-            #   비전 OCR 정확도를 높인다(정방향 검증 완료). 이미 정방향(가로)이면 무동작.
             if img.height > img.width:
                 img = img.rotate(-90, expand=True)
-            # ★★v232: <b>긴 변 2000px로 리사이즈해 전송</b>. 300dpi A4 회전본은 3509×2481인데
-            #   Anthropic 이미지 권장은 긴 변 1568px이라 그대로 보내면 <b>서버가 임의 축소</b>하고
-            #   토큰도 과소비된다. 300dpi로 읽고 2000px로 줄이면 <b>표 숫자 선명도는 유지</b>되면서
-            #   전송량이 1/2로 준다(실측 PNG 1,264,841 → 670,377B).
             try:
                 from PIL import Image as _PILImage
                 _lim=2000
@@ -1218,24 +1218,14 @@ def pdf_to_txt(pdf_bytes):
             except Exception: pass
             buf=io.BytesIO(); img.save(buf, format='PNG')
             b=base64.b64encode(buf.getvalue()).decode()
-            # ★★★★★v281 (2026.07.31 이영태 32페이지 실사고):
-            #   구 코드는 <b>페이지당 1회 호출·재시도 0회</b>였고, 실패 흔적을 <b>idx==0일 때만</b> 남겼다.
-            #   → 1p가 성공하고 12~32p가 429/타임아웃으로 죽으면 <b>아무 데도 안 남고</b>
-            #     앞쪽 계약목록만 살아 "계약은 나오는데 담보가 통째로 빈" 산출물이 조용히 나갔다.
-            #   이영태 실측: 32페이지 · b64 906KB/장 · 이미지토큰 약 3,770/장 = <b>32장 약 12만 입력토큰</b>.
-            #   → ①429/5xx <b>재시도 3회 지수백오프</b> ②<b>모든 실패 페이지를 기록</b> ③성공/실패 수를 화면에 노출.
-            t=''
-            _last=''
             for _try in range(3):
                 try:
                     r=httpx.post('https://api.anthropic.com/v1/messages',
                         headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                        # ★★★v233 원복(2026.07.25): 모델은 <b>어제 실제로 작동한 haiku-4-5</b>를 그대로 쓴다.
-                        #   v232에서 내가 검증 없이 sonnet-4-6으로 바꿨다 — <b>모델명이 틀리면 400으로 OCR이 통째 실패</b>한다.
                         json={'model':'claude-haiku-4-5-20251001','max_tokens':8000,
                               'messages':[{'role':'user','content':[
                                   {'type':'image','source':{'type':'base64','media_type':'image/png','data':b}},
-                                  {'type':'text','text':prompt}]}]}, timeout=120)
+                                  {'type':'text','text':prompt}]}]}, timeout=90)
                     if r.status_code==200:
                         t=''.join(x.get('text','') for x in r.json().get('content',[]) if x.get('type')=='text')
                         break
@@ -1248,11 +1238,19 @@ def pdf_to_txt(pdf_bytes):
                     _last=f'예외 {_ee}'
                     print(f'[PDF_VISION_ERR] p{idx+1} try{_try+1} {_ee}')
                     import time as _tm; _tm.sleep((2,5,12)[_try])
-            if t.strip(): out.append(t)
-            else: _fail_pages.append((idx+1,_last))
         except Exception as e:
-            print(f'[PDF_VISION_ERR] p{idx+1} {e}')
-            _fail_pages.append((idx+1,f'예외 {e}'))
+            print(f'[PDF_VISION_ERR] p{idx+1} {e}'); _last=f'예외 {e}'
+        return idx, t, _last
+    import time as _tv832
+    _t832=_tv832.time()
+    from concurrent.futures import ThreadPoolExecutor as _TPE832
+    _nw=int(os.environ.get('VISION_WORKERS','5') or 5)
+    with _TPE832(max_workers=max(1,min(_nw,8))) as _ex:
+        _res=list(_ex.map(lambda a: _ocr_one(*a), list(enumerate(pages))))
+    for idx, t, _last in sorted(_res, key=lambda x: x[0]):
+        if t.strip(): out.append(t)
+        else: _fail_pages.append((idx+1,_last))
+    print(f'[v832 비전 동시] {len(pages)}장 · 일꾼 {max(1,min(_nw,8))} · {_tv832.time()-_t832:.1f}초')
     txt='\n'.join(out)
     print(f'[PDF_VISION] pages={len(pages)} ok={len(out)} fail={len(_fail_pages)} '
           f'chars={len(txt)} dpi=300 model=claude-haiku-4-5-20251001')
