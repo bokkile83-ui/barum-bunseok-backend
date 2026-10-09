@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v830-nohint-20261009'
+VSTAMP = 'v831-asyncjob-20261009'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10785,7 +10785,22 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
   fd.append("pw",ACCESS);
   let j=null;
   try{
-    const r=await fetch("/analyze",{method:"POST",body:fd});clearInterval(timer);loading.remove();
+    /* ★★★★★v831 제230조 (지점장 실측 2026.10.09 20:19 「300초 넘기고 오류 떴다 · status 502 upstream error」):
+       긴 분석(비전 OCR 경로 150초↑)은 프록시 한도(약 300초)에서 끊긴다 → 접수(/analyze/start, 즉시 응답) → 뒤에서 처리 → 4초마다 /analyze/status 로 물어 완료본을 받는다.
+       연결을 오래 안 잡으니 길이와 무관하게 안 끊긴다. 옛 서버(/analyze/start 없음)면 종전 /analyze 로 간다. */
+    let r;
+    try{
+      const r0=await fetch("/analyze/start",{method:"POST",body:fd});
+      if(r0.status===404) throw new Error('nostart');
+      const j0=await r0.json(); if(!j0.ok||!j0.job) throw new Error(j0.error||'접수 실패');
+      let st=null;
+      while(true){ await new Promise(res=>setTimeout(res,4000));
+        try{ const rs=await fetch("/analyze/status?job="+encodeURIComponent(j0.job),{cache:"no-store"}); st=await rs.json(); }catch(e){ continue; }
+        if(st&&st.state&&st.state!=="run") break;
+        const mm=document.getElementById("ldmsg"); if(mm&&st&&st.msg) mm.textContent=st.msg; }
+      r={status:200,text:async()=>JSON.stringify(st.res||{ok:false,error:st.error||'결과 없음'})};
+    }catch(e){ if(String(e.message)!=='nostart') throw e; r=await fetch("/analyze",{method:"POST",body:fd}); }
+    clearInterval(timer);loading.remove();
     /* ★★★★★v698 (지점장 실측 2026.09.15 「Unexpected token 'u', "upstream error" is not valid JSON」)
        분석이 80~100초라 Railway 엣지가 먼저 연결을 끊으면 프록시가 <b>JSON이 아닌 문자열</b>을 돌려준다.
        구 코드는 그걸 그대로 `r.json()`에 넣어 <b>파싱 오류</b>로 죽었다 → 원인이 안 보였다.
@@ -13622,6 +13637,46 @@ def job_get(jid: str):
     return JSONResponse(dict(_j))
 
 _BEHAVE_CACHE770 = None
+# ★★★★★v831 제230조 — 분석 접수/상태 (프록시 300초 한도 우회). 파일은 메모리로 복사해 뒤 일꾼(thread)이 종전 analyze()를 그대로 돌린다. 결과 JSON은 한 번 받아가면 지운다(1시간 뒤 자동 삭제).
+_AJOBS = {}
+def _ajob_purge():
+    import time as _t
+    for k in [k for k, v in _AJOBS.items() if _t.time() - v.get('t', 0) > 3600]:
+        _AJOBS.pop(k, None)
+@app.post('/analyze/start')
+async def analyze_start(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
+    if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
+    import io as _io, secrets as _sec, threading as _th, time as _t, asyncio as _as, json as _js
+    from starlette.datastructures import UploadFile as _SU
+    async def _clone(u):
+        if not u or not getattr(u, 'filename', None): return None
+        data = await u.read()
+        try: return _SU(file=_io.BytesIO(data), filename=u.filename, headers=getattr(u, 'headers', None))
+        except TypeError: return _SU(_io.BytesIO(data), filename=u.filename)
+    f1 = await _clone(file); f2 = [x for x in [await _clone(y) for y in (file2 or [])] if x] or None
+    _ajob_purge(); jid = _sec.token_hex(8)
+    _AJOBS[jid] = {'t': _t.time(), 'state': 'run', 'res': None, 'msg': '접수됨 · 분석 중…'}
+    def _work():
+        try:
+            r = _as.run(analyze(f1, f2, pw))
+            body = _js.loads(bytes(r.body).decode('utf-8')) if hasattr(r, 'body') else (r if isinstance(r, dict) else {'ok': False, 'error': '응답 형식'})
+            _AJOBS[jid].update(state='done', res=body)
+        except Exception as e:
+            import traceback as _tb
+            _AJOBS[jid].update(state='err', res={'ok': False, 'error': str(e)[:300], 'trace': _tb.format_exc()[-1200:]})
+    _th.Thread(target=_work, daemon=True).start()
+    print('[v831 접수]', jid, (file.filename if file else '-'), len(f2 or []))
+    return JSONResponse({'ok': True, 'job': jid})
+@app.get('/analyze/status')
+def analyze_status(job: str = ''):
+    j = _AJOBS.get(job)
+    if not j: return JSONResponse({'ok': False, 'state': 'err', 'error': '접수 번호 없음(서버 재시작) — 같은 파일로 다시 눌러 주세요'})
+    if j['state'] == 'run':
+        import time as _t
+        return JSONResponse({'ok': True, 'state': 'run', 'msg': '분석 중… %d초' % int(_t.time() - j['t'])})
+    res = j['res']; _AJOBS.pop(job, None)
+    return JSONResponse({'ok': True, 'state': j['state'], 'res': res})
+
 @app.post('/analyze')
 async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None), pw:str=Form('')):
     if pw!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
