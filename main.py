@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v834-ping-20261010'
+VSTAMP = 'v835-smallfix-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14974,8 +14974,8 @@ async def helper_chat(body:dict):
     try: picks=_hkb_pick(pickq,n=_HQ_PICK_N,maxc=_HQ_PICK_C,app=_app)   # ★v793 HELPER 채팅 = 고지·추천 서랍 · ★v816 프리미엄 12쪽·22,000자
     except Exception as e: print('[v806 pick]',str(e)[:120]); picks=[]
     # ★v833 제234조 (지점장 2026.10.10 「바름아 오늘 날씨어때 → AI 연결 실패 · 이런 질문은 안 되냐」): 잡담·인사·날씨 같은 보험 밖 짧은 질문 = 「잡담」 — 생각·검수 없이 빠른 한 번 호출(웹검색 2회 허용), 바름이답게 두세 줄. 실패해도 자료 더미 대신 사람 말로 답한다
-    _is_small=bool(lastq) and len((lastq or '').strip())<=40 and not images and not (body.get('files') or [])
-    _is_small=_is_small and not re.search(r'보험|담보|고지|심사|인수|진단|수술|입원|약|병|암|실손|특약|약관|보상|청구|회사|상품|가입|추천|갱신|만기|보험료|코드|KCD|간편|유병|표준체|할증|부담보|거절|검진|추적|용종|혈압|당뇨|콜레스테롤|지방간|갑상선|우울|정신|디스크|골절',lastq or '')
+    # ★v835 (지점장 캡처 08:39 「황반변성」이 잡담으로 빠짐): 잡담 = 「보험 낱말 없음」이 아니라 「잡담 낱말 있음」으로 판정. 병명·낯선 낱말은 전부 본업 경로
+    _is_small=bool(lastq) and len((lastq or '').strip())<=40 and not images and not (body.get('files') or []) and bool(re.search(r'안녕|하이$|^hi|hello|날씨|고마워|감사|수고|잘자|잘 자|좋은 아침|밥 먹|점심|저녁|심심|뭐해|뭐 해|누구야|누구니|이름이|기분|농담|웃긴|노래|생일|사랑|힘들다|피곤|졸려|화이팅|파이팅|잘했|최고|바보|ㅋㅋ|ㅎㅎ|ㅠㅠ|ㅜㅜ|오늘 어때|몇 시|며칠|요일',lastq or '',re.I)) and not re.search(r'보험|담보|고지|심사|인수|진단|수술|입원|약|병|암|실손|특약|약관|보상|청구|회사|상품|가입|추천|갱신|만기|보험료|코드|KCD|간편|유병|표준체|할증|부담보|거절|검진|추적|용종|혈압|당뇨|콜레스테롤|지방간|갑상선|우울|정신|디스크|골절|변성|염$|증$|세 ',lastq or '')
     _is_reco=(not _is_small) and bool(re.search(r'회사별|각사|비교|추천|가입|들어갈|들어가|저렴|싸게|가격|어디|어느\s*회사|간편|유병|병력|진단|수술|입원|추적|관찰|완치|이력|발병|\d{2}년\s*\d{1,2}월',pickq or ''))
     # ★v806 제214조: 병력·추천 질문이면 간편 조건표(18)·유병자 이력별 회사길(144)·추천 틀(213)·간편유형 회사비교(142)를 꼭 넣는다
     try:
