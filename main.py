@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v832-ocrpar-20261009'
+VSTAMP = 'v833-smalltalk-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14407,6 +14407,15 @@ async def remodel_route(xlsx: UploadFile = File(None),
 #   MAKEONE HELPER 대화 AI. 범위 밖 질문은 정중히 거절. 앱이 보내는 kb(규칙표·사례·KCD·회사 메모)를 시스템에 넣어 앱과 같은 근거로 답한다.
 #   고객 병력이 나오면 <facts>{...}</facts> JSON 을 답 끝에 붙여 앱의 규칙 엔진이 판정한다(판정은 AI가 아니라 규칙이 한다).
 #   캡처(건강e음·나의건강기록·The건강보험)가 오면 비전으로 진료내역을 읽어 같은 facts 로 낸다. 저장 안 함.
+_PRACTICE_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안의 보험 영업 연습 AI다. 상대는 BARUM 지점(최은혜 지점장) 신입 설계사이고, 거절 대응·첫 상담·보장 설명·클로징을 실전처럼 훈련시킨다.
+⭐ 표 금지(마크다운 표 안 됨). 순서는 숫자, 해당여부는 ✅, 비교는 줄글.
+[역할 2가지 — 명확히 구분]
+A) 코치 모드: 신입이 「○○ 거절당했어요」「"비싸요" 거절 대응」「첫 상담 어떻게 해요?」처럼 물으면 → 왜 그런지 쉽게 설명 → 바로 쓸 멘트를 큰따옴표로 1~2개(짧게) → 공감→재프레임(점검·확인이다)→작은 약속(1분/그것만) 순서로 코칭.
+B) 고객 모드(롤플레이): 신입이 「고객 해줘」「영업 시작」 또는 난이도(레벨1/2/3)를 고르면 → 진짜 고객이 되어 끝까지 연기.
+[난이도] 🟢 레벨1 순한 고객 — 호의적, 가벼운 질문. 🟡 레벨2 까칠·의심 — 거절 2~3회 연속, 근거·숫자를 요구. 🔴 레벨3 강한 거절(실전) — 거절 7유형을 섞어 강하게, 어설픈 멘트엔 더 닫히고, 설득 안 되면 「생각해볼게요」 하고 끊는다.
+[고객 모드 절대 규칙] 힌트·칭찬·코치 말투 전면 금지, 100% 고객으로만 말한다. 쉽게 설득되지 마라 — 공감 없음·일방 설명·근거 없음·강매 느낌이면 더 거절한다. 레벨2·3은 가입 거부·통화 종료 가능. 욕설·인신공격 없는 합리적이지만 안 넘어가는 현실 고객(상담에 응한 DB 고객 수준). 거절 7유형 활용: "비싸요" "생각해볼게요" "보험 많아요" "바빠요" "필요없어요" "배우자랑 상의" "기존 설계사 있어요". 신입이 공감→재프레임→작은 약속을 제대로 하면 한 칸씩 마음을 연다. 한 번에 한두 마디만.
+[종료 — 「피드백」 또는 「끝」일 때만 코치로 복귀해 디브리핑] 잘한 점 1~2개(구체) → 놓친 거절·약했던 멘트 1~2개 → 다음에 바로 쓸 한 줄 멘트 → 5점 만점 점수. 위로성 칭찬 금지.
+한국어, 짧고 또렷하게."""
 _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 보험 설계사(특히 신입)를 돕는 심사 도우미 AI다. 자기를 가리킬 때 「바름이」라고 한다. 한국어로, 짧고 단정하게, 결론→근거→할 일 순서로 답한다.
 ★답 길이 규칙(v828 제229조, 지점장 2026.10.09 「질문에 답이 너무 짧다」 — 구 「5줄 이내·40자」 폐기): 신입이 그 답만 읽고 고객 앞에서 설명할 수 있을 만큼 쓴다. 기본 12~30줄. ★★모양은 네이버 AI 답(지점장 캡처 2026.10.09 「똑같은 질문에 네이버 답이다」)을 그대로 따른다: ⓐ 도입 문단 3~4문장 — 질문의 핵심 숫자·기준(금액·기간·비율)을 **굵게** 넣고 현재 상황(2026년 기준)과 왜 중요한지를 쉬운 말로. ⓑ 「## 제목」 절 3~4개(예: ○○ 부담과 실태 / 회사별 보장 현황 / 제도·지원 현황 / 설계 포인트) — 각 절은 문단 2~4문장, 절 하나에는 2열 표(| 구분 | 주요 내용 |, 행 4~6개)를 넣는다. ⓒ 마지막 문단 = 설계사가 다음에 할 행동 + 고객에게 바로 권할 한 가지, 끝에 「○○도 찾아드릴까요?」 식의 이어 묻기 한 문장. 제목만 있고 내용 없는 절 금지. ① 첫 문단 = 결론 2~3문장(핵심 단어 **굵게**) ② 「## 왜 그런가」 = 근거를 쉬운 말로 풀어 쓴 문단 3~6문장(용어가 나오면 괄호로 한 줄 뜻풀이) ③ 「## 회사별」 = 회사마다 한 줄 이상(회사명: 되는지 · 한도·금액 · 조건 · 예외) — 손보·생보 둘 다 ④ 「## 고객에게 이렇게 말한다」 = 설계사가 그대로 읽을 수 있는 설명 2~4문장 ⑤ 「## 할 일」 = 다음 행동 1~3줄 + 주의(고지·면책·확인 필요). 질문이 단순(용어 뜻·예/아니오)이면 ②까지만, 그래도 5줄 이상. 인사·서론·반복은 금지하되 설명은 아끼지 않는다. ★자료 표시 규칙(지점장 「저건 챗창에 띄울 필요 없다」): 표에 「자료」「출처」 열을 만들지 않는다. 본문·표 안에 「135 비교3 2쪽」 같은 자료명·쪽 번호를 쓰지 않는다. 근거 자료명·쪽은 답 맨 끝에 「근거: 자료명(쪽) · 자료명(쪽)」 한 줄로만 모아 쓴다(기사면 매체·날짜). ★v819 형식(지점장 2026.10.09 「글로 띄워지는 게 깔끔하게 — 네이버 AI 보고」): 결론 문단 1~2문장(핵심 단어는 **굵게**) → 필요하면 작은 제목 한 줄(「## 제목」) → 비교·조건은 마크다운 표(| 확인 항목 | 되는 경우 | 어려운 경우 | 처럼 3열 이내·행 6개 이내) 또는 「· 」 글머리 → 마지막 「할 일」 한 줄. 이모지·구분선(━━)·장식 금지. 웹 검색을 썼으면 맨 끝에 「출처: 사이트이름(URL)」 줄. ★★v821 약관 검색(지점장 2026.10.09 「가장 중요한 건 약관 검색 — 네이버는 그걸 해낸다」): 약관·면책·지급사유·조항을 물으면 ① 📚 자료에 그 회사 약관이 있으면 그 조항을 먼저 인용 ② 없으면 web_search 로 「회사명 상품명 약관 pdf」(보험사 상품공시실·공시실 PDF 우선)를 찾고 web_fetch 로 그 약관을 열어 해당 조항 원문을 찾는다 ③ 답에는 「약관 조항 번호 + 원문 1~3줄(따옴표)」 + 쉬운 말 풀이 + 해당 상품명·약관 판(날짜) + 출처 URL 을 쓴다. 원문을 못 찾았으면 「약관 원문 미확인 — 증권·약관 PDF 확인」이라 쓰고 일반 원칙만 말한다. 약관 조항을 지어내지 않는다. ★v820 서치 규칙: 공식(금감원·협회·보험사 홈)·기사를 지식iN·블로그보다 먼저 믿는다 · 블로그·카페만 있는 내용은 「(블로그 기준 — 회사 확인)」을 붙인다 · 검색 결과와 지식책이 다르면 지식책(지점장 자료)을 따르고 그 차이를 한 줄 적는다 · 날짜가 2년 넘은 기사는 연도를 같이 적는다.
 다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기·추천 — 아래 kb의 규칙표와 자료(카탈로그1·2, 추천규칙)에서 어느 회사·상품이 되는지 + 상품명으로 추천.
@@ -14799,7 +14808,7 @@ async def helper_kb_search(body:dict):
 
 # ★v816 제218조 바름이 프리미엄 설정 — Railway 변수로 바꿀 수 있다(HELPER_MODEL · HELPER_THINK · HELPER_REVIEW=0 이면 검수 끔)
 _ANTH_URL=os.environ.get('ANTHROPIC_URL','https://api.anthropic.com/v1/messages')
-_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-opus-5-5'),'claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]
+_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-opus-5-5'),'claude-sonnet-5-5','claude-haiku-5-5','claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]   # ★v833 현행 모델명(5.5) 폴백 추가 — 구 이름만 있어 전부 실패하면 「AI 응답 실패」
 _HQ_MODELS=list(dict.fromkeys(_HQ_MODELS))
 _HQ_THINK=int(os.environ.get('HELPER_THINK','8000') or 0)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
 _HQ_MAXTOK=int(os.environ.get('HELPER_MAXTOK','6000') or 6000)
@@ -14920,6 +14929,28 @@ async def helper_chat(body:dict):
     lastq=''
     for m in reversed(msgs):
         if m.get('role')=='user' and str(m.get('content','')).strip(): lastq=str(m.get('content',''))[:500]; break
+    # ★v833 제236조 (지점장 2026.10.10 「AI에 있었던 고객반응도 넣어봐 — 힘들거든 설계사」): 옛 AI 앱 「🎤 영업연습」 복원 — 바름이가 고객이 되어 거절·반응 연기(레벨 1~3 · 거절 7유형 · 「피드백」에 코치 복귀). 자료·검수·생각 없음, 빠른 호출
+    if (body.get('app') or '')=='practice':
+        _pc=[{'role':m['role'],'content':str(m.get('content',''))[:2000]} for m in msgs if m.get('role') in ('user','assistant') and str(m.get('content','')).strip()][-24:]
+        while _pc and _pc[0]['role']!='user': _pc=_pc[1:]
+        if not _pc: _pc=[{'role':'user','content':lastq or '영업 연습 시작'}]
+        _m2=[]
+        for x in _pc:
+            if _m2 and _m2[-1]['role']==x['role']: _m2[-1]['content']+='\n'+x['content']
+            else: _m2.append(dict(x))
+        _pc=_m2
+        _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
+        _ans='';_used=''
+        for _m in _HQ_MODELS:
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    _r=await client.post(_ANTH_URL,headers=_hd,json={'model':_m,'max_tokens':900,'system':_PRACTICE_SYS,'messages':_pc})
+                _d=_r.json(); _ans=''.join(b.get('text','') for b in _d.get('content',[]) if b.get('type')=='text').strip()
+                if _r.status_code==200 and _ans: _used=_m; break
+                print(f'[v833 practice] {_m} status={_r.status_code} err={str(_d)[:160]}')
+            except Exception as e: print(f'[v833 practice] {_m} exc={str(e)[:120]}')
+        if not _ans: _ans='(바름이) 지금 AI 연결이 잠시 안 된다 — 잠시 뒤 「레벨」 단추를 다시 눌러라.'
+        return JSONResponse({'ok':True,'answer':_ans,'model':_used,'practice':True},headers=_HUB_CORS)
     # ★v785 제201조: 「다른회사는?」처럼 짧은 이어 묻기는 앞 질문의 병명이 없어 자료를 못 찾았다 → 최근 사용자 말 3개를 합쳐 찾는다(최신 말 우선)
     _uq=[str(m.get('content','')).strip() for m in msgs if m.get('role')=='user' and str(m.get('content','')).strip()]
     pickq=' '.join(_uq[-3:])[-900:] if _uq else lastq
@@ -14927,7 +14958,10 @@ async def helper_chat(body:dict):
     _app=_hq_drawer(pickq, body.get('app') or 'auto')
     try: picks=_hkb_pick(pickq,n=_HQ_PICK_N,maxc=_HQ_PICK_C,app=_app)   # ★v793 HELPER 채팅 = 고지·추천 서랍 · ★v816 프리미엄 12쪽·22,000자
     except Exception as e: print('[v806 pick]',str(e)[:120]); picks=[]
-    _is_reco=bool(re.search(r'회사별|각사|비교|추천|가입|들어갈|들어가|저렴|싸게|가격|어디|어느\s*회사|간편|유병|병력|진단|수술|입원|추적|관찰|완치|이력|발병|\d{2}년\s*\d{1,2}월',pickq or ''))
+    # ★v833 제234조 (지점장 2026.10.10 「바름아 오늘 날씨어때 → AI 연결 실패 · 이런 질문은 안 되냐」): 잡담·인사·날씨 같은 보험 밖 짧은 질문 = 「잡담」 — 생각·검수 없이 빠른 한 번 호출(웹검색 2회 허용), 바름이답게 두세 줄. 실패해도 자료 더미 대신 사람 말로 답한다
+    _is_small=bool(lastq) and len((lastq or '').strip())<=40 and not images and not (body.get('files') or [])
+    _is_small=_is_small and not re.search(r'보험|담보|고지|심사|인수|진단|수술|입원|약|병|암|실손|특약|약관|보상|청구|회사|상품|가입|추천|갱신|만기|보험료|코드|KCD|간편|유병|표준체|할증|부담보|거절|검진|추적|용종|혈압|당뇨|콜레스테롤|지방간|갑상선|우울|정신|디스크|골절',lastq or '')
+    _is_reco=(not _is_small) and bool(re.search(r'회사별|각사|비교|추천|가입|들어갈|들어가|저렴|싸게|가격|어디|어느\s*회사|간편|유병|병력|진단|수술|입원|추적|관찰|완치|이력|발병|\d{2}년\s*\d{1,2}월',pickq or ''))
     # ★v806 제214조: 병력·추천 질문이면 간편 조건표(18)·유병자 이력별 회사길(144)·추천 틀(213)·간편유형 회사비교(142)를 꼭 넣는다
     try:
         if _is_reco:
@@ -15028,6 +15062,22 @@ async def helper_chat(body:dict):
         return resp.status_code, d
     def _txt(d): return ''.join(b.get('text','') for b in (d or {}).get('content',[]) if b.get('type')=='text').strip()
     used=None; data=None; webused=False
+    if _is_small:
+        _sm_sys=_HELPER_SYS+'\n\n★잡담 모드(v833 제234조): 지금 질문은 보험 밖 짧은 말(인사·날씨·안부·농담). 「다룰 수 있는 것」 제한을 이 답에만 풀고, 바름이답게 두세 줄로 사람처럼 답한다. 날씨·뉴스 같은 실시간 정보는 웹 검색 도구가 있으면 한 번 검색해 답하고, 없으면 「지금 못 본다」고 솔직히 말한다. 표·절·할 일 목록 금지. 끝에 한 줄로 「고객 얘기 적어 주면 심사·고지 봐 준다」처럼 본업을 가볍게 안내한다.'
+        _sm_tools=[{'type':'web_search_20250305','name':'web_search','max_uses':2,'user_location':{'type':'approximate','country':'KR'}}] if not body.get('noweb') else None
+        for model in _HQ_MODELS:
+            try:
+                st,data=await _call(model,think=False,mt=700,sysx=_sm_sys,tools=_sm_tools,to=60)
+                if st==200 and _txt(data): used=model; break
+                print(f'[v833 small] {model} status={st} err={str(data)[:160]}')
+                if st!=200 and _sm_tools:
+                    st,data=await _call(model,think=False,mt=700,sysx=_sm_sys,tools=None,to=60)
+                    if st==200 and _txt(data): used=model; break
+            except Exception as e: print(f'[v833 small] {model} exc={str(e)[:120]}')
+        if used:
+            _text=_txt(data)
+            return JSONResponse({'ok':True,'answer':_text,'model':used,'web':any(b.get('type')=='server_tool_use' for b in data.get('content',[])),'sources':_hq_sources(data),'small':True},headers=_HUB_CORS)
+        return JSONResponse({'ok':True,'answer':'바름이다. 지금 AI 연결이 잠시 안 돼서 그 말엔 답을 못 했다 — 잠시 뒤 다시 물어봐 줘. 고객 얘기(나이·병력·약)를 적어 주면 심사·고지는 바로 봐 준다.','model':'','small':True,'err':str(data)[:200]},headers=_HUB_CORS)
     for model in _HQ_MODELS:
         for think in ((True,False) if model==_HQ_MODELS[0] else (False,)):
             try:
@@ -15044,7 +15094,7 @@ async def helper_chat(body:dict):
             except Exception as e:
                 print(f'[v816 helper] {model} think={think} exc={str(e)[:160]}')
         if used: break
-    if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패','detail':str(data)[:300]})
+    if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패 — '+re.sub(r'\s+',' ',str((data or {}).get('error',data))[:140]),'detail':str(data)[:300]},headers=_HUB_CORS)   # ★v833 이유를 앱에 보인다
     webused=any(b.get('type')=='server_tool_use' for b in data.get('content',[]))
     text=_txt(data)
     # ★v829 제229조 8항 (지점장 「안 짤리게 해줘」): 초안 자체가 max_tokens로 끊겼으면 「끊긴 곳부터 이어서」 한 번 더 불러 붙인다(최대 2회). 끝까지 쓴 답만 낸다.
