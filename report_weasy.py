@@ -254,7 +254,7 @@ def _gen_split_of(rep, *names):
     import re as _r
     def _n(x): return _r.sub(r'[\s·()\[\]/.]', '', str(x))
     _ALIAS2 = {'암진단비':('일반암',), '통합암진단비':('통합암',), '통합전이암진단비':('통합전이암',),
-               '유사암진단비':('유사암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
+               '유사암진단비':('유사암',), '소액암진단비':('소액암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
                '뇌졸증':('뇌졸증진단비',), '뇌출혈':('뇌출혈진단비',), '허혈성':('허혈성 진단비','허혈성진단비')}
     cand = tuple(names) + tuple(a for nm in names for a in _ALIAS2.get(str(nm), ()))
     for nm in cand:
@@ -297,7 +297,7 @@ def _split_span(rep, lookup, bv, unit=True):
 #   ⇒ 라벨표를 <b>모듈 상수 하나로 올려</b> 파랑·레드가 <b>같은 표</b>를 보게 한다.
 #   ★색 규칙은 바꾸지 않는다 — <b>조회 키만 합친다</b>(제146조).
 _LBL_ALIAS = {'암진단비':('일반암',), '통합암진단비':('통합암',), '통합전이암진단비':('통합전이암',),
-          '유사암진단비':('유사암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
+          '유사암진단비':('유사암',), '소액암진단비':('소액암',), '고액암진단비':('고액암',), '뇌혈관':('뇌혈관진단비',),
           '뇌졸증':('뇌졸증진단비',), '뇌출혈':('뇌출혈진단비',), '허혈성':('허혈성 진단비','허혈성진단비'),
           # ★★★★★v640 (지점장 실측 2026.09.02 「진단서에도 갱신을 블랙으로 나온다」 · 조주환)
           #   [실측] 종수술비 칸 `(20/50/100/500/1000)` — 엑셀은 파랑(0070C0)인데
@@ -458,6 +458,7 @@ def _wc_status(rep, lookup):
                    ('통합암진단비', _cov_val(rep,'암','통합암')),
                    ('통합전이암진단비', _cov_val(rep,'암','통합전이암')),
                    ('유사암진단비', _cov_val(rep,'암','유사암')),
+                   ('소액암진단비', _cov_val(rep,'암','소액암')),   # ★v827 제228조 소액암 전용행
                    ('고액암진단비', _cov_val(rep,'암','고액암'))]
         else:
             # ★★★v252(지점장 지시 2026.07.26, 영구): <b>7p는 연동</b> — CI 중대한OO 행을
@@ -823,7 +824,7 @@ def _ac(label):
         #   마스터 9행 전용행(v300)이 엑셀에만 있고 설명서·진단서엔 없어 4대 산출물 연동이 깨져 있었다.
         '교통상해 사망':['교통상해사망'],
         '종신':['일반사망'],
-        '일반암':['일반암'], '유사암':['유사암(갑.기.경.제)','유사암'], '고액암':['고액암'],
+        '일반암':['일반암'], '유사암':['유사암(갑.기.경.제)','유사암'], '소액암':['소액암'], '고액암':['고액암'],
         '뇌혈관 수술비':['뇌혈관수술비'], '허혈성 수술비':['허혈성수술비'], '심장 수술비':['심장수술비'],
         '상해 후유 3%':['상해후유3%'], '상해 후유 80%':['상해후유80%'],
         '질병 후유 3%':['질병후유3%'], '질병 후유 80%':['질병후유80%'],
@@ -993,7 +994,7 @@ def _dx_groups(rep):
     import re as _re
     """★v41 8p 진단비 그룹 — CI 계약이면 '중대한OO' 행을 CI 칩으로 추가(유동)."""
     _ci = (rep or {}).get('ci', {}) or {}
-    cam = ['고액암','일반암','유사암']
+    cam = ['고액암','일반암','유사암','소액암']   # ★v827 제228조
     brn = ['뇌혈관','뇌졸증','뇌출혈']
     hrt = ['허혈성','협심증','급성심근','심부전','염증','부정맥']
     if str(_ci.get('status'))=='ci':
@@ -2530,9 +2531,9 @@ body {{ color:{INK}; }}
 .wcard.dgcard .wcf {{ flex:1; align-items:flex-start; }}
 .wcard.dgcard .dglist {{ flex:1; align-self:stretch; display:flex; flex-direction:column; justify-content:flex-start; }}
 .dgrow {{ display:flex; align-items:center; gap:1mm; margin:0.4mm 0; }}
-.dgcancer .dgrow .mb {{ height:7.4mm; line-height:7.4mm; font-size:9pt; }}
+.dgcancer .dgrow .mb {{ height:6.0mm; line-height:6.0mm; font-size:9pt; }}   /* ★v827 제228조 소액암 행 추가(6행) — 7p 제로섬: 행 높이 7.4→6.0 */
 .dgcancer .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
-.dgcancer .dgrow {{ margin:1.2mm 0; }}
+.dgcancer .dgrow {{ margin:1.1mm 0; }}   /* ★v827 6행 수용 */
 .dgheart .dgrow .mb {{ height:5.6mm; line-height:5.6mm; font-size:8pt; }}   /* ★v421h CI 오면 넘침 → 세로 축소 */
 .dgheart .dglab {{ flex:0 0 21mm; font-size:6.2pt; line-height:1.05; white-space:nowrap; }}
 .dgheart .dgrow {{ margin:0.45mm 0; }}

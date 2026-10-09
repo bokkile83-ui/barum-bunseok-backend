@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v814-cart-20261008'
+VSTAMP = 'v827-soaek-20261009'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1370,6 +1370,11 @@ def silson_selftest():
 #   지침 위반은 <b>값이 아니라 코드 작성 시점</b>에 생긴다 → 담보명→기대행을 직접 대조한다.
 #   ★master.xlsx는 건드리지 않는다(원본 cmp 동일 = 정본 판정 기준 유지).
 _DOCTRINE_SELFTEST = [
+    # ★v827 제228조 — 소액암 전용행(2026.10.09). 유사암 행 합산 금지.
+    ('소액암진단비',                         '소액암'),
+    ('갱신형 소액암진단비',                  '소액암'),
+    ('소액암진단',                           '소액암'),
+    ('소액암수술비',                         None),
     # (담보명, 기대 마스터행 / None=기재금지)  ── 조문: 단독 5종(#27)
     ('허혈성심장질환진단비',                 '허혈성 진단비'),
     ('심장허혈성진단비',                     '허혈성 진단비'),
@@ -1467,7 +1472,7 @@ _STRUCT_SELFTEST = [
     ('제177조 오늘환율', 'main.py',            r"@app\.get\('/fx/today'\)", True),
     # ★v753 제178조 — 운전자 6행은 규칙이 최종 판정. 이 줄이 사라지면 LLM 이 민사소송법률비용·부상치료비(1~7급)를 다시 끌어온다.
     ('제178조 운전자LLM차단', 'main.py',       r"if std in _DRIVER_RULE_ONLY:", True),
-    ('제215조 암치료LLM차단', 'main.py',       r"std in _CANCER_RULE_ONLY or re\.search\(r'카티", True),
+    ('제216조 암치료LLM차단', 'main.py',       r"std in _CANCER_RULE_ONLY or re\.search\(r'카티", True),
     # ★v754 제179조 — 1-8종 세트+종번호는 8칸 슬래시. 이 줄이 사라지면 8줄이 한 숫자로 더해진다(700).
     ('제179조 1-8종슬래시', 'main.py',         r"if std in jong8_acc and 1 <= jong <= 8:", True),
     # ★v755 제180조 — 실손 계약이 아니면 엑셀 실손 5행에 넣지 않는다. 사라지면 실손 없는 고객에 5/0/0 이 찍힌다.
@@ -1748,13 +1753,19 @@ _STRUCT_SELFTEST = [
     ('제204조 조문',                'BARUM_DOCTRINE.md', r'제204조 — HELPER 검색: 드문 말 우선', True),
     ('제205조 줄임말 정확일치',     'main.py', r"if k==a\.lower\(\): more\.extend\(b\)", True),
     ('제205조 조문',                'BARUM_DOCTRINE.md', r'제205조 — HELPER 회사 이름 2글자는 되묻는다', True),
-    ('제206조 모를때 웹검색',       'main.py', r"if _helper_unknown\(text\) and not body\.get\('noweb'\)", True),
+    ('제206조 모를때 웹검색',       'main.py', r"_helper_unknown\(text\) and not body\.get\('noweb'\)", True),   # ★v824 'if not webused and' 앞머리 추가분 반영(검사식만 보정)
     ('제206조 손보생보 같이',       'main.py', r'손보·생보 같이\(v790 제206조\)', True),
     ('제206조 조문',                'BARUM_DOCTRINE.md', r'제206조 — HELPER 손보·생보 같이 · 모를 때만 웹 검색', True),
     ('제207조 DB+파일 삭제',        'main.py', r'DB 와 임시 파일 「둘 다」에서 지운다', True),
     ('제207조 올릴때 옛판 교체',    'main.py', r'_hkb_del\(t,norm=True\)', True),
     ('제207조 조문',                'BARUM_DOCTRINE.md', r'제207조 — HELPER 중복 자료는 서버가 무시', True),
     ('제208조 추천 규칙',           'main.py', r'추천 규칙\(v792 제208조', True),
+    ('제217조 표준체 먼저',         'main.py', r'표준체 먼저\(v815 제217조', True),
+    ('제218조 바름이 프리미엄',     'main.py', r'_HQ_REVIEW_ASK=', True),
+    ('제219조 바름이 통합 서랍',    'main.py', r'def _hq_drawer\(', True),
+    ('제221조 PPT A3 통일디자인',  'main.py', r'def _ppt_scale\(', True),
+    ('제222조 PPT 값칸 분리',      'main.py', r'_CELLMODE = bool\(_cells\)', True),
+    ('제222조 조문',               'BARUM_DOCTRINE.md', r'제222조 — 값 칸 분리 폼', True),
     ('제208조 조문',                'BARUM_DOCTRINE.md', r'제208조 — 바름이 상품 추천 틀', True),
     ('제209조 앱별 서랍',           'main.py', r'def _hkb_app_of', True),
     ('제209조 조문',                'BARUM_DOCTRINE.md', r'제209조 — 서랍을 둘로', True),
@@ -5822,7 +5833,7 @@ def resolve_kw(raw):
         # ★v51(지점장 확정 2026.07.13): 현대해상 '레보아이로봇수술비' = 다빈치로봇수술비(마스터 26행).
         #   '로봇' 키워드로 이미 잡힌다 — 이 조건을 좁히면 레보아이가 조용히 누락되므로 건드리지 말 것.
         if has('다빈치') or has('로봇') or has('레보아이'): return '다빈치로봇수술비',0
-        if has('암') and no('양성종양','유사암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인]
+        if has('암') and no('양성종양','유사암','소액암'): return '암수술',0   # ★v30 양성종양·유사암 수술 오탐 차단 → [확인] / ★v827 소액암수술비도 동일(암수술 부풀림 금지)
         if jong: return '종수술비공통', jong   # ★v29q-12 상해/질병·부위 미표기 1-5종 수술(예 파워수술 1-5종)→상해·질병 양쪽 슬래시
         if has('상해') or has('재해'):   # ★v30h 재해수술비=상해수술비 동일 취급
             # §6 상해수술비 = 기본만. 병원규모·부위/특정·통원·자XXXX 접두변형은 합산 금지 → [확인]
@@ -6062,14 +6073,22 @@ def resolve_kw(raw):
         return '하이클래스(암)',0
     # 유사암 — 단 '유사암제외'(유사암을 뺀 일반 암진단)는 일반암
     # ★★★★★v248 (지점장 확정 2026.07.26): <b>"유사암이라고 기재된 것만 해라"</b>
-    #   → 유사암 행에는 담보명에 <b>'유사암'(또는 '소액암')이 명시된 담보만</b> 넣는다.
+    #   → 유사암 행에는 담보명에 <b>'유사암'이 명시된 담보만</b> 넣는다. (★v827: '소액암'은 전용행으로 분리 — 제228조)
     #   구 v230의 <b>동의어 자동산입</b>(갑상선·갑상샘·기타피부·경계성·제자리·상피내·양성뇌종양)은 <b>폐기</b>.
     #   ★실측 근거(양*선 KB 3열): 메리츠 `갱신형 갑상선암(초기제외)진단비` 1,000 ·
     #     `갱신형 갑상선암 및 기타피부암의 전이암(림프절 등 전이제외)진단비` 1,000이 유사암에 산입돼
     #     <b>3,000</b>이 됐으나 KB 전체보장현황 유사암은 <b>1,000</b>(= `갱신형 유사암진단비`뿐)이다.
     #   ★★<b>영향 고지</b>: 이 규칙으로 이정화 우체국 `갑상샘암치료보험금`·`상피내암치료보험금`은
     #     <b>[확인]큐</b>로 간다(구 v230에선 유사암에 산입돼 한장표 900과 일치했다). 추측 대신 신인 수기 확인.
-    if any(k in n for k in [_norm(x) for x in ['유사암','소액암']]) and no('유사암제외','유사암 제외'):
+    # ★★★★★v827 제228조 (지점장 지시 2026.10.09 「엑셀에도 소액암 넣자 — 지침·진단서·리포트·비교엑셀·보험앱 다」):
+    #   소액암(유방·자궁경부·자궁체부·전립선·방광)은 <b>마스터 암블록 「소액암」 전용행</b>(유사암 아래)이다.
+    #   구 규칙(소액암진단 → 유사암 행 합산)은 <b>폐기</b>. 담보명에 '소액암'이 명시된 <b>진단비만</b> 들어간다.
+    #   수술·치료비·일당·주요치료 변형은 종전대로 [확인] 큐. '(소액암제외)'는 위 _strip에서 이미 지워져 여기 안 온다.
+    if has('소액암') and no('소액암제외','소액암 제외'):
+        if has('수술') or has('치료비') or has('일당') or has('입원') or has('통원') or has('주요치료') or has('방사선') or has('약물'):
+            return None, 0
+        return '소액암',0
+    if any(k in n for k in [_norm(x) for x in ['유사암']]) and no('유사암제외','유사암 제외'):
         # ★★★v207 (지점장 확정 2026.07.25, 양*선 메리츠 실측): '유사암(갑.기.경.제)'는 <b>진단비 전용 행</b>이다.
         #   글자만 보고 넣던 탓에 <b>수술비·치료비·일당</b>까지 산입돼 유사암이 1,250(=100+1,000+150)으로 부풀었다.
         #   실측 오류 2건 — '갱신형 갑상선기능항진증치료비' 100(갑상선 <b>기능</b>항진증 = 암이 아니다) ·
@@ -6745,7 +6764,7 @@ _SILSON5 = ('입원', '통원', '약값', 'MRI', '도수치료', '비급여주�
 
 # ★v753 제178조 — 운전자 6행은 규칙(resolve_kw)이 최종 판정. LLM 폴백이 이 행으로 보낸 담보는 받지 않는다.
 _DRIVER_RULE_ONLY = ('합의금', '6주미만', '변호사', '대인', '대물', '자부상')
-# ★v814 제215조 (지점장 2026.10.08 한O빈 「항암방사선이 왜 이리 높아 · 무슨 기준이야」): 암 치료비 2행도 규칙이 최종 판정.
+# ★v814 제216조 (지점장 2026.10.08 한O빈 「항암방사선이 왜 이리 높아 · 무슨 기준이야」): 암 치료비 2행도 규칙이 최종 판정.
 #   규칙은 카티(CAR-T) 허가치료를 제외(v267)했는데 LLM 폴백이 항암방사선약물로 되끌어와 5,000 이 찍혔다(현대·KB).
 _CANCER_RULE_ONLY = ('항암방사선약물', '중입자치료비')
 
@@ -6935,7 +6954,7 @@ _AUDIT_GROUPS = [
     ('교통상해입원일당', None), ('암직접치료입원일당', '암일당'), ('입원급여금', '질병일당'),
     ('간호간병통합서비스사용 질병입원일당', '간호통합병동')]),
  ('§8.2 암·유사암(v248·v197·v227)', [
-    ('갱신형 유사암진단비', '유사암(갑.기.경.제)'), ('소액암진단', '유사암(갑.기.경.제)'),
+    ('갱신형 유사암진단비', '유사암(갑.기.경.제)'), ('소액암진단', '소액암'),
     ('갱신형 갑상선암(초기제외)진단비', None), ('갑상샘암치료보험금', None),
     ('상피내암치료보험금', None), ('갱신형 유사암수술비', None),
     ('암진단비(유사암제외)', '일반암'), ('16대특정암진단비', '고액암'),
@@ -7707,9 +7726,9 @@ def build_excel(data, out):
                     if std in _DRIVER_RULE_ONLY:
                         print(f"[v753 제178조] LLM 운전자 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
                         std = None; m = {}
-                    # ★v814 제215조: 카티(CAR-T)는 어느 행으로도 LLM 매핑 금지 · 항암방사선약물·중입자 행은 규칙만(§8.2 카티 제외 · 허가 제외)
+                    # ★v814 제216조: 카티(CAR-T)는 어느 행으로도 LLM 매핑 금지 · 항암방사선약물·중입자 행은 규칙만(§8.2 카티 제외 · 허가 제외)
                     if std and (std in _CANCER_RULE_ONLY or re.search(r'카티|CAR-?T', raw, re.I)):
-                        print(f"[v814 제215조] LLM 암치료 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
+                        print(f"[v814 제216조] LLM 암치료 매핑 거절: {ct.get('company','')} '{raw}' {amt} → {std} (규칙 제외 담보)")
                         std = None; m = {}
             else:
                 m = {}
@@ -9417,6 +9436,21 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     prs = Presentation(TPL_PPT)
     sl = prs.slides[0]
     by = {sh.name:sh for sh in sl.shapes if sh.has_text_frame}
+    _PS = _ppt_scale(prs)   # ★v823 제221조 A3 폼: 글자 pt = 구 폼(19.05cm) 기준 × 슬라이드 가로 배율
+    _NEWFORM = any(getattr(sh,'name','')=='HDR_RULE' for sh in sl.shapes)   # ★v823 리포트형 폼(제목 왼쪽·날짜 오른쪽 고정)
+    # ★★★★★v823 제222조 「값 칸 분리 폼」(지점장 2026.10.09 「안 이쁘다 — 진단서처럼」):
+    #   폼에 이름이 '상자|라벨' 인 텍스트박스(값 칸)가 있으면 라벨 줄에 값을 이어 붙이지 않고 그 칸에 값만 쓴다.
+    #   '상자|'(라벨 없음) = 타일형 값 칸(뇌혈관·뇌졸증·뇌출혈·허혈성·급성심근). 구 폼(값 칸 없음)은 종전 그대로.
+    _cells = {sh.name: sh for sh in sl.shapes if sh.has_text_frame and '|' in str(sh.name)}
+    _CELLMODE = bool(_cells)
+    _NEWFORM = _NEWFORM or _CELLMODE
+    def _cell_run(nm):
+        _c = _cells.get(nm)
+        if _c is None: return None
+        _p = _c.text_frame.paragraphs[0]
+        if not _p.runs:
+            _r = _p.add_run(); _r.text = ''
+        return _p.runs[0]
     client = data['client']; contracts = data['contracts']
     now = datetime.datetime.now()
 
@@ -9493,13 +9527,20 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         # ★★★v221: 구 코드는 박스·문단·run을 못 찾으면 <b>아무 말 없이 return</b>했다.
         #   그래서 'PPT 상해 수술 라인이 통째로 비어 있다' 같은 사고가 <b>로그 한 줄 없이</b> 나갔다.
         #   → 실패 사유를 반드시 찍는다(배포 후 Railway 로그로 즉시 원인 확정 가능).
-        if box not in by:
+        _cr = _cell_run(box + '|') if _CELLMODE else None   # ★v823 제222조 타일 값 칸
+        if _cr is not None:
+            prefix, suffix = '', ''
+            class _PP: pass
+            p = _PP(); p.runs = [_cr]; ri = 0
+        elif box not in by:
             print(f'[PPT_MISS] 박스없음 box={box} std={std} — 템플릿 ppt_form.pptx의 도형 이름 확인 필요'); return
-        tf=by[box].text_frame
-        if pi>=len(tf.paragraphs):
+        if _cr is not None: pass
+        else:
+          tf=by[box].text_frame
+          if pi>=len(tf.paragraphs):
             print(f'[PPT_MISS] 문단없음 box={box} p{pi} (문단수 {len(tf.paragraphs)}) std={std}'); return
-        p=tf.paragraphs[pi]
-        if ri>=len(p.runs):
+          p=tf.paragraphs[pi]
+          if ri>=len(p.runs):
             print(f'[PPT_MISS] run없음 box={box} p{pi} r{ri} (run수 {len(p.runs)}) std={std}'); return
         gs=_gensum.get(std,0); ns=_nonsum.get(std,0); ps=_propsum.get(std,0)   # ★v370 제안(레드)
         if std in _silson:
@@ -9569,20 +9610,26 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         return None
     def pvl(box, label, std):
         """라벨로 찾은 슬롯에 값만 기입(갱신=파랑 + 비갱신=검정 분할 유지, 꼬리 보존)."""
-        sl=_slot(box,label)
-        if not sl:
-            print(f'[PPT_MISS] 라벨없음 box={box} label={label!r} std={std}'); return
-        p, ri, c = sl
-        t=p.runs[ri].text; head=t[:c+1]; tail=t[c+1:]
+        _cr = _cell_run(box + '|' + label) if _CELLMODE else None   # ★v823 제222조 값 칸
+        if _cr is not None:
+            class _PP: pass
+            p = _PP(); p.runs = [_cr]; ri = 0; head = ''; tail = ''
+        else:
+            sl=_slot(box,label)
+            if not sl:
+                print(f'[PPT_MISS] 라벨없음 box={box} label={label!r} std={std}'); return
+            p, ri, c = sl
+            t=p.runs[ri].text; head=t[:c+1]; tail=t[c+1:]
         # ★v330b: 폼(표본)에 예시값이 남아 있으면 값이 두 번 찍힌다(실측 '상해수술 : 200 200').
         #   ':' 뒤 꼬리가 <b>숫자·콤마·공백뿐</b>이면 예시값으로 보고 버린다.
         #   '   / 약 : ' 처럼 <b>다음 라벨·구분자가 있으면 그대로 보존</b>한다(뼈대 훼손 금지).
         if tail.strip() and not re.search(r'[^\d,\s]', tail): tail=''
         gs=_gensum.get(std,0); ns=_nonsum.get(std,0); ps=_propsum.get(std,0)
+        _hs = (head + ' ') if head else ''   # ★v823 값 칸이면 접두 공백 없음
         if std in _silson:
             _v=totals.get(std,0)
             if not _v: return
-            _seg(p.runs[ri], [(f'{head} {_v:,}',_BLUE),(tail,None)]); return
+            _seg(p.runs[ri], [(f'{_hs}{_v:,}',_BLUE),(tail,None)]); return
         _T=totals.get(std,None)
         if ps and isinstance(_T,(int,float)) and _T>=ps: _T=_T-ps   # ★v370 제안분을 뗀다(합계엔 이미 포함)
         if isinstance(_T,(int,float)) and _T>0 and (gs or ns) and (gs+ns)!=_T:   # ★v370 gs·ns 둘 다 0이면 보정 금지(0-나눗셈)
@@ -9595,9 +9642,9 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         if not gs and not ns and not ps: return
         # ★★★★★v370 (지점장 확정 2026.08.09): 한 칸 3분할 = 갱신(파랑)+비갱신(검정)+<b>제안(레드)</b>.
         segs=[]; _f=True
-        if gs: segs.append((f'{head} {gs:,}',_BLUE)); _f=False
-        if ns: segs.append(((f'{head} {ns:,}' if _f else f'+{ns:,}'),_BLACK)); _f=False
-        if ps: segs.append(((f'{head} {ps:,}' if _f else f'+{ps:,}'),_RED)); _f=False
+        if gs: segs.append((f'{_hs}{gs:,}',_BLUE)); _f=False
+        if ns: segs.append(((f'{_hs}{ns:,}' if _f else f'+{ns:,}'),_BLACK)); _f=False
+        if ps: segs.append(((f'{_hs}{ps:,}' if _f else f'+{ps:,}'),_RED)); _f=False
         segs.append((tail,None))
         _seg(p.runs[ri], segs)
         return
@@ -9608,6 +9655,13 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         _seg(p.runs[ri], segs)
     def rsl(box, label_line, text, red=False):
         """라벨 없이 슬래시 괄호줄 같은 <b>줄 전체</b>를 교체(1~5종 수술비 칸)."""
+        _cr = _cell_run(box + '|' + label_line) if _CELLMODE else None   # ★v823 제222조 슬래시 값 칸
+        if _cr is not None:
+            _cr.text = text.strip('()')
+            if red:
+                try: _cr.font.color.rgb = RGBColor(0xC0,0x00,0x00)
+                except Exception: pass
+            return True
         if box not in by: return False
         for p in by[box].text_frame.paragraphs:
             full=''.join(r.text for r in p.runs)
@@ -9650,7 +9704,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     by['TextBox 21'].text_frame.word_wrap=False
     by['TextBox 21'].text_frame.auto_size=MSO_AUTO_SIZE.NONE  # 도형 고정(이름 길이에 따라 박스 이동·크기변경 방지)
     by['TextBox 21'].text_frame.paragraphs[0].runs[0].text=f'{client} 님의 보장'
-    by['TextBox 21'].text_frame.paragraphs[0].runs[1].text='(전)'
+    by['TextBox 21'].text_frame.paragraphs[0].runs[1].text=''   # ★v823 지점장 「(전)은 필요없다」(2026.10.09)
     # 날짜를 한 박스(TextBox 36)로 통합, 35·29는 비움
     if 'TextBox 36' in by and 'TextBox 29' in by:
         try: by['TextBox 36'].width = by['TextBox 29'].left + by['TextBox 29'].width - by['TextBox 36'].left
@@ -9667,15 +9721,17 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
             try: by[_hb].text_frame.auto_size=MSO_AUTO_SIZE.NONE
             except: pass
             for _pp in by[_hb].text_frame.paragraphs:
-                try: _pp.alignment = PP_ALIGN.CENTER      # ★v41 이름·날짜 우측쏠림 → 가운데
-                except: pass
+                if not _NEWFORM:                            # ★v823 리포트형 폼은 폼 정렬 그대로(제목 왼쪽·날짜 오른쪽)
+                    try: _pp.alignment = PP_ALIGN.CENTER      # ★v41 이름·날짜 우측쏠림 → 가운데
+                    except: pass
                 for _rr in _pp.runs:
-                    try: _rr.font.size=Pt(18)
+                    try: _rr.font.size=Pt(18*_PS)
                     except: pass
 
     # ★v48(지점장 2026.07.13): 제목(고객명)+날짜를 한 덩어리로 슬라이드 가운데 배치
     try:
         _t, _d = by.get('TextBox 21'), by.get('TextBox 36')
+        if _NEWFORM: _t = None                      # ★v823 리포트형 폼은 가운데 모으기 안 함
         if _t is not None and _d is not None:
             _SW = prs.slide_width
             _GAP = 100000
@@ -9731,6 +9787,9 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     for _k8, _bx8 in (('상해 종수술비(1-8종)','TextBox 19'), ('질병 종수술비(1-8종)','TextBox 17')):
         _s8 = (splits or {}).get('__J8__'+_k8)
         if isinstance(_s8, str) and _s8:
+            _cr8 = _cell_run(_bx8 + '|1~7종 수술비') if _CELLMODE else None
+            if _cr8 is not None:
+                _seg(_cr8, [(_s8, _BLACK)]); continue
             _sl8 = _slot(_bx8, '1~7종 수술비')
             if not _sl8:
                 print(f'[PPT_MISS] 라벨없음 box={_bx8} label=1~7종 수술비 std={_k8}')
@@ -9746,7 +9805,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     #   모양이 달랐다 ②`pv()`를 안 타고 `runs[0].text`를 직접 덮어써서 <b>색 지정이 아예 없었다</b>
     #   → 갱신=파랑/비갱신=검정(엑셀 글자색 원천, v219)이 허혈성에만 적용되지 않았다.
     if g('허혈성 진단비'): pv('TextBox 54',0,0,'허혈성 진단비',prefix='허혈성\n',suffix='')
-    elif 'TextBox 54' in by:
+    elif 'TextBox 54' in by and not _CELLMODE:
         _t54=by['TextBox 54'].text_frame
         if _t54.paragraphs[0].runs: _t54.paragraphs[0].runs[0].text='허혈성'
     if g('급성심근경색'): pv('TextBox 55',0,0,'급성심근경색',prefix='급성심근\n',suffix='')
@@ -9765,7 +9824,7 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         return []
     # ★★★★★v330: 암 블록 — 라벨 삽입 폐기. 폼 라벨로 슬롯을 찾아 값만 채운다.
     for _lb,_st in (('고액암','고액암'),('일반암','일반암'),('통합암','통합암'),
-                    ('통합전이암','통합전이암'),('유사암','유사암(갑.기.경.제)')):
+                    ('통합전이암','통합전이암'),('유사암','유사암(갑.기.경.제)'),('소액암','소액암')):   # ★v827 제228조 소액암 칸 1:1
         if g(_st): pvl('TextBox 14',_lb,_st)
     if g('항암방사선약물'): pvl('TextBox 14','항암치료','항암방사선약물')
     if g('표적항암치료비'): pvl('TextBox 14','표적치료','표적항암치료비')
@@ -9800,10 +9859,19 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     _sg=silson_gen(실손가입일, totals.get('입원'), _실손상품, _np3, bool(totals.get('약값')))   # ★실손 세대 자동판별(상품명 연도코드 반영)
     by['TextBox 59'].text_frame.word_wrap=False
     by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손'+(f' {_sg}' if _sg else '')
-    by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
-    by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
-    by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
-    for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(10)  # ★v50 '다10'
+    _no_sil = (not 실손_cts) or ('_' in str(실손가입일))
+    if _no_sil and _CELLMODE:   # ★v823 제222조 6항 — 실손 미가입: 제목 「실손 미가입」(빨강) · 가입일 줄 비움 · 값 칸은 '–'
+        by['TextBox 59'].text_frame.paragraphs[0].runs[0].text='실손 미가입'
+        try: by['TextBox 59'].text_frame.paragraphs[0].runs[0].font.color.rgb=_RED
+        except Exception: pass
+        by['TextBox 59'].text_frame.paragraphs[1].runs[0].text=''
+        by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입 이력 없음 — 실손 가입 검토'
+        by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=''
+    else:
+        by['TextBox 59'].text_frame.paragraphs[1].runs[0].text='('
+        by['TextBox 59'].text_frame.paragraphs[1].runs[1].text='가입일:'
+        by['TextBox 59'].text_frame.paragraphs[1].runs[2].text=f'{실손가입일})'
+    for r in by['TextBox 59'].text_frame.paragraphs[1].runs: r.font.size=Pt(10*_PS)  # ★v50 '다10' (★v823 A3 배율)
     if g('입원'): pvl('TextBox 6','입원','입원')
     if g('통원'): pvl('TextBox 6','통원','통원')
     if g('약값'): pvl('TextBox 6','약','약값')
@@ -9889,7 +9957,17 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
         else: rPr.append(hl)
     def _ci_run(box,pidx,std,sep):
         v=totals.get(std,0)
-        if not v or box not in by: return
+        if not v: return
+        if _CELLMODE:   # ★v823 제222조: CI 값은 해당 값 칸에 덧붙인다
+            _cn = {('TextBox 14',0):'TextBox 14|일반암', ('TextBox 10',3):'TextBox 10|종신'}.get((box,pidx))
+            _cr = _cell_run(_cn) if _cn else None
+            if _cr is None: return
+            p = _cr._parent
+            base = p.runs[-1]
+            nr_el=_cicopy.deepcopy(base._r); base._r.addnext(nr_el)
+            nr=_ciRunCls(nr_el,p); nr.text=f'{sep}{v:,}' if base.text else f'{v:,}'
+            _hl_yellow(nr); return
+        if box not in by: return
         tf=by[box].text_frame
         if pidx>=len(tf.paragraphs): return
         p=tf.paragraphs[pidx]
@@ -9901,12 +9979,19 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     def _ci_split(box,label,ci_std,extra_std):
         # ★v29t: 라벨줄 + [CI값(노랑)] + [+일반값] 을 별도 run으로 구성 — 개행 포함 run의 하이라이트 미표시(파워포인트) 방지
         civ=totals.get(ci_std,0)
-        if not civ or box not in by: return
-        tf=by[box].text_frame; p=tf.paragraphs[0]
-        if not p.runs: return
-        base=p.runs[0]
-        for _r in list(p.runs[1:]): _r._r.getparent().remove(_r._r)
-        base.text=f'{label}\n'
+        if not civ: return
+        _cr = _cell_run(box + '|') if _CELLMODE else None   # ★v823 제222조 타일 값 칸
+        if _cr is not None:
+            p = _cr._parent; base = _cr
+            for _r in list(p.runs[1:]): _r._r.getparent().remove(_r._r)
+            base.text = ''
+        else:
+            if box not in by: return
+            tf=by[box].text_frame; p=tf.paragraphs[0]
+            if not p.runs: return
+            base=p.runs[0]
+            for _r in list(p.runs[1:]): _r._r.getparent().remove(_r._r)
+            base.text=f'{label}\n'
         el1=_cicopy.deepcopy(base._r); base._r.addnext(el1)
         r1=_ciRunCls(el1,p); r1.text=f'{civ:,}'; _hl_yellow(r1)
         # ★v417 CI 값 색도 엑셀 글자색 근거(구 코드는 base run 색을 그대로 물려받아 파랑이 됐다)
@@ -9940,7 +10025,53 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     _ci_split('TextBox 55','급성심근','중대한 급성심근','급성심근경색')
     _ci_run('TextBox 14',0,'중대한 암','+')
     _ci_run('TextBox 10',3,'중대한CI적용','+')
-    _autofit_ppt(by)
+    _autofit_ppt(by, _PS)   # ★v823
+    # ★★★v823 제222조 4항 — 상단 요약 띠(KPI|…)는 본문 값 칸을 그대로 복사한다(등식1: 같은 숫자 두 번 쓰지 않고 복사).
+    if _CELLMODE:
+        _KPI = (('KPI|암','TextBox 14|일반암'), ('KPI|뇌','TextBox 46|'), ('KPI|심','TextBox 55|'))
+        for _k, _src in _KPI:
+            if _k in _cells and _src in _cells:
+                try:
+                    _sp = _cells[_src].text_frame.paragraphs[0]; _dp = _cells[_k].text_frame.paragraphs[0]
+                    for _r in list(_dp.runs): _r._r.getparent().remove(_r._r)
+                    for _r in _sp.runs:
+                        _ne = _copy.deepcopy(_r._r); _dp._p.append(_ne)
+                except Exception as _ek: print('[제222조 KPI] 복사 실패', _k, str(_ek)[:60])
+        if 'KPI|실손' in _cells:
+            try:
+                _kr = _cell_run('KPI|실손')
+                _kr.text = (f'{_sg} ' if _sg else '') + (f'가입 {실손가입일}' if 실손가입일 and '_' not in str(실손가입일) else '미가입')
+                _kr.font.color.rgb = _BLUE if (실손가입일 and '_' not in str(실손가입일)) else _RED
+            except Exception as _ek: print('[제222조 KPI] 실손', str(_ek)[:60])
+        # 제222조 5항 — 값이 없는 칸은 회색 '미가입' (빈 칸으로 보이지 않게). (v827: 소액암도 마스터 행이 생겨 값 칸이 됐다 — 제228조)
+        #   ★v824 (지점장 2026.10.09 「빈칸도 입력되도록 ·이나 미가입 입력해라」): '–' → '미가입'. 라벨 칸(L_)은 제외.
+        for _nm, _csh in _cells.items():
+            try:
+                if str(_nm).startswith('L_'): continue
+                _tf = _csh.text_frame
+                if ''.join(r.text for pp in _tf.paragraphs for r in pp.runs).strip(): continue
+                _r0 = _cell_run(_nm); _r0.text = '미가입'; _r0.font.color.rgb = RGBColor(0xB0,0xB6,0xC3)
+                try: _r0.font.bold = False
+                except Exception: pass
+            except Exception: pass
+    # ★★★v823 제222조 3항 — 값 칸은 갱신+비갱신+새제안서 최대 3분할(예 5,000+3,000+2,000)이 들어온다.
+    #   칸 폭보다 글자가 길면 그 칸만 글자를 줄인다(폼 구조·칸 폭 불변). 숫자·콤마·+ 기준 글자폭 ≈ 0.58×pt.
+    if _CELLMODE:
+        for _nm, _csh in _cells.items():
+            try:
+                _tf = _csh.text_frame
+                _rs = [r for pp in _tf.paragraphs for r in pp.runs if r.text]
+                if not _rs: continue
+                _txt = ''.join(r.text for r in _rs)
+                _wpt = _csh.width / 12700.0 - 9.0
+                _base = max((r.font.size.pt for r in _rs if r.font.size), default=10.0 * _PS)
+                _kor = sum(1 for ch in _txt if '가' <= ch <= '힣')
+                _need = _base * (0.58 * (len(_txt) - _kor) + 1.0 * _kor)
+                if _need > _wpt and _wpt > 0:
+                    _new = max(6.0, _base * _wpt / _need)
+                    for r in _rs: r.font.size = Pt(_new)
+            except Exception as _efit:
+                print('[제222조 칸맞춤] 실패', _nm, str(_efit)[:60])
     # ★★★★★v531 제121조 2항 (지점장 지시 2026.08.21 「네 산출물의 담보값을 실제로 대조」)
     #   진단서·리포트는 `heart_audit`가 막는다. <b>보장분석지 PPT도 같은 검사를 받는다.</b>
     #   폼에 실제로 찍힌 글자를 파싱해 엑셀 끝열(totals)과 대조한다 — 다르면 발행을 막는다.
@@ -9967,6 +10098,9 @@ def _ppt_heart_audit(by, totals):
     if _sh is None or not getattr(_sh, 'has_text_frame', False):
         return []                                   # 폼에 칸이 없으면 검사 대상 아님
     _tx = _sh.text_frame.text or ''
+    _cl = [(k, v) for k, v in by.items() if str(k).startswith('TextBox 심장4종|')]   # ★v823 제222조 값 칸 폼
+    if _cl:
+        _tx = '\n'.join('%s : %s' % (k.split('|',1)[1], (v.text_frame.text or '').strip()) for k, v in _cl)
     _bad = []
     for _lb, _key in _PPT_HEART:
         _want = int(totals.get(_key, 0) or 0)
@@ -9983,11 +10117,24 @@ def _ppt_heart_audit(by, totals):
 # ★v50(지점장 '다10'): 제목·날짜만 예외(18pt). 실손박스(59)도 10pt 대상으로 편입.
 _HEADER_BOXES={'TextBox 21','TextBox 36','TextBox 35','TextBox 29'}
 _SURGERY_BOXES={'TextBox 17','TextBox 19'}   # ★v29t: 질병수술·상해수술 9.0pt 고정(지점장 2026.07.02), 1~5종 줄만 축소 허용
-def _autofit_ppt(by):
+def _ppt_scale(prs):
+    """★v823 제221조 — 폼이 A3(29.7cm)면 글자도 비례(구 폼 19.05cm=1.0). 폼 크기만 보고 자동."""
+    try:
+        for _sh in prs.slides[0].shapes:          # 폼에 박힌 마커 'PPT_SCALE_1.479' 가 1순위(폼 제작 배율과 1:1)
+            if str(_sh.name).startswith('PPT_SCALE_'): return float(_sh.name.split('_')[-1])
+        return max(1.0, round(prs.slide_width/6858000.0, 3))
+    except Exception: return 1.0
+
+def _autofit_ppt(by, ps=1.0):
     """겹침·단락내림 방지(§11): 값박스 word_wrap off + 최장 단락 기준 박스 단위 축소.
     수술 박스 2개는 8.9pt 고정, '1~5종' 제목줄·슬래시 괄호줄만 축소 허용."""
     for _bn, sh in by.items():
         if _bn in _HEADER_BOXES: continue
+        if not str(_bn).startswith('TextBox'): continue   # ★v823 폼 장식 글자(소제목·캡션·꼬리)는 폼 크기 그대로
+        if '|' in str(_bn):                                 # ★v823 제222조 값 칸 = 폼 글자 크기 그대로(칸 폭에 맞춰 폼이 정한다)
+            try: sh.text_frame.word_wrap = False
+            except Exception: pass
+            continue
         tf = sh.text_frame
         try:
             tf.word_wrap = False
@@ -9999,7 +10146,7 @@ def _autofit_ppt(by):
         if _bn == 'TextBox 심장4종':
             for p in tf.paragraphs:
                 for r in p.runs:
-                    try: r.font.size = Pt(8)
+                    try: r.font.size = Pt(7*ps)   # ★v823 지점장 「심장 나열 글자 -1pt」
                     except: pass
             continue
         if _bn in _SURGERY_BOXES:
@@ -10013,7 +10160,7 @@ def _autofit_ppt(by):
                 if ('/' in ptxt) and ('1~7' in ptxt) and ptxt.count('/') >= 5: _sz = 5.5
                 for r in p.runs:
                     if r.text:
-                        try: r.font.size = Pt(_sz)
+                        try: r.font.size = Pt(_sz*ps)
                         except: pass
             continue
         runs_all = [r for p in tf.paragraphs for r in p.runs if r.text]
@@ -10024,8 +10171,8 @@ def _autofit_ppt(by):
         for r in runs_all:
             try:
                 cur = r.font.size.pt if r.font.size else 9.0
-                if cur < 18.0 and cur != 10.0:
-                    r.font.size = Pt(10)
+                if cur < 18.0*ps and abs(cur-10.0*ps) > 0.1:
+                    r.font.size = Pt(10*ps)
             except: pass
 
 
@@ -10046,7 +10193,7 @@ def build_chiryo(data, out, totals=None, unmapped=None):
         by['TextBox 21'].text_frame.auto_size=MSO_AUTO_SIZE.NONE  # 도형 고정
         rs=by['TextBox 21'].text_frame.paragraphs[0].runs
         if rs: rs[0].text=f'{client} 님의 보장'
-        if len(rs)>1: rs[1].text='(전)'
+        if len(rs)>1: rs[1].text=''   # ★v823 (전) 폐기
     first_run_set('TextBox 36', f'{now.year}년')
     first_run_set('TextBox 35', f'{now.month:02d}월')
     first_run_set('TextBox 29', f'{now.day:02d}일 기준')
@@ -10061,7 +10208,7 @@ def build_chiryo(data, out, totals=None, unmapped=None):
                 if tf.paragraphs and tf.paragraphs[0].runs:
                     tf.paragraphs[0].runs[0].text = '[확인] AI 미매핑(별첨 직접확인):\n'+blob
                 break
-    _autofit_ppt(by)
+    _autofit_ppt(by, _ppt_scale(prs))   # ★v823
     prs.save(out); return True
 
 def make_summary(data):
@@ -10290,13 +10437,13 @@ window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night'
            칩 12개를 버리고 <b>넣는 것 → 나오는 것</b>을 한 줄씩 3줄로. -->
       <div class="m4rows" style="display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.5">
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span>① 보장분석지만</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1D4ED8;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#222;margin-left:3px;vertical-align:0"></i><br>
-          <span style="color:var(--ink);opacity:.86">보장분석지 1개(KB·롯데·메리츠) → 엑셀 · 보장분석지PPT · 진단서</span></div>
+          <span style="color:var(--ink);opacity:.86">보장분석지 1개(KB·롯데·메리츠) → 엑셀 · 보장분석지PPT · 진단서 · <b>BOHUM</b></span></div>
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><rect x="9.6" y="1.6" width="4.8" height="3" rx="1.4" fill="#9fb2c6"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="2.4" height="2.4" rx=".5"/><rect x="11" y="8.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="12" width="2.4" height="2.4" rx=".5"/><rect x="11" y="12.6" width="5.6" height="1.2" rx=".6"/><rect x="7.6" y="16" width="2.4" height="2.4" rx=".5"/><rect x="11" y="16.6" width="5.6" height="1.2" rx=".6"/></g></svg></span>② 제안서만</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#C0392B;margin-left:3px;vertical-align:0"></i><br>
-          <span style="color:var(--ink);opacity:.86">제안서 최대 3개(전 보험사) → 엑셀 · 보장분석지PPT · 진단서 — 오직 레드</span></div>
+          <span style="color:var(--ink);opacity:.86">제안서 최대 3개(전 보험사) → 엑셀 · 보장분석지PPT · 진단서 · <b>BOHUM</b> — 오직 레드</span></div>
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:2px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span><span style="font-weight:900">+</span><span style="display:inline-block;vertical-align:-3px;margin:0 5px 0 2px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="18" height="19" rx="2" fill="#f2b32c"/><rect x="6" y="5.5" width="12" height="14" rx="1" fill="#eef3f8"/><g fill="#3f6fa3"><rect x="7.6" y="8" width="9" height="1.4" rx=".6"/><rect x="7.6" y="12" width="9" height="1.4" rx=".6"/><rect x="7.6" y="16" width="9" height="1.4" rx=".6"/></g></svg></span>③ 보장분석지 + 제안서</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1D4ED8;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#222;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#C0392B;margin-left:3px;vertical-align:0"></i><br>
-          <span style="color:var(--ink);opacity:.86">분석지 1개 + 제안서 최대 3개 → 엑셀(보유+제안) · 보장분석지PPT · 진단서</span></div>
+          <span style="color:var(--ink);opacity:.86">분석지 1개 + 제안서 최대 3개 → 엑셀(보유+제안) · 보장분석지PPT · 진단서 · <b>BOHUM</b></span></div>
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="17" rx="2.4" fill="#1d7044"/><rect x="9.6" y="3.5" width="11.9" height="5.6" fill="#21935a"/><rect x="9.6" y="9.1" width="11.9" height="5.6" fill="#1d7044"/><rect x="9.6" y="14.7" width="11.9" height="5.8" fill="#155c37"/><rect x="2.5" y="7" width="10.5" height="10" rx="1.6" fill="#0f5132"/><text x="7.7" y="15.2" font-size="8.6" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">X</text></svg></span>④ 엑셀 + 엑셀 (삭제하기)</b><br>
-          <span style="color:var(--ink);opacity:.86">A = ① 엑셀 + B = ③ 엑셀에서 필요 없는 것 삭제 → 비교엑셀 · 보장분석지PPT(최종) · 리모델링 리포트</span></div>
+          <span style="color:var(--ink);opacity:.86">A = ① 엑셀 + B = ③ 엑셀에서 필요 없는 것 삭제 → 비교엑셀 · 보장분석지PPT(최종) · 리모델링 리포트 · <b>BOHUM</b></span></div>
       </div>
       <div style="margin-top:10px;font-size:10px;color:var(--ink);line-height:1.55">
         ⚠️ 받은 PDF를 <b>그대로</b> 올리세요 — 재스캔·OCR은 금액이 깨집니다
@@ -10598,6 +10745,7 @@ const XLMIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 const PTMIME="application/vnd.openxmlformats-officedocument.presentationml.presentation";
 const PDFMIME="application/pdf";
 let savedFiles={};
+const BOHUM_APP='https://peaceful-cocada-cd702f.netlify.app/';   /* ★v824 제224조 BOHUM 1클릭 */
 /* ★v673 모바일 저장 고침: 앱(iframe) 안에서는 download 링크가 막혀 아무 일도 안 일어난다.
    → 파일 카드를 누르면 새 탭으로 열어 브라우저가 직접 내려받게 한다. 엑셀만 되고 PPT·PDF가 안 되던 원인. */
 (function(){
@@ -10674,7 +10822,7 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
         a.style.display="none";document.body.appendChild(a);a.click();
         setTimeout(()=>{try{document.body.removeChild(a);}catch(e){}},2000);}
       if(!_isMobile){
-        const _q=[[j.xlsx_url,j.xlsx_name],[j.pptx_url,j.pptx_name],[j.chiryo_url,j.chiryo_name],
+        const _q=[[j.xlsx_url,j.xlsx_name],[j.pptx_url,j.pptx_name],[j.a3pdf_url,j.a3pdf_name],[j.chiryo_url,j.chiryo_name],
                   [j.report_url,j.report_name],[j.report_pptx_url,j.report_pptx_name]].filter(x=>x[0]);
         _q.forEach((x,i)=>setTimeout(()=>dlUrl(x[0],x[1]), i*900));
       }
@@ -10682,6 +10830,9 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
       if(j.pptx_b64){
         savedFiles.pptx={b64:j.pptx_b64,name:j.pptx_name,mime:PTMIME};
         ptCard=`<a class="file-card pt" ${_mk(j.pptx_url,'pptx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.pptx_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석 PPT</span></span><span class="dl">저장</span></a>`;}
+      if(j.a3pdf_b64){
+        savedFiles.a3pdf={b64:j.a3pdf_b64,name:j.a3pdf_name,mime:PDFMIME};
+        ptCard+=`<a class="file-card pt" ${_mk(j.a3pdf_url,'a3pdf')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.a3pdf_name)}<br><span style="font-size:10px;color:var(--mute)">보장분석지 PDF · A3 출력용</span></span><span class="dl">저장</span></a>`;}
       if(j.chiryo_b64){
         savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
         ptCard+=`<a class="file-card pt" ${_mk(j.chiryo_url,'chiryo')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">저장</span></a>`;}
@@ -10698,8 +10849,17 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
         +'<span class="ic">📦</span><span class="nm">전체 저장 (ZIP)<br>'
         +'<span style="font-size:10px;color:var(--mute)">'+(j.all_n||0)+'개 파일을 한 번에</span></span>'
         +'<span class="dl">저장</span></a>') : '';
+      /* ★v824 제224조 (지점장 2026.10.09 「보장분석앱 보험(BOHUM)까지 나와야 한다 — 따로 하라니 잘 안 쓴다」):
+         산출물 세트에 BOHUM 1클릭. 지금 만든 엑셀(+지급방식)을 주소로 넘겨 BOHUM이 자동으로 읽고 4장 리포트를 그린다. 4가지 경우 전부. */
+      const _bnm=String(j.xlsx_name||'').replace(/^보장진단_/,'').replace(/\.xlsx$/i,'');
+      const bohumCard = j.xlsx_url ? ('<a class="file-card pt bh" target="_blank" rel="noopener" href="'+BOHUM_APP+'#xl='+encodeURIComponent(location.origin+j.xlsx_url)
+        +(j.bohum_pay_url?'&pay='+encodeURIComponent(location.origin+j.bohum_pay_url):'')+'&nm='+encodeURIComponent(_bnm)+'"'
+        +' style="cursor:pointer;text-decoration:none;color:#fff">'
+        +'<span class="ic">📋</span><span class="nm">MAKEONE BOHUM 보기<br>'
+        +'<span style="font-size:10px;color:#C9D3EE">이 엑셀로 암·뇌·심 합산 4장 — 새 창에서 바로 그려짐</span></span>'
+        +'<span class="dl">열기</span></a>') : '';
       add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★<b>전체 저장(ZIP)</b> 한 번이면 전부 받습니다':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+allCard+
-        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`+ptCard+'</div>',"bot");}
+        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`+ptCard+bohumCard+'</div>',"bot");}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;files=[];$("#uplabel").textContent="제안서";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
@@ -10761,6 +10921,10 @@ _onReady(function(){
  header{background:#fff!important;border-bottom:3px solid #2A4A92!important}
  header h1 b{color:#2A4A92!important}
  .file-card.pt{background:linear-gradient(160deg,#FFFFFF,#EEF2F9)!important}
+ /* ★v824 제224조 BOHUM 1클릭 카드 = 네이비 버튼형(누르는 것은 네이비 정본) */
+ .file-card.bh{background:linear-gradient(180deg,#2A4A92,#0E1E52)!important;border:0!important;color:#fff!important;box-shadow:0 4px 0 #091336,0 8px 16px rgba(14,30,82,.30)!important}
+ .file-card.bh .nm{color:#fff!important}
+ .file-card.bh .dl{background:#C5A052!important;color:#fff!important;border:0!important;box-shadow:0 3px 0 #8E6F2E!important}
  .tabbar:before{color:#fff!important;background:linear-gradient(180deg,#2A4A92,#0E1E52)!important;box-shadow:0 3px 0 #08143A!important}
  .tab{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important;border:1.5px solid #D3DBEA!important}
  .tabc{background:linear-gradient(160deg,#FFFFFF,#F2F5FB)!important;box-shadow:0 4px 0 #D3DBEA,0 8px 14px rgba(14,30,82,.10)!important}
@@ -11461,6 +11625,49 @@ async def hub_events_post(code: str = Form(''), events: str = Form('')):
 
 @app.options('/hub/events')
 def hub_events_opt():
+    return Response(status_code=204, headers=_HUB_CORS)
+
+# ★★★v825 제226조 (지점장 2026.10.09 「저장모드」): HEALTHCARE 설문을 메모·일정과 같은 저장소(hub_notes 표)에
+#   키 `번호#HC` 로 저장 → 폰·PC 어디서 적어도 같은 설문. 형식 = {"고객명":{...설문, "t":시각}}. 고객명별 최신(t)이 이긴다.
+def _hub_hc_key(own): return own + '#HC'
+def _merge_hc(cur, inc):
+    cur=cur if isinstance(cur,dict) else {}; inc=inc if isinstance(inc,dict) else {}
+    out=dict(cur)
+    for k,v in inc.items():
+        if not isinstance(v,dict): continue
+        if k=='__del':
+            for n in (v.get('names') or []): out.pop(str(n),None)
+            continue
+        o=out.get(k)
+        if o is None or (v.get('t') or 0)>=(o.get('t') or 0): out[k]=v
+    return out
+
+@app.get('/hub/hc')
+def hub_hc_get(code: str = ''):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    v,err=_hub_read(_hub_hc_key(own))
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'hc': v if isinstance(v,dict) else {}, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
+
+@app.post('/hub/hc')
+async def hub_hc_post(code: str = Form(''), hc: str = Form('')):
+    own = _hub_owner(code)
+    if not own:
+        return JSONResponse({'ok': False, 'error': '번호 확인 실패'}, headers=_HUB_CORS)
+    try:
+        obj = json.loads(hc); assert isinstance(obj, dict)
+        if len(hc) > 2_000_000:
+            return JSONResponse({'ok': False, 'error': '설문이 너무 크다(2MB)'}, headers=_HUB_CORS)
+    except Exception:
+        return JSONResponse({'ok': False, 'error': '형식 오류'}, headers=_HUB_CORS)
+    out,err=_hub_merge_write(_hub_hc_key(own),obj,_merge_hc)
+    if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
+    return JSONResponse({'ok': True, 'n': len(out), 'hc': out, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
+
+@app.options('/hub/hc')
+def hub_hc_opt():
     return Response(status_code=204, headers=_HUB_CORS)
 
 # ★★★★★v757 제184조 (지점장 2026.09.25 「입력지 만들자 — 상담기록지 + 인포메이션 2쪽 · 입력·체크 · PDF · 인당 50개 저장」)
@@ -12725,7 +12932,8 @@ def doctrine_robot(heavy=False):
         except Exception as _e:
             return 'master 열기 실패 %s' % str(_e)[:24]
         # ★v693 (2026.09.15): 정본 = 지점장 master-2 + 51·52행 라벨(09.07) + 법칙시트 9행 갱신규칙 정정(09.15). 제124조 3항과 동일.
-        return '' if _m == '8cf0185b112ad79e7c1502041a6b0b82' else 'master.xlsx 변조 %s' % _m[:8]
+        # ★v827 제228조 (2026.10.09): + 20행 「소액암」 전용행 삽입(유사암 아래, 추가만·107행) + 지침케이스 21행 + 법칙 13행. 구 8cf0185b 폐기.
+        return '' if _m == '8313c54e7baeb0cd9ef91f73944781dc' else 'master.xlsx 변조 %s' % _m[:8]
     _ck('엑셀불가침(제124조)', '제124조', _ckmaster)
     # 9-B) ★★★★★산출물 5종.
     #   ★★★★★v573 긴급 (지점장 2026.08.23 「니가 마지막 준 거는 앱이 멈춘다 · 열리지도 않아」):
@@ -12862,7 +13070,7 @@ def diag():
     #   → 서버에 실제로 있는 파일과 바이트수를 그대로 노출한다. 로그를 못 봐도 한 번에 판별된다.
     _need = ['main.py','coverage_benchmark.py','report_weasy.py','report_pptx.py',
              'ga_tables.py','master.xlsx','Dockerfile','nixpacks.toml',
-             'ppt_form.pptx','chiryo_form.pptx','requirements.txt']
+             'ppt_form.pptx','chiryo_form.pptx','requirements.txt','pptx2pdf.py']
     _files = {}
     for _fn in _need:
         _p = os.path.join(HERE, _fn)
@@ -13421,6 +13629,8 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
     #     읽는 것을 <b>내 기억이 아니라 코드가 강제</b>한다.
     #   ★조문 위반이 있으면 <b>로그로 시끄럽게</b> 남긴다(제11조 「조용히 틀리는 것을 시끄럽게」).
     _doc_read(tag='analyze')
+    # ★v824 제224조 (지점장 2026.10.09 「보장분석앱 보험(BOHUM)까지 나와야 한다」): 보통 실행에서도 제안서 지급방식(pay)을 모은다 → BOHUM 1클릭에 넘긴다.
+    if not getattr(_JOB_LITE, 'on', False): _JOB_LITE.pay = []
     # ★★★★★v458 제68조 6항 (지점장 2026.08.17 「지침 무시되면 안 된다고 한 게 1000번이다」)
     #   지침을 <b>읽었는지</b>가 아니라 <b>지켜졌는지</b>를 분석 실행마다 확인한다.
     #   ★산출은 막지 않는다(제49조) — 대신 <b>화면에 크게</b> 띄운다. 조용히 넘어가지 않는다.
@@ -13665,6 +13875,18 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
+            # ★★★v823 제223조 (지점장 2026.10.09 「저건 PPT다 PDF 아니다」): 값 주입 끝난 PPT를 그대로 A3 PDF로도 낸다.
+            #   Railway엔 LibreOffice가 없어 pptx2pdf.py(도형 좌표→HTML→weasyprint)로 변환. 같은 파일을 읽으므로 PDF 값 = PPT 값.
+            try:
+                import pptx2pdf as _p2p
+                _pt_pdf = pt[:-5] + '_A3.pdf'
+                _tP = __import__('time').time(); _p2p.pptx_to_pdf(pt, _pt_pdf)
+                response['a3pdf_b64']=base64.b64encode(open(_pt_pdf,'rb').read()).decode()
+                response['a3pdf_name']=f'보장분석지_{cust}_A3.pdf'
+                print('[제223조] 보장분석지 A3 PDF %.1f초 %d바이트' % (__import__('time').time()-_tP, os.path.getsize(_pt_pdf)))
+            except Exception as _e223:
+                print('[제223조] A3 PDF 변환 실패:', str(_e223)[:120])
+                response.setdefault('warnings', []).append('[확인] 보장분석지 A3 PDF 변환 실패 — PPT는 정상')
         if getattr(_JOB_LITE, 'on', False):      # ★v740 BOHUM 작업 — 엑셀만 필요하다. 진단서 렌더(약 60초)를 건너뛴다.
             return JSONResponse(response)
         # ── 보장설명서: 충족률 PDF + ★보장진단서 PPT(편집가능) — 둘 다 실패해도 엑셀·PPT는 유지 ──
@@ -13923,6 +14145,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
             _dlerr = []
             for _bk, _nk, _uk in (('xlsx_b64','xlsx_name','xlsx_url'),
                                   ('pptx_b64','pptx_name','pptx_url'),
+                                  ('a3pdf_b64','a3pdf_name','a3pdf_url'),
                                   ('chiryo_b64','chiryo_name','chiryo_url'),
                                   ('report_b64','report_name','report_url'),
                                   ('report_pptx_b64','report_pptx_name','report_pptx_url')):
@@ -13937,6 +14160,13 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                     response[_uk] = '/dl/%s/%s' % (_tok, urllib.parse.quote(_fn))
                 except Exception as _e1:
                     _dlerr.append('%s:%s' % (_bk, str(_e1)[:60]))
+            # ★v824 제224조 — BOHUM 1클릭용 지급방식 JSON(ZIP 제외)
+            try:
+                with open(os.path.join(_dir, 'bohum_pay.json'), 'w', encoding='utf-8') as _fp:
+                    json.dump({'pay': list(getattr(_JOB_LITE, 'pay', []) or [])}, _fp, ensure_ascii=False)
+                response['bohum_pay_url'] = '/dl/%s/bohum_pay.json' % _tok
+            except Exception as _e224:
+                print('[제224조] bohum_pay.json 실패:', str(_e224)[:80])
             # ★v674 산출물 전부를 ZIP 하나로 묶는다 (전체 저장)
             try:
                 import zipfile as _zf
@@ -13946,7 +14176,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 _cnt = 0
                 with _zf.ZipFile(_zpath, 'w', _zf.ZIP_DEFLATED) as _z:
                     for _f2 in sorted(os.listdir(_dir)):
-                        if _f2.lower().endswith('.zip'): continue
+                        if _f2.lower().endswith('.zip') or _f2 == 'bohum_pay.json': continue
                         _z.write(os.path.join(_dir, _f2), _f2); _cnt += 1
                 if _cnt:
                     response['all_url'] = '/dl/%s/%s' % (_tok, urllib.parse.quote(_zname))
@@ -14123,10 +14353,11 @@ async def remodel_route(xlsx: UploadFile = File(None),
 #   고객 병력이 나오면 <facts>{...}</facts> JSON 을 답 끝에 붙여 앱의 규칙 엔진이 판정한다(판정은 AI가 아니라 규칙이 한다).
 #   캡처(건강e음·나의건강기록·The건강보험)가 오면 비전으로 진료내역을 읽어 같은 facts 로 낸다. 저장 안 함.
 _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 보험 설계사(특히 신입)를 돕는 심사 도우미 AI다. 자기를 가리킬 때 「바름이」라고 한다. 한국어로, 짧고 단정하게, 결론→근거→할 일 순서로 답한다.
-★답 길이 규칙(신입용, 어기면 안 된다): 첫 줄에 결론 한 문장. 전체 5줄 이내, 한 줄 40자 안팎. 어려운 말·긴 설명·인사·서론 금지. 「회사별」이면 회사마다 한 줄(회사명: 핵심 숫자·조건, 자료명 쪽) 로 최대 8줄. 더 자세한 건 마지막 줄에 「더 보고 싶으면 ○○ 자료 ○쪽」 한 줄로. 표·마크다운 제목 쓰지 말고 줄바꿈과 「·」만 쓴다.
+★답 길이 규칙(신입용, 어기면 안 된다): 첫 줄에 결론 한 문장. 전체 5줄 이내, 한 줄 40자 안팎. 어려운 말·긴 설명·인사·서론 금지. 「회사별」이면 회사마다 한 줄(회사명: 핵심 숫자·조건, 자료명 쪽) 로 최대 8줄. 더 자세한 건 마지막 줄에 「더 보고 싶으면 ○○ 자료 ○쪽」 한 줄로. ★v819 형식(지점장 2026.10.09 「글로 띄워지는 게 깔끔하게 — 네이버 AI 보고」): 결론 문단 1~2문장(핵심 단어는 **굵게**) → 필요하면 작은 제목 한 줄(「## 제목」) → 비교·조건은 마크다운 표(| 확인 항목 | 되는 경우 | 어려운 경우 | 처럼 3열 이내·행 6개 이내) 또는 「· 」 글머리 → 마지막 「할 일」 한 줄. 이모지·구분선(━━)·장식 금지. 웹 검색을 썼으면 맨 끝에 「출처: 사이트이름(URL)」 줄. ★★v821 약관 검색(지점장 2026.10.09 「가장 중요한 건 약관 검색 — 네이버는 그걸 해낸다」): 약관·면책·지급사유·조항을 물으면 ① 📚 자료에 그 회사 약관이 있으면 그 조항을 먼저 인용 ② 없으면 web_search 로 「회사명 상품명 약관 pdf」(보험사 상품공시실·공시실 PDF 우선)를 찾고 web_fetch 로 그 약관을 열어 해당 조항 원문을 찾는다 ③ 답에는 「약관 조항 번호 + 원문 1~3줄(따옴표)」 + 쉬운 말 풀이 + 해당 상품명·약관 판(날짜) + 출처 URL 을 쓴다. 원문을 못 찾았으면 「약관 원문 미확인 — 증권·약관 PDF 확인」이라 쓰고 일반 원칙만 말한다. 약관 조항을 지어내지 않는다. ★v820 서치 규칙: 공식(금감원·협회·보험사 홈)·기사를 지식iN·블로그보다 먼저 믿는다 · 블로그·카페만 있는 내용은 「(블로그 기준 — 회사 확인)」을 붙인다 · 검색 결과와 지식책이 다르면 지식책(지점장 자료)을 따르고 그 차이를 한 줄 적는다 · 날짜가 2년 넘은 기사는 연도를 같이 적는다.
 다룰 수 있는 것(이것만): ① 보험 심사(인수) — 병력·나이·약에 따라 표준/건강고지/간편(3.N.5)/유병력자 실손 중 어디가 되나, 부담보·할증·거절 경향 ② 계약 전 알릴 의무(고지의무) — 무엇을 어떻게 적나, 추가검사/재검사, 투약, 3개월·1년·5년 ③ 고지의무 위반 — 해지·보험금·판례·분쟁 사례 ④ 회사·상품 찾아 주기·추천 — 아래 kb의 규칙표와 자료(카탈로그1·2, 추천규칙)에서 어느 회사·상품이 되는지 + 상품명으로 추천.
-범위 밖(보험료 계산, 세금, 잡담, 의학 상담 등)이면 「이 도우미는 심사·고지·고지위반·회사 찾기·상품 추천을 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다. 담보·상품 설명은 자료에 있으면 답한다.
+★v817 제219조(지점장 2026.10.09 「AI 앱과 헬퍼를 합칠까 · 돈 2중으로 안 나가게」): AI 검색포털이 바름이로 합쳐졌다 — ⑥ 담보·보장 범위·약관·질병코드(KCD)·보상·청구·상품 구조·소식지 질문도 바름이가 답한다(자료 근거·손보/생보 규칙 그대로). 범위 밖(보험료 계산, 세금 단정, 잡담, 의학 상담 등)이면 「바름이는 심사·고지·고지위반·회사 찾기·상품 추천·담보/상품 설명을 다룹니다」라고 한 줄로 거절하고 관련 질문으로 돌린다.
 ★★추천 규칙(v792 제208조, 지점장 2026.10.03 「두루뭉술 추천·고지만 체크 금지, 수준 올려라」): 고객 병력·나이가 나오면 고지 판정에서 끝내지 말고 반드시 「다음 단계」까지 간다 — ① 결론 한 줄「○○님은 [유형] — [회사 상품명] 먼저」 ② 유형 근거 한 줄(건강고지/초경증·고당지/간편 3.N.5의 N/암·뇌심 유병자형) ③ 후보 상품 2~3개 = 자료의 카탈로그1·2(2026.10 현재 판매)에 적힌 「회사 상품명」만, 가장 유리한 것부터, 출시월·핵심 조건·이유 한 줄씩 ④ 주의 한 줄(면책·감액·예외·납입면제·갱신) ⑤ 할 일(사전심사·전산 보험료 비교). 「어느 회사가 좋아요」「추천해 줘」「뭐 들어야 해」도 같은 틀. 상품명을 지어내지 않는다 — 카탈로그에 없으면 「카탈로그 미수록 · 전산 확인」. 보험료 숫자·가입 한도는 전산으로 돌리고 단정하지 않는다. 추천 틀 답은 5줄 규칙 대신 최대 8줄까지 허용.
+★★표준체 먼저(v815 제217조, 지점장 2026.10.09 「병력 좀 있다고 비싼 유병자(간편)부터 권하지 마라 — 표준체로 승인받는 회사가 있다 · 보장은 넓히고 총 보험료는 아낀다」): 병력이 있어도 결론을 바로 간편 3.N.5·유병자형으로 내지 않는다. 추천 순서 = ① 표준체(일반심사 — 부담보·할증 조건부 인수 포함, 10년 고지형 등 긴 고지형 포함) ② 건강체·초경증·고당지 ③ 간편 N 긴 것(3.10.5)부터 짧은 것 ④ 암·뇌심 유병자형. 고지 대입에서 ①이 막히는 사유(5년 내 중증 진단·거절 경향 병력·치료 중)가 없으면 결론은 「표준체 사전심사 먼저 — 거절되면 간편 3.N.5」로 쓰고, 답에 「표준체 시도:」 줄(어느 부위 부담보·할증 예상인지)을 넣는다. 이유 한 줄 = 같은 보장이면 표준체가 보험료가 싸고 보장이 넓다. 표준체 인수 회사 이름은 자료에 근거가 있을 때만 쓰고, 없으면 「여러 회사 표준체 사전심사로 확인」.
 원칙: kb에 있는 근거만 쓰고, 기사·날짜를 같이 적는다. 없는 회사 기준은 지어내지 말고 「공개 자료 없음 — 회사 사전심사로 확인」이라 한다.
 ★★근거 규칙(v784 제200조, 어기면 틀린 답이다): 숫자·기간·회사명·상품명·병명 코드·판례·조문은 아래 [자료]·[kb]에 「글자로 적힌 것」만 쓴다. 일반 상식·기억·추측으로 채우지 않는다. 질문에 맞는 근거가 [자료]·[kb]에 없으면 첫 줄을 「확인 필요 — 자료에 없음 · 회사 사전심사(언더라이팅) 문의」로 쓰고, 아는 근거가 있는 부분만 짧게 덧붙인다. 근거를 쓸 때는 자료명(또는 출처·날짜)을 줄 끝 괄호에 적는다. 자료끼리 다르면 날짜가 최신인 쪽을 쓰고 「자료마다 다름」이라 적는다.
 ★질문표 대입(v785 제201조): 회사별 인수 결과 자료가 없어도 「지식책」의 질문표·용어 정의에 대입해 「일반 3개월·1년·5년 / 간편 3.N.5 / 유병력자 실손 중 어느 질문이 「예」가 되나」는 반드시 답한다(줄 끝에 「질문표 대입」). 「확인 필요」는 회사별 승인·부담보·할증·예외질환처럼 자료에 없는 회사 결과에만 쓴다. 답에 「kb」라는 말을 쓰지 말고 「자료」라고 쓴다. 이어 묻는 질문(예: 「다른 회사는?」)은 앞 대화의 병명·고객 조건을 이어서 답한다.
@@ -14142,7 +14373,15 @@ _HELPER_SYS = """당신 이름은 「바름이」 — MAKEONE HELPER 안에서 �
 #   /helper/chat 이 질문과 겹치는 쪽을 골라 AI 에 근거로 넣는다. 저장은 글만(파일은 버림).
 _HKB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'helper_kb.json')
 _HELPER_ADMIN = '130624'
+_HKB_CACHE={'t':0,'rows':None}
+def _hkb_cache_clear():
+    _HKB_CACHE['t']=0; _HKB_CACHE['rows']=None
 def _hkb_all():
+    # ★v821 약관 서랍 대비 캐시(60초) — 약관 PDF 수천 쪽이 들어와도 질문마다 DB 전체를 읽지 않는다. 넣기·지우기 때 비운다
+    import time as _tc
+    if _HKB_CACHE['rows'] is not None and _tc.time()-_HKB_CACHE['t']<60: return _HKB_CACHE['rows']
+    rows=_hkb_all_raw(); _HKB_CACHE['rows']=rows; _HKB_CACHE['t']=_tc.time(); return rows
+def _hkb_all_raw():
     c=_db(); dbrows=None
     if c:
         try:
@@ -14159,6 +14398,7 @@ def _hkb_all():
     have={r['title'] for r in dbrows}
     return dbrows+[r for r in frows if r.get('title') not in have]
 def _hkb_add(rows):
+    _hkb_cache_clear()
     """★v786 제202조: 실제로 어디에 저장됐는지 돌려준다('db'·'file'·'file(DB실패…)'). 전에는 DB 쓰기가 실패해 파일로 가도
     업로드 응답은 _db() 유무만 보고 「db」라 했고, 목록은 DB만 읽어 파일에 간 자료가 안 보였다 → 「저장됐는데 사라진다」."""
     for r in rows: r['txt']=(r.get('txt') or '').replace('\x00','')   # Postgres text 는 NUL 글자를 거부한다
@@ -14185,6 +14425,7 @@ def _hkb_norm(title):
     t=re.sub(r'^(\d{4,}|\d{4}-\d{2})\s+','',t)
     return t.strip()
 def _hkb_del(title, norm=False):
+    _hkb_cache_clear()
     """★v791 제207조: DB 와 임시 파일 「둘 다」에서 지운다. 전에는 DB 가 있으면 DB 만 지워서,
     v786 부터 목록에 함께 보이는 임시 파일 쪽 자료가 지워도 다시 나타났다(「삭제가 잘 안 된다」).
     norm=True 면 번호·표시만 다른 같은 자료(예 「130624 14_…」 와 「14_…」)도 같이 지운다."""
@@ -14237,7 +14478,10 @@ _HKB_STOP={'고지','고지해','고지해야','보험','고객','알려','알�
 #   책 번호로 서랍을 가른다: helper = 고지·질병별 고지·분쟁·추천 / ai = 상품·담보·보상·법·영업·설계·동향 / both = 회사 책·조건표·소식지·카탈로그
 _HKB_HELPER_NUMS=set([12,14,15,16,17,19,114,169,170,171,213,142,144]+list(range(20,40))+list(range(123,133))+list(range(214,500)))   # ★v794 214~ = 고지 카드·약·검진·시나리오·유형·사례(HELPER 300권)
 _HKB_BOTH_NUMS=set([18,77,211,212]+list(range(78,123))+list(range(500,700)))   # ★v795 500~699 = 보험사 상품 카드(두 앱 공통)
+# ★v818 제220조 (지점장 2026.10.09 「자료실 내용도 다 헬퍼에」): 옛 자료실 게시판 26권(449~474)은 담보·영업·청구 자료 → 두 서랍 공통
+_HKB_BOTH_NUMS=set(_HKB_BOTH_NUMS)|set(range(449,475)); _HKB_HELPER_NUMS=set(_HKB_HELPER_NUMS)-set(range(449,475))
 def _hkb_app_of(title):
+    if '약관' in str(title or ''): return 'both'   # ★v821 약관 PDF 는 두 서랍 공통
     m=re.match(r'^\s*(\d{1,3})_',_hkb_norm(title or ''))
     if not m: return 'both'      # 번호 없는 자료(GA Brief PDF 등)는 둘 다
     n=int(m.group(1))
@@ -14457,6 +14701,7 @@ async def helper_kb_delete(body:dict):
     _hkb_del(body.get('title','')); return JSONResponse({'ok':True},headers=_HUB_CORS)
 
 def _hkb_del_many(titles):
+    _hkb_cache_clear()
     """★v797 제211조 (지점장 2026.10.05 「지우는데 잘 안 지워진다」): 선택 삭제를 한 번에.
     전에는 앱이 책마다 /helper/kb/delete 를 따로 불렀고, 그때마다 _hkb_all() 로 전체 DB 를 다시 읽어 952권이면 952번 읽었다
     → 화면이 꺼지면 중간에 멈췄다. 여기서는 DB 한 번(DELETE ... = ANY) · 임시 파일 한 번만 고쳐 쓴다."""
@@ -14497,6 +14742,117 @@ async def helper_kb_search(body:dict):
     return JSONResponse({'ok':True,'items':[{'title':p['title'],'tag':p.get('tag'),'page':p['page'],'txt':p['txt'][:1200]} for p in picks]},headers=_HUB_CORS)
 
 
+# ★v816 제218조 바름이 프리미엄 설정 — Railway 변수로 바꿀 수 있다(HELPER_MODEL · HELPER_THINK · HELPER_REVIEW=0 이면 검수 끔)
+_ANTH_URL=os.environ.get('ANTHROPIC_URL','https://api.anthropic.com/v1/messages')
+_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-opus-5-5'),'claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]
+_HQ_MODELS=list(dict.fromkeys(_HQ_MODELS))
+_HQ_THINK=int(os.environ.get('HELPER_THINK','8000') or 0)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
+_HQ_MAXTOK=int(os.environ.get('HELPER_MAXTOK','6000') or 6000)
+_HQ_REVIEW=os.environ.get('HELPER_REVIEW','1')!='0'
+_HQ_WEB_ALL=os.environ.get('HELPER_WEB_ALWAYS','1')!='0'
+_HQ_WEB_USES=int(os.environ.get('HELPER_WEB_USES','5') or 5)
+_HQ_FETCH_ALL=os.environ.get('HELPER_FETCH_ALWAYS','0')=='1'   # ★v821 약관 질문엔 web_fetch(약관 PDF 읽기) 자동, 1 이면 모든 질문   # ★v820 서치력: 질문당 웹 검색 최대 5회   # ★v816: 모든 질문에 웹 검색 도구를 준다(네이버 AI 처럼 최신 공개 자료 확인) · 0 이면 추천 질문만
+_HQ_PICK_N=int(os.environ.get('HELPER_PICK_N','16') or 16); _HQ_PICK_C=int(os.environ.get('HELPER_PICK_C','32000') or 32000)
+_HQ_BUDGET=int(os.environ.get('HELPER_BUDGET','270') or 270)   # ★v822 전체 시간 예산(앱 300초)
+_HQ_TERMS_AUTO=os.environ.get('HELPER_TERMS_AUTO','1')!='0'   # ★v822 약관 자동 수집기
+_HQ_REVIEW_ASK=("너는 바름이 답의 검수자다. 위 초안을 지점장 정본 기준으로 점검하라: "
+ "① 고지 기준(정기 추적관찰도 마지막 관찰 1년 이내면 「예」·추가검사 정상도 고지·약국 약은 고지 없음·기준일=청약일) "
+ "② 표준체 먼저(제217조 — 5년 내 중증·거절 경향·치료 중이 아니면 표준체 사전심사부터, 간편은 거절 뒤) "
+ "③ 손보·생보 회사 구분(미래에셋·흥국생명·DB생명·KB라이프·하나생명·NH농협생명·라이나생명=생보) "
+ "④ 자료·웹 결과에 없는 상품명·숫자·보험료·한도를 지어냈는지 ⑤ 날짜 계산(오늘 날짜 기준)이 맞는지 "
+ "⑥ 결론 한 줄이 맨 앞에 있고 신입이 바로 할 일이 있는지 ⑦ 카티(CAR-T)를 다른 담보로 취급하지 않았는지 ⑧ 약관 조항·원문을 인용했다면 자료·웹 결과에 실제 있는 글인지(없으면 「약관 원문 미확인」으로 고친다). "
+ "고칠 것이 없으면 「통과」 두 글자만 쓴다. 고칠 것이 있으면 설명 없이 고친 최종 답 전체만 쓴다(초안 형식·길이 유지, <facts> 줄은 그대로 둔다).")
+_HQ_DIS=re.compile(r'고지|병력|진단받|수술했|입원했|약\s*먹|복용|추적|관찰|재검|간편|유병|인수|심사|부담보|할증|위반|청약|가입\s*(가능|돼|될)|\d{2}\s*(세|살)|어느\s*회사|추천|들어갈|들어가')
+_HQ_COV=re.compile(r'담보|보장\s*(범위|내용)|약관|코드|KCD|진단비|치료비|수술비|일당|실손|보상|청구|지급|특약|갱신|해지환급|만기|상품\s*구조|1~5종|1-5종|소식지|뜻|차이|란\s*뭐|이\s*뭐')
+def _hq_drawer(q, want='auto'):
+    """★v817 제219조 — 바름이 하나로 합친 뒤 질문 종류로 서랍을 고른다(앱이 'helper'/'ai'를 직접 주면 그대로)"""
+    if want in ('helper','ai'): return want
+    d=bool(_HQ_DIS.search(q or '')); c=bool(_HQ_COV.search(q or ''))
+    if d and not c: return 'helper'
+    if c and not d: return 'ai'
+    return None   # 둘 다/모름 → 전체 서랍
+_HQ_TRUST=[(r'fss\.or\.kr|fcsc\.kr|klia\.or\.kr|knia\.or\.kr|law\.go\.kr|korea\.kr|nhis\.or\.kr|hira\.or\.kr|mohw\.go\.kr',3,'공식'),
+           (r'samsungfire|hi\.co\.kr|idbins|kbinsure|meritzfire|hwgeneralins|lotteins|heungkukfire|nhfire|hanainsure|samsunglife|hanwhalife|kyobo|shinhanlife|nhlife|miraeasset|myangel|abllife|heungkuklife|dblife|kblife|hanalife|lina\.co\.kr|metlife|aia|chubb|prudential|tongyang',3,'보험사'),
+           (r'insjournal|insnews|dailian|fnnews|mk\.co\.kr|hankyung|edaily|yna\.co\.kr|newsis|news1|chosun|joongang|donga|hani|kyunghyang|heraldcorp|etnews|medigate|dailymedi',2,'기사'),
+           (r'kin\.naver\.com',1,'지식iN'),(r'blog\.naver\.com|tistory|brunch',1,'블로그'),(r'cafe\.naver|dcinside|clien|fmkorea',0,'카페')]
+def _hq_sources(data):
+    """★v820 — Claude 응답 content 의 web_search_tool_result 에서 제목·URL 을 모아 신뢰도순으로 정렬"""
+    out=[]; seen=set()
+    try:
+        for b in (data or {}).get('content',[]):
+            if b.get('type')=='web_fetch_tool_result':
+                try:
+                    c=b.get('content') or {}; u=str(c.get('url') or ''); t='약관·문서 원문 열람'
+                    if u and u not in seen: seen.add(u); out.append({'title':t,'url':u,'domain':re.sub(r'^www\\.','',u.split('/')[2]) if '//' in u else u,'trust':3,'kind':'원문','age':''})
+                except Exception: pass
+                continue
+            if b.get('type')!='web_search_tool_result': continue
+            for r in (b.get('content') or []):
+                if not isinstance(r,dict) or r.get('type')!='web_search_result': continue
+                u=str(r.get('url') or ''); t=str(r.get('title') or '')[:90]
+                if not u or u in seen: continue
+                seen.add(u); lv,kind=0,'웹'
+                for pat,l,k in _HQ_TRUST:
+                    if re.search(pat,u): lv,kind=l,k; break
+                try: dom=re.sub(r'^www\.','',u.split('/')[2])
+                except Exception: dom=u
+                out.append({'title':t,'url':u,'domain':dom,'trust':lv,'kind':kind,'age':str(r.get('page_age') or '')[:10]})
+        out.sort(key=lambda x:-x['trust'])
+    except Exception as e: print('[v820 src]',str(e)[:80])
+    return out[:8]
+_TERMS_SYS=("너는 보험 약관 PDF 찾기 도우미다. 질문에 나온 회사·상품(없으면 질문의 담보가 들어가는 그 회사의 현재 판매 대표 상품)의 "
+ "약관 PDF 「직접 링크」(.pdf 로 끝나거나 PDF 를 바로 내려주는 주소)를 web_search 로 찾아라. 보험사 공식 도메인(samsungfire.com·hi.co.kr·idbins.com·kbinsure.co.kr·meritzfire.com·hwgeneralins.com·lotteins.co.kr·heungkukfire.co.kr·nhfire.co.kr·hanainsure.co.kr·samsunglife.com·hanwhalife.com·kyobo.com·shinhanlife.co.kr·nhlife.co.kr·lina.co.kr 등)·"
+ "생명보험협회/손해보험협회 공시실을 우선한다. 블로그·카페에 올라온 사본은 쓰지 않는다. "
+ "출력은 JSON 한 덩어리만: {\"items\":[{\"company\":\"회사명\",\"product\":\"상품명\",\"edition\":\"판(예 2026.07)\",\"url\":\"https://...pdf\"}]} 최대 3개, 확실한 것부터. 못 찾으면 {\"items\":[]}.")
+async def _terms_prefetch(q, key, budget=90):
+    """★v822 — 약관 PDF 를 찾아 받아 📚에 넣고 넣은 제목 목록을 돌려준다(이미 있으면 그 제목만)"""
+    import time as _tt, hashlib as _hh
+    t0=_tt.time(); added=[]
+    try:
+        _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
+        js={'model':_HQ_MODELS[0],'max_tokens':1200,'system':_TERMS_SYS,'messages':[{'role':'user','content':q[:600]}],
+            'tools':[{'type':'web_search_20250305','name':'web_search','max_uses':5,'user_location':{'type':'approximate','country':'KR'}}]}
+        async with httpx.AsyncClient(timeout=min(60,budget)) as client:
+            r=await client.post(_ANTH_URL,headers=_hd,json=js)
+        d=r.json() if r.status_code==200 else {}
+        if r.status_code!=200:
+            js['model']=_HQ_MODELS[1] if len(_HQ_MODELS)>1 else js['model']
+            async with httpx.AsyncClient(timeout=min(60,budget)) as client:
+                r=await client.post(_ANTH_URL,headers=_hd,json=js)
+            d=r.json() if r.status_code==200 else {}
+        txt=''.join(b.get('text','') for b in d.get('content',[]) if b.get('type')=='text')
+        items=[]
+        m=re.search(r'\{.*\}',txt,re.S)
+        if m:
+            try: items=(json.loads(m.group(0)) or {}).get('items') or []
+            except Exception: items=[]
+        if not items:   # JSON 이 없으면 검색 결과의 .pdf 주소를 그대로
+            for b in d.get('content',[]):
+                if b.get('type')!='web_search_tool_result': continue
+                for rr in (b.get('content') or []):
+                    u=str(rr.get('url') or '')
+                    if u.lower().endswith('.pdf') and '약관' in str(rr.get('title') or ''): items.append({'company':'','product':str(rr.get('title') or '')[:40],'edition':'','url':u})
+        items=[x for x in items if str(x.get('url','')).startswith('http')][:3]
+        print('[v822 약관] 후보',[(x.get('company'),x.get('product'),x.get('url'))[:3] for x in items])
+        have={str(r0.get('title')) for r0 in _hkb_all()}
+        with tempfile.TemporaryDirectory() as td:
+            for it in items:
+                if _tt.time()-t0>budget-15: break
+                u=it['url']; h=_hh.md5(u.encode()).hexdigest()[:8]
+                title=f"약관_{(it.get('company') or '').strip() or '회사미상'}_{(it.get('product') or '').strip()[:40] or 'pdf'}_{(it.get('edition') or '').strip() or h}"
+                title=re.sub(r'[\\/:*?"<>|\n]+','',title)
+                if title in have or any(h in t for t in have): added.append(title); continue
+                try:
+                    async with httpx.AsyncClient(timeout=60,follow_redirects=True,headers={'User-Agent':'Mozilla/5.0'}) as client:
+                        rp=await client.get(u)
+                    if rp.status_code!=200 or len(rp.content)<5000 or len(rp.content)>80*1024*1024: print('[v822 약관] 받기 실패',u,rp.status_code,len(rp.content)); continue
+                    if not rp.content[:5].startswith(b'%PDF'): print('[v822 약관] PDF 아님',u); continue
+                    rows=await _kb_ingest_one('terms.pdf',rp.content,title,'약관자동 '+h+' '+u[:120],None,td)
+                    if len(rows)<3: print('[v822 약관] 글자 없음',u); continue
+                    _hkb_add(rows); added.append(title); print(f'[v822 약관] 저장 {title} {len(rows)}쪽')
+                except Exception as e: print('[v822 약관] 받기 exc',str(e)[:120])
+    except Exception as e: print('[v822 약관] exc',str(e)[:160])
+    return added
 @app.post('/helper/chat')
 async def helper_chat(body:dict):
     if body.get('pw')!=PW: return JSONResponse({'ok':False,'error':'비밀번호 오류'})
@@ -14512,14 +14868,16 @@ async def helper_chat(body:dict):
     # ★v785 제201조: 「다른회사는?」처럼 짧은 이어 묻기는 앞 질문의 병명이 없어 자료를 못 찾았다 → 최근 사용자 말 3개를 합쳐 찾는다(최신 말 우선)
     _uq=[str(m.get('content','')).strip() for m in msgs if m.get('role')=='user' and str(m.get('content','')).strip()]
     pickq=' '.join(_uq[-3:])[-900:] if _uq else lastq
-    try: picks=_hkb_pick(pickq,app=body.get('app') or 'helper')   # ★v793 HELPER 채팅 = 고지·추천 서랍
+    # ★v817 제219조: 서랍 자동 선택 — 고지·병력·추천 → helper / 담보·상품·보상 → ai / 둘 다면 전체
+    _app=_hq_drawer(pickq, body.get('app') or 'auto')
+    try: picks=_hkb_pick(pickq,n=_HQ_PICK_N,maxc=_HQ_PICK_C,app=_app)   # ★v793 HELPER 채팅 = 고지·추천 서랍 · ★v816 프리미엄 12쪽·22,000자
     except Exception as e: print('[v806 pick]',str(e)[:120]); picks=[]
     _is_reco=bool(re.search(r'회사별|각사|비교|추천|가입|들어갈|들어가|저렴|싸게|가격|어디|어느\s*회사|간편|유병|병력|진단|수술|입원|추적|관찰|완치|이력|발병|\d{2}년\s*\d{1,2}월',pickq or ''))
     # ★v806 제214조: 병력·추천 질문이면 간편 조건표(18)·유병자 이력별 회사길(144)·추천 틀(213)·간편유형 회사비교(142)를 꼭 넣는다
     try:
         if _is_reco:
             have={str(x.get('title','')) for x in picks}
-            rows=_hkb_rows_for(body.get('app') or 'helper')
+            rows=_hkb_rows_for(_app or 'all')
             for pre in ('144_','213_','18_','142_'):
                 if any(_hkb_norm(h).startswith(pre) for h in have): continue
                 cand=[r for r in rows if _hkb_norm(str(r.get('title',''))).startswith(pre)]
@@ -14528,6 +14886,25 @@ async def helper_chat(body:dict):
                 cand.sort(key=lambda r:-sum((r.get('txt') or '').count(w) for w in toks))
                 picks.append(cand[0]|{'txt':(cand[0].get('txt') or '')[:2400]})
     except Exception as e: print('[v806 pin]',str(e)[:80])
+    # ★★★★★v822 약관 자동 수집기(지점장 2026.10.09 「수천·수만 개를 어떻게 다운받냐」 → 질문 받은 약관만 그때 받아 📚에 저장, 다음부턴 바로):
+    #   약관 질문인데 📚에 그 회사 약관이 없으면 → 웹에서 약관 PDF 주소를 찾아 서버가 직접 받아 쪽 단위로 📚에 넣고 → 그 쪽들을 이번 답 자료에 바로 붙인다
+    _terms_added=[]
+    try:
+        _is_terms0=bool(re.search(r'약관|면책|보상하지\s*않|지급\s*사유|특별약관|보통약관|조항|제\s*\d+\s*조',pickq or ''))
+        if _HQ_TERMS_AUTO and _is_terms0 and key and not body.get('dry') and not body.get('noweb'):
+            _have_terms=[p for p in picks if '약관' in str(p.get('title',''))]
+            if len(_have_terms)<3:
+                _terms_added=await _terms_prefetch(pickq, key, budget=90)
+                if _terms_added:
+                    _toks=_hkb_tokens(pickq); _rows=[r for r in _hkb_all() if r.get('title') in _terms_added]
+                    _rows.sort(key=lambda r:-sum(min((r.get('txt') or '').count(w),3) for w in _toks))
+                    _used={(p['title'],p['page']) for p in picks}; _c=0
+                    for r in _rows[:12]:
+                        if (r['title'],r['page']) in _used: continue
+                        picks.append(dict(r)|{'txt':(r.get('txt') or '')[:3000]}); _c+=len(r.get('txt') or '')
+                        if _c>24000: break
+                    print(f'[v822 약관] 자동 수집 {len(_terms_added)}권 → 자료에 {min(12,len(_rows))}쪽 추가')
+    except Exception as e: print('[v822 약관] exc',str(e)[:160])
     kbtxt=''.join(f"\n[자료 「{p['title']}」 {p.get('tag') or ''} {p['page']}쪽]\n{p['txt']}\n" for p in picks)
     _today=(datetime.datetime.utcnow()+datetime.timedelta(hours=9)).strftime('%Y-%m-%d')   # ★v806: 날짜 계산(「3개월 전」「24년 4월」→ 몇 년 지났나)용 오늘 날짜(한국)
     system=_HELPER_SYS+f"\n\n★오늘 날짜는 {_today}(한국)다. 「○개월 전」「작년」「24년 4월」 같은 날짜는 이 날짜로 계산한다."+("\n\n★지점장이 올린 자료(소식지·세일즈북)가 아래 있으면 그 자료를 최우선 근거로 쓰고, 「회사별로」 물으면 자료에 나온 회사를 하나씩 나눠 답하며 자료명·쪽을 적는다. 자료에 없는 회사는 「자료에 없음」이라 한다.\n"+kbtxt if picks else '')+"\n\n[kb — 앱과 같은 근거]\n"+json.dumps(kb,ensure_ascii=False)[:60000]
@@ -14573,39 +14950,70 @@ async def helper_chat(body:dict):
     if body.get('dry'):
         cc=sum(len(m['content']) if isinstance(m['content'],str) else sum(len(x.get('text','')) for x in m['content'] if x.get('type')=='text') for m in conv)
         return JSONResponse({'ok':True,'dry':True,'picks':[{'title':p['title'],'page':p['page'],'len':len(p['txt'])} for p in picks],'system_len':len(system),'conv_chars':cc},headers=_HUB_CORS)
-    async def _call(model):
-        async with httpx.AsyncClient(timeout=90) as client:
-            resp=await client.post('https://api.anthropic.com/v1/messages',
-                headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                json={'model':model,'max_tokens':1500,'system':system,'messages':conv})
-        return resp.status_code, resp.json()
-    used=None; data=None
-    for model in ('claude-sonnet-4-6','claude-haiku-4-5-20251001'):
-        try:
-            st,data=await _call(model)
-            if st==200 and data.get('content'): used=model; break
-            print(f'[v779 helper] {model} status={st} err={str(data)[:200]}')
-        except Exception as e:
-            print(f'[v779 helper] {model} exc={e}')
+    # ★★★★★v816 제218조 (지점장 2026.10.09 「요금 더 내도 되니 퀄리티 더 올리자 · 진정한 헬퍼가 되게」) — 바름이 프리미엄:
+    #   ① 최상위 모델(HELPER_MODEL, 기본 claude-opus-5-5) + 생각(thinking) → 안 되면 sonnet-4-6 → haiku
+    #   ② 자료 12쪽·22,000자(전 6쪽·9,000자) ③ 추천·회사·상품 질문은 웹 검색 도구를 처음부터 같이 준다(최대 3회, 한국)
+    #   ④ 검수 한 번 더 — 지점장 정본(고지 기준·표준체 먼저·손보/생보·상품명 지어내기 금지·숫자 단정 금지·카티)으로 초안을 점검해 고친 답만 낸다
+    #   ⑤ 전체 150초 안(앱은 180초에 끊는다) — 시간이 모자라면 검수는 건너뛴다
+    import time as _t816
+    _t0=_t816.time()
+    _is_terms=bool(re.search(r'약관|면책|보상하지\s*않|지급\s*사유|특별약관|보통약관|조항|제\s*\d+\s*조',pickq or ''))
+    _tools=([{'type':'web_search_20250305','name':'web_search','max_uses':_HQ_WEB_USES,'user_location':{'type':'approximate','country':'KR'}}]
+            +([{'type':'web_fetch_20250910','name':'web_fetch','max_uses':3,'max_content_tokens':60000}] if (_is_terms or _HQ_FETCH_ALL) else [])) if ((_is_reco or _HQ_WEB_ALL) and not body.get('noweb')) else None
+    async def _call(model, think=True, msgs=None, mt=None, sysx=None, tools=None, to=120):
+        js={'model':model,'max_tokens':mt or _HQ_MAXTOK,'system':sysx or system,'messages':msgs or conv}
+        if think and _HQ_THINK>0: js['thinking']={'type':'enabled','budget_tokens':_HQ_THINK}; js['max_tokens']=max(js['max_tokens'],_HQ_THINK+2500)
+        if tools: js['tools']=tools
+        _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
+        if tools and any(t.get('name')=='web_fetch' for t in tools): _hd['anthropic-beta']='web-fetch-2025-09-10'
+        async with httpx.AsyncClient(timeout=to) as client:
+            resp=await client.post(_ANTH_URL, headers=_hd, json=js)
+        try: d=resp.json()
+        except Exception: d={'raw':resp.text[:200]}
+        return resp.status_code, d
+    def _txt(d): return ''.join(b.get('text','') for b in (d or {}).get('content',[]) if b.get('type')=='text').strip()
+    used=None; data=None; webused=False
+    for model in _HQ_MODELS:
+        for think in ((True,False) if model==_HQ_MODELS[0] else (False,)):
+            try:
+                st,data=await _call(model,think=think,tools=_tools)
+                if st==200 and _txt(data): used=model; break
+                print(f'[v816 helper] {model} think={think} status={st} err={str(data)[:200]}')
+                if st==400 and _tools and any(t.get('name')=='web_fetch' for t in _tools):   # ★v821 web_fetch 미지원 키면 검색만으로
+                    _tools=[t for t in _tools if t.get('name')!='web_fetch']
+                    st,data=await _call(model,think=False,tools=_tools)
+                    if st==200 and _txt(data): used=model; break
+                if st==200 and _tools: # 도구만 쓰고 글이 없으면 도구 없이 한 번 더
+                    st,data=await _call(model,think=False,tools=None)
+                    if st==200 and _txt(data): used=model; break
+            except Exception as e:
+                print(f'[v816 helper] {model} think={think} exc={str(e)[:160]}')
+        if used: break
     if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패','detail':str(data)[:300]})
-    text=''.join(b.get('text','') for b in data.get('content',[]) if b.get('type')=='text')
-    # ★v806 제214조 (지점장 「저런 식의 대답이 대부분 — 잘 되도록」): 추천 질문인데 손보/생보 줄이 없거나, 날짜가 있는데 유형 날짜 줄이 없으면 한 번 고쳐 받는다
+    webused=any(b.get('type')=='server_tool_use' for b in data.get('content',[]))
+    text=_txt(data)
+    # ★v820 서치력(지점장 「네이버 수준 서치력 — 가장 강력한 서치 헬퍼」): 웹 검색 결과의 출처(제목·URL)를 서버가 직접 모아 앱의 「출처 N건」 카드로 넘긴다
+    sources=_hq_sources(data)
+    # ★v806 형식 점검 + ★v816 품질 검수(한 번의 호출로)
     try:
-        if _is_reco and not body.get('nofix'):
-            miss=[]
-            body_txt=re.sub(r'<facts>.*?</facts>','',text,flags=re.S)
+        miss=[]
+        body_txt=re.sub(r'<facts>.*?</facts>','',text,flags=re.S)
+        if _is_reco:
             if not re.search(r'(^|\n)\s*[-·*•]*\s*\**손보\**\s*[:：]',body_txt): miss.append('「손보:」로 시작하는 후보 줄')
             if not re.search(r'(^|\n)\s*[-·*•]*\s*\**생보\**\s*[:：]',body_txt): miss.append('「생보:」로 시작하는 후보 줄(없으면 「생보: 자료에 해당 생보 상품 없음 — 전산 비교설계로 확인」)')
-            if re.search(r'(19|20)?\d{2}\s*년|\d{4}[.\-/]\d{1,2}|\d+\s*(개월|년)\s*전|작년|재작년',pickq or '') and not re.search(r'3\.N\.5|3\.1\.1|311-5',body_txt): miss.append('간편 유형 날짜 줄(3.N.5 · 3.1.1/311-5 · 2Q 가능 시점)')
-            if miss and data.get('stop_reason')!='max_tokens':
-                fix=conv+[{'role':'assistant','content':text},{'role':'user','content':'(형식 점검) 위 답에 빠진 것: '+' / '.join(miss)+'. 내용은 그대로 두고 빠진 줄을 넣어 답 전체를 다시 써라. 자료에 없는 회사·상품은 지어내지 않는다.'}]
-                async with httpx.AsyncClient(timeout=90) as client:
-                    r2=await client.post('https://api.anthropic.com/v1/messages',headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                        json={'model':used,'max_tokens':1500,'system':system,'messages':fix})
-                d2=r2.json()
-                t2=''.join(b.get('text','') for b in d2.get('content',[]) if b.get('type')=='text') if r2.status_code==200 else ''
-                if t2.strip(): text=t2; print('[v806 fix] 고침:',miss)
-    except Exception as e: print('[v806 fix] exc',str(e)[:120])
+            if re.search(r'(19|20)?\d{2}\s*년|\d{4}[.\-/]\d{1,2}|\d+\s*(개월|년)\s*전|작년|재작년',pickq or '') and not re.search(r'3\.N\.5|3\.1\.1|311-5|3\.\d{1,2}\.5',body_txt): miss.append('간편 유형 날짜 줄(3.N.5 · 3.1.1/311-5 · 2Q 가능 시점)')
+            if not re.search(r'표준체',body_txt): miss.append('「표준체 시도:」 줄(제217조 — 표준체 먼저, 막히면 이유)')
+        left=_HQ_BUDGET-(_t816.time()-_t0)
+        if (_HQ_REVIEW and left>45 and data.get('stop_reason')!='max_tokens' and not body.get('nofix')):
+            rv=[{'role':'user','content':'[검수할 질문]\n'+(lastq or pickq)[:1500]+'\n\n[바름이 초안]\n'+text+'\n\n'+_HQ_REVIEW_ASK+('\n\n[형식에서 빠진 것] '+' / '.join(miss) if miss else '')}]
+            st2,d2=await _call(used,think=False,msgs=rv,mt=3000,sysx=system,to=max(30,int(left)-10))
+            t2=_txt(d2) if st2==200 else ''
+            if t2 and not re.match(r'^\s*통과\s*$',t2):
+                if '<facts>' in text and '<facts>' not in t2:
+                    mfa=re.search(r'<facts>.*?</facts>',text,re.S); t2=t2.rstrip()+('\n'+mfa.group(0) if mfa else '')
+                text=t2; print('[v816 검수] 고침 ·',miss)
+            else: print('[v816 검수] 통과 ·',st2)
+    except Exception as e: print('[v816 검수] exc',str(e)[:160])
     facts=None
     m=re.search(r'<facts>\s*(\{.*?\})\s*</facts>',text,re.S)
     if m:
@@ -14614,8 +15022,8 @@ async def helper_chat(body:dict):
         text=text[:m.start()].rstrip()
     # ★v790 제206조 (지점장 「모르는 건 니가 서치해서 못 해주나 바름이가」): 자료에 없다고 답할 때만 웹 검색을 한 번 더 한다
     #   → 아는 질문은 비용·속도 그대로, 모르는 질문만 검색(최대 3회). 결과는 「🔎 웹 검색」 표시 + 출처·날짜
-    web=False
-    if _helper_unknown(text) and not body.get('noweb'):
+    web=webused
+    if not webused and _helper_unknown(text) and not body.get('noweb'):
         wt=await _helper_web(key,conv)
         if wt:
             text='🔎 자료에 없어 웹에서 찾았다 (공개 자료 · 회사 확인 필요)\n'+wt; web=True
@@ -14623,7 +15031,7 @@ async def helper_chat(body:dict):
             except Exception: pass
     try: text=_fix_ins_side(text)
     except Exception: pass
-    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web})
+    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web,'sec':round(_t816.time()-_t0,1),'drawer':_app or 'all','sources':sources,'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'terms_added':_terms_added})
 
 # ★v799 제213조 — 답의 「손보:」「생보:」 줄 회사가 반대쪽이면 서버가 바로잡는다
 _INS_NONLIFE=['삼성화재','현대해상','DB손보','DB손해보험','KB손보','KB손해보험','메리츠화재','한화손보','한화손해보험','롯데손보','롯데손해보험','흥국화재','NH농협손보','농협손보','NH농협손해보험','하나손보','하나손해보험','MG손보','AIG손보','라이나손보','라이나손해보험','캐롯','AXA손보','악사손보']
@@ -14680,9 +15088,9 @@ _HELPER_WEB_SYS = """당신은 「바름이」 — 보험 설계사를 돕는 AI
 async def _helper_web(key,conv):
     try:
         async with httpx.AsyncClient(timeout=120) as client:
-            resp=await client.post('https://api.anthropic.com/v1/messages',
+            resp=await client.post(_ANTH_URL,
                 headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},
-                json={'model':'claude-sonnet-4-6','max_tokens':900,'system':_HELPER_WEB_SYS,'messages':conv,
+                json={'model':_HQ_MODELS[0],'max_tokens':1500,'system':_HELPER_WEB_SYS,'messages':conv,
                       'tools':[{'type':'web_search_20250305','name':'web_search','max_uses':3,'user_location':{'type':'approximate','country':'KR'}}]})
         d=resp.json()
         if resp.status_code!=200: print('[v790 web] status',resp.status_code,str(d)[:200]); return ''
