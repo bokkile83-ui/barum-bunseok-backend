@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v833-smalltalk-20261010'
+VSTAMP = 'v834-ping-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -12109,6 +12109,21 @@ from fastapi.responses import RedirectResponse as _RR766
 def info_pdf():
     return _RR766('https://singular-smakager-0caac1.netlify.app/info.pdf', status_code=302)
 
+@app.get('/helper/ping')
+async def helper_ping():
+    """★v834 (지점장 캡처 2026.10.10 08:31 — 잡담·고객반응 둘 다 「AI 연결이 잠시 안 된다」): 모델별로 가장 작은 호출을 해 보고 상태·오류를 그대로 보인다. 키 노출 없음."""
+    key=os.environ.get('ANTHROPIC_API_KEY','');out={'ok':True,'ver':VSTAMP,'key':('있음 …'+key[-4:]) if key else '없음','models':[]}
+    if not key: return JSONResponse(out,headers=_HUB_CORS)
+    for m in _HQ_MODELS:
+        try:
+            async with httpx.AsyncClient(timeout=40) as client:
+                r=await client.post(_ANTH_URL,headers={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'},json={'model':m,'max_tokens':20,'messages':[{'role':'user','content':'안녕'}]})
+            try: d=r.json()
+            except Exception: d={'raw':r.text[:200]}
+            txt=''.join(b.get('text','') for b in (d or {}).get('content',[]) if b.get('type')=='text')
+            out['models'].append({'model':m,'status':r.status_code,'text':txt[:40],'error':(d.get('error') if isinstance(d,dict) else str(d)[:200])})
+        except Exception as e: out['models'].append({'model':m,'status':'exc','error':str(e)[:200]})
+    return JSONResponse(out,headers=_HUB_CORS)
 @app.get('/health')
 def health():
     _cib = ci_selftest()   # ★v238 CI 자가진단 — 실패하면 즉시 노출
@@ -14940,16 +14955,16 @@ async def helper_chat(body:dict):
             else: _m2.append(dict(x))
         _pc=_m2
         _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
-        _ans='';_used=''
+        _ans='';_used='';_last_err=''
         for _m in _HQ_MODELS:
             try:
                 async with httpx.AsyncClient(timeout=60) as client:
                     _r=await client.post(_ANTH_URL,headers=_hd,json={'model':_m,'max_tokens':900,'system':_PRACTICE_SYS,'messages':_pc})
                 _d=_r.json(); _ans=''.join(b.get('text','') for b in _d.get('content',[]) if b.get('type')=='text').strip()
                 if _r.status_code==200 and _ans: _used=_m; break
-                print(f'[v833 practice] {_m} status={_r.status_code} err={str(_d)[:160]}')
-            except Exception as e: print(f'[v833 practice] {_m} exc={str(e)[:120]}')
-        if not _ans: _ans='(바름이) 지금 AI 연결이 잠시 안 된다 — 잠시 뒤 「레벨」 단추를 다시 눌러라.'
+                _last_err=f'{_m} {_r.status_code} '+str((_d or {}).get('error',_d))[:160]; print('[v833 practice]',_last_err)
+            except Exception as e: _last_err=f'{_m} exc '+str(e)[:120]; print('[v833 practice]',_last_err)
+        if not _ans: _ans='(바름이) 지금 AI 연결이 잠시 안 된다 — 잠시 뒤 「레벨」 단추를 다시 눌러라.\n[이유] '+_last_err[:220]
         return JSONResponse({'ok':True,'answer':_ans,'model':_used,'practice':True},headers=_HUB_CORS)
     # ★v785 제201조: 「다른회사는?」처럼 짧은 이어 묻기는 앞 질문의 병명이 없어 자료를 못 찾았다 → 최근 사용자 말 3개를 합쳐 찾는다(최신 말 우선)
     _uq=[str(m.get('content','')).strip() for m in msgs if m.get('role')=='user' and str(m.get('content','')).strip()]
@@ -15077,7 +15092,7 @@ async def helper_chat(body:dict):
         if used:
             _text=_txt(data)
             return JSONResponse({'ok':True,'answer':_text,'model':used,'web':any(b.get('type')=='server_tool_use' for b in data.get('content',[])),'sources':_hq_sources(data),'small':True},headers=_HUB_CORS)
-        return JSONResponse({'ok':True,'answer':'바름이다. 지금 AI 연결이 잠시 안 돼서 그 말엔 답을 못 했다 — 잠시 뒤 다시 물어봐 줘. 고객 얘기(나이·병력·약)를 적어 주면 심사·고지는 바로 봐 준다.','model':'','small':True,'err':str(data)[:200]},headers=_HUB_CORS)
+        return JSONResponse({'ok':True,'answer':'바름이다. 지금 AI 연결이 잠시 안 돼서 그 말엔 답을 못 했다 — 잠시 뒤 다시 물어봐 줘. 고객 얘기(나이·병력·약)를 적어 주면 심사·고지는 바로 봐 준다.\n[이유] '+re.sub(r'\s+',' ',str((data or {}).get('error',data))[:220]),'model':'','small':True,'err':str(data)[:200]},headers=_HUB_CORS)
     for model in _HQ_MODELS:
         for think in ((True,False) if model==_HQ_MODELS[0] else (False,)):
             try:
