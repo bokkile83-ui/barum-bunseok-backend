@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v828-helperlong-20261009'
+VSTAMP = 'v829-helpercut-20261009'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14760,7 +14760,7 @@ _HQ_REVIEW_ASK=("너는 바름이 답의 검수자다. 위 초안을 지점장 �
  "② 표준체 먼저(제217조 — 5년 내 중증·거절 경향·치료 중이 아니면 표준체 사전심사부터, 간편은 거절 뒤) "
  "③ 손보·생보 회사 구분(미래에셋·흥국생명·DB생명·KB라이프·하나생명·NH농협생명·라이나생명=생보) "
  "④ 자료·웹 결과에 없는 상품명·숫자·보험료·한도를 지어냈는지 ⑤ 날짜 계산(오늘 날짜 기준)이 맞는지 "
- "⑥ 결론 한 줄이 맨 앞에 있고 신입이 바로 할 일이 있는지 ⑦ 카티(CAR-T)를 다른 담보로 취급하지 않았는지 ⑧ 약관 조항·원문을 인용했다면 자료·웹 결과에 실제 있는 글인지(없으면 「약관 원문 미확인」으로 고친다). "
+ "⑥ 도입 문단이 맨 앞에 있고(제229조 네이버 모양: 도입 문단 → ## 절 → 할 일·이어 묻기) 신입이 바로 할 일이 있는지 · 표 안에 자료명·쪽 번호가 없는지 ⑦ 카티(CAR-T)를 다른 담보로 취급하지 않았는지 ⑧ 약관 조항·원문을 인용했다면 자료·웹 결과에 실제 있는 글인지(없으면 「약관 원문 미확인」으로 고친다). "
  "고칠 것이 없으면 「통과」 두 글자만 쓴다. 고칠 것이 있으면 설명 없이 고친 최종 답 전체만 쓴다(초안 형식·길이 유지, <facts> 줄은 그대로 둔다).")
 _HQ_DIS=re.compile(r'고지|병력|진단받|수술했|입원했|약\s*먹|복용|추적|관찰|재검|간편|유병|인수|심사|부담보|할증|위반|청약|가입\s*(가능|돼|될)|\d{2}\s*(세|살)|어느\s*회사|추천|들어갈|들어가')
 _HQ_COV=re.compile(r'담보|보장\s*(범위|내용)|약관|코드|KCD|진단비|치료비|수술비|일당|실손|보상|청구|지급|특약|갱신|해지환급|만기|상품\s*구조|1~5종|1-5종|소식지|뜻|차이|란\s*뭐|이\s*뭐')
@@ -14992,6 +14992,18 @@ async def helper_chat(body:dict):
     if not used: return JSONResponse({'ok':False,'error':'AI 응답 실패','detail':str(data)[:300]})
     webused=any(b.get('type')=='server_tool_use' for b in data.get('content',[]))
     text=_txt(data)
+    # ★v829 제229조 8항 (지점장 「안 짤리게 해줘」): 초안 자체가 max_tokens로 끊겼으면 「끊긴 곳부터 이어서」 한 번 더 불러 붙인다(최대 2회). 끝까지 쓴 답만 낸다.
+    try:
+        _cont=0
+        while (data or {}).get('stop_reason')=='max_tokens' and _cont<2 and (_HQ_BUDGET-(_t816.time()-_t0))>40:
+            _cont+=1
+            _msgs=conv+[{'role':'assistant','content':text},{'role':'user','content':'답이 중간에 끊겼다. 끊긴 문장부터 이어서 끝까지 써라. 앞 내용을 반복하지 말고 이어지는 부분만 쓴다.'}]
+            _st3,_d3=await _call(used,think=False,msgs=_msgs,mt=_HQ_MAXTOK,sysx=system,to=max(30,int(_HQ_BUDGET-(_t816.time()-_t0))-10))
+            _t3=_txt(_d3) if _st3==200 else ''
+            if not _t3: break
+            text=text.rstrip()+('\n' if not text.endswith('\n') else '')+_t3; data=_d3
+            print('[v829 이어쓰기]',_cont,'회 · stop=',(_d3 or {}).get('stop_reason'))
+    except Exception as _e829: print('[v829 이어쓰기] exc',str(_e829)[:120])
     # ★v820 서치력(지점장 「네이버 수준 서치력 — 가장 강력한 서치 헬퍼」): 웹 검색 결과의 출처(제목·URL)를 서버가 직접 모아 앱의 「출처 N건」 카드로 넘긴다
     sources=_hq_sources(data)
     # ★v806 형식 점검 + ★v816 품질 검수(한 번의 호출로)
@@ -15006,8 +15018,12 @@ async def helper_chat(body:dict):
         left=_HQ_BUDGET-(_t816.time()-_t0)
         if (_HQ_REVIEW and left>45 and data.get('stop_reason')!='max_tokens' and not body.get('nofix')):
             rv=[{'role':'user','content':'[검수할 질문]\n'+(lastq or pickq)[:1500]+'\n\n[바름이 초안]\n'+text+'\n\n'+_HQ_REVIEW_ASK+('\n\n[형식에서 빠진 것] '+' / '.join(miss) if miss else '')}]
-            st2,d2=await _call(used,think=False,msgs=rv,mt=3000,sysx=system,to=max(30,int(left)-10))
+            # ★v829 (지점장 캡처 2026.10.09 19:27 「간병인변천사」 답이 「…슬기로운 간편간병인에」에서 잘림): 검수 호출 max_tokens 3000이 제229조 긴 답(12~30줄·표)보다 작아
+            #   검수본이 중간에서 끊겼고, 끊긴 검수본이 초안을 덮어썼다 → 검수는 초안과 같은 상한(_HQ_MAXTOK)으로 부르고, 검수본이 max_tokens로 끝났으면 버리고 초안을 쓴다.
+            st2,d2=await _call(used,think=False,msgs=rv,mt=_HQ_MAXTOK,sysx=system,to=max(30,int(left)-10))
             t2=_txt(d2) if st2==200 else ''
+            if st2==200 and (d2 or {}).get('stop_reason')=='max_tokens':
+                print('[v829 검수] 검수본 잘림(max_tokens) → 초안 유지'); t2=''
             if t2 and not re.match(r'^\s*통과\s*$',t2):
                 if '<facts>' in text and '<facts>' not in t2:
                     mfa=re.search(r'<facts>.*?</facts>',text,re.S); t2=t2.rstrip()+('\n'+mfa.group(0) if mfa else '')
