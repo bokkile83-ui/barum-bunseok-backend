@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v835-smallfix-20261010'
+VSTAMP = 'v837-budget-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14823,16 +14823,71 @@ async def helper_kb_search(body:dict):
 
 # ★v816 제218조 바름이 프리미엄 설정 — Railway 변수로 바꿀 수 있다(HELPER_MODEL · HELPER_THINK · HELPER_REVIEW=0 이면 검수 끔)
 _ANTH_URL=os.environ.get('ANTHROPIC_URL','https://api.anthropic.com/v1/messages')
-_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-opus-5-5'),'claude-sonnet-5-5','claude-haiku-5-5','claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]   # ★v833 현행 모델명(5.5) 폴백 추가 — 구 이름만 있어 전부 실패하면 「AI 응답 실패」
+_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-sonnet-5-5'),'claude-sonnet-5-5','claude-haiku-5-5','claude-opus-5-5','claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]   # ★v837 기본 모델 sonnet-5-5(지점장 「한 달 5만원」) — opus 는 HELPER_MODEL 로   # ★v833 현행 모델명(5.5) 폴백 추가 — 구 이름만 있어 전부 실패하면 「AI 응답 실패」
 _HQ_MODELS=list(dict.fromkeys(_HQ_MODELS))
-_HQ_THINK=int(os.environ.get('HELPER_THINK','8000') or 0)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
+_HQ_THINK=int(os.environ.get('HELPER_THINK','3000') or 0)   # ★v837 8000→3000(비용)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
 _HQ_MAXTOK=int(os.environ.get('HELPER_MAXTOK','6000') or 6000)
 _HQ_REVIEW=os.environ.get('HELPER_REVIEW','1')!='0'
+_HQ_REVIEW_ALL=os.environ.get('HELPER_REVIEW_ALL','0')=='1'   # ★v837
 _HQ_WEB_ALL=os.environ.get('HELPER_WEB_ALWAYS','1')!='0'
 _HQ_WEB_USES=int(os.environ.get('HELPER_WEB_USES','5') or 5)
 _HQ_FETCH_ALL=os.environ.get('HELPER_FETCH_ALWAYS','0')=='1'   # ★v821 약관 질문엔 web_fetch(약관 PDF 읽기) 자동, 1 이면 모든 질문   # ★v820 서치력: 질문당 웹 검색 최대 5회   # ★v816: 모든 질문에 웹 검색 도구를 준다(네이버 AI 처럼 최신 공개 자료 확인) · 0 이면 추천 질문만
 _HQ_PICK_N=int(os.environ.get('HELPER_PICK_N','16') or 16); _HQ_PICK_C=int(os.environ.get('HELPER_PICK_C','32000') or 32000)
-_HQ_BUDGET=int(os.environ.get('HELPER_BUDGET','270') or 270)   # ★v822 전체 시간 예산(앱 300초)
+_HQ_BUDGET=int(os.environ.get('HELPER_BUDGET','270') or 270)
+# ★v837 제239조 (지점장 2026.10.10 「서치 능력은 그대로, 시간 걸려도 되지만 한 달 5만원」): 월 요금 미터 + 예산 지킴이.
+#   단가(USD/백만 토큰, 입력/출력): opus 4/20 · sonnet 2/10 · haiku 1/5(추정) · 웹검색 1회 $0.01 · 환율 HELPER_KRW(기본 1400).
+#   미터는 hub_config(k='helper_usage_YYYYMM')에 누적(DB 없으면 메모리). 예산 HELPER_BUDGET_KRW(기본 50000).
+#   80% 넘으면 절약 모드(생각 없음·검수 없음·웹 2회·자료 8쪽) · 100% 넘으면 최소 모드(haiku·웹 없음) — 답은 끊지 않는다. 답 꼬리에 상태 표시.
+_HQ_PRICE={'opus':(4.0,20.0),'sonnet':(2.0,10.0),'haiku':(1.0,5.0)}
+_HQ_KRW=float(os.environ.get('HELPER_KRW','1400') or 1400); _HQ_BUDGET_KRW=int(os.environ.get('HELPER_BUDGET_KRW','50000') or 50000)
+_HQ_USAGE={'ym':'','krw':0.0,'calls':0,'q':0,'hq':0,'basic':0,'small':0,'practice':0,'in':0,'out':0,'web':0}
+def _usage_ym(): return datetime.datetime.now().strftime('%Y%m')
+def _usage_load():
+    ym=_usage_ym()
+    if _HQ_USAGE['ym']==ym: return _HQ_USAGE
+    _HQ_USAGE.update({'ym':ym,'krw':0.0,'calls':0,'q':0,'hq':0,'basic':0,'small':0,'practice':0,'in':0,'out':0,'web':0})
+    c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT v FROM hub_config WHERE k=%s",('helper_usage_'+ym,)); r=k.fetchone()
+                if r and r[0]:
+                    try: _HQ_USAGE.update(json.loads(r[0])); _HQ_USAGE['ym']=ym
+                    except Exception: pass
+        except Exception as _e: print('[v837 usage] 읽기 실패',str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    return _HQ_USAGE
+def _usage_save():
+    c=_db()
+    if not c: return
+    try:
+        with c, c.cursor() as k:
+            k.execute("INSERT INTO hub_config(k,v,updated) VALUES(%s,%s,NOW()) ON CONFLICT (k) DO UPDATE SET v=EXCLUDED.v, updated=NOW()",('helper_usage_'+_HQ_USAGE['ym'],json.dumps(_HQ_USAGE,ensure_ascii=False)))
+    except Exception as _e: print('[v837 usage] 저장 실패',str(_e)[:80])
+    finally:
+        try: c.close()
+        except Exception: pass
+def _usage_add(model,d,kind=None):
+    """한 호출의 usage 를 원화로 더한다. kind 는 질문 1건당 한 번만(tier 이름)."""
+    try:
+        u=_usage_load(); us=(d or {}).get('usage') or {}
+        ti=int(us.get('input_tokens',0) or 0)+int(us.get('cache_read_input_tokens',0) or 0)+int(us.get('cache_creation_input_tokens',0) or 0); to=int(us.get('output_tokens',0) or 0)
+        fam='opus' if 'opus' in (model or '') else 'haiku' if 'haiku' in (model or '') else 'sonnet'; pi,po=_HQ_PRICE[fam]
+        wn=sum(1 for b in (d or {}).get('content',[]) if b.get('type')=='server_tool_use')
+        usd=ti/1e6*pi+to/1e6*po+wn*0.01
+        u['krw']+=usd*_HQ_KRW; u['calls']+=1; u['in']+=ti; u['out']+=to; u['web']+=wn
+        if kind: u['q']+=1; u[kind]=u.get(kind,0)+1
+        _usage_save()
+    except Exception as _e: print('[v837 usage] add exc',str(_e)[:80])
+def _usage_mode():
+    u=_usage_load(); p=(u['krw']/_HQ_BUDGET_KRW) if _HQ_BUDGET_KRW>0 else 0
+    return ('min' if p>=1.0 else 'save' if p>=0.8 else 'normal'), p, u
+@app.get('/helper/usage')
+async def helper_usage():
+    mode,p,u=_usage_mode()
+    return JSONResponse({'ok':True,'ver':VSTAMP,'month':u['ym'],'krw':round(u['krw']),'budget_krw':_HQ_BUDGET_KRW,'pct':round(p*100,1),'mode':mode,'questions':u['q'],'by':{'hq':u['hq'],'basic':u['basic'],'small':u['small'],'practice':u['practice']},'calls':u['calls'],'tokens_in':u['in'],'tokens_out':u['out'],'web_searches':u['web'],'model':_HQ_MODELS[0],'think':_HQ_THINK},headers=_HUB_CORS)   # ★v822 전체 시간 예산(앱 300초)
 _HQ_TERMS_AUTO=os.environ.get('HELPER_TERMS_AUTO','1')!='0'   # ★v822 약관 자동 수집기
 _HQ_REVIEW_ASK=("너는 바름이 답의 검수자다. 위 초안을 지점장 정본 기준으로 점검하라: "
  "① 고지 기준(정기 추적관찰도 마지막 관찰 1년 이내면 「예」·추가검사 정상도 고지·약국 약은 고지 없음·기준일=청약일) "
@@ -14956,12 +15011,12 @@ async def helper_chat(body:dict):
         _pc=_m2
         _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
         _ans='';_used='';_last_err=''
-        for _m in _HQ_MODELS:
+        for _m in list(dict.fromkeys((['claude-haiku-5-5'] if _usage_mode()[0]=='min' else ['claude-sonnet-5-5'])+_HQ_MODELS)):
             try:
                 async with httpx.AsyncClient(timeout=60) as client:
                     _r=await client.post(_ANTH_URL,headers=_hd,json={'model':_m,'max_tokens':900,'system':_PRACTICE_SYS,'messages':_pc})
                 _d=_r.json(); _ans=''.join(b.get('text','') for b in _d.get('content',[]) if b.get('type')=='text').strip()
-                if _r.status_code==200 and _ans: _used=_m; break
+                if _r.status_code==200 and _ans: _used=_m; _usage_add(_m,_d,'practice'); break
                 _last_err=f'{_m} {_r.status_code} '+str((_d or {}).get('error',_d))[:160]; print('[v833 practice]',_last_err)
             except Exception as e: _last_err=f'{_m} exc '+str(e)[:120]; print('[v833 practice]',_last_err)
         if not _ans: _ans='(바름이) 지금 AI 연결이 잠시 안 된다 — 잠시 뒤 「레벨」 단추를 다시 눌러라.\n[이유] '+_last_err[:220]
@@ -15064,6 +15119,19 @@ async def helper_chat(body:dict):
     _is_terms=bool(re.search(r'약관|면책|보상하지\s*않|지급\s*사유|특별약관|보통약관|조항|제\s*\d+\s*조',pickq or ''))
     _tools=([{'type':'web_search_20250305','name':'web_search','max_uses':_HQ_WEB_USES,'user_location':{'type':'approximate','country':'KR'}}]
             +([{'type':'web_fetch_20250910','name':'web_fetch','max_uses':3,'max_content_tokens':60000}] if (_is_terms or _HQ_FETCH_ALL) else [])) if ((_is_reco or _HQ_WEB_ALL) and not body.get('noweb')) else None
+    # ★v836 제238조 (지점장 2026.10.10 「서치가 2분 넘는다 → 보험 질문엔 고품질, 그 외엔 기본」): 두 단계.
+    #   고품질 = 고지·병력·추천·회사·담보·약관·보상(정규식 _HQ_DIS/_HQ_COV/_is_reco/약관) 또는 첨부·캡처 → 종전 그대로(opus+생각+웹+검수).
+    #   기본   = 그 밖(병 설명·용어·일반 상식·짧은 사실 질문) → 생각 없음·검수 없음·웹은 최신/뉴스 낱말 때만·자료 6쪽. 목표 30초 안.
+    _is_hq=bool(images) or bool(body.get('files')) or _is_reco or _is_terms or bool(_HQ_DIS.search(pickq or '')) or bool(re.search(r'보험|고지|심사|인수|추천|회사|상품|특약|담보|약관|보상|청구|실손|간편|유병|표준체|할증|부담보|보험료|진단비|치료비|수술비|일당|지급|갱신|해지환급|만기|소식지|KCD|코드',pickq or ''))
+    if os.environ.get('HELPER_TIER','auto')=='hq': _is_hq=True
+    _bmode,_bpct,_bu=_usage_mode()
+    if _bmode=='save' and _is_hq:
+        _tools=([{'type':'web_search_20250305','name':'web_search','max_uses':2,'user_location':{'type':'approximate','country':'KR'}}] if (_tools and not body.get('noweb')) else None)
+    if _bmode=='min':
+        _tools=None
+    if not _is_hq:
+        _tools=[{'type':'web_search_20250305','name':'web_search','max_uses':2,'user_location':{'type':'approximate','country':'KR'}}] if (re.search(r'최신|요즘|올해|202\d|뉴스|발표|개정|바뀐|얼마|가격|시세',pickq or '') and not body.get('noweb')) else None
+        system=system+'\n\n★기본 모드(v836): 보험 밖 일반 질문이다. 자료가 있으면 쓰되 없으면 일반 지식으로 네이버 모양(도입 한 문단 + ## 절 2~3 + 할 일)으로 10~18줄. 「다룰 수 있는 것」 제한은 이 답에만 풀고, 끝에 한 줄로 보험 관점(고지·보장)에서 볼 점을 덧붙인다.'
     async def _call(model, think=True, msgs=None, mt=None, sysx=None, tools=None, to=120):
         js={'model':model,'max_tokens':mt or _HQ_MAXTOK,'system':sysx or system,'messages':msgs or conv}
         if think and _HQ_THINK>0: js['thinking']={'type':'enabled','budget_tokens':_HQ_THINK}; js['max_tokens']=max(js['max_tokens'],_HQ_THINK+2500)
@@ -15074,6 +15142,7 @@ async def helper_chat(body:dict):
             resp=await client.post(_ANTH_URL, headers=_hd, json=js)
         try: d=resp.json()
         except Exception: d={'raw':resp.text[:200]}
+        if resp.status_code==200: _usage_add(model,d)
         return resp.status_code, d
     def _txt(d): return ''.join(b.get('text','') for b in (d or {}).get('content',[]) if b.get('type')=='text').strip()
     used=None; data=None; webused=False
@@ -15090,13 +15159,16 @@ async def helper_chat(body:dict):
                     if st==200 and _txt(data): used=model; break
             except Exception as e: print(f'[v833 small] {model} exc={str(e)[:120]}')
         if used:
-            _text=_txt(data)
+            _text=_txt(data); _usage_add(used,{'usage':{}},'small')
             return JSONResponse({'ok':True,'answer':_text,'model':used,'web':any(b.get('type')=='server_tool_use' for b in data.get('content',[])),'sources':_hq_sources(data),'small':True},headers=_HUB_CORS)
         return JSONResponse({'ok':True,'answer':'바름이다. 지금 AI 연결이 잠시 안 돼서 그 말엔 답을 못 했다 — 잠시 뒤 다시 물어봐 줘. 고객 얘기(나이·병력·약)를 적어 주면 심사·고지는 바로 봐 준다.\n[이유] '+re.sub(r'\s+',' ',str((data or {}).get('error',data))[:220]),'model':'','small':True,'err':str(data)[:200]},headers=_HUB_CORS)
-    for model in _HQ_MODELS:
-        for think in ((True,False) if model==_HQ_MODELS[0] else (False,)):
+    _mlist=_HQ_MODELS if _is_hq else [m for m in ['claude-sonnet-5-5']+_HQ_MODELS if m]
+    if _bmode=='min': _mlist=['claude-haiku-5-5']+_mlist
+    _mlist=list(dict.fromkeys(_mlist))
+    for model in _mlist:
+        for think in ((True,False) if (model==_HQ_MODELS[0] and _is_hq and _bmode=='normal') else (False,)):
             try:
-                st,data=await _call(model,think=think,tools=_tools)
+                st,data=await _call(model,think=think,tools=_tools,mt=(None if _is_hq else 2500))
                 if st==200 and _txt(data): used=model; break
                 print(f'[v816 helper] {model} think={think} status={st} err={str(data)[:200]}')
                 if st==400 and _tools and any(t.get('name')=='web_fetch' for t in _tools):   # ★v821 web_fetch 미지원 키면 검색만으로
@@ -15136,7 +15208,7 @@ async def helper_chat(body:dict):
             if re.search(r'(19|20)?\d{2}\s*년|\d{4}[.\-/]\d{1,2}|\d+\s*(개월|년)\s*전|작년|재작년',pickq or '') and not re.search(r'3\.N\.5|3\.1\.1|311-5|3\.\d{1,2}\.5',body_txt): miss.append('간편 유형 날짜 줄(3.N.5 · 3.1.1/311-5 · 2Q 가능 시점)')
             if not re.search(r'표준체',body_txt): miss.append('「표준체 시도:」 줄(제217조 — 표준체 먼저, 막히면 이유)')
         left=_HQ_BUDGET-(_t816.time()-_t0)
-        if (_HQ_REVIEW and left>45 and data.get('stop_reason')!='max_tokens' and not body.get('nofix')):
+        if (_HQ_REVIEW and _is_hq and _bmode=='normal' and (_is_reco or _HQ_REVIEW_ALL) and left>45 and data.get('stop_reason')!='max_tokens' and not body.get('nofix')):   # ★v837 검수는 추천·회사 질문만(HELPER_REVIEW_ALL=1 이면 전부)
             rv=[{'role':'user','content':'[검수할 질문]\n'+(lastq or pickq)[:1500]+'\n\n[바름이 초안]\n'+text+'\n\n'+_HQ_REVIEW_ASK+('\n\n[형식에서 빠진 것] '+' / '.join(miss) if miss else '')}]
             # ★v829 (지점장 캡처 2026.10.09 19:27 「간병인변천사」 답이 「…슬기로운 간편간병인에」에서 잘림): 검수 호출 max_tokens 3000이 제229조 긴 답(12~30줄·표)보다 작아
             #   검수본이 중간에서 끊겼고, 끊긴 검수본이 초안을 덮어썼다 → 검수는 초안과 같은 상한(_HQ_MAXTOK)으로 부르고, 검수본이 max_tokens로 끝났으면 버리고 초안을 쓴다.
@@ -15167,7 +15239,8 @@ async def helper_chat(body:dict):
             except Exception: pass
     try: text=_fix_ins_side(text)
     except Exception: pass
-    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web,'sec':round(_t816.time()-_t0,1),'drawer':_app or 'all','sources':sources,'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'terms_added':_terms_added})
+    _usage_add(used,{'usage':{}},'hq' if _is_hq else 'basic'); _bmode2,_bpct2,_bu2=_usage_mode()
+    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web,'tier':('hq' if _is_hq else 'basic'),'budget':{'mode':_bmode2,'pct':round(_bpct2*100),'krw':round(_bu2['krw'])},'sec':round(_t816.time()-_t0,1),'drawer':_app or 'all','sources':sources,'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'terms_added':_terms_added})
 
 # ★v799 제213조 — 답의 「손보:」「생보:」 줄 회사가 반대쪽이면 서버가 바로잡는다
 _INS_NONLIFE=['삼성화재','현대해상','DB손보','DB손해보험','KB손보','KB손해보험','메리츠화재','한화손보','한화손해보험','롯데손보','롯데손해보험','흥국화재','NH농협손보','농협손보','NH농협손해보험','하나손보','하나손해보험','MG손보','AIG손보','라이나손보','라이나손해보험','캐롯','AXA손보','악사손보']
