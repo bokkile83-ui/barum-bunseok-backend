@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v837-budget-20261010'
+VSTAMP = 'v838-max200-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14823,12 +14823,12 @@ async def helper_kb_search(body:dict):
 
 # ★v816 제218조 바름이 프리미엄 설정 — Railway 변수로 바꿀 수 있다(HELPER_MODEL · HELPER_THINK · HELPER_REVIEW=0 이면 검수 끔)
 _ANTH_URL=os.environ.get('ANTHROPIC_URL','https://api.anthropic.com/v1/messages')
-_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-sonnet-5-5'),'claude-sonnet-5-5','claude-haiku-5-5','claude-opus-5-5','claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]   # ★v837 기본 모델 sonnet-5-5(지점장 「한 달 5만원」) — opus 는 HELPER_MODEL 로   # ★v833 현행 모델명(5.5) 폴백 추가 — 구 이름만 있어 전부 실패하면 「AI 응답 실패」
+_HQ_MODELS=[m for m in [os.environ.get('HELPER_MODEL','claude-opus-5-5'),'claude-sonnet-5-5','claude-haiku-5-5','claude-opus-5-5','claude-sonnet-4-6','claude-haiku-4-5-20251001'] if m]   # ★v837 기본 모델 sonnet-5-5(지점장 「한 달 5만원」) — opus 는 HELPER_MODEL 로   # ★v833 현행 모델명(5.5) 폴백 추가 — 구 이름만 있어 전부 실패하면 「AI 응답 실패」
 _HQ_MODELS=list(dict.fromkeys(_HQ_MODELS))
-_HQ_THINK=int(os.environ.get('HELPER_THINK','3000') or 0)   # ★v837 8000→3000(비용)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
+_HQ_THINK=int(os.environ.get('HELPER_THINK','8000') or 0)   # ★v838 원복 8000 — Max 플랜 월 $200 프로모션 크레딧(지점장 09:24 「원복 넣자」)   # ★v822 최대 품질(지점장 「비용 많이 들어도 된다 · 퀄리티 최대치」)
 _HQ_MAXTOK=int(os.environ.get('HELPER_MAXTOK','6000') or 6000)
 _HQ_REVIEW=os.environ.get('HELPER_REVIEW','1')!='0'
-_HQ_REVIEW_ALL=os.environ.get('HELPER_REVIEW_ALL','0')=='1'   # ★v837
+_HQ_REVIEW_ALL=os.environ.get('HELPER_REVIEW_ALL','1')=='1'   # ★v838 검수 전부(원복)
 _HQ_WEB_ALL=os.environ.get('HELPER_WEB_ALWAYS','1')!='0'
 _HQ_WEB_USES=int(os.environ.get('HELPER_WEB_USES','5') or 5)
 _HQ_FETCH_ALL=os.environ.get('HELPER_FETCH_ALWAYS','0')=='1'   # ★v821 약관 질문엔 web_fetch(약관 PDF 읽기) 자동, 1 이면 모든 질문   # ★v820 서치력: 질문당 웹 검색 최대 5회   # ★v816: 모든 질문에 웹 검색 도구를 준다(네이버 AI 처럼 최신 공개 자료 확인) · 0 이면 추천 질문만
@@ -14839,7 +14839,7 @@ _HQ_BUDGET=int(os.environ.get('HELPER_BUDGET','270') or 270)
 #   미터는 hub_config(k='helper_usage_YYYYMM')에 누적(DB 없으면 메모리). 예산 HELPER_BUDGET_KRW(기본 50000).
 #   80% 넘으면 절약 모드(생각 없음·검수 없음·웹 2회·자료 8쪽) · 100% 넘으면 최소 모드(haiku·웹 없음) — 답은 끊지 않는다. 답 꼬리에 상태 표시.
 _HQ_PRICE={'opus':(4.0,20.0),'sonnet':(2.0,10.0),'haiku':(1.0,5.0)}
-_HQ_KRW=float(os.environ.get('HELPER_KRW','1400') or 1400); _HQ_BUDGET_KRW=int(os.environ.get('HELPER_BUDGET_KRW','50000') or 50000)
+_HQ_KRW=float(os.environ.get('HELPER_KRW','1400') or 1400); _HQ_BUDGET_KRW=int(os.environ.get('HELPER_BUDGET_KRW','250000') or 250000)   # ★v838 월 $200 프로모션 안(25만원)
 _HQ_USAGE={'ym':'','krw':0.0,'calls':0,'q':0,'hq':0,'basic':0,'small':0,'practice':0,'in':0,'out':0,'web':0}
 def _usage_ym(): return datetime.datetime.now().strftime('%Y%m')
 def _usage_load():
