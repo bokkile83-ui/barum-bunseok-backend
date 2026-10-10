@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v838-max200-20261010'
+VSTAMP = 'v839-hcrelay-20261010'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -11681,6 +11681,73 @@ async def hub_hc_post(code: str = Form(''), hc: str = Form('')):
     if err: return JSONResponse({'ok': False, 'error': err, 'retry': True}, headers=_HUB_CORS)
     return JSONResponse({'ok': True, 'n': len(out), 'hc': out, 'src': 'db' if _hub_db_on() else 'file'}, headers=_HUB_CORS)
 
+# ★v839 제241조 (지점장 2026.10.10 15:10 「여전히 안 된다 — 헬스케어로 돌아가지지 않고 메디케어는 없다」): 폰 새 창 postMessage/opener 가 삼성 브라우저에서 끊김 →
+#   서버 중계. MEDICARE/BOHUM 이 PDF 를 /hub/hcpdf 에 올리고(번호·고객명·종류) 같은 탭으로 HEALTHCARE 로 돌아간다 → HEALTHCARE 가 /hub/hcpdf 에서 받아 붙인다.
+#   저장 = hc_pdf 표(bytea, 고객·종류별 1건 덮어쓰기, 7일 지나면 지움) · DB 없으면 메모리.
+_HCPDF_MEM={}
+def _hcpdf_init():
+    c=_db()
+    if not c: return
+    try:
+        with c, c.cursor() as k:
+            k.execute("CREATE TABLE IF NOT EXISTS hc_pdf(k TEXT PRIMARY KEY, name TEXT, v BYTEA, updated TIMESTAMPTZ DEFAULT NOW())")
+            k.execute("DELETE FROM hc_pdf WHERE updated < NOW() - INTERVAL '7 days'")
+    except Exception as _e: print('[v839 hcpdf] init',str(_e)[:80])
+    finally:
+        try: c.close()
+        except Exception: pass
+try: _hcpdf_init()
+except Exception: pass
+def _hcpdf_key(own,name,kind): return f"{own}|{(name or '').strip()[:40]}|{kind}"
+@app.post('/hub/hcpdf')
+async def hub_hcpdf_post(code: str = Form(''), name: str = Form(''), kind: str = Form(''), fname: str = Form(''), file: UploadFile = File(...)):
+    own=_hub_owner(code)
+    if not own: return JSONResponse({'ok':False,'error':'번호 확인 실패'},headers=_HUB_CORS)
+    if kind not in ('med','boh'): return JSONResponse({'ok':False,'error':'종류 오류'},headers=_HUB_CORS)
+    data=await file.read()
+    if not data or len(data)>25_000_000: return JSONResponse({'ok':False,'error':'PDF 없음 또는 25MB 초과'},headers=_HUB_CORS)
+    key=_hcpdf_key(own,name,kind); fn=(fname or file.filename or (kind+'.pdf'))[:120]
+    c=_db(); src='mem'
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("INSERT INTO hc_pdf(k,name,v,updated) VALUES(%s,%s,%s,NOW()) ON CONFLICT (k) DO UPDATE SET name=EXCLUDED.name, v=EXCLUDED.v, updated=NOW()",(key,fn,data))
+            src='db'
+        except Exception as _e: print('[v839 hcpdf] 저장 실패',str(_e)[:80]); _HCPDF_MEM[key]=(fn,data)
+        finally:
+            try: c.close()
+            except Exception: pass
+    else: _HCPDF_MEM[key]=(fn,data)
+    return JSONResponse({'ok':True,'kind':kind,'name':fn,'bytes':len(data),'src':src},headers=_HUB_CORS)
+def _hcpdf_get(own,name,kind):
+    key=_hcpdf_key(own,name,kind); c=_db()
+    if c:
+        try:
+            with c, c.cursor() as k:
+                k.execute("SELECT name,v FROM hc_pdf WHERE k=%s",(key,)); r=k.fetchone()
+                if r: return r[0], bytes(r[1])
+        except Exception as _e: print('[v839 hcpdf] 읽기 실패',str(_e)[:80])
+        finally:
+            try: c.close()
+            except Exception: pass
+    r=_HCPDF_MEM.get(key); return (r[0],r[1]) if r else (None,None)
+@app.get('/hub/hcpdf')
+async def hub_hcpdf_get(code: str = '', name: str = '', kind: str = ''):
+    own=_hub_owner(code)
+    if not own: return JSONResponse({'ok':False,'error':'번호 확인 실패'},headers=_HUB_CORS)
+    fn,data=_hcpdf_get(own,name,kind)
+    if not data: return JSONResponse({'ok':False,'error':'없음'},status_code=404,headers=_HUB_CORS)
+    return Response(content=data,media_type='application/pdf',headers=dict(_HUB_CORS,**{'X-File-Name':urllib.parse.quote(fn or ''),'Cache-Control':'no-store'}))
+@app.get('/hub/hcpdf/list')
+async def hub_hcpdf_list(code: str = '', name: str = ''):
+    own=_hub_owner(code)
+    if not own: return JSONResponse({'ok':False,'error':'번호 확인 실패'},headers=_HUB_CORS)
+    out={}
+    for kind in ('med','boh'):
+        fn,data=_hcpdf_get(own,name,kind); out[kind]={'name':fn,'bytes':len(data)} if data else None
+    return JSONResponse({'ok':True,'name':name,'pdf':out},headers=_HUB_CORS)
+@app.options('/hub/hcpdf')
+async def hub_hcpdf_opt(): return Response(status_code=204,headers=_HUB_CORS)
 @app.options('/hub/hc')
 def hub_hc_opt():
     return Response(status_code=204, headers=_HUB_CORS)
