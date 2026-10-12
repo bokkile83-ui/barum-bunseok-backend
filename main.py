@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v841-info781-20261012'
+VSTAMP = 'v843-info782-20261012'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14803,8 +14803,14 @@ async def helper_kb_upload(pw: str = Form(''), title: str = Form(''), tag: str =
             for info in z.infolist():
                 if info.is_dir(): continue
                 nm=info.filename
-                try: nm=nm.encode('cp437').decode('cp949')
-                except Exception: pass
+                if not (info.flag_bits & 0x800):   # ★v842 제253조: UTF-8 표시 없는 zip(리눅스 zip 명령 등) — utf-8 먼저, 안 되면 윈도 cp949
+                    raw=None
+                    try: raw=nm.encode('cp437')
+                    except Exception: pass
+                    if raw is not None:
+                        for enc in ('utf-8','cp949'):
+                            try: nm=raw.decode(enc); break
+                            except Exception: pass
                 base=os.path.basename(nm)
                 if not base or base.startswith('.') or base.startswith('__'): continue
                 t=(tag+' ' if tag else '')+os.path.splitext(base)[0]; t=t.strip()[:80]
