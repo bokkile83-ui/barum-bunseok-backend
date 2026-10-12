@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v843-info782-20261012'
+VSTAMP = 'v845-ppttier-20261013'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -9781,6 +9781,27 @@ def build_ppt(data, out, totals=None, surg_q=None, surg_s=None, splits=None):
     # ★v337 1-7/1-8/1-9종 = 폼 `1~7종 수술비 :` 칸에 대표값(최댓값)
     # ★v351: 엑셀 '120대수술비'를 분석지 PPT `_____대 수술 :` 칸에도 기재(질병 박스 TextBox 17).
     if g('n대수술비'): pvl('TextBox 17','대 수술','n대수술비')
+    # ★v845 제260조 (지점장 2026.10.13 「N대수술비가 ___대수술비라고 늘 나온다 — 잡아라」):
+    #   라벨 칸 'L_TextBox 17|대 수술'의 밑줄 '____'을 실제 N(116·120·7 등)으로 바꾼다.
+    #   N = n대수술비로 해석된 원담보명 중 <b>금액 최대(=대표값) 담보</b>의 '숫자+대' 하나만(지점장 08:36 「116대 이렇게만」).
+    #   값 칸은 종전대로 대표값(엑셀과 동일). 값이 없으면 밑줄 그대로.
+    if g('n대수술비'):
+        _best = None   # (amt, N)
+        for _ct in contracts:
+            for _raw, _amt in _ct.get('dambo', {}).items():
+                if resolve(_raw) != 'n대수술비': continue
+                _t = re.sub(r'\([^)]*\)', '', re.sub(r'\s', '', str(_raw)))
+                _m = re.search(r'(?<!\d)(\d{1,3})대', _t)
+                if not _m: continue
+                _cand = (float(_amt or 0), int(_m.group(1)))
+                if _best is None or _cand > _best: _best = _cand
+        _lab = _cells.get('L_TextBox 17|대 수술') if _CELLMODE else None
+        if _best and _lab is not None:
+            _nstr = str(_best[1])
+            for _pp in _lab.text_frame.paragraphs:
+                for _rr in _pp.runs:
+                    if '_' in _rr.text:
+                        _rr.text = re.sub(r'_+', _nstr, _rr.text, count=1); break
     # ★v754 제179조 — 엑셀이 8칸 슬래시면 분석지 PPT 도 슬래시 그대로(1-5종과 같은 표기). 대표값이면 종전 pvl.
     for _k8, _bx8 in (('상해 종수술비(1-8종)','TextBox 19'), ('질병 종수술비(1-8종)','TextBox 17')):
         _s8 = (splits or {}).get('__J8__'+_k8)
