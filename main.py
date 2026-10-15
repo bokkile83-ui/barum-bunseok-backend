@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v846-info783-20261014'
+VSTAMP = 'v849-claimfix-20261015'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -10554,6 +10554,10 @@ _onReady(()=>{
       +_rc(j.pdf, _rn+'_리포트.pdf', '리모델링 리포트 PDF','pt')
       /* ★v612 (지점장 지시 2026.08.30) — 최종 엑셀 기준 보장분석지 PPT 추가 */
       +_rc(j.anal, '보장분석지_'+_rn+'(최종).pptx', '보장분석지 PPT (최종)','pt')
+      /* ★v848 제263조 (지점장 2026.10.15 「④ 비교엑셀에는 보험(BOHUM)이 안 나온다」) — ①~③과 같은 BOHUM 1클릭 카드. 입력 = 최종 엑셀(B) */
+      +(j.final_xlsx?('<a class="file-card pt bh" target="_blank" rel="noopener" href="'+BOHUM_APP+'#xl='+encodeURIComponent(location.origin+j.final_xlsx)
+        +'&nm='+encodeURIComponent((j.client||'')+'(최종)')+'" style="cursor:pointer;text-decoration:none;color:#fff">'
+        +'<span class="ic">📋</span><span class="nm">MAKEONE BOHUM 보기<br><span style="font-size:10px;color:#C9D3EE">최종 엑셀로 암·뇌·심 합산 4장 — 새 창에서 바로 그려짐</span></span><span class="dl">열기</span></a>'):'')
       +'</div>'
       /* ★v687 산출물이 빠지면 빨갛게 사유를 띄운다 — 카드가 조용히 사라지지 않는다 */
       +((j.fail&&j.fail.length)?('<div style="margin-top:6px;color:#c0392b;font-weight:700;font-size:12px">★ 산출물 실패 '
@@ -14485,6 +14489,10 @@ async def remodel_route(xlsx: UploadFile = File(None),
         _d = _save_dl(r['pdf'], f'{_cl}_remodel_report.pdf') if r.get('pdf') else ''
         # ★★★★★v612 (지점장 지시 2026.08.30 「비교엑셀 + 리포트 + 보장분석ppt 3가지로」)
         _ap = _save_dl(r['anal_pptx'], f'보장분석지_{_cl}(최종).pptx') if r.get('anal_pptx') else ''
+        # ★★★★★v848 제263조 (지점장 2026.10.15 「비교엑셀(④)에는 보험(BOHUM)이 안 나온다」)
+        #   ①~③은 v824 제224조로 BOHUM 1클릭 카드가 붙었는데 ④ 리모델링 결과에는 카드 자체가 없었다(홈 안내문엔 BOHUM이 적혀 있었다).
+        #   BOHUM은 보장분석 엑셀 형식을 읽으므로 ④의 입력 = <b>최종 엑셀(B)</b>을 /dl 에 저장해 주소를 넘긴다. 지급방식(bohum_pay)은 ④에선 없음(엑셀만).
+        _fx = _save_dl(_nb, f'보장진단_{_cl}(최종).xlsx') if _nb else ''
         print(f"[v422g 리모델링] {_cl} {c['prem_old']:,.0f}→{c['prem_new']:,.0f} "
               f"절감 {c['save_m']:,.0f}({c['save_pct']}%) · 증가 {len(c['up'])} 신규 {len(c['add'])} "
               f"감소 {len(c['down'])} 삭제 {len(c['delete'])}")
@@ -14495,11 +14503,13 @@ async def remodel_route(xlsx: UploadFile = File(None),
                              'n_up': len(c['up']), 'n_add': len(c['add']),
                              'n_down': len(c['down']), 'n_del': len(c['delete']),
                              'xlsx': _x, 'pptx': _p, 'pdf': _d, 'anal': _ap,
+                             'final_xlsx': _fx, 'final_xlsx_name': f'보장진단_{_cl}(최종).xlsx',   # ★v848 BOHUM 입력
                              'fail': r.get('fail') or [],   # ★v687 산출물 실패 사유 — 화면 표시
                              'all': _zip_dl([(r['xlsx'], f'{_cl}_리모델링_비교.xlsx'),
                                              (r['pptx'], f'{_cl}_리모델링_리포트.pptx'),
                                              (r.get('pdf'), f'{_cl}_리모델링_리포트.pdf'),
-                                             (r.get('anal_pptx'), f'보장분석지_{_cl}(최종).pptx')],
+                                             (r.get('anal_pptx'), f'보장분석지_{_cl}(최종).pptx'),
+                                             (_nb, f'보장진단_{_cl}(최종).xlsx')],
                                             f'리모델링_전체_{_cl}.zip')})
     except Exception as e:
         traceback.print_exc()
