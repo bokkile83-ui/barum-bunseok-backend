@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v850-claimforms-20261015'
+VSTAMP = 'v851-infopages-20261015'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -15747,3 +15747,8 @@ def _forms_zip850(grp: str, co: str):
     fn = f'{co}_청구서양식_MAKEONE.zip'
     return Response(buf.getvalue(), media_type='application/zip',
                     headers={'Content-Disposition': "attachment; filename*=UTF-8''" + urllib.parse.quote(fn)})
+
+# ★★★★★v851 제267조 — 인포메이션 쪽 그림(infopages/1~60.webp, 1400px) 정적 제공 → 허브 view.html 이 PDF 13MB 대신 쪽당 100~300KB 그림으로 즉시 표시
+_INFOPG851 = os.path.join(HERE, 'infopages')
+if os.path.isdir(_INFOPG851):
+    app.mount('/infopages', _SF850(directory=_INFOPG851), name='infopages851')
