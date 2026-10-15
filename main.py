@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v854-ihdgate-20261016'
+VSTAMP = 'v855-nursing-20261016'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -860,6 +860,7 @@ def _split_cols(block_lines):
 _AMT_TAIL_UF = re.compile(r'(?<!\S)([\d][\d,]{0,11})\s*$')
 def _paren_bal(s): return s.count('(')+s.count('（')-s.count(')')-s.count('）')
 
+_KT855 = re.compile(r'간호\s*[·ㆍ]?\s*간병\s*통합|간병\s*통합\s*서비스|간호\s*통합')   # ★v855 제271조 간호통합병동 키워드
 def _unfold_cols(block_lines):
     """★★★v225 (지점장 지시 2026.07.25, 영구): <b>별첨 담보명 접힘 복원</b>.
     롯데 3열 별첨은 담보명이 길면 <b>위·아래 줄에 걸쳐 접히고 금액은 가운데 줄</b>에 온다.
@@ -928,6 +929,13 @@ def _unfold_cols(block_lines):
                 #   ★괄호가 안 맞으면(`_paren_bal > 0`) 종전대로 꼬리 — 롯데 3열 복원은 그대로 산다.
                 over = (pend is not None and amt is None and nm
                         and (tail >= 1 or _prev_pure_amt) and _paren_bal(buf) <= 0)
+                # ★★★★★v855 제271조 (지점장 2026.10.16 「간호통합병동이 무조건 있어야 한다」 · 조영선 DB 2504 실측):
+                #   간호·간병통합서비스 줄은 길어서 3열 별첨에서 거의 항상 두 줄로 접힌다. 구 복원은 이 머리줄을
+                #   「앞 담보의 꼬리」로 붙이거나 「머리말」로 덮어써 통째로 잃었다(간호통합 7 이 [확인]큐에도 없었다).
+                #   → 이 키워드가 든 이름은 ① 항상 새 담보로 시작(앞 담보를 먼저 닫는다) ② 금액을 못 받은 동안은 절대 덮어쓰지 않는다.
+                _kt855 = bool(_KT855.search(nm)) if nm else False
+                if _kt855 and buf and not (pend is None and _KT855.search(buf)): _flush()
+                if buf and pend is None and _KT855.search(buf): over = False
                 if gap or dup or over: _flush()
                 _prev_pure_amt = (amt is not None and not nm)
                 prev = i
@@ -937,7 +945,7 @@ def _unfold_cols(block_lines):
                     #   [실측] `(정상계약 리스트)삼성생명…보장기간` + `상해 입원의료비` 가 한 덩어리가 돼
                     #   <b>상해 입원의료비 5,000이 통째로 사라졌다</b>(김생금님).
                     #   ★괄호가 안 맞으면 진짜 접힘이므로 종전대로 이어붙인다(롯데 3열 복원 유지).
-                    if buf and pend is None and _paren_bal(buf) <= 0:
+                    if buf and pend is None and _paren_bal(buf) <= 0 and not _KT855.search(buf):   # ★v855 간호통합 머리줄은 덮어쓰지 않는다
                         buf = nm; tail = 0
                     elif buf: buf += nm; tail += 1
                     else: buf = nm
@@ -979,6 +987,7 @@ def rule_extract(block_lines, prefolded=False):
     #   1담보 1줄</b>로 만들어져 들어온다(parse_jean). 여기에 별첨용 접힘 복원을 다시 걸면
     #   금액 끝좌표가 우연히 두 무리로 갈려 <b>2열로 오판</b>하고(실측 경계 [38,63]) 담보명이
     #   서로 뭉쳐 <b>20건 → 16건</b>이 됐다. 이미 접힌 게 없는 입력에는 복원을 걸지 않는다.
+    _orig855 = list(block_lines)   # ★v855 안전망용 원문 보관
     if not prefolded:
         block_lines=_unfold_cols(block_lines)                # ★v225 담보명 접힘 복원(성공 시 '이름  금액' 1줄 형태)
         block_lines=_split_cols(_reflow_cols(block_lines))   # ★v133 접힘 3열 재조립 → 기존 다열 분해
@@ -1116,6 +1125,14 @@ def rule_extract(block_lines, prefolded=False):
     for i, nm in enumerate(names):
         _add(nm, (amts[i] if i < len(amts) else 0))   # 금액 미확보=0 → [확인] 경유, 증발 금지
     dambo['__DUP__'] = {k:v for k,v in _duplog.items() if len(v) >= 2}
+    # ★★★★★v855 제271조 — 안전망: 별첨 원문에 간호·간병통합 글자가 있는데 담보 목록에 그 이름이 하나도 없으면
+    #   조용히 지나가지 않는다 → [확인]큐 최상단(★결함의심)에 「간호통합병동 줄 유실」을 남긴다(금액은 지어내지 않는다).
+    try:
+        _src855 = ' '.join(str(l) for l in _orig855)
+        if _KT855.search(_src855) and not any(_KT855.search(str(k)) for k in dambo):
+            dambo['★유실의심 NURSING-CARE 줄(별첨 접힘) — 원문 확인'] = 0
+            print('[v855 제271조] 간호통합 줄 유실 의심 — 원문엔 있는데 담보 목록엔 없음')
+    except Exception: pass
     return dambo
 
 def llm_extract(block_text):
@@ -1471,6 +1488,8 @@ _STRUCT_SELFTEST = [
     # ★v753 제178조 — 운전자 6행은 규칙이 최종 판정. 이 줄이 사라지면 LLM 이 민사소송법률비용·부상치료비(1~7급)를 다시 끌어온다.
     ('제178조 운전자LLM차단', 'main.py',       r"if std in _DRIVER_RULE_ONLY:", True),
     ('제270조 허혈성단독관문',  'main.py',       r"if std == '허혈성 진단비' and '허혈' not in", True),
+    ('제271조 간호통합보호',    'main.py',       r"_KT855 = re.compile", True),
+    ('제271조 간호통합안전망',  'main.py',       r"유실의심 NURSING-CARE 줄", True),
     ('제270조 세부허혈제거',    'main.py',       r"_SEBU_WIN = \{[^}]*'허혈성 진단비'", False),
     ('제216조 암치료LLM차단', 'main.py',       r"std in _CANCER_RULE_ONLY or re\.search\(r'카티", True),
     # ★v754 제179조 — 1-8종 세트+종번호는 8칸 슬래시. 이 줄이 사라지면 8줄이 한 숫자로 더해진다(700).
@@ -8774,6 +8793,8 @@ def build_excel(data, out):
         _n = re.sub(r'\s', '', str(_raw or '')); _nt = str(_note or '')
         if ('접힘의심' in _n) or ('원문 대조' in _nt):
             return ('★결함의심', '담보명 잘림 — 별첨 원문 대조 필요')
+        if '유실의심' in _n:
+            return ('★결함의심', '간호·간병통합 줄이 별첨 원문엔 있는데 담보로 안 잡혔다 — 원문 보고 간호통합병동 행에 수기 (제271조)')
         # ★★★★★v853 제269조 (조영선 DB 2504 실측 2026.10.15): 담보명이 꼬리 조각뿐인 줄(`맞춤간편고지)` 20 · `간편고지)` 5)
         #   = 별첨 두 줄 접힘에서 앞줄(진짜 담보명)이 앞 담보에 붙고 뒷줄 조각에 금액이 매달린 것. 「마스터 무행」으로 조용히
         #   묻히면 간병인 20·요양 5 가 사라진 줄도 모른다 → ★결함의심 최상단에 「앞 담보명 잘림」으로 노출한다.
