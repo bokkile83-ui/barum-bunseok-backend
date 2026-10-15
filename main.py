@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v852-sebuguard-20261015'
+VSTAMP = 'v853-fragflag-20261015'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -8764,6 +8764,11 @@ def build_excel(data, out):
         _n = re.sub(r'\s', '', str(_raw or '')); _nt = str(_note or '')
         if ('접힘의심' in _n) or ('원문 대조' in _nt):
             return ('★결함의심', '담보명 잘림 — 별첨 원문 대조 필요')
+        # ★★★★★v853 제269조 (조영선 DB 2504 실측 2026.10.15): 담보명이 꼬리 조각뿐인 줄(`맞춤간편고지)` 20 · `간편고지)` 5)
+        #   = 별첨 두 줄 접힘에서 앞줄(진짜 담보명)이 앞 담보에 붙고 뒷줄 조각에 금액이 매달린 것. 「마스터 무행」으로 조용히
+        #   묻히면 간병인 20·요양 5 가 사라진 줄도 모른다 → ★결함의심 최상단에 「앞 담보명 잘림」으로 노출한다.
+        if re.fullmatch(r'[()\s]*(맞춤|통합)?(간편|일반)?(가입|고지|심사)?(형)?[)\s]*(갱신형)?[)\s]*', _n) or _n.startswith(')') or len(_n) <= 2:
+            return ('★결함의심', '담보명이 꼬리 조각뿐 — 앞 담보명 잘림(별첨 두 줄 접힘). 바로 앞 담보 금액·간병인/일당 줄 원문 확인')
         for _k, _why in _RULE_OUT:
             if _k in _n: return ('규칙제외', _why)
         if ('후유' in _n) and ('80' not in _n) and re.search(r'(?<![\d.])(20|50)\s*(?:%|[~\-–]\s*100\s*%)', _n):
