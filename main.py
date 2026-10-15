@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v849-claimfix-20261015'
+VSTAMP = 'v850-claimforms-20261015'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -15723,3 +15723,27 @@ for _i810, _r810 in enumerate(list(app.router.routes)):
         app.router.routes[_i810] = _nr810
         _n810.append(_r810.path)
 print('[v810 옆줄] 무거운 길 %d개를 threadpool 로: %s' % (len(_n810), ', '.join(_n810)))
+
+# ★★★★★v850 제266조 — 각사 보험금 청구서 양식 PDF(지점장 수집 2026.10.15, 손보16·생명22·공제5 = 115개)
+#   /forms/index.json = 목록 · /forms/<그룹>/<회사>/<파일>.pdf = 원본(pikepdf 재압축) · /forms/zip/<그룹>/<회사> = 회사별 zip(즉석)
+from fastapi.staticfiles import StaticFiles as _SF850
+_FORMS850 = os.path.join(HERE, 'forms')
+if os.path.isdir(_FORMS850):
+    app.mount('/forms', _SF850(directory=_FORMS850), name='forms850')
+
+@app.get('/forms-zip/{grp}/{co}')
+def _forms_zip850(grp: str, co: str):
+    import zipfile as _zf, io as _io
+    grp = os.path.basename(grp); co = os.path.basename(co)          # 경로 탈출 금지
+    d = os.path.join(_FORMS850, grp, co)
+    if not os.path.isdir(d):
+        return JSONResponse({'ok': False, 'error': '없는 회사'}, status_code=404)
+    buf = _io.BytesIO()
+    with _zf.ZipFile(buf, 'w', _zf.ZIP_DEFLATED) as z:
+        for r, _, fs in os.walk(d):
+            for f in sorted(fs):
+                p = os.path.join(r, f)
+                z.write(p, os.path.join(co, os.path.relpath(p, d)))   # UTF-8 플래그 자동(Python zipfile)
+    fn = f'{co}_청구서양식_MAKEONE.zip'
+    return Response(buf.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition': "attachment; filename*=UTF-8''" + urllib.parse.quote(fn)})
