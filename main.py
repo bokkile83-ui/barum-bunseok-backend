@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v855-nursing-20261016'
+VSTAMP = 'v856-simple-20261016'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -8834,6 +8834,12 @@ def build_excel(data, out):
     _nbug  = sum(1 for t in _qc if t[0] == '★결함의심')
     _nrule = sum(1 for t in _qc if t[0] == '규칙제외')
     _nnone = sum(1 for t in _qc if t[0] == '마스터 무행')
+    # ★v856 제272조 신인 모드 — 결함의심 요약을 화면으로(엑셀 확인사항 시트까지 안 열어도 보이게)
+    try:
+        globals()['_QC_LAST'] = {'bug': _nbug, 'rule': _nrule, 'none': _nnone,
+            'items': [{'co': str(t[3] or ''), 'raw': str(t[4] or '')[:60], 'amt': t[5] if isinstance(t[5],(int,float)) else None, 'why': str(t[1] or '')[:70]}
+                      for t in _qc if t[0] == '★결함의심'][:8]}
+    except Exception: globals()['_QC_LAST'] = None
     print('[v308 확인큐] 총 %d = 결함의심 %d / 규칙제외 %d / 마스터무행 %d' % (len(_qc), _nbug, _nrule, _nnone))
     _h6 = ws2.cell(6,1, '[확인] 자동매핑 실패 담보 %d건  —  ★결함의심 %d건 · 규칙제외 %d건 · 마스터 무행 %d건'
                         % (len(_qc), _nbug, _nrule, _nnone))
@@ -10451,6 +10457,19 @@ header{background:linear-gradient(180deg,#FFFFFF,#FBF8EF)!important;border-botto
 .tab:active,.tabc:active{transform:translateY(3px);box-shadow:0 1px 0 #EBCF7A!important}
 .mkhome{box-shadow:0 3px 10px rgba(15,63,160,.25)}
 }
+/* ★v856 신인 간단 모드 */
+body.mk-simple #up,body.mk-simple #tabnew,body.mk-simple #upr1,body.mk-simple #upr2,body.mk-simple .m4rows{display:none!important}
+body.mk-simple #simpleGuide{display:block!important}
+body.mk-simple .tabbar{justify-content:center}
+body.mk-simple #upp{min-width:150px}
+.mk-qc{border:2px solid #C0392B;background:#FFF1F0;border-radius:12px;padding:10px 12px;margin:8px 0;font-size:12px;line-height:1.5}
+.mk-qc b.t{color:#C0392B;font-size:13.5px}
+.mk-qc .it{margin-top:4px;color:#3a2e2e}
+.mk-qc button{margin-top:8px;border:0;background:#0E1E52;color:#fff;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer;width:100%}
+.mk-ok{border:1.5px solid #cfe3d4;background:#F2FBF4;border-radius:10px;padding:7px 10px;margin:8px 0;font-size:11.5px;color:#1d5c37}
+.mk-stamp{display:inline-block;background:#C0392B;color:#fff;border-radius:7px;padding:2px 8px;font-size:10.5px;font-weight:900;margin-left:6px;vertical-align:middle}
+.mk-sh{flex:none;margin-left:6px;border:1.5px solid #C5A052;background:#FFF8E6;color:#6B5200;border-radius:9px;padding:6px 8px;font-size:11px;font-weight:800;cursor:pointer}
+details.mk-more{margin-top:8px}details.mk-more summary{cursor:pointer;font-weight:800;color:var(--mute);font-size:12px;list-style:none}details.mk-more summary:before{content:'▸ '}details.mk-more[open] summary:before{content:'▾ '}
 </style></head><body>
 <script>
 /* ★MAKEONE 야간모드 수신기(20260905c) — 화면에 뜨는 버튼 없음. 허브에서 켜면 같이 어두워진다 */
@@ -10496,6 +10515,11 @@ window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night'
 <div class="app" id="app">
   <header><div style="flex:1"><h1>@@BRAND@@ <b>@@BSUB@@</b></h1>
     <div class="sub">보장분석 리포트 PDF 1개 → 엑셀+PPT 개별 다운로드</div>
+    <!-- ★v856 제272조 신인 모드(간단/전체) — 지점장 2026.10.16 「보장분석앱은 더 디테일하게」 -->
+    <div style="margin-top:6px;display:inline-flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;font-size:11.5px;font-weight:800">
+      <button type="button" id="modeS" onclick="mkMode('simple')" style="border:0;padding:4px 10px;cursor:pointer;background:#0E1E52;color:#fff">간단 (신인)</button>
+      <button type="button" id="modeF" onclick="mkMode('full')" style="border:0;padding:4px 10px;cursor:pointer;background:transparent;color:var(--mute)">전체</button>
+    </div>
     <div id="drobot" style="margin-top:5px;font-size:10.5px;font-weight:700;letter-spacing:-.2px;white-space:nowrap;overflow:hidden">@@DROBOT@@</div></div>
     <button id="lout" style="border:1px solid var(--line);background:transparent;color:var(--mute);
      border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;flex:none">로그아웃</button></header>
@@ -10509,6 +10533,16 @@ window.addEventListener('message',function(e){try{if(e.data&&e.data.mk==='night'
            산출물은 <b>칩(chip)</b>으로 감싸 줄이 넘쳐도 자연스럽게 흐르게 한다. -->
       <!-- ★★★★★v626 (지점장 지시 2026.09.02 「뭐가 나오는지 심플하게」).
            칩 12개를 버리고 <b>넣는 것 → 나오는 것</b>을 한 줄씩 3줄로. -->
+      <!-- ★v856 신인 안내(간단 모드에서만) -->
+      <div id="simpleGuide" style="display:none;font-size:12.5px;line-height:1.6">
+        <div style="font-weight:900;font-size:14px;color:#0E1E52;margin-bottom:6px">보장분석지 PDF 1개만 넣으면 됩니다</div>
+        <div style="display:grid;gap:5px">
+          <div><b style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#FFD84D;color:#374151;font-size:11px">1</b> 원넷에서 고객 <b>보장분석지</b>를 열어 <b>PDF 저장</b>(인쇄 말고 저장)</div>
+          <div><b style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#FFD84D;color:#374151;font-size:11px">2</b> 아래 <b>「보장분석지 PDF」</b> 칸에 넣고 <b>분석하기</b> → 1~3분 기다림</div>
+          <div><b style="display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:#FFD84D;color:#374151;font-size:11px">3</b> 고객에게 주는 건 <b>「고객용 보장분석지」 한 장</b>. 빨간 상자(확인 필요)가 뜨면 <b>체크한 뒤</b>에 준다</div>
+        </div>
+        <div style="margin-top:8px;font-size:10.5px;color:var(--mute)">제안서·엑셀 비교는 「전체」 모드에서 · 받은 PDF를 그대로 올리세요(재스캔·OCR 금지)</div>
+      </div>
       <div class="m4rows" style="display:flex;flex-direction:column;gap:7px;font-size:12px;line-height:1.5">
         <div><b><span style="display:inline-block;vertical-align:-3px;margin-right:5px;line-height:0"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 2h10l6 6v14H4z" fill="#d93025"/><path d="M14 2l6 6h-6z" fill="#f4a6a0"/><text x="12" y="17" font-size="6.4" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial">PDF</text></svg></span>① 보장분석지만</b><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#1D4ED8;margin-left:3px;vertical-align:0"></i><i style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#222;margin-left:3px;vertical-align:0"></i><br>
           <span style="color:var(--ink);opacity:.86">보장분석지 1개(KB·롯데·메리츠) → 엑셀 · 보장분석지PPT · 진단서 · <b>BOHUM</b></span></div>
@@ -10816,7 +10850,33 @@ $("#fi").onchange=e=>{/* ★★★★★v592 (지점장 2026.08.26 「제안서 
  file=files[0]||null;e.target.value="";   /* 같은 파일을 다시 고를 수 있게 비운다 */$("#uplabel").textContent=files.length?(files.map(function(f){return f.name;}).join(" · ")+"  ["+files.length+"/3]"):"제안서";_syncSend();};
 $("#fp").onchange=e=>{pdfFile=e.target.files[0]||null;$("#upplabel").textContent=pdfFile?pdfFile.name:"PDF";_syncSend();};
 function esc(s){return String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
+function add(html,cls){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;if(window.mkAddShare)mkAddShare(d);return d;}
+/* ★v856 제272조 신인 모드 — 간단(기본)/전체. 기기 저장. 간단 = ① 보장분석지 칸만 · 결과 = 고객용 1장 + 확인 상자 + 설계사용 접힘 */
+function mkMode(m){try{localStorage.setItem('mk_bm_mode',m)}catch(e){};document.body.classList.toggle('mk-simple',m==='simple');
+  const s=document.getElementById('modeS'),f=document.getElementById('modeF');if(s&&f){s.style.background=m==='simple'?'#0E1E52':'transparent';s.style.color=m==='simple'?'#fff':'var(--mute)';f.style.background=m==='full'?'#0E1E52':'transparent';f.style.color=m==='full'?'#fff':'var(--mute)'}
+  const l=document.getElementById('upplabel');if(l&&(l.textContent==='PDF'||l.textContent==='보장분석지 PDF'))l.textContent=m==='simple'?'보장분석지 PDF':'PDF';}
+function mkIsSimple(){return document.body.classList.contains('mk-simple')}
+_onReady(()=>{let m='simple';try{m=localStorage.getItem('mk_bm_mode')||'simple'}catch(e){};mkMode(m)});
+function mkQcBox(j){const q=j&&j.qc;if(!q)return '';
+  if(!q.bug)return '<div class="mk-ok">✓ 자동 검사 통과 — 결함의심 0건 (규칙제외 '+(q.rule||0)+' · 행 없음 '+(q.none||0)+'은 정상)</div>';
+  const its=(q.items||[]).map(x=>'<div class="it">· '+esc(x.co)+' <b>'+esc(x.raw)+'</b>'+(x.amt!=null?' '+Number(x.amt).toLocaleString():'')+' — <span style="color:#8a3b34">'+esc(x.why)+'</span></div>').join('');
+  const cust=(j.xlsx_name||'').replace(/^보장진단_/,'').replace(/\.xlsx$/i,'');
+  window._mkQcTxt='[보장분석 체크요청] '+cust+' — 결함의심 '+q.bug+'건\n'+(q.items||[]).map(x=>'· '+x.co+' '+x.raw+(x.amt!=null?' '+x.amt:'')+' — '+x.why).join('\n')+'\n엑셀: '+location.origin+(j.xlsx_url||'');
+  return '<div class="mk-qc"><b class="t">⚠ 보장분석지와 체크하세요 — 확인 필요 '+q.bug+'건</b>'+its
+    +'<button type="button" onclick="mkSendQc()">📤 체크 요청 보내기</button></div>';}
+/* ★v856 카톡 공유 — 지점장 2026.10.16 「보장분석 다운들이 카톡 공유가 되게 가능하나」: 서버 /dl 파일을 받아 Web Share(files)로 공유창 → 카톡. PC·미지원이면 저장 */
+async function mkShareFile(u,nm,btn){try{if(btn){btn.disabled=true;btn.textContent='…'}
+  const r=await fetch(u);const b=await r.blob();const f=new File([b],nm||'file',{type:b.type||'application/octet-stream'});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:nm||''});}
+  else{const a=document.createElement('a');a.href=u;a.download=nm||'';document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),1500);alert('이 기기는 바로 공유가 안 됩니다 — 저장한 뒤 카톡에서 보내세요')}
+ }catch(e){}finally{if(btn){btn.disabled=false;btn.textContent='📤 카톡'}}}
+function mkAddShare(root){try{root.querySelectorAll('a.file-card').forEach(a=>{const u=a.getAttribute('href')||'';
+  if(!/^\/dl\//.test(u)||/\.zip(\?|$)/i.test(u)||a.classList.contains('bh')||a.querySelector('.mk-sh'))return;
+  const nm=(a.querySelector('.nm')?a.querySelector('.nm').childNodes[0].textContent:'').trim();
+  const b=document.createElement('button');b.type='button';b.className='mk-sh';b.textContent='📤 카톡';
+  b.onclick=ev=>{ev.preventDefault();ev.stopPropagation();mkShareFile(u,nm||a.download||'',b)};a.appendChild(b)})}catch(e){}}
+async function mkSendQc(){const t=window._mkQcTxt||'';try{if(navigator.share){await navigator.share({text:t});return}}catch(e){}
+  try{await navigator.clipboard.writeText(t);alert('내용을 복사했습니다 — 카톡에 붙여 넣어 보내세요')}catch(e){prompt('복사해서 보내세요',t)}}
 function b64toBlob(b64,mime){const bin=atob(b64);const arr=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);return new Blob([arr],{type:mime});}
 function dl(blob,fname){const u=URL.createObjectURL(blob);const a=document.createElement("a");a.href=u;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(u),3000);}
 const XLMIME="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -10851,7 +10911,7 @@ $("#send").onclick=async()=>{
   if(!file&&!pdfFile)return;add(esc((file?file.name:"")+(file&&pdfFile?" + ":"")+(pdfFile?pdfFile.name:"")),"me");
   $("#send").disabled=true;$("#up").style.opacity=.5;
   const loading=add('<div style="display:flex;align-items:center;gap:11px"><span class="spin"></span><div style="flex:1"><div id="ldmsg" style="font-weight:800">PDF 파싱 중…</div><div id="ldtime" style="font-size:11px;color:var(--mute);margin-top:2px">0초 · 기다려 주세요</div></div></div>',"bot");
-  const t0=Date.now();const steps=["PDF 파싱 중…","담보 추출 중…","엑셀 생성 중…","PPT 채우는 중…","완성 중…"];let si=0;
+  const t0=Date.now();const steps=["보험사 자료 읽는 중…","담보 정리 중…","엑셀 만드는 중…","보장분석지 만드는 중…","마무리 중…"];let si=0;
   const timer=setInterval(()=>{si=Math.min(si+1,steps.length-1);const s=Math.floor((Date.now()-t0)/1000);const tm=document.getElementById("ldtime");const mm=document.getElementById("ldmsg");if(tm)tm.textContent=s+"초 경과";if(mm)mm.textContent=steps[si];},8000);
   const fd=new FormData();
 /* v370 role fix: server file=bojang(pdfFile) / file2=jean(file) */
@@ -10951,8 +11011,16 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
         +'<span class="ic">📋</span><span class="nm">MAKEONE BOHUM 보기<br>'
         +'<span style="font-size:10px;color:#C9D3EE">이 엑셀로 암·뇌·심 합산 4장 — 새 창에서 바로 그려짐</span></span>'
         +'<span class="dl">열기</span></a>') : '';
-      add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★<b>전체 저장(ZIP)</b> 한 번이면 전부 받습니다':'자동 저장 중… 안 되면 카드를 누르세요')+'</span><div class="summary-box">'+j.summary+'</div><div class="file-cards">'+allCard+
-        `<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`+ptCard+bohumCard+'</div>',"bot");}
+      const xlCard=`<a class="file-card xl" ${_mk(j.xlsx_url,'xlsx')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.xlsx_name)}<br><span style="font-size:10px;color:var(--mute)">보장진단 엑셀</span></span><span class="dl">저장</span></a>`;
+      const qcBox=mkQcBox(j);
+      if(mkIsSimple()){
+        /* ★v856 제272조 신인 결과 화면: 고객용 1장(A3 PDF, 없으면 PPT) + 확인 상자 + 설계사용 접힘 */
+        const custU=j.a3pdf_url||j.pptx_url, custN=j.a3pdf_url?'고객용 보장분석지 (PDF)':'고객용 보장분석지 (PPT)';
+        const custCard=custU?('<a class="file-card pt" href="'+custU+'" download style="cursor:pointer;text-decoration:none;color:inherit;border:2px solid #0E1E52;background:#fff"><span class="ic">📄</span><span class="nm"><b style="font-size:14px">'+custN+'</b>'+(j.qc&&j.qc.bug?'<span class="mk-stamp">체크 전</span>':'')+'<br><span style="font-size:10px;color:var(--mute)">고객에게 주는 건 이 한 장</span></span><span class="dl">저장</span></a>'):'';
+        add('<b>분석 완료!</b>'+qcBox+'<div class="file-cards">'+custCard+'</div>'
+          +'<details class="mk-more"><summary>설계사용 파일 더 보기 (엑셀 · 진단서 · BOHUM · 전체 ZIP)</summary><div class="summary-box" style="margin-top:8px">'+j.summary+'</div><div class="file-cards">'+allCard+xlCard+ptCard+bohumCard+'</div></details>',"bot");
+      } else {
+      add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★<b>전체 저장(ZIP)</b> 한 번이면 전부 받습니다':'자동 저장 중… 안 되면 카드를 누르세요')+'</span>'+qcBox+'<div class="summary-box">'+j.summary+'</div><div class="file-cards">'+allCard+xlCard+ptCard+bohumCard+'</div>',"bot");}}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}
   if(j&&j.data){analysisData=j.data;document.getElementById("qbar").style.display="flex";document.getElementById("qlbl").style.display="block";}
   file=null;files=[];$("#uplabel").textContent="제안서";$("#send").disabled=true;$("#fi").value="";$("#up").style.opacity=1;
@@ -14033,6 +14101,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         cust=data['client']; d=tempfile.mkdtemp(); now=datetime.datetime.now()
         xl=os.path.join(d,f'보장진단_{cust}.xlsx'); pt=os.path.join(d,f'보장분석지_{cust}.pptx')
         tx=os.path.join(d,f'치료비정리_{cust}.pptx')
+        globals()['_QC_LAST']=None   # ★v856
         unmapped=build_excel(data,xl)
         # ★★★★★v323 <b>10억통장 = 이름으로 찾는다</b>(지점장 지시 2026.08.01).
         #   지점장 원문: "10억통장은 이름으로 찾아야 한다. 유일하게 보장진단서에 10억통장이
@@ -14088,6 +14157,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
             src_note = (src_note or '') + ' / ★이미지PDF-비전OCR'
         response={'ok':True,'xlsx_b64':xlsx_b64,'xlsx_name':f'보장진단_{cust}.xlsx',
                   'summary':_sm,'pptx_ready':ppt_ok,'source':src_note}
+        response['qc']=globals().get('_QC_LAST')   # ★v856 제272조 결함의심 요약
         if ppt_ok and os.path.exists(pt):
             response['pptx_b64']=base64.b64encode(open(pt,'rb').read()).decode()
             response['pptx_name']=f'보장분석지_{cust}.pptx'
