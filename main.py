@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v862-fastjindan-20261017'
+VSTAMP = 'v863-pptonly-20261017'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -11017,7 +11017,7 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
       const qcBox=mkQcBox(j);
       if(mkIsSimple()){
         /* ★v856 제272조 신인 결과 화면: 고객용 1장(A3 PDF, 없으면 PPT) + 확인 상자 + 설계사용 접힘 */
-        const custU=j.a3pdf_url||j.pptx_url, custN=j.a3pdf_url?'고객용 보장분석지 (PDF)':'고객용 보장분석지 (PPT)';
+        const custU=j.a3pdf_url||j.pptx_url, custN=j.a3pdf_url?'고객용 보장분석지 (PDF)':'고객용 보장분석지 (PPT)';   /* ★v863 제279조 A3 없음 → PPT */
         const custCard=custU?('<a class="file-card pt" href="'+custU+'" download style="cursor:pointer;text-decoration:none;color:inherit;border:2px solid #0E1E52;background:#fff"><span class="ic">📄</span><span class="nm"><b style="font-size:14px">'+custN+'</b>'+(j.qc&&j.qc.bug?'<span class="mk-stamp">체크 전</span>':'')+'<br><span style="font-size:10px;color:var(--mute)">고객에게 주는 건 이 한 장</span></span><span class="dl">저장</span></a>'):'';
         /* ★v860 제276조 (지점장 2026.10.17 「신인용 보장분석앱에 보험이 안 나온다」): BOHUM 카드가 「더 보기」 접힘 안에 숨어 있었다 → 고객용 보장분석지 바로 아래 큰 카드로 */
         const bohumSimple=bohumCard?bohumCard.replace('MAKEONE BOHUM 보기<br>','<b style="font-size:14px">MAKEONE 보험(BOHUM) 리포트</b><br>').replace('이 엑셀로 암·뇌·심 합산 4장 — 새 창에서 바로 그려짐','암·뇌·심 합산 4장 — 누르면 새 창에서 바로 그려진다 · 「PDF 저장」으로 고객 전달'):'';
@@ -14167,7 +14167,10 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
             response['pptx_name']=f'보장분석지_{cust}.pptx'
             # ★★★v823 제223조 (지점장 2026.10.09 「저건 PPT다 PDF 아니다」): 값 주입 끝난 PPT를 그대로 A3 PDF로도 낸다.
             #   Railway엔 LibreOffice가 없어 pptx2pdf.py(도형 좌표→HTML→weasyprint)로 변환. 같은 파일을 읽으므로 PDF 값 = PPT 값.
+            # ★★★★★v863 제279조 (지점장 2026.10.17 「보장분석지 A3도 필요 없다 PPT만 있으면 돼 · 진단서도 PPT만」): A3 PDF 변환을 끈다(제223조 폐기).
+            #   간단 모드 고객용 카드는 pptx_url 로 자동 폴백(custU=j.a3pdf_url||j.pptx_url). 산출물 = 엑셀 · 보장분석지 PPT · 진단서 PPT · 설명서(인포).
             try:
+                raise RuntimeError('제279조 A3 PDF 생성 안 함')
                 import pptx2pdf as _p2p
                 _pt_pdf = pt[:-5] + '_A3.pdf'
                 _tP = __import__('time').time(); _p2p.pptx_to_pdf(pt, _pt_pdf)
@@ -14175,8 +14178,9 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                 response['a3pdf_name']=f'보장분석지_{cust}_A3.pdf'
                 print('[제223조] 보장분석지 A3 PDF %.1f초 %d바이트' % (__import__('time').time()-_tP, os.path.getsize(_pt_pdf)))
             except Exception as _e223:
-                print('[제223조] A3 PDF 변환 실패:', str(_e223)[:120])
-                response.setdefault('warnings', []).append('[확인] 보장분석지 A3 PDF 변환 실패 — PPT는 정상')
+                if '제279조' not in str(_e223):
+                    print('[제223조] A3 PDF 변환 실패:', str(_e223)[:120])
+                    response.setdefault('warnings', []).append('[확인] 보장분석지 A3 PDF 변환 실패 — PPT는 정상')
         if getattr(_JOB_LITE, 'on', False):      # ★v740 BOHUM 작업 — 엑셀만 필요하다. 진단서 렌더(약 60초)를 건너뛴다.
             return JSONResponse(response)
         # ── 보장설명서: 충족률 PDF + ★보장진단서 PPT(편집가능) — 둘 다 실패해도 엑셀·PPT는 유지 ──
@@ -14277,7 +14281,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                         if not _drop:
                             # ★v425 (제49조) 정정: 설명서는 <b>인포메이션 구간만</b> 잘라 쓰므로
                             #   재무 페이지가 애초에 없다. 다만 <b>있는데 못 지운 경우</b>는 사고다.
-                            if 'ASSET' in _txt or '돈을 보내고' in _txt:
+                            if ('ASSET' in _txt or '돈을 보내고' in _txt) and not os.path.exists(os.path.join(HERE, 'info_static.pdf')):   # ★v863: 설명서=인포 정적본이면 이 사본은 안 쓰므로 경고 안 함
                                 print('[v425 ★설명서] 재무 페이지가 있는데 제거 실패 — 문구 변경 의심')
                                 response.setdefault('warnings', []).append(
                                     '[확인] 설명서 재무 페이지 제거 실패')
