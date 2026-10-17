@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v859-noinfo-20261017'
+VSTAMP = 'v860-bohumcard-20261017'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -11019,8 +11019,10 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
         /* ★v856 제272조 신인 결과 화면: 고객용 1장(A3 PDF, 없으면 PPT) + 확인 상자 + 설계사용 접힘 */
         const custU=j.a3pdf_url||j.pptx_url, custN=j.a3pdf_url?'고객용 보장분석지 (PDF)':'고객용 보장분석지 (PPT)';
         const custCard=custU?('<a class="file-card pt" href="'+custU+'" download style="cursor:pointer;text-decoration:none;color:inherit;border:2px solid #0E1E52;background:#fff"><span class="ic">📄</span><span class="nm"><b style="font-size:14px">'+custN+'</b>'+(j.qc&&j.qc.bug?'<span class="mk-stamp">체크 전</span>':'')+'<br><span style="font-size:10px;color:var(--mute)">고객에게 주는 건 이 한 장</span></span><span class="dl">저장</span></a>'):'';
-        add('<b>분석 완료!</b>'+qcBox+'<div class="file-cards">'+custCard+'</div>'
-          +'<details class="mk-more"><summary>설계사용 파일 더 보기 (엑셀 · 진단서 · BOHUM · 전체 ZIP)</summary><div class="summary-box" style="margin-top:8px">'+j.summary+'</div><div class="file-cards">'+allCard+xlCard+ptCard+bohumCard+'</div></details>',"bot");
+        /* ★v860 제276조 (지점장 2026.10.17 「신인용 보장분석앱에 보험이 안 나온다」): BOHUM 카드가 「더 보기」 접힘 안에 숨어 있었다 → 고객용 보장분석지 바로 아래 큰 카드로 */
+        const bohumSimple=bohumCard?bohumCard.replace('MAKEONE BOHUM 보기<br>','<b style="font-size:14px">MAKEONE 보험(BOHUM) 리포트</b><br>').replace('이 엑셀로 암·뇌·심 합산 4장 — 새 창에서 바로 그려짐','암·뇌·심 합산 4장 — 누르면 새 창에서 바로 그려진다 · 「PDF 저장」으로 고객 전달'):'';
+        add('<b>분석 완료!</b>'+qcBox+'<div class="file-cards">'+custCard+bohumSimple+'</div>'
+          +'<details class="mk-more"><summary>설계사용 파일 더 보기 (엑셀 · 진단서 · 전체 ZIP)</summary><div class="summary-box" style="margin-top:8px">'+j.summary+'</div><div class="file-cards">'+allCard+xlCard+ptCard+'</div></details>',"bot");
       } else {
       add('<b>분석 완료!</b> <span style="font-size:11px;color:var(--mute)">'+(_isMobile?'★<b>전체 저장(ZIP)</b> 한 번이면 전부 받습니다':'자동 저장 중… 안 되면 카드를 누르세요')+'</span>'+qcBox+'<div class="summary-box">'+j.summary+'</div><div class="file-cards">'+allCard+xlCard+ptCard+bohumCard+'</div>',"bot");}}
   }catch(e){clearInterval(timer);loading.remove();add('<span class="err">오류: '+esc(e.message)+'</span>',"bot");}

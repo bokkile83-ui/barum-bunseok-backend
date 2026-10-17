@@ -402,7 +402,9 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
 
     tmp = tempfile.mkdtemp()
     pdf = os.path.join(tmp, 'rep.pdf')
+    import time as _tm; _T0 = _tm.time()   # ★v860 시간 계측
     build_report_pdf(rep, pdf)
+    print('[v860 시간] 진단서 weasy PDF %.1f초' % (_tm.time() - _T0)); _T1 = _tm.time()
     # ★v108 분할: 간지 페이지를 찾아 PPT(앞)·PDF(뒤)로 나눈다. 추가 렌더 0회.
     _info = _find_info_page(pdf)
     _npg = 0
@@ -451,6 +453,7 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
     #   900dpi에서 장당 약 224MB × 11장 = 2.4GB가 동시에 RAM에 뜬다 → Railway OOM.
     #   그래서 <한 장씩 변환 → 저장 → 즉시 해제>로 바꾼다. 순간 점유 = 1장분(약 224MB).
     _n_pages = _last
+    print('[v860 시간] 진단서 bbox/pdfinfo %.1f초' % (_tm.time() - _T1)); _T2 = _tm.time()
 
     prs = Presentation()
     pw_pt, ph_pt = (pages[0][0], pages[0][1]) if pages else (595.276, 841.890)
@@ -558,5 +561,6 @@ def build_report_pptx(rep, out, dpi=DPI, pdf_out=None):
             #   ★상자 크기는 배경에서 찾은 값이라 <b>줄일 수 없다</b>(고정) → 칠하지 않는다.
             #   배경 칸 자체가 이미 흰색이라 빈 칸은 그대로 비어 보인다.
 
+    print('[v860 시간] 진단서 %ddpi 렌더+PPT %d장 %.1f초' % (dpi, _n_pages, _tm.time() - _T2))
     prs.save(out)
     return True
