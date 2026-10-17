@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v863-pptonly-20261017'
+VSTAMP = 'v864-helperstream-20261017'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1781,6 +1781,7 @@ _STRUCT_SELFTEST = [
     ('제208조 추천 규칙',           'main.py', r'추천 규칙\(v792 제208조', True),
     ('제217조 표준체 먼저',         'main.py', r'표준체 먼저\(v815 제217조', True),
     ('제218조 바름이 프리미엄',     'main.py', r'_HQ_REVIEW_ASK=', True),
+    ('제280조 바름이 스트리밍',     'main.py', r"@app.post\('/helper/chat/stream'\)", True),
     ('제219조 바름이 통합 서랍',    'main.py', r'def _hq_drawer\(', True),
     ('제221조 PPT A3 통일디자인',  'main.py', r'def _ppt_scale\(', True),
     ('제222조 PPT 값칸 분리',      'main.py', r'_CELLMODE = bool\(_cells\)', True),
@@ -15372,12 +15373,66 @@ async def helper_chat(body:dict):
     if not _is_hq:
         _tools=[{'type':'web_search_20250305','name':'web_search','max_uses':2,'user_location':{'type':'approximate','country':'KR'}}] if (re.search(r'최신|요즘|올해|202\d|뉴스|발표|개정|바뀐|얼마|가격|시세',pickq or '') and not body.get('noweb')) else None
         system=system+'\n\n★기본 모드(v836): 보험 밖 일반 질문이다. 자료가 있으면 쓰되 없으면 일반 지식으로 네이버 모양(도입 한 문단 + ## 절 2~3 + 할 일)으로 10~18줄. 「다룰 수 있는 것」 제한은 이 답에만 풀고, 끝에 한 줄로 보험 관점(고지·보장)에서 볼 점을 덧붙인다.'
-    async def _call(model, think=True, msgs=None, mt=None, sysx=None, tools=None, to=120):
+    _emit=body.get('__emit')   # ★v864 제280조 스트리밍: /helper/chat/stream 이 넣어 준 조각 전달 함수(없으면 종전 그대로)
+    _stages={}
+    async def _call(model, think=True, msgs=None, mt=None, sysx=None, tools=None, to=120, stream=False):
         js={'model':model,'max_tokens':mt or _HQ_MAXTOK,'system':sysx or system,'messages':msgs or conv}
         if think and _HQ_THINK>0: js['thinking']={'type':'enabled','budget_tokens':_HQ_THINK}; js['max_tokens']=max(js['max_tokens'],_HQ_THINK+2500)
         if tools: js['tools']=tools
         _hd={'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json'}
         if tools and any(t.get('name')=='web_fetch' for t in tools): _hd['anthropic-beta']='web-fetch-2025-09-10'
+        if stream and _emit:
+            # ★v864 제280조 (지점장 2026.10.17 「대답의 퀄리티는 중요하다. 근데 우선 보여주고 추가질문이 되는 것도 좋다. 너무 느리거든」):
+            #   초안을 SSE 로 받아 글자가 나오는 대로 앱에 흘려보낸다. 모델·생각·웹검색·검수는 종전 그대로(품질 손실 0) — 체감만 당긴다.
+            #   비스트리밍 응답과 같은 모양(content 블록·stop_reason·usage)으로 다시 조립해 뒤 단계(_txt·_hq_sources·_usage_add)가 그대로 돈다.
+            js['stream']=True
+            d={'content':[],'stop_reason':None,'usage':{}}; blocks={}; _tstart=_t816.time()
+            try:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(to, connect=20.0, read=90.0)) as client:
+                    async with client.stream('POST',_ANTH_URL, headers=_hd, json=js) as resp:
+                        if resp.status_code!=200:
+                            raw=await resp.aread()
+                            try: return resp.status_code, json.loads(raw)
+                            except Exception: return resp.status_code, {'raw':raw[:200].decode('utf-8','ignore')}
+                        _emit({'reset':1})
+                        async for line in resp.aiter_lines():
+                            if not line.startswith('data:'): continue
+                            try: ev=json.loads(line[5:].strip())
+                            except Exception: continue
+                            ty=ev.get('type')
+                            if ty=='message_start': d['usage']=((ev.get('message') or {}).get('usage') or {}); d['model']=(ev.get('message') or {}).get('model')
+                            elif ty=='content_block_start':
+                                blk=dict(ev.get('content_block') or {}); idx=ev.get('index')
+                                if blk.get('type')=='server_tool_use': blk['_pj']=''
+                                if blk.get('type')=='thinking': _emit({'s':'생각 중'})
+                                if blk.get('type') in ('web_search_tool_result','web_fetch_tool_result'): _emit({'s':'🔎 검색 결과 읽는 중'})
+                                blocks[idx]=blk; d['content'].append(blk)
+                            elif ty=='content_block_delta':
+                                blk=blocks.get(ev.get('index')); de=ev.get('delta') or {}
+                                if blk is None: continue
+                                if de.get('type')=='text_delta': blk['text']=blk.get('text','')+de.get('text',''); _emit({'t':de.get('text','')})
+                                elif de.get('type')=='input_json_delta': blk['_pj']=blk.get('_pj','')+de.get('partial_json','')
+                            elif ty=='content_block_stop':
+                                blk=blocks.get(ev.get('index'))
+                                if blk is not None and '_pj' in blk:
+                                    try: blk['input']=json.loads(blk['_pj'] or '{}')
+                                    except Exception: blk['input']={}
+                                    del blk['_pj']
+                                    q_=(blk.get('input') or {}).get('query') or (blk.get('input') or {}).get('url') or ''
+                                    _emit({'s':'🔎 '+('웹 검색: ' if blk.get('name')=='web_search' else '원문 열람: ')+str(q_)[:60]})
+                            elif ty=='message_delta':
+                                d['stop_reason']=(ev.get('delta') or {}).get('stop_reason') or d['stop_reason']
+                                u2=ev.get('usage') or {}
+                                if u2: d['usage']=dict(d.get('usage') or {})|u2
+                            elif ty=='error':
+                                print('[v864 stream] error event',str(ev)[:200]); return 500, {'error':ev.get('error')}
+                            if (_t816.time()-_tstart)>to: print('[v864 stream] 시간 초과',to); break
+                for b in d['content']:
+                    if '_pj' in b: b.pop('_pj',None)
+            except Exception as e:
+                print('[v864 stream] exc',str(e)[:160]); return 599, {'error':str(e)[:200]}
+            _usage_add(model,d)
+            return 200, d
         async with httpx.AsyncClient(timeout=to) as client:
             resp=await client.post(_ANTH_URL, headers=_hd, json=js)
         try: d=resp.json()
@@ -15408,7 +15463,7 @@ async def helper_chat(body:dict):
     for model in _mlist:
         for think in ((True,False) if (model==_HQ_MODELS[0] and _is_hq and _bmode=='normal') else (False,)):
             try:
-                st,data=await _call(model,think=think,tools=_tools,mt=(None if _is_hq else 2500))
+                st,data=await _call(model,think=think,tools=_tools,mt=(None if _is_hq else 2500),stream=True,to=(max(120,int(_HQ_BUDGET-(_t816.time()-_t0))-70) if _emit else 120))
                 if st==200 and _txt(data): used=model; break
                 print(f'[v816 helper] {model} think={think} status={st} err={str(data)[:200]}')
                 if st==400 and _tools and any(t.get('name')=='web_fetch' for t in _tools):   # ★v821 web_fetch 미지원 키면 검색만으로
@@ -15438,6 +15493,10 @@ async def helper_chat(body:dict):
     except Exception as _e829: print('[v829 이어쓰기] exc',str(_e829)[:120])
     # ★v820 서치력(지점장 「네이버 수준 서치력 — 가장 강력한 서치 헬퍼」): 웹 검색 결과의 출처(제목·URL)를 서버가 직접 모아 앱의 「출처 N건」 카드로 넘긴다
     sources=_hq_sources(data)
+    _stages['draft']=round(_t816.time()-_t0,1)
+    if _emit:   # ★v864 제280조: 초안 완성 → 앱은 이 시점에 입력칸을 풀어 추가 질문을 받는다. 검수는 뒤에서 계속 돌고 끝나면 final 로 바꿔치기
+        try: _emit({'draft':re.sub(r'<facts>.*?</facts>','',text,flags=re.S).rstrip(),'sources':sources,'model':used,'web':webused,'tier':('hq' if _is_hq else 'basic'),'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'sec':_stages['draft']})
+        except Exception as _ee: print('[v864 emit draft]',str(_ee)[:80])
     # ★v806 형식 점검 + ★v816 품질 검수(한 번의 호출로)
     try:
         miss=[]
@@ -15449,6 +15508,8 @@ async def helper_chat(body:dict):
             if not re.search(r'표준체',body_txt): miss.append('「표준체 시도:」 줄(제217조 — 표준체 먼저, 막히면 이유)')
         left=_HQ_BUDGET-(_t816.time()-_t0)
         if (_HQ_REVIEW and _is_hq and _bmode=='normal' and (_is_reco or _HQ_REVIEW_ALL) and left>45 and data.get('stop_reason')!='max_tokens' and not body.get('nofix')):   # ★v837 검수는 추천·회사 질문만(HELPER_REVIEW_ALL=1 이면 전부)
+            if _emit: _emit({'s':'검수 중 — 지점장 정본과 대조'})
+            _trv=_t816.time()
             rv=[{'role':'user','content':'[검수할 질문]\n'+(lastq or pickq)[:1500]+'\n\n[바름이 초안]\n'+text+'\n\n'+_HQ_REVIEW_ASK+('\n\n[형식에서 빠진 것] '+' / '.join(miss) if miss else '')}]
             # ★v829 (지점장 캡처 2026.10.09 19:27 「간병인변천사」 답이 「…슬기로운 간편간병인에」에서 잘림): 검수 호출 max_tokens 3000이 제229조 긴 답(12~30줄·표)보다 작아
             #   검수본이 중간에서 끊겼고, 끊긴 검수본이 초안을 덮어썼다 → 검수는 초안과 같은 상한(_HQ_MAXTOK)으로 부르고, 검수본이 max_tokens로 끝났으면 버리고 초안을 쓴다.
@@ -15459,8 +15520,9 @@ async def helper_chat(body:dict):
             if t2 and not re.match(r'^\s*통과\s*$',t2):
                 if '<facts>' in text and '<facts>' not in t2:
                     mfa=re.search(r'<facts>.*?</facts>',text,re.S); t2=t2.rstrip()+('\n'+mfa.group(0) if mfa else '')
-                text=t2; print('[v816 검수] 고침 ·',miss)
+                text=t2; print('[v816 검수] 고침 ·',miss); _stages['review_changed']=True
             else: print('[v816 검수] 통과 ·',st2)
+            _stages['review']=round(_t816.time()-_trv,1)
     except Exception as e: print('[v816 검수] exc',str(e)[:160])
     facts=None
     m=re.search(r'<facts>\s*(\{.*?\})\s*</facts>',text,re.S)
@@ -15480,7 +15542,41 @@ async def helper_chat(body:dict):
     try: text=_fix_ins_side(text)
     except Exception: pass
     _usage_add(used,{'usage':{}},'hq' if _is_hq else 'basic'); _bmode2,_bpct2,_bu2=_usage_mode()
-    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web,'tier':('hq' if _is_hq else 'basic'),'budget':{'mode':_bmode2,'pct':round(_bpct2*100),'krw':round(_bu2['krw'])},'sec':round(_t816.time()-_t0,1),'drawer':_app or 'all','sources':sources,'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'terms_added':_terms_added})
+    _stages['total']=round(_t816.time()-_t0,1); print('[v864 시간]',json.dumps(_stages,ensure_ascii=False))
+    return JSONResponse({'ok':True,'answer':text,'facts':facts,'model':used,'web':web,'tier':('hq' if _is_hq else 'basic'),'budget':{'mode':_bmode2,'pct':round(_bpct2*100),'krw':round(_bu2['krw'])},'sec':_stages['total'],'stages':_stages,'drawer':_app or 'all','sources':sources,'books':[{'title':p['title'],'page':p['page']} for p in picks[:8]],'terms_added':_terms_added})
+
+# ★★★★★v864 제280조 — /helper/chat/stream : 같은 helper_chat 을 돌리되 조각을 SSE 로 흘린다.
+#   사건: {"reset":1} 새 초안 시작(앞 글자 지움) · {"t":"글자"} 초안 조각 · {"s":"상태"} 생각/검색/검수 상태 · {"draft":...} 초안 완성(여기서 앱은 입력칸을 푼다)
+#        · {"final":{…/helper/chat 과 같은 JSON…}} 검수까지 끝난 최종 · {"err":"…"} 실패
+#   helper_chat 은 v810 옆줄(threadpool + 자체 asyncio.run) 안에서 돌고, 이 길은 메인 루프에서 큐만 비운다 → 로그인·다른 앱이 안 멈춘다.
+@app.post('/helper/chat/stream')
+async def helper_chat_stream(body:dict):
+    import queue as _q864, asyncio as _a864, threading as _th864
+    from fastapi.responses import StreamingResponse as _SR864
+    q=_q864.Queue()
+    def _emit(ev):
+        try: q.put(json.dumps(ev,ensure_ascii=False))
+        except Exception as e: print('[v864 emit]',str(e)[:80])
+    body=dict(body); body['__emit']=_emit
+    def _run():
+        try:
+            r=_a864.run(helper_chat(body))
+            try: fin=json.loads(bytes(r.body).decode('utf-8'))
+            except Exception as e: fin={'ok':False,'error':'응답 해석 실패 '+str(e)[:80]}
+            _emit({'final':fin})
+        except Exception as e:
+            traceback.print_exc(); _emit({'err':str(e)[:200]})
+        finally: q.put(None)
+    _th864.Thread(target=_run,daemon=True).start()
+    loop=_a864.get_event_loop()
+    async def _gen():
+        yield ': open\n\n'
+        while True:
+            try: item=await loop.run_in_executor(None, q.get, True, 15)
+            except _q864.Empty: yield ': ping\n\n'; continue
+            if item is None: break
+            yield 'data: '+item+'\n\n'
+    return _SR864(_gen(), media_type='text/event-stream', headers=dict(_HUB_CORS)|{'cache-control':'no-cache','x-accel-buffering':'no'})
 
 # ★v799 제213조 — 답의 「손보:」「생보:」 줄 회사가 반대쪽이면 서버가 바로잡는다
 _INS_NONLIFE=['삼성화재','현대해상','DB손보','DB손해보험','KB손보','KB손해보험','메리츠화재','한화손보','한화손해보험','롯데손보','롯데손해보험','흥국화재','NH농협손보','농협손보','NH농협손해보험','하나손보','하나손해보험','MG손보','AIG손보','라이나손보','라이나손해보험','캐롯','AXA손보','악사손보']
