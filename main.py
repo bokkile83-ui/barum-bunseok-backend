@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v858-info786-20261017'
+VSTAMP = 'v859-noinfo-20261017'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -1742,7 +1742,7 @@ _STRUCT_SELFTEST = [
     ('제187조 시작굽기금지',        'main.py', r"v764 긴급 \(지점장 2026\.09\.26 「모든 앱이 안 된다", True),
     ('제192조 서버렌더금지',        'main.py', r"_RR766\('https://singular-smakager-0caac1\.netlify\.app/info\.pdf'", True),
     ('제192조 조문',                'BARUM_DOCTRINE.md', r'제192조 — 서버는 인포메이션을 그리지 않는다', True),
-    ('제193조 참고자료복원',        'main.py', r"response\['report_name'\]=f'보장설명서_참고자료_\{cust\}\.pdf'", True),
+    ('제193조 참고자료복원',        'main.py', r"response\['report_name'\]='보장설명서_참고자료\(인포메이션\)\.pdf'", True),   # ★v859 제275조 링크 방식
     ('제193조 조문',                'BARUM_DOCTRINE.md', r'제193조 — 설명서는 미리 만든 인포메이션 참고자료를 싣는다', True),
     ('제194조 동작검사캐시',        'main.py', r'_BEHAVE_CACHE770 = behave_selftest\(\)', True),
     ('제194조 조문',                'BARUM_DOCTRINE.md', r'제194조 — 분석 시간 줄이기', True),
@@ -10976,7 +10976,7 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
         setTimeout(()=>{try{document.body.removeChild(a);}catch(e){}},2000);}
       if(!_isMobile){
         const _q=[[j.xlsx_url,j.xlsx_name],[j.pptx_url,j.pptx_name],[j.a3pdf_url,j.a3pdf_name],[j.chiryo_url,j.chiryo_name],
-                  [j.report_url,j.report_name],[j.report_pptx_url,j.report_pptx_name]].filter(x=>x[0]);
+                  [j.report_static?null:j.report_url,j.report_name],[j.report_pptx_url,j.report_pptx_name]].filter(x=>x[0]);   /* ★v859 설명서 링크는 자동 저장 제외 */
         _q.forEach((x,i)=>setTimeout(()=>dlUrl(x[0],x[1]), i*900));
       }
       let ptCard='';
@@ -10989,7 +10989,9 @@ _jn.slice(0,3).forEach(f=>fd.append("file2",f));
       if(j.chiryo_b64){
         savedFiles.chiryo={b64:j.chiryo_b64,name:j.chiryo_name,mime:PTMIME};
         ptCard+=`<a class="file-card pt" ${_mk(j.chiryo_url,'chiryo')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.chiryo_name)}<br><span style="font-size:10px;color:var(--mute)">치료비 정리 PPT</span></span><span class="dl">저장</span></a>`;}
-      if(j.report_b64){
+      if(j.report_static&&j.report_url){   /* ★v859 제275조 — 설명서(인포) = 허브 뷰어 링크. 응답·ZIP 에 13.9MB 를 싣지 않는다 */
+        ptCard+=`<a class="file-card pt" href="${j.report_url}" target="_blank" rel="noopener" style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF · 허브 인포메이션(60쪽)</span></span><span class="dl">열기</span></a>`;}
+      else if(j.report_b64){
         savedFiles.report={b64:j.report_b64,name:j.report_name,mime:PDFMIME};
         ptCard+=`<a class="file-card pt" ${_mk(j.report_url,'report')} style="cursor:pointer;text-decoration:none;color:inherit"><span class="ic"></span><span class="nm">${esc(j.report_name)}<br><span style="font-size:10px;color:var(--mute)">보장설명지 PDF</span></span><span class="dl">저장</span></a>`;}
       if(j.report_pptx_b64){
@@ -14292,9 +14294,13 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                     # ★★★★★v767 제193조 — 설명서 = 미리 만든 인포메이션 참고자료(info_static.pdf). 렌더 0.
                     _st767 = os.path.join(HERE, 'info_static.pdf')
                     if os.path.exists(_st767):
-                        response['report_b64']=base64.b64encode(open(_st767,'rb').read()).decode()
-                        response['report_name']=f'보장설명서_참고자료_{cust}.pdf'
-                        print('[v767 제193조] 설명서 = 인포메이션 참고자료(미리 만든 PDF) 첨부')
+                        # ★★★★★v859 제275조 (지점장 2026.10.17 「보장분석앱이 느려서 인포메이션을 뺄 수 있을까」):
+                        #   인포 참고자료 13.9MB 를 base64(18.5MB)로 응답 JSON 에 싣고 /dl·ZIP 에도 넣던 것을 <b>전부 뺀다</b>.
+                        #   같은 PDF 가 허브(info.pdf·쪽그림 뷰어)에 있으므로 카드는 <b>허브 뷰어 링크</b>로 연다. 응답·ZIP 이 그만큼 가벼워진다.
+                        response['report_url']='https://singular-smakager-0caac1.netlify.app/view.html?f=info.pdf&t='+urllib.parse.quote('보험 인포메이션(참고자료)')
+                        response['report_name']='보장설명서_참고자료(인포메이션).pdf'
+                        response['report_static']=True
+                        print('[v859 제275조] 설명서 = 허브 인포메이션 링크(응답·ZIP 미포함)')
                     else:
                         response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
                         response['report_name']=f'보장설명서_{cust}.pdf'
@@ -14318,7 +14324,7 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
         # ★★★★★v446 제61조 3항 — 4대 산출물 개수 게이트.
         #   v446 사고: 진단서 PPT·설명서 PDF가 조용히 사라졌는데 아무 게이트도 안 울렸다.
         _OUT4_KEYS = ('xlsx_b64', 'pptx_b64', 'report_pptx_b64', 'report_b64')
-        _miss4 = [k for k in _OUT4_KEYS if k not in response]
+        _miss4 = [k for k in _OUT4_KEYS if k not in response and not (k=='report_b64' and response.get('report_static'))]   # ★v859 제275조 설명서는 링크
         if _miss4:
             print('[v446 산출물게이트] ★ 누락 %d건 %s' % (len(_miss4), _miss4))
             response.setdefault('warnings', []).append(
