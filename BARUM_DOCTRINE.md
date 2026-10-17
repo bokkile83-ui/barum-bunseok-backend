@@ -7385,3 +7385,6 @@ v767 제193조 이래 설명서 = info_static.pdf(13.9MB) 를 base64(18.5MB)로 
 
 ## 제277조 리모델링 리포트(엑셀 vs 엑셀 PPT) 입력칸 연하게 (서버 v861, 2026.10.17 14:10 · 지점장 「리포트 입력칸들이 너무 진해 진하기 줄이자」 · 「진단서 화질 낮추지 마」)
 report_pages.py 입력칸 3종만: `.box` 테두리 .45mm #414c58 → .25mm #B9C2CE, 값 글자 900 → 700 / `.amount` .2mm #666a6e → #B9C2CE, 900 → 700 / `.value-box` 동일. 카드·패널 테두리(.panel·.summary-card 등)와 표 머리 색은 그대로. 진단서 600dpi 는 지점장 지시로 유지(v123 확정). 실측: remodel_single(한서빈 엑셀) 9쪽 렌더 확인(4·6쪽).
+
+## 제278조 진단서 생성 시간 단축 — 화질 그대로 (서버 v862, 2026.10.17 16:30 · 지점장 「인포 유지 · 바꿔보자 · 품질은 떨어지면 안 돼」)
+① 제275조 철회: 설명서(인포 13.9MB) 다시 응답·/dl·ZIP 포함(인포는 계산 시간 0 — 빼도 속도 무관). ② WeasyPrint: `.wscol.wsmain` flex-column → block. 중첩 flex(wsmain>dgcard>dglist>dgrow)가 8쪽 11.7초·9쪽 4.3초를 먹었다. 12쪽 전부 픽셀 차이 0 실측(같은 HTML, CSS 한 줄만 다름). ③ report_pptx: 600dpi 변환+지우기+PNG 저장을 스레드 min(3, CPU) 병렬, 슬라이드 조립은 순차. dpi·PNG 압축 그대로. ④ 로컬 실측(한서빈 11쪽, fonts-nanum 설치해 Railway 와 같은 글꼴): 94초 → 45.7초 (weasy 22.6→11.3 · 600dpi 37.6→19.5). ★교훈: 로컬에 Nanum 이 없으면 Noto CJK(CFF) 서브셋 때문에 write_pdf 가 14초로 부풀어 Railway 와 다른 수치가 나온다 — 속도 측정은 fonts-nanum 설치 후. 진단용 `BARUM_DUMP_DOC` 환경변수(조립 HTML 저장) 추가. Railway 실측은 /health 뒤 지점장 분석에서.

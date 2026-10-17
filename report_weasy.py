@@ -2095,7 +2095,7 @@ body {{ color:{INK}; }}
 .wstalk {{ background:#EAF2FB; border-left:2.6pt solid {BLUE}; border-radius:1.4mm; padding:2mm 3mm; font-size:7.6pt; line-height:1.5; color:{NAVY}; font-style:italic; }}
 .wstalk .h {{ font-style:normal; font-weight:800; color:{BLUE}; }}
 .ws3 {{ display:flex; gap:1.8mm; align-items:stretch; }}
-.wscol.wsmain {{ display:flex; flex-direction:column; }}
+.wscol.wsmain {{ display:block; }} /* ★v862 제278조: flex-column 중첩(wsmain>dgcard>dglist>dgrow)이 WeasyPrint 에서 8쪽 11.7초·9쪽 4.3초 → block 으로 8쪽 5.3초·9쪽 2.5초, 렌더 픽셀 차이 0(실측). 자식 .wsr 의 min-height·center 그대로 */
 .wsmain .wscap {{ flex:0 0 auto; }}
 .wsmain .wsr {{ min-height:39mm; display:flex; flex-direction:column; justify-content:center; }}
 .wsr .box {{ display:block; margin-top:1.6mm; border:0.6pt solid {LINE}; border-radius:1mm; height:6mm; background:#FCFDFE; }}
@@ -5526,6 +5526,9 @@ def _render_exact(doc, out):
        무관하므로 이 방식으로 100% 보장된다."""
     import re as _r
     expect = len(_r.findall(r'<div class="pg(?=["\s])', doc))
+    if _os_env.environ.get('BARUM_DUMP_DOC'):   # ★v862 진단용: 조립된 HTML 을 파일로 남긴다(속도 분석)
+        try: open(_os_env.environ['BARUM_DUMP_DOC'], 'w', encoding='utf-8').write(doc)
+        except Exception: pass
     # ★★★★★v676 (2026.09.05 실측): 아래 분할 정규식이 `[^"]*">`라 <b>id 속성이 붙은 뒤로
     #   한 장도 못 잡았다</b>(실제 마크업 `<div class="pg cvpg" id="pg1">`). 분할 0개 →
     #   페이지 단위 렌더가 통째로 무력화 → 통짜 렌더 폴백 → 47쪽 중 11쪽(연금·재무·심혈관)

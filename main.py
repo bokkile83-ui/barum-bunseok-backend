@@ -19,7 +19,7 @@ from pptx.text.text import _Run
 #   구 코드는 main.py 안 <b>4곳에 각인 문자열을 하드코딩</b>했다 — 한 곳만 안 바뀌면
 #   `/health`·`/version`·`/diag`가 <b>서로 다른 버전</b>을 답하고, 그걸 보고 배포 여부를 오판한다.
 #   ★이 상수가 main.py의 <b>유일한 각인</b>이다. 바꿀 때는 여기 한 줄만 바꾼다.
-VSTAMP = 'v861-lightbox-20261017'
+VSTAMP = 'v862-fastjindan-20261017'
 
 
 app = FastAPI(title="BARUM 보장분석 v7")
@@ -14299,10 +14299,10 @@ async def analyze(file:UploadFile=File(None), file2:List[UploadFile]=File(None),
                         # ★★★★★v859 제275조 (지점장 2026.10.17 「보장분석앱이 느려서 인포메이션을 뺄 수 있을까」):
                         #   인포 참고자료 13.9MB 를 base64(18.5MB)로 응답 JSON 에 싣고 /dl·ZIP 에도 넣던 것을 <b>전부 뺀다</b>.
                         #   같은 PDF 가 허브(info.pdf·쪽그림 뷰어)에 있으므로 카드는 <b>허브 뷰어 링크</b>로 연다. 응답·ZIP 이 그만큼 가벼워진다.
-                        response['report_url']='https://singular-smakager-0caac1.netlify.app/view.html?f=info.pdf&t='+urllib.parse.quote('보험 인포메이션(참고자료)')
+                        # ★v862 제278조 — 지점장 「인포 유지」: 제275조(링크만)는 철회. 인포는 계산 시간 0 이라 빼도 속도와 무관했고, ZIP 한 묶음 전달 흐름이 끊겼다.
+                        response['report_b64']=base64.b64encode(open(_st767,'rb').read()).decode()
                         response['report_name']='보장설명서_참고자료(인포메이션).pdf'
-                        response['report_static']=True
-                        print('[v859 제275조] 설명서 = 허브 인포메이션 링크(응답·ZIP 미포함)')
+                        print('[v862 제278조] 설명서 = 인포메이션 참고자료(미리 만든 PDF) 첨부 — 제275조 철회')
                     else:
                         response['report_b64']=base64.b64encode(open(rpdf,'rb').read()).decode()
                         response['report_name']=f'보장설명서_{cust}.pdf'
