@@ -490,8 +490,8 @@ text-align:left;padding:1.1mm}
 .highlight td{background:#fffaf0;border-top:.5mm solid #97732a;border-bottom:.5mm solid #97732a}
 .code-name{display:block;font-weight:800;color:#20384c}
 .code-number{display:block;margin-top:.6mm;color:#1e2a38}
-.amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #666a6e;
-border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:900;color:#18394c}.amount.red{color:#ff0000}
+.amount{display:inline-block;min-width:16mm;padding:.6mm 1.2mm;border:.2mm solid #B9C2CE;
+border-radius:1.2mm;background:#fff;font-size:10.5pt;font-weight:700;color:#18394c}.amount.red{color:#ff0000}
 /* ★v582 제131조 — 리포트 전 페이지 3색: 레드(제안) · 블루(갱신 보유) · 블랙(비갱신 보유) */
 .amount.gen{color:#0b2340}.amount.blk{color:#0b2340}
 .dot{width:3.2mm;height:3.2mm;display:inline-block;border-radius:50%;
@@ -839,8 +839,8 @@ color:#fff;font-size:8.4pt;font-weight:900}
 .label{font-size:8pt;font-weight:800;color:#294558}
 .label.blue{color:var(--blue)}
 .value-box{height:6.2mm;display:flex;justify-content:flex-end;align-items:center;
-border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
-font-weight:900;font-size:11pt}
+border:.25mm solid #B9C2CE;border-radius:1.2mm;background:#fff;padding:0 2mm;color:#153d40;
+font-weight:700;font-size:11pt}
 .value-box.red{color:#ff0000}
 .amount.gen{color:#0b2340}
 .amount.blk{color:#0b2340}   /* ★v582 제131조 */
@@ -1094,8 +1094,8 @@ font-size:11pt;font-weight:900}
 /* ★★★★★v465 제72조 2항 (육안검수 실측) — 6쪽 「일반암 14,000만」이 두 줄로 깨졌다.
    진하기를 올리면서 글자가 커져 좁은 칸(2칸 행)을 넘쳤다.
    ★<b>금액 칸은 절대 줄바꿈하지 않는다.</b> 넘치면 글자를 줄여서라도 한 줄로 둔다. */
-.box{height:4.5mm;border:.45mm solid #414c58;border-radius:1.2mm;background:#fff;
-display:flex;align-items:center;justify-content:flex-end;padding:0 1.4mm;font-weight:900;
+.box{height:4.5mm;border:.25mm solid #B9C2CE;border-radius:1.2mm;background:#fff;
+display:flex;align-items:center;justify-content:flex-end;padding:0 1.4mm;font-weight:700;
 color:#0b2340;font-size:10pt;white-space:nowrap;overflow:hidden}
 .row.two .box{font-size:8.6pt;padding:0 1mm}
 .row.two .un{width:5mm}
